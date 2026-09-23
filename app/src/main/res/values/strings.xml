@@ -314,6 +314,8 @@
     <string name="food_in_grams">Weigh it</string>
     <string name="food_in_units">Count %1$s</string>
     <string name="food_how_much">How much</string>
+    <!-- Under a switched-off count, for a food nobody has named a portion of: opens that food in the food editor. -->
+    <string name="food_give_a_portion">Give this a portion</string>
     <string name="repeat_kcal">%1$s kcal</string>
     <string name="scan_title">Scan a barcode</string>
     <string name="scan_open">Scan</string>

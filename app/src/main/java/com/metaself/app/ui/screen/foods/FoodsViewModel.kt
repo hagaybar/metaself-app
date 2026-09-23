@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.foods
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.food.EditRefused
@@ -39,6 +40,7 @@ import javax.inject.Inject
 class FoodsViewModel @Inject constructor(
     private val foods: FoodRepository,
     private val now: Now,
+    savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     private val _looking = MutableStateFlow(Looking())
@@ -80,6 +82,20 @@ class FoodsViewModel @Inject constructor(
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
         initialValue = FoodsUiState(),
     )
+
+    init {
+        // Opened from "Give this a portion" on the logging screen, for one food: its editor is
+        // opened, and the list searched down to it, so the editor is on screen rather than below
+        // however many foods come before it. Read before the first frame for the reason the meal
+        // builder reads its chosen foods then. A food that has gone meanwhile opens nothing.
+        savedState.get<String>("food")?.toLongOrNull()?.let { foodId ->
+            viewModelScope.launch {
+                val food = foods.byId(foodId) ?: return@launch
+                _looking.value = _looking.value.copy(query = food.name)
+                _editing.value = Editing(foodId = food.id, form = FoodForm.of(food))
+            }
+        }
+    }
 
     private fun visible(all: List<Food>, looking: Looking): List<Food> {
         val shown = all.filter { looking.showHidden || !it.hidden }

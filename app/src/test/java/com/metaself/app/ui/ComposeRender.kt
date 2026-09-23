@@ -138,6 +138,17 @@ class ComposeRender {
         (nodeStartingWith(prefix).boundsInRoot.right / density).toInt()
 
     /**
+     * Whether the control whose label starts with [prefix] can be pressed.
+     *
+     * Asked of the semantics, not of the colour: a render here cannot say how a control looks, only
+     * whether it declares itself switched off.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun isEnabled(prefix: String): Boolean =
+        !nodeStartingWith(prefix).config.contains(SemanticsProperties.Disabled)
+
+    /**
      * How far down the node matching [prefix] starts, in dp.
      *
      * Two controls with the same top are on the same line; different tops mean one of them wrapped.

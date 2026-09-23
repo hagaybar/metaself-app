@@ -63,19 +63,35 @@ class RepeatViewModel @Inject constructor(
         _choosing,
         _looking,
     ) { ownFoods, ownMeals, adjusting, choosing, looking ->
+        val foods = FoodSearch.matching(ownFoods, looking.query)
         RepeatUiState(
             tab = looking.tab,
             query = looking.query,
-            foods = FoodSearch.matching(ownFoods, looking.query),
+            foods = foods,
             meals = ownMeals.filter { it.name.contains(looking.query.trim(), ignoreCase = true) },
             adjusting = adjusting,
-            choosing = choosing,
+            choosing = choosing?.let { current(it, foods) },
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
         initialValue = RepeatUiState(),
     )
+
+    /**
+     * The question open, about the food as it is NOW rather than as it was when he picked it.
+     *
+     * "Give this a portion" leaves this screen for the food's editor with the question still open,
+     * and he comes back to it. The foods are observed, so the list already shows the new portion; a
+     * question still holding the food as picked would keep counting switched off beside a row that
+     * says it can be counted. Its row is found again by id, because a rename can move it. A food no
+     * longer on the list leaves the question as it was.
+     */
+    private fun current(choosing: Choosing, foods: List<Food>): Choosing {
+        val index = foods.indexOfFirst { it.id == choosing.food.id }
+        if (index < 0) return choosing
+        return choosing.copy(index = index, food = foods[index])
+    }
 
     fun showTab(tab: RepeatTab) {
         _looking.value = _looking.value.copy(tab = tab)

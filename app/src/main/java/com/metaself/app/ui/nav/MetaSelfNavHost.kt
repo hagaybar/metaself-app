@@ -83,7 +83,10 @@ sealed class Destination(val route: String) {
             if (text.isBlank()) route else "meal/describe?text=" + Uri.encode(text)
     }
     data object Repeat : Destination("meal/repeat")
-    data object Foods : Destination("foods")
+    data object Foods : Destination("foods") {
+        /** With this food's editor already open: where "Give this a portion" goes. */
+        fun editing(foodId: Long): String = "foods?food=$foodId"
+    }
     data object BuildMeal : Destination("meal/build/{mealId}") {
         /** Zero means a meal that does not exist yet: he is starting one. */
         fun of(mealId: Long): String = "meal/build/$mealId"
@@ -446,6 +449,9 @@ fun MetaSelfNavHost(
                     navController.navigate(Destination.Describe.withWords(words))
                 },
                 onManageFoods = { navController.navigate(Destination.Foods.route) },
+                // Back from the editor comes back here, with the question still open: the food is
+                // observed, so the portion he gave it is on offer when he returns.
+                onGivePortion = { foodId -> navController.navigate(Destination.Foods.editing(foodId)) },
                 onRepeat = { meal ->
                     // Straight to the day being looked at. No model, no network, no waiting.
                     dayViewModel.logSavedMeal(
@@ -550,7 +556,18 @@ fun MetaSelfNavHost(
         // screen's link kept, returning to the day would throw away a half-finished log he stepped
         // out of to fix a duplicate, and would be a back arrow that skips a screen. Design §3.1
         // corrected to match. From the menu this is the day anyway.
-        composable(Destination.Foods.route) {
+        // Registered with the food to open as an optional argument and still reachable by the bare
+        // route, exactly as the meal builder is. A String for the reason `Destination.Record` gives.
+        composable(
+            route = Destination.Foods.route + "?food={food}",
+            arguments = listOf(
+                navArgument("food") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             val managerViewModel: ManagerViewModel = hiltViewModel()
             val tab by managerViewModel.tab.collectAsStateWithLifecycle()
             val foodsViewModel: FoodsViewModel = hiltViewModel()

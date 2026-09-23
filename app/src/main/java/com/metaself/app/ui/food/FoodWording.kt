@@ -62,6 +62,14 @@ object FoodWording {
             "Nothing has said what one of this is"
     }
 
+    /**
+     * [why], as the reason of the option it switches off: "Count portion: nothing has said what one
+     * of this is". Named by the option's own label so it reads as that option's excuse, not as a
+     * remark about the food.
+     */
+    fun whyNot(option: String, reason: CannotCount): String =
+        "$option: " + why(reason).replaceFirstChar { it.lowercase() }
+
     /** "180 g" or "2 bars" — what is about to be logged, as words. */
     fun amount(amount: Double, unit: String): String = Portions.words(amount, unit)
 

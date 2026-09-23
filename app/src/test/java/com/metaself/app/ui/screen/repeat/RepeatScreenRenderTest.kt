@@ -26,6 +26,9 @@ class RepeatScreenRenderTest {
     /** What the describe fallback was called with, or null if it was never taken. */
     private var describedWith: String? = null
 
+    /** The food "Give this a portion" was pressed for, or null if it never was. */
+    private var portionFor: Long? = null
+
     @After
     fun tearDown() = render.dispose()
 
@@ -464,7 +467,51 @@ class RepeatScreenRenderTest {
             ),
         )
 
-        assertThat(texts).contains("Nothing knows what one slice weighs")
+        assertThat(texts).contains("Weigh it: nothing knows what one slice weighs")
+    }
+
+    /**
+     * A food with no named portion: counting is off, it looks off, the reason names the option it
+     * belongs to, and the way to fix it is offered on the spot rather than three screens away.
+     */
+    @Test
+    fun `a food with no portion offers to give it one, for that food`() {
+        val rice = aFood(name = "Rice", facts = FoodFacts(per100g = aPer100g())).copy(id = 7)
+
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(rice),
+                choosing = Choosing(index = 0, food = rice, countedAs = CountedAs.GRAMS),
+            ),
+        )
+
+        assertThat(render.isEnabled("Count portion")).isFalse()
+        assertThat(render.isEnabled("Weigh it")).isTrue()
+        assertThat(texts).contains("Count portion: nothing has said what one of this is")
+        assertThat(render.isDrawnBefore("Count portion:", "How much")).isTrue()
+
+        render.click("Give this a portion")
+
+        assertThat(portionFor).isEqualTo(7L)
+    }
+
+    /** A food that already has a portion has nothing to be given, so nothing offers to give it. */
+    @Test
+    fun `a food with a portion is not offered one`() {
+        val bread = aFood(
+            name = "Bread",
+            facts = FoodFacts(per100g = aPer100g(), perUnit = aPerUnit("slice", 80.0), gramsPerUnit = weighing(30.0)),
+        )
+
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(bread),
+                choosing = Choosing(index = 0, food = bread, countedAs = CountedAs.GRAMS),
+            ),
+        )
+
+        assertThat(render.isEnabled("Count slice")).isTrue()
+        assertThat(texts).doesNotContain("Give this a portion")
     }
 
     /** He sees the number before it lands on the record rather than afterwards. */
@@ -606,6 +653,7 @@ class RepeatScreenRenderTest {
             state = state,
             onDescribe = { words -> describedWith = words },
             onManageFoods = {},
+            onGivePortion = { foodId -> portionFor = foodId },
             onRepeat = {},
             onBuildMeal = {},
             onEditMeal = {},

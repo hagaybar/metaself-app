@@ -233,6 +233,29 @@ class RepeatViewModelTest {
         assertThat(viewModel.state.value.choosing?.countedAs).isEqualTo(CountedAs.UNITS)
     }
 
+    /**
+     * "Give this a portion" leaves for the food's editor with this question still open, and he comes
+     * back to it. The count has to be on offer when he does: a question still holding the food as
+     * it was when he picked it would keep the option he just made possible switched off.
+     */
+    @Test
+    fun `a portion given in the editor reaches the question already open`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Rice", facts = FoodFacts(per100g = aPer100g()))))
+        val viewModel = watched(foods)
+        viewModel.beginChoosing(0)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.choosing?.cannotCount).isNotNull()
+
+        foods.correct(1, FoodFacts(per100g = aPer100g(), perUnit = aPerUnit("bowl", 200.0)))
+        advanceUntilIdle()
+
+        val choosing = viewModel.state.value.choosing
+        assertThat(choosing?.cannotCount).isNull()
+        assertThat(choosing?.food?.facts?.perUnit?.unitName).isEqualTo("bowl")
+        // Still on the way of counting it opened on: nothing he chose moves under him.
+        assertThat(choosing?.countedAs).isEqualTo(CountedAs.GRAMS)
+    }
+
     @Test
     fun `nothing is logged until an amount makes sense`() = runTest(dispatcher) {
         val viewModel = watched(foods = listOf(aFood()))
@@ -401,9 +424,14 @@ class RepeatViewModelTest {
     private fun TestScope.watched(
         foods: List<Food> = emptyList(),
         savedMeals: FakeSavedMealRepository = FakeSavedMealRepository(),
+    ): RepeatViewModel = watched(FakeFoodRepository(foods), savedMeals)
+
+    private fun TestScope.watched(
+        foods: FakeFoodRepository,
+        savedMeals: FakeSavedMealRepository = FakeSavedMealRepository(),
     ): RepeatViewModel {
         val viewModel = RepeatViewModel(
-            foods = FakeFoodRepository(foods),
+            foods = foods,
             savedMeals = savedMeals,
         )
         backgroundScope.launch { viewModel.state.collect { } }

@@ -182,7 +182,7 @@ class MealBuilderScreenRenderTest {
             ),
         )
 
-        assertThat(texts).contains("Nothing knows what one spoon weighs")
+        assertThat(texts).contains("Weigh it: nothing knows what one spoon weighs")
     }
 
     /** The same food twice in one meal is an editing accident, so it is not offered again. */
@@ -252,7 +252,7 @@ class MealBuilderScreenRenderTest {
             ),
         )
 
-        assertThat(texts).contains("Nothing knows what one spoon weighs")
+        assertThat(texts).contains("Weigh it: nothing knows what one spoon weighs")
     }
 
     /**

@@ -78,6 +78,12 @@ class DestinationRouteTest {
             .isEqualTo("meal/build/0?foods=3,7,12")
     }
 
+    /** "Give this a portion" opens the manager on that food, by the route the host registers. */
+    @Test
+    fun `the manager can be opened on one food`() {
+        assertThat(Destination.Foods.editing(7L)).isEqualTo("foods?food=7")
+    }
+
     /** The "Build a meal" button carries nothing, and must still land on the same destination. */
     @Test
     fun `a new meal with nothing chosen is the plain route`() {

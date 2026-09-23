@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.foods
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.data.food.EditRefused
@@ -951,6 +952,37 @@ class FoodsViewModelTest {
         assertThat(viewModel.state.value.merging).isNull()
         assertThat(viewModel.state.value.chosen).containsExactly(1L, 2L, 3L)
         assertThat(foods.current).hasSize(3)
+    }
+
+    /**
+     * Arriving from "Give this a portion" on the logging screen: that food's editor is already open,
+     * and the list is searched down to it so the editor is on screen rather than somewhere below a
+     * long list.
+     */
+    @Test
+    fun `opened for one food, its editor is open and in view`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice"), aFood(name = "Tahini")))
+        val viewModel = FoodsViewModel(foods, Now { 1_000 }, SavedStateHandle(mapOf("food" to "2")))
+        backgroundScope.launch { viewModel.state.collect { } }
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertThat(state.editing?.foodId).isEqualTo(2L)
+        assertThat(state.editing?.form?.name).isEqualTo("Rice")
+        assertThat(state.query).isEqualTo("Rice")
+        assertThat(state.foods.map { it.name }).containsExactly("Rice")
+    }
+
+    /** A food that has gone by the time the manager opens leaves the manager as it always opens. */
+    @Test
+    fun `opened for a food that is not there, nothing is open`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Apple")))
+        val viewModel = FoodsViewModel(foods, Now { 1_000 }, SavedStateHandle(mapOf("food" to "9")))
+        backgroundScope.launch { viewModel.state.collect { } }
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.editing).isNull()
+        assertThat(viewModel.state.value.query).isEmpty()
     }
 
     /** "Join with a duplicate" on Yoghurt's own screen, then the duplicate picked off the list. */
