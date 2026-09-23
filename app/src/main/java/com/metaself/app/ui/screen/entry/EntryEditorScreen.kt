@@ -88,6 +88,7 @@ fun EntryEditorScreen(
         Text(
             text = stringResource(R.string.entry_whole_numbers),
             style = MaterialTheme.typography.bodySmall,
+            color = MetaSelfInk.two,
         )
 
         Field(
@@ -101,6 +102,7 @@ fun EntryEditorScreen(
         Text(
             text = stringResource(R.string.entry_macros_optional),
             style = MaterialTheme.typography.bodySmall,
+            color = MetaSelfInk.two,
         )
 
         Field(

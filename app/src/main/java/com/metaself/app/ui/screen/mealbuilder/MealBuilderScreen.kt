@@ -557,9 +557,11 @@ private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
             color = MetaSelfInk.two,
         )
 
+        // Each group's heading is a kicker, as My foods sets it — not small print level with the
+        // notes, which left the two groups of four identical labels with nothing between them.
         Text(
             text = stringResource(R.string.foods_group_per_100g),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.titleSmall,
         )
         Field(form.kcalPer100g, { form = form.copy(kcalPer100g = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_100G].takeIf { showErrors }, numeric = true)
         Field(form.proteinPer100g, { form = form.copy(proteinPer100g = it) }, stringResource(R.string.foods_field_protein), null, numeric = true)
@@ -568,7 +570,7 @@ private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
 
         Text(
             text = stringResource(R.string.foods_group_per_unit),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.titleSmall,
         )
         Field(form.unitName, { form = form.copy(unitName = it) }, stringResource(R.string.foods_field_unit), errors[FoodField.UNIT_NAME].takeIf { showErrors })
         Field(form.kcalPerUnit, { form = form.copy(kcalPerUnit = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_UNIT].takeIf { showErrors }, numeric = true)
