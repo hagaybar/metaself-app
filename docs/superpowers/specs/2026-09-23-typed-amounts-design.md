@@ -98,6 +98,14 @@ And the rules the instructions add:
 for "when there is no unit", because a proposal can no longer arrive without one. **Rows already on
 the record keep what they have** (D34's rule for them — correct it on the day — is unchanged).
 
+
+**Amended 2026-09-23, after review.** The reply's reader drops an item, and names it on screen ("1 item
+in the answer couldn't be used: X"), when its basis contradicts its unit in either direction — per 100
+of a counted piece, or per one gram or millilitre — or when the row it would log at the stated amount
+exceeds the ceiling on a hand-typed item (10,000 kcal, or 1,000 g of protein, carbohydrate or fat).
+An amount past its own box limit is not judged this way; it arrives with its box refusing it. A
+non-finite amount is treated as no amount, so D34's second ask applies.
+
 ### 3. Where every figure says it came from (D4)
 
 **The row's source is the worth's source. The amount has no source and never changes one.** This is
