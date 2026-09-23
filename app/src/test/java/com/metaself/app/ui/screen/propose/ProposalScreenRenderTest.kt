@@ -6,7 +6,16 @@ import androidx.compose.runtime.setValue
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.ProposedItem
 import com.metaself.app.domain.ai.aBun
+import com.metaself.app.domain.ai.aModelPita
 import com.metaself.app.domain.ai.aProposedItem
+import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
@@ -162,6 +171,77 @@ class ProposalScreenRenderTest {
         assertThat(render.isEnabled("Save this meal")).isFalse()
     }
 
+    // --- His own foods (D53 §4, §5) --------------------------------------------------------------
+
+    @Test
+    fun `his own food's row says so and offers the estimate`() {
+        val row = ProposalRow.of(aModelPita(), listOf(hisPita()))
+
+        val texts = draw(ProposalUiState.Proposed(rows = listOf(row), note = null))
+
+        assertThat(texts).contains("From your foods")
+        assertThat(texts).contains("Use the estimate (165 kcal)")
+        assertThat(texts).contains("250 kcal · P 8 · C 50 · F 1")
+        // His Pita's figure is typed, and a typed figure says nothing about where it came from.
+        assertThat(texts).doesNotContain("Estimated — moderate confidence")
+    }
+
+    /** "From your foods" is wording above the origin line, never in place of it (D53 §3). */
+    @Test
+    fun `his food's own origin is still said beneath it`() {
+        val estimated = hisPita().copy(
+            facts = FoodFacts(
+                perUnit = PerUnit(
+                    "pita",
+                    Nutrients(250.0, 8.0, 50.0, 1.0),
+                    Provenance(Source.AI_ESTIMATE, Confidence.LOW, setAtMillis = 0),
+                ),
+            ),
+        )
+        val row = ProposalRow.of(aModelPita(), listOf(estimated))
+
+        val texts = draw(ProposalUiState.Proposed(rows = listOf(row), note = null))
+
+        assertThat(texts).contains("From your foods")
+        assertThat(texts).contains("Estimated — low confidence")
+        assertThat(render.isDrawnBefore("From your foods", "Estimated — low confidence")).isTrue()
+    }
+
+    @Test
+    fun `his food counted in grams says so, and offers to count it in grams`() {
+        val row = ProposalRow.of(aBun(), listOf(hisBun()))
+
+        val texts = draw(ProposalUiState.Proposed(rows = listOf(row), note = null))
+
+        assertThat(texts).contains(
+            "Your Hamburger bun is counted in grams. Say how many grams to use its figures.",
+        )
+        assertThat(texts).contains("Count it in grams")
+        assertThat(texts).doesNotContain("From your foods")
+        assertThat(texts).contains("Estimated — moderate confidence")
+    }
+
+    @Test
+    fun `a close match is one question with his food's name in it`() {
+        val yoghurt = aProposedItem(name = "Yoghurt", amount = 150.0, unit = "g")
+        val greek = Food(id = 9, name = "Greek yoghurt", facts = hisBun().facts)
+        val row = ProposalRow.of(yoghurt, listOf(greek))
+
+        val texts = draw(ProposalUiState.Proposed(rows = listOf(row), note = null))
+
+        assertThat(texts).contains("Use your Greek yoghurt?")
+        assertThat(texts).doesNotContain("From your foods")
+    }
+
+    @Test
+    fun `no match draws no line about his foods`() {
+        val texts = draw(proposed(aProposedItem()))
+
+        assertThat(texts.none { it.startsWith("Use your") || it.startsWith("Use the estimate") })
+            .isTrue()
+        assertThat(texts).doesNotContain("From your foods")
+    }
+
     // --- "2 portion" on the proposal (D37, #27) -------------------------------------------------
 
     /** The app's own "portion" beside the box takes its plural from the number in the box. */
@@ -271,6 +351,9 @@ class ProposalScreenRenderTest {
                 onOpenWorth = {},
                 onSetWorthBox = { _, _, _ -> },
                 onCloseWorth = {},
+                onUseYourFood = {},
+                onUseEstimate = {},
+                onCountInFoodUnit = {},
                 onRemove = {},
                 onTellItMore = {},
                 onSave = {},
@@ -316,6 +399,22 @@ class ProposalScreenRenderTest {
         assertThat(render.isEnabled("Save this meal")).isFalse()
     }
 
+    private val typed = Provenance(Source.TYPED, null, setAtMillis = 0)
+
+    /** The spec's invented Pita: per pita, 250 kcal · P 8 · C 50 · F 1, typed. */
+    private fun hisPita() = Food(
+        id = 7,
+        name = "Pita",
+        facts = FoodFacts(perUnit = PerUnit("pita", Nutrients(250.0, 8.0, 50.0, 1.0), typed)),
+    )
+
+    /** The spec's invented Hamburger bun: per 100 g only, 270 kcal · P 9 · C 50 · F 4, typed. */
+    private fun hisBun() = Food(
+        id = 8,
+        name = "Hamburger bun",
+        facts = FoodFacts(per100g = PerHundredGrams(Nutrients(270.0, 9.0, 50.0, 4.0), typed)),
+    )
+
     private fun proposed(vararg items: ProposedItem) = ProposalUiState.Proposed(
         rows = items.map { ProposalRow(it, it.toItemToLog()) },
         note = null,
@@ -331,6 +430,9 @@ class ProposalScreenRenderTest {
             onOpenWorth = {},
             onSetWorthBox = { _, _, _ -> },
             onCloseWorth = {},
+            onUseYourFood = {},
+            onUseEstimate = {},
+            onCountInFoodUnit = {},
             onRemove = {},
             onTellItMore = {},
             onSave = {},

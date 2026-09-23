@@ -3,20 +3,33 @@ package com.metaself.app.ui.screen.propose
 import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.food.FakeFoodRepository
+import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.ai.ProposedItem
 import com.metaself.app.domain.ai.aBun
+import com.metaself.app.domain.ai.aModelPita
 import com.metaself.app.domain.ai.aProposal
 import com.metaself.app.domain.ai.aProposedItem
 import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.FoodMatch
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
 import com.metaself.app.ui.propose.ProposalWording
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -40,7 +53,11 @@ class ProposalViewModelTest {
     @Test
     fun `a described meal becomes rows, one per component`() = runTest {
         val viewModel =
-            ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())), ProblemLog.NONE)
+            ProposalViewModel(
+                FakeEstimator(EstimateResult.Proposed(aProposal())),
+                ProblemLog.NONE,
+                FakeFoodRepository(),
+            )
 
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
@@ -253,7 +270,8 @@ class ProposalViewModelTest {
         assertThat(viewModel.accepted()).isEmpty()
         assertThat(ProposalWording.worthRefused(proposed.rows[0].editingWorth!!.per, "g"))
             .isEqualTo(
-                "All four per 100 g (at most 1000 kcal, and 110 g of protein, carbohydrate or fat).",
+                "All four per 100 g (at most 1000 kcal, and 110 g of protein, " +
+                    "carbohydrate or fat).",
             )
     }
 
@@ -332,6 +350,200 @@ class ProposalViewModelTest {
         assertThat(row.numbers!!.proteinG).isEqualTo(37)
     }
 
+    // --- His own foods (D53 §4, §5) --------------------------------------------------------------
+
+    /** The spec's Pita: his, known per pita at 250 kcal, typed. The model said 165. */
+    @Test
+    fun `an exact match takes his food's figures and keeps the described amount`() = runTest {
+        val foods = FakeFoodRepository(listOf(hisPita()))
+        val pita = foods.current.single()
+        val viewModel = proposedViewModelOf(aModelPita(), foods = foods)
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.match).isEqualTo(FoodMatch.Exact(pita))
+        assertThat(row.item.worth).isInstanceOf(Worth.YourFood::class.java)
+        assertThat(row.item.amountText).isEqualTo("1")
+        assertThat(row.item.foodId).isEqualTo(pita.id)
+        val numbers = row.numbers!!
+        assertThat(listOf(numbers.kcal, numbers.proteinG, numbers.carbsG, numbers.fatG))
+            .containsExactly(250, 8, 50, 1).inOrder()
+        assertThat(numbers.source).isEqualTo(Source.TYPED)
+        assertThat(viewModel.accepted().single().foodId).isEqualTo(pita.id)
+    }
+
+    @Test
+    fun `one tap uses the estimate and one tap goes back`() = runTest {
+        val foods = FakeFoodRepository(listOf(hisPita()))
+        val viewModel = proposedViewModelOf(aModelPita(), foods = foods)
+
+        viewModel.useEstimate(0)
+        var row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.numbers!!.kcal).isEqualTo(165)
+        assertThat(row.numbers!!.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(row.numbers!!.confidence).isEqualTo(Confidence.MEDIUM)
+        assertThat(row.item.foodId).isNull()
+
+        viewModel.useYourFood(0)
+        row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.numbers!!.kcal).isEqualTo(250)
+        assertThat(row.item.foodId).isEqualTo(foods.current.single().id)
+    }
+
+    /** An amount he typed is his, whichever worth it is multiplied by. */
+    @Test
+    fun `switching between his food and the estimate keeps a typed amount`() = runTest {
+        val viewModel =
+            proposedViewModelOf(aModelPita(), foods = FakeFoodRepository(listOf(hisPita())))
+
+        viewModel.setAmount(0, "2")
+        viewModel.useEstimate(0)
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).rows[0].numbers!!.kcal)
+            .isEqualTo(330)
+
+        viewModel.useYourFood(0)
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).rows[0].numbers!!.kcal)
+            .isEqualTo(500)
+    }
+
+    /**
+     * The spec's Hamburger bun (§5): his is known per 100 g at 270 kcal, the model said 1 bun at
+     * 150. A bun cannot be costed from a per-100 g figure, so the estimate stays until he switches
+     * to grams — and then the box is empty, because a number put there would look like his.
+     */
+    @Test
+    fun `his food counted in another unit leaves the estimate and offers the switch`() = runTest {
+        val foods = FakeFoodRepository(listOf(hisBun()))
+        val bun = foods.current.single()
+        val viewModel = proposedViewModelOf(aBun(), foods = foods)
+
+        var row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.match).isEqualTo(FoodMatch.Exact(bun))
+        assertThat(row.item.worth).isInstanceOf(Worth.Estimated::class.java)
+        assertThat(row.numbers!!.kcal).isEqualTo(150)
+
+        viewModel.countInFoodUnit(0)
+        var proposed = viewModel.state.value as ProposalUiState.Proposed
+        row = proposed.rows[0]
+        assertThat(row.item.unit).isEqualTo("g")
+        assertThat(row.item.amountText).isEmpty()
+        assertThat(proposed.blockedBy).isEqualTo(0)
+        assertThat(viewModel.accepted()).isEmpty()
+
+        viewModel.setAmount(0, "60")
+        row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        val numbers = row.numbers!!
+        // 270 × 0.6 = 162; 9 × 0.6 = 5.4 → 5; 50 × 0.6 = 30; 4 × 0.6 = 2.4 → 2.
+        assertThat(listOf(numbers.kcal, numbers.proteinG, numbers.carbsG, numbers.fatG))
+            .containsExactly(162, 5, 30, 2).inOrder()
+        assertThat(numbers.source).isEqualTo(Source.TYPED)
+        assertThat(row.item.foodId).isEqualTo(bun.id)
+
+        // The estimate returns with its own unit and amount.
+        viewModel.useEstimate(0)
+        proposed = viewModel.state.value as ProposalUiState.Proposed
+        row = proposed.rows[0]
+        assertThat(row.item.unit).isEqualTo("bun")
+        assertThat(row.item.amountText).isEqualTo("1")
+        assertThat(row.numbers!!.kcal).isEqualTo(150)
+        assertThat(row.item.foodId).isNull()
+    }
+
+    @Test
+    fun `a close match is offered, never applied by itself`() = runTest {
+        val foods = FakeFoodRepository(listOf(aGreekYoghurt()))
+        val greek = foods.current.single()
+        val viewModel = proposedViewModelOf(
+            aProposedItem(name = "Yoghurt", amount = 150.0, unit = "g"),
+            foods = foods,
+        )
+
+        var row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.match).isEqualTo(FoodMatch.Close(greek))
+        assertThat(row.item.worth).isInstanceOf(Worth.Estimated::class.java)
+        assertThat(row.item.foodId).isNull()
+        assertThat(row.item.name).isEqualTo("Yoghurt")
+
+        viewModel.useYourFood(0)
+        row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.name).isEqualTo("Greek yoghurt")
+        assertThat(row.item.foodId).isEqualTo(greek.id)
+        assertThat(row.item.worth).isInstanceOf(Worth.YourFood::class.java)
+
+        // Taken back, it is the model's item again, under the model's name.
+        viewModel.useEstimate(0)
+        row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.name).isEqualTo("Yoghurt")
+        assertThat(row.item.foodId).isNull()
+    }
+
+    @Test
+    fun `a hidden food is not matched`() = runTest {
+        val viewModel = proposedViewModelOf(
+            aModelPita(),
+            foods = FakeFoodRepository(listOf(hisPita().copy(hidden = true))),
+        )
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.match).isEqualTo(FoodMatch.None)
+        assertThat(row.numbers!!.kcal).isEqualTo(165)
+    }
+
+    /** Typing over his food's worth changes only this entry, and the entry stays on his food. */
+    @Test
+    fun `a worth typed over his food keeps the food and still offers the estimate`() = runTest {
+        val foods = FakeFoodRepository(listOf(hisPita()))
+        val viewModel = proposedViewModelOf(aModelPita(), foods = foods)
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "240")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.worth).isInstanceOf(Worth.Typed::class.java)
+        assertThat(row.item.foodId).isEqualTo(foods.current.single().id)
+        assertThat(row.numbers!!.kcal).isEqualTo(240)
+        // His food itself is not touched by typing here.
+        assertThat(foods.current.single().facts).isEqualTo(hisPita().facts)
+
+        viewModel.useEstimate(0)
+        val back = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(back.numbers!!.kcal).isEqualTo(165)
+        assertThat(back.editingWorth).isNull()
+    }
+
+    /** D16: matching happens on the phone, after the reply — nothing is read while it is asked. */
+    @Test
+    fun `no food is read before the answer arrives`() = runTest {
+        val answer = CompletableDeferred<EstimateResult>()
+        val estimator = object : MealEstimator {
+            override suspend fun estimate(description: String, moreDetail: String?) = answer.await()
+        }
+        val foods = CountingFoods(FakeFoodRepository(listOf(hisPita())))
+        val viewModel = ProposalViewModel(estimator, ProblemLog.NONE, foods)
+
+        viewModel.describe("a pita")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value).isEqualTo(ProposalUiState.Waiting)
+        assertThat(foods.reads).isEqualTo(0)
+
+        answer.complete(EstimateResult.Proposed(aProposal(items = listOf(aModelPita()))))
+        advanceUntilIdle()
+        assertThat(foods.reads).isEqualTo(1)
+    }
+
+    @Test
+    fun `nothing about his foods reaches the estimator`() = runTest {
+        val estimator =
+            FakeEstimator(EstimateResult.Proposed(aProposal(items = listOf(aModelPita()))))
+        val viewModel =
+            ProposalViewModel(estimator, ProblemLog.NONE, FakeFoodRepository(listOf(hisPita())))
+
+        viewModel.describe("a pita with hummus")
+        advanceUntilIdle()
+
+        assertThat(estimator.lastDescription).isEqualTo("a pita with hummus")
+        assertThat(estimator.lastDetail).isNull()
+    }
+
     @Test
     fun `a row can be removed, and removing the last one starts over`() = runTest {
         val viewModel = proposedViewModel()
@@ -346,7 +558,11 @@ class ProposalViewModelTest {
     @Test
     fun `a failure keeps the owner's words and says what went wrong`() = runTest {
         val viewModel =
-            ProposalViewModel(FakeEstimator(EstimateResult.Unreachable), ProblemLog.NONE)
+            ProposalViewModel(
+                FakeEstimator(EstimateResult.Unreachable),
+                ProblemLog.NONE,
+                FakeFoodRepository(),
+            )
 
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
@@ -366,6 +582,7 @@ class ProposalViewModelTest {
             ProposalViewModel(
                 FakeEstimator(EstimateResult.AmountMissing(listOf("Stew"))),
                 ProblemLog.NONE,
+                FakeFoodRepository(),
             )
 
         viewModel.describe("stew")
@@ -379,7 +596,11 @@ class ProposalViewModelTest {
 
     @Test
     fun `no key says so, and does not pretend the network failed`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey), ProblemLog.NONE)
+        val viewModel = ProposalViewModel(
+            FakeEstimator(EstimateResult.NoKey),
+            ProblemLog.NONE,
+            FakeFoodRepository(),
+        )
 
         viewModel.describe("risotto")
         advanceUntilIdle()
@@ -393,7 +614,11 @@ class ProposalViewModelTest {
      */
     @Test
     fun `no key offers the way to the key, and keeps the words`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey), ProblemLog.NONE)
+        val viewModel = ProposalViewModel(
+            FakeEstimator(EstimateResult.NoKey),
+            ProblemLog.NONE,
+            FakeFoodRepository(),
+        )
 
         viewModel.describe("risotto")
         advanceUntilIdle()
@@ -405,7 +630,11 @@ class ProposalViewModelTest {
     @Test
     fun `a failure that is not the key offers no way to it`() = runTest {
         val viewModel =
-            ProposalViewModel(FakeEstimator(EstimateResult.Unreachable), ProblemLog.NONE)
+            ProposalViewModel(
+                FakeEstimator(EstimateResult.Unreachable),
+                ProblemLog.NONE,
+                FakeFoodRepository(),
+            )
 
         viewModel.describe("risotto")
         advanceUntilIdle()
@@ -419,7 +648,11 @@ class ProposalViewModelTest {
      */
     @Test
     fun `leaving to add the key clears the complaint and keeps the words`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey), ProblemLog.NONE)
+        val viewModel = ProposalViewModel(
+            FakeEstimator(EstimateResult.NoKey),
+            ProblemLog.NONE,
+            FakeFoodRepository(),
+        )
         viewModel.describe("risotto")
         advanceUntilIdle()
 
@@ -432,7 +665,7 @@ class ProposalViewModelTest {
     @Test
     fun `telling it more asks again with both the original and the addition`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
-        val viewModel = ProposalViewModel(estimator, ProblemLog.NONE)
+        val viewModel = ProposalViewModel(estimator, ProblemLog.NONE, FakeFoodRepository())
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
 
@@ -447,7 +680,7 @@ class ProposalViewModelTest {
     fun `an empty description asks nothing at all`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
 
-        ProposalViewModel(estimator, ProblemLog.NONE).describe("   ")
+        ProposalViewModel(estimator, ProblemLog.NONE, FakeFoodRepository()).describe("   ")
         advanceUntilIdle()
 
         assertThat(estimator.calls).isEqualTo(0)
@@ -458,6 +691,7 @@ class ProposalViewModelTest {
         val viewModel = ProposalViewModel(
             FakeEstimator(EstimateResult.Proposed(aProposal())),
             ProblemLog.NONE,
+            FakeFoodRepository(),
             SavedStateHandle(mapOf("text" to "shakshuka")),
         )
 
@@ -476,6 +710,7 @@ class ProposalViewModelTest {
         ProposalViewModel(
             estimator,
             ProblemLog.NONE,
+            FakeFoodRepository(),
             SavedStateHandle(mapOf("text" to "shakshuka")),
         )
         advanceUntilIdle()
@@ -488,7 +723,8 @@ class ProposalViewModelTest {
     fun `no carried words leaves the description empty`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
 
-        val viewModel = ProposalViewModel(estimator, ProblemLog.NONE, SavedStateHandle())
+        val viewModel =
+            ProposalViewModel(estimator, ProblemLog.NONE, FakeFoodRepository(), SavedStateHandle())
         advanceUntilIdle()
 
         assertThat(viewModel.description).isEqualTo("")
@@ -501,6 +737,7 @@ class ProposalViewModelTest {
         val viewModel = ProposalViewModel(
             FakeEstimator(EstimateResult.Proposed(aProposal())),
             ProblemLog.NONE,
+            FakeFoodRepository(),
             SavedStateHandle(mapOf("text" to "shakshuka")),
         )
 
@@ -521,7 +758,11 @@ class ProposalViewModelTest {
     @Test
     fun `starting over leaves nothing that could be accepted again`() = runTest {
         val viewModel =
-            ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())), ProblemLog.NONE)
+            ProposalViewModel(
+                FakeEstimator(EstimateResult.Proposed(aProposal())),
+                ProblemLog.NONE,
+                FakeFoodRepository(),
+            )
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
         assertThat(viewModel.accepted()).isNotEmpty()
@@ -539,6 +780,7 @@ class ProposalViewModelTest {
             ProposalViewModel(
                 estimator,
                 ProblemLog.NONE,
+                FakeFoodRepository(),
                 SavedStateHandle(mapOf("text" to "shakshuka")),
             )
 
@@ -563,7 +805,7 @@ class ProposalViewModelTest {
                 throw IllegalStateException("unexpected reply")
         }
         val problems = RecordingProblemLog()
-        val viewModel = ProposalViewModel(throwing, problems)
+        val viewModel = ProposalViewModel(throwing, problems, FakeFoodRepository())
 
         viewModel.describe("risotto")
         advanceUntilIdle()
@@ -576,14 +818,47 @@ class ProposalViewModelTest {
 
     private fun proposedViewModel(): ProposalViewModel = proposedViewModelOf(aProposedItem(), aBun())
 
-    private fun proposedViewModelOf(vararg items: ProposedItem): ProposalViewModel {
+    private fun proposedViewModelOf(
+        vararg items: ProposedItem,
+        foods: FoodRepository = FakeFoodRepository(),
+    ): ProposalViewModel {
         val viewModel = ProposalViewModel(
             FakeEstimator(EstimateResult.Proposed(aProposal(items = items.toList()))),
             ProblemLog.NONE,
+            foods,
         )
         viewModel.describe("a burger in a bun")
         dispatcher.scheduler.advanceUntilIdle()
         return viewModel
+    }
+
+    private val typed = Provenance(Source.TYPED, null, setAtMillis = 0)
+
+    /** The spec's invented Pita: per pita, 250 kcal · P 8 · C 50 · F 1, typed. */
+    private fun hisPita() = Food(
+        name = "Pita",
+        facts = FoodFacts(perUnit = PerUnit("pita", Nutrients(250.0, 8.0, 50.0, 1.0), typed)),
+    )
+
+    /** The spec's invented Hamburger bun: per 100 g only, 270 kcal · P 9 · C 50 · F 4, typed. */
+    private fun hisBun() = Food(
+        name = "Hamburger bun",
+        facts = FoodFacts(per100g = PerHundredGrams(Nutrients(270.0, 9.0, 50.0, 4.0), typed)),
+    )
+
+    /** Any figures: it is only ever the close match for the model's "Yoghurt". */
+    private fun aGreekYoghurt() = Food(
+        name = "Greek yoghurt",
+        facts = FoodFacts(per100g = PerHundredGrams(Nutrients(97.0, 9.0, 4.0, 5.0), typed)),
+    )
+
+    /** Counts every time the foods on offer are read. */
+    private class CountingFoods(private val inner: FakeFoodRepository) : FoodRepository by inner {
+        var reads = 0
+            private set
+
+        override fun observeOffered(): Flow<List<Food>> =
+            inner.observeOffered().onStart { reads++ }
     }
 
     private fun amountOf(viewModel: ProposalViewModel, index: Int): String =

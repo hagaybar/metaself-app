@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.portion.Portions
@@ -66,6 +67,9 @@ fun ProposalScreen(
     onOpenWorth: (Int) -> Unit,
     onSetWorthBox: (Int, WorthFigure, String) -> Unit,
     onCloseWorth: (Int) -> Unit,
+    onUseYourFood: (Int) -> Unit,
+    onUseEstimate: (Int) -> Unit,
+    onCountInFoodUnit: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onTellItMore: (String) -> Unit,
     onSave: () -> Unit,
@@ -196,6 +200,9 @@ fun ProposalScreen(
                             onOpenWorth = { onOpenWorth(index) },
                             onSetWorthBox = { figure, text -> onSetWorthBox(index, figure, text) },
                             onCloseWorth = { onCloseWorth(index) },
+                            onUseYourFood = { onUseYourFood(index) },
+                            onUseEstimate = { onUseEstimate(index) },
+                            onCountInFoodUnit = { onCountInFoodUnit(index) },
                             onRemove = { onRemove(index) },
                         )
                     }
@@ -322,6 +329,9 @@ private fun ProposedRow(
     onOpenWorth: () -> Unit,
     onSetWorthBox: (WorthFigure, String) -> Unit,
     onCloseWorth: () -> Unit,
+    onUseYourFood: () -> Unit,
+    onUseEstimate: () -> Unit,
+    onCountInFoodUnit: () -> Unit,
     onRemove: () -> Unit,
 ) {
     val item = row.item
@@ -401,6 +411,16 @@ private fun ProposedRow(
             )
         }
 
+        // Wording, not a source (D53 §3): above the origin line, never in its place, so a food whose
+        // figure is the label's still says so, and one whose figure is an estimate its confidence.
+        if (item.worth is Worth.YourFood) {
+            Text(
+                text = stringResource(R.string.propose_from_your_foods),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
         // Decision D7: an estimate says how sure it was, and keeps saying it — whatever the amount.
         row.sourceRow?.let { DayTotalsWording.origin(it) }?.let { origin ->
             Text(
@@ -410,9 +430,49 @@ private fun ProposedRow(
             )
         }
 
+        YourFoodLine(row, onUseYourFood, onUseEstimate, onCountInFoodUnit)
+
         Small(stringResource(R.string.propose_remove), onRemove)
 
         HorizontalDivider()
+    }
+}
+
+/**
+ * What his own foods say about this row, when they say anything (D53 §4, §5): the way back to the
+ * estimate while it is on his food; one question naming his food while it is not; or, for his food
+ * counted another way, the sentence saying so and the one honest switch.
+ */
+@Composable
+private fun YourFoodLine(
+    row: ProposalRow,
+    onUseYourFood: () -> Unit,
+    onUseEstimate: () -> Unit,
+    onCountInFoodUnit: () -> Unit,
+) {
+    if (row.onYourFood) {
+        val label = row.estimateKcal
+            ?.let { stringResource(R.string.propose_use_estimate_kcal, it.toString()) }
+            ?: stringResource(R.string.propose_use_estimate)
+        Small(label, onUseEstimate)
+        return
+    }
+    row.yourFoodOffered?.let { food ->
+        Small(stringResource(R.string.propose_use_your_food, food.name), onUseYourFood)
+        return
+    }
+    row.switchOffered?.let { (food, way) ->
+        // Grams in words; any other unit as the food names it, the app's own "portion" plural.
+        val words = when (way.countedAs) {
+            CountedAs.GRAMS -> stringResource(R.string.propose_grams)
+            CountedAs.UNITS -> unitWord(null, way.unit)
+        }
+        Text(
+            text = stringResource(R.string.propose_counted_in, food.name, words),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Small(stringResource(R.string.propose_count_it_in, words), onCountInFoodUnit)
     }
 }
 

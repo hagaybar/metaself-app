@@ -15,6 +15,9 @@ sealed interface FoodMatch {
     data class Close(val food: Food) : FoodMatch
 }
 
+/** A way of counting his food, and the unit an amount of it is then typed in. */
+data class CountedIn(val countedAs: CountedAs, val unit: String)
+
 /**
  * Finding his own food for an item the model named — on the phone, after the reply, and never sent
  * anywhere (D16, D53 §4).
@@ -64,6 +67,27 @@ object FoodMatching {
         val countedIn = facts.perUnit?.unitName ?: FoodFacts.PORTION
         return CountedAs.UNITS.takeIf { keyOrNull(countedIn) == unitKey }
     }
+
+    /**
+     * The one honest way across when his food cannot cost an amount in [unit] (D53 §5): the way it
+     * CAN be counted, for an amount he then types. Null when none is needed — [countedAsFor] has an
+     * answer — or when there is none.
+     *
+     * Grams, when it can be weighed and the described amount was not already grams. Otherwise the
+     * unit it is counted in (`portion` when it names none). Nothing is converted: the amount box
+     * this leads to is empty.
+     */
+    fun countedInstead(food: Food, unit: String): CountedIn? {
+        if (countedAsFor(food, unit) != null) return null
+        val facts = food.facts
+        if (!Portions.isGrams(unit) && Logging.canWeigh(facts) == null) {
+            return CountedIn(CountedAs.GRAMS, GRAMS)
+        }
+        if (Logging.canCount(facts) != null) return null
+        return CountedIn(CountedAs.UNITS, facts.perUnit?.unitName ?: FoodFacts.PORTION)
+    }
+
+    private const val GRAMS = "g"
 
     private fun keyOrNull(text: String): String? = runCatching { FoodKeys.nameKey(text) }.getOrNull()
 }

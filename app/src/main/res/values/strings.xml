@@ -193,6 +193,13 @@
     <string name="propose_blocked">Say how much %1$s was to save this.</string>
     <string name="propose_change_worth">Change</string>
     <string name="propose_worth_done">Done</string>
+    <string name="propose_from_your_foods">From your foods</string>
+    <string name="propose_use_estimate">Use the estimate</string>
+    <string name="propose_use_estimate_kcal">Use the estimate (%1$s kcal)</string>
+    <string name="propose_use_your_food">Use your %1$s?</string>
+    <string name="propose_counted_in">Your %1$s is counted in %2$s. Say how many %2$s to use its figures.</string>
+    <string name="propose_count_it_in">Count it in %1$s</string>
+    <string name="propose_grams">grams</string>
     <string name="propose_total">%1$s kcal in total</string>
     <string name="propose_save">Save this meal</string>
     <string name="propose_keep_as_meal">Save, and keep these as a meal</string>

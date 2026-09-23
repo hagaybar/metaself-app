@@ -713,6 +713,9 @@ fun MetaSelfNavHost(
                 onOpenWorth = proposeViewModel::openWorth,
                 onSetWorthBox = proposeViewModel::setWorthBox,
                 onCloseWorth = proposeViewModel::closeWorth,
+                onUseYourFood = proposeViewModel::useYourFood,
+                onUseEstimate = proposeViewModel::useEstimate,
+                onCountInFoodUnit = proposeViewModel::countInFoodUnit,
                 onRemove = proposeViewModel::remove,
                 onTellItMore = proposeViewModel::tellItMore,
                 onSave = {

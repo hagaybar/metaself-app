@@ -3,6 +3,7 @@ package com.metaself.app.ui.screen.propose
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.day.FoodItem
@@ -14,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import java.math.BigDecimal
 import javax.inject.Inject
 
@@ -32,6 +34,7 @@ import javax.inject.Inject
 class ProposalViewModel @Inject constructor(
     private val estimator: MealEstimator,
     private val problems: ProblemLog,
+    private val foods: FoodRepository,
     savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -79,10 +82,16 @@ class ProposalViewModel @Inject constructor(
         ) {
             _state.value = ProposalUiState.Waiting
             _state.value = when (val result = estimator.estimate(text, moreDetail)) {
-                is EstimateResult.Proposed -> ProposalUiState.Proposed(
-                    rows = result.proposal.items.map { ProposalRow(it, it.toItemToLog()) },
-                    note = result.proposal.note,
-                )
+                is EstimateResult.Proposed -> {
+                    // Only now, with the answer in: his foods are read on the phone, once, and
+                    // never go anywhere (D16, D53 §4). A food made while the answer is on screen is
+                    // not seen until he asks again.
+                    val offered = foods.observeOffered().first()
+                    ProposalUiState.Proposed(
+                        rows = result.proposal.items.map { ProposalRow.of(it, offered) },
+                        note = result.proposal.note,
+                    )
+                }
 
                 else -> ProposalUiState.Describing(
                     failure = ProposalWording.failure(result),
@@ -155,6 +164,21 @@ class ProposalViewModel @Inject constructor(
         updateRow(index) { row ->
             if (row.editingWorth?.refused == true) row else row.copy(editingWorth = null)
         }
+    }
+
+    /** *Use your …* — his own food in place of the estimate, on the terms of D53 §4 and §5. */
+    fun useYourFood(index: Int) {
+        updateRow(index) { it.usingYourFood() }
+    }
+
+    /** *Use the estimate* — the model's item again, with nothing lost either way (D53 §4). */
+    fun useEstimate(index: Int) {
+        updateRow(index) { it.usingEstimate() }
+    }
+
+    /** *Count it in …* — his food's own unit and worth, and an empty amount for him (D53 §5). */
+    fun countInFoodUnit(index: Int) {
+        updateRow(index) { it.countedInFoodUnit() }
     }
 
     /** Remove a row the model invented, or one the owner did not eat. */

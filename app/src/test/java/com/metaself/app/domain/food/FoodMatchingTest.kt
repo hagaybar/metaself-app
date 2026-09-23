@@ -173,4 +173,38 @@ class FoodMatchingTest {
     fun `a unit that keys to nothing is never counted`() {
         assertThat(FoodMatching.countedAsFor(food("Bread", facts = perSlice()), "\"")).isNull()
     }
+
+    // --- countedInstead -----------------------------------------------------------------------
+
+    /** The spec's bun (§5): described as a piece, known per 100 g, so the way across is grams. */
+    @Test
+    fun `a piece his food cannot count is offered in grams when it can be weighed`() {
+        assertThat(FoodMatching.countedInstead(food("Hamburger bun"), "bun"))
+            .isEqualTo(CountedIn(CountedAs.GRAMS, "g"))
+    }
+
+    @Test
+    fun `grams his food cannot weigh are offered in the unit it counts in`() {
+        assertThat(FoodMatching.countedInstead(food("Bread", facts = perSlice()), "g"))
+            .isEqualTo(CountedIn(CountedAs.UNITS, "slice"))
+    }
+
+    @Test
+    fun `a piece it can neither weigh nor count in is offered in its own unit`() {
+        assertThat(FoodMatching.countedInstead(food("Bread", facts = perSlice()), "slices"))
+            .isEqualTo(CountedIn(CountedAs.UNITS, "slice"))
+    }
+
+    /** Millilitres are not grams: a per-100 g food is offered in grams, never assumed to be ml. */
+    @Test
+    fun `millilitres are offered as grams, not converted`() {
+        assertThat(FoodMatching.countedInstead(food("Juice"), "ml"))
+            .isEqualTo(CountedIn(CountedAs.GRAMS, "g"))
+    }
+
+    @Test
+    fun `a food that already costs the unit needs no way across`() {
+        assertThat(FoodMatching.countedInstead(food("Bun"), "g")).isNull()
+        assertThat(FoodMatching.countedInstead(food("Bread", facts = perSlice()), "slice")).isNull()
+    }
 }

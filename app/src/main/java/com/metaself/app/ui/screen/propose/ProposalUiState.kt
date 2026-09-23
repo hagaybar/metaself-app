@@ -7,6 +7,10 @@ import com.metaself.app.domain.amount.Per
 import com.metaself.app.domain.amount.Rate
 import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.FoodItem
+import com.metaself.app.domain.food.CountedIn
+import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodMatch
+import com.metaself.app.domain.food.FoodMatching
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.portion.Portions
@@ -18,13 +22,125 @@ import com.metaself.app.ui.ActionRefused
  * [estimate] is kept beside [item] until he saves, so that nothing done to the row loses the model's
  * answer. [item] is its own worth times its own amount; there is no scaling, and so no original to
  * scale from.
+ *
+ * [match] is what his own foods said about the model's plain name when the answer arrived (§4). The
+ * row is on his food while [item] carries its id — his food's own worth, or his typing over it —
+ * and on the estimate otherwise; one tap moves it either way, and nothing is lost.
  */
 data class ProposalRow(
     val estimate: ProposedItem,
     val item: ItemToLog,
     /** The four worth boxes, while they are open under the worth line; null while closed. */
     val editingWorth: WorthBoxes? = null,
+    val match: FoodMatch = FoodMatch.None,
 ) {
+    /** True while the row is his food's — its worth, or his typing over it. */
+    val onYourFood: Boolean get() = item.foodId != null
+
+    private val candidate: Food?
+        get() = when (val match = match) {
+            is FoodMatch.Exact -> match.food
+            is FoodMatch.Close -> match.food
+            FoodMatch.None -> null
+        }
+
+    /**
+     * The way across when the row is on the estimate and the food it is exactly cannot cost the
+     * described amount (§5) — the sentence and *Count it in …* are drawn from it. Null otherwise.
+     */
+    val switchOffered: Pair<Food, CountedIn>?
+        get() {
+            if (onYourFood) return null
+            val food = (match as? FoodMatch.Exact)?.food ?: return null
+            return FoodMatching.countedInstead(food, item.unit)?.let { food to it }
+        }
+
+    /**
+     * The food *Use your …?* names, or null when it is not offered: a close match not yet taken,
+     * or an exact one he has set aside for the estimate. An exact match that cannot cost the amount
+     * offers [switchOffered] instead.
+     */
+    val yourFoodOffered: Food?
+        get() {
+            if (onYourFood) return null
+            return when (val match = match) {
+                is FoodMatch.Close -> match.food
+                is FoodMatch.Exact ->
+                    match.food.takeIf { FoodMatching.countedAsFor(it, item.unit) != null }
+                FoodMatch.None -> null
+            }
+        }
+
+    /** What *Use the estimate* would log, for its label — null while that is not yet a number. */
+    val estimateKcal: Int? get() = usingEstimate().numbers?.kcal
+
+    /**
+     * His food, in place of the estimate (§4). A close match taken is his answer that it is this
+     * food, so from then on it is treated as the exact one — its name, and the unit rule of §5: the
+     * amount described is kept when the food can cost it, and otherwise the row stays the estimate
+     * and offers the switch. Whatever amount he has typed is his, and stays.
+     */
+    fun usingYourFood(): ProposalRow {
+        val food = candidate ?: return this
+        val taken = copy(match = FoodMatch.Exact(food), editingWorth = null)
+        val countedAs = FoodMatching.countedAsFor(food, item.unit)
+            ?: return taken.copy(item = item.copy(name = food.name))
+        return taken.copy(
+            item = item.copy(
+                name = food.name,
+                worth = Worth.YourFood(food, countedAs),
+                foodId = food.id,
+            ),
+        )
+    }
+
+    /**
+     * The model's item again (§4, §5): its name, its worth, its source. The amount stays when the
+     * unit is still the model's; after a switch of unit the model's own amount and unit return.
+     */
+    fun usingEstimate(): ProposalRow {
+        val model = estimate.toItemToLog()
+        val amount = if (item.unit == model.unit) item.amountText else model.amountText
+        return copy(item = model.copy(amountText = amount), editingWorth = null)
+    }
+
+    /**
+     * *Count it in …* (§5): the food's own way of counting and its worth, with the amount box
+     * EMPTY — a number put there would look like his own (D4, D30). The row cannot be saved until
+     * he types one.
+     */
+    fun countedInFoodUnit(): ProposalRow {
+        val (food, way) = switchOffered ?: return this
+        return copy(
+            item = ItemToLog(
+                name = food.name,
+                detail = item.detail,
+                amountText = "",
+                unit = way.unit,
+                worth = Worth.YourFood(food, way.countedAs),
+                foodId = food.id,
+            ),
+            editingWorth = null,
+        )
+    }
+
+    companion object {
+        /**
+         * A row for the model's [estimate], looked up among the foods [offered] (§4): on his food
+         * from the start when it is exactly one of them and can cost the amount, on the estimate
+         * otherwise.
+         */
+        fun of(estimate: ProposedItem, offered: List<Food>): ProposalRow {
+            val row = ProposalRow(
+                estimate = estimate,
+                item = estimate.toItemToLog(),
+                match = FoodMatching.match(estimate.name, offered),
+            )
+            if (row.match !is FoodMatch.Exact) return row
+            return if (row.yourFoodOffered != null) row.usingYourFood() else row
+        }
+    }
+
     /**
      * What the row will log — or null while its amount is not usable, or while a worth box is
      * blank or refused, which blocks the row exactly as a blank amount does (D53 §6).
