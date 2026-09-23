@@ -3,6 +3,7 @@ package com.metaself.app.ui.screen.foods
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.EditRefused
 import com.metaself.app.data.food.EditResult
 import com.metaself.app.data.food.FoodRepository
@@ -10,14 +11,15 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodSearch
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.food.FoodWording
+import com.metaself.app.ui.guarded
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -35,11 +37,17 @@ import javax.inject.Inject
  * **Nothing whole goes, and no two foods become one, without being asked first** (D36). Neither can
  * be put back, so a delete asks "Delete it?" and a join asks which food stays — on both ways into a
  * join — and only the answer does it.
+ *
+ * **Nothing here takes the app down.** Every action goes through [guarded]; one that throws puts
+ * [FoodsUiState.failed] in the refusal slot and is written to the problem log. Each write below is
+ * one transaction, so the sentence can say nothing was changed; the reads that open a question or
+ * an editor say that it could not be opened.
  */
 @HiltViewModel
 class FoodsViewModel @Inject constructor(
     private val foods: FoodRepository,
     private val now: Now,
+    private val problems: ProblemLog,
     savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -49,6 +57,7 @@ class FoodsViewModel @Inject constructor(
     private val _refusal = MutableStateFlow<String?>(null)
     private val _chosen = MutableStateFlow<Set<Long>>(emptySet())
     private val _deleting = MutableStateFlow<Deleting?>(null)
+    private val _failed = MutableStateFlow<ActionRefused?>(null)
 
     val state: StateFlow<FoodsUiState> = combine(
         // Every food, hidden ones included: this is the screen where hiding is undone, and a food
@@ -57,8 +66,9 @@ class FoodsViewModel @Inject constructor(
         foods.observeOnlyAPortionCount(),
         _looking,
         _editing,
-        combine(_merging, _refusal, _chosen, _deleting) { merging, refusal, chosen, deleting ->
-            Aside(merging, refusal, chosen, deleting)
+        combine(_merging, _refusal, _chosen, _deleting, _failed) { merging, refusal, chosen, deleting,
+            failed ->
+            Aside(merging, refusal, chosen, deleting, failed)
         },
     ) { all, portionCount, looking, editing, aside ->
         FoodsUiState(
@@ -76,6 +86,7 @@ class FoodsViewModel @Inject constructor(
             refusal = aside.refusal,
             chosen = aside.chosen,
             deleting = aside.deleting,
+            failed = aside.failed,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -95,8 +106,8 @@ class FoodsViewModel @Inject constructor(
             ?.takeUnless { savedState.get<Boolean>(FOOD_OPENED) == true }
         savedState[FOOD_OPENED] = true
         openFor?.let { foodId ->
-            viewModelScope.launch {
-                val food = foods.byId(foodId) ?: return@launch
+            act(ActionRefused.COULD_NOT_OPEN) {
+                val food = foods.byId(foodId) ?: return@act
                 _looking.value = _looking.value.copy(query = food.name)
                 _editing.value = Editing(foodId = food.id, form = FoodForm.of(food))
             }
@@ -133,7 +144,7 @@ class FoodsViewModel @Inject constructor(
 
     fun edit(foodId: Long) {
         val food = state.value.foods.firstOrNull { it.id == foodId } ?: return
-        _refusal.value = null
+        dismissRefusal()
         _merging.value = null
         _deleting.value = null
         _editing.value = Editing(foodId = food.id, form = FoodForm.of(food))
@@ -157,9 +168,9 @@ class FoodsViewModel @Inject constructor(
      * Save what he has typed.
      *
      * The name, the brand and the numbers are three separate things that can each be refused for
-     * their own reason, so they are done in order and the first refusal stops the rest: renaming
-     * onto a name another food holds must not half-apply, leaving the numbers changed and the name
-     * not.
+     * their own reason, but they are saved as one change ([FoodRepository.saveForm]): the first
+     * refusal undoes the rest, so renaming onto a name another food holds cannot half-apply, leaving
+     * the numbers changed and the name not — and a Save that throws has changed nothing either.
      *
      * An earlier refusal to delete is let go of first, for the reason [setForm] lets go of it: left
      * above Save, it would read as this Save's refusal, and this Save's own answer lands elsewhere.
@@ -171,21 +182,12 @@ class FoodsViewModel @Inject constructor(
             _editing.value = editing.copy(showErrors = true)
             return
         }
-        viewModelScope.launch {
-            val id = editing.foodId
+        act(ActionRefused.NOTHING_CHANGED) {
             val form = editing.form
-
-            when (val renamed = foods.rename(id, form.name)) {
-                is EditResult.Refused -> return@launch refuse(renamed.why)
-                EditResult.Done -> Unit
-            }
-            when (val branded = foods.setBrand(id, form.brand.takeIf { it.isNotBlank() })) {
-                is EditResult.Refused -> return@launch refuse(branded.why)
-                EditResult.Done -> Unit
-            }
-            val facts = form.toFacts(now()) ?: return@launch
-            when (val corrected = foods.correct(id, facts)) {
-                is EditResult.Refused -> return@launch refuse(corrected.why)
+            val facts = form.toFacts(now()) ?: return@act
+            val brand = form.brand.takeIf { it.isNotBlank() }
+            when (val saved = foods.saveForm(editing.foodId, form.name, brand, facts)) {
+                is EditResult.Refused -> refuse(saved.why)
                 EditResult.Done -> closeEditor()
             }
         }
@@ -193,14 +195,14 @@ class FoodsViewModel @Inject constructor(
 
     /** Out of every picker, with its history still attached and its name still shown on every day. */
     fun hide(foodId: Long) {
-        viewModelScope.launch {
+        act(ActionRefused.NOTHING_CHANGED) {
             foods.hide(foodId)
             closeEditor()
         }
     }
 
     fun unhide(foodId: Long) {
-        viewModelScope.launch { foods.unhide(foodId) }
+        act(ActionRefused.NOTHING_CHANGED) { foods.unhide(foodId) }
     }
 
     /**
@@ -217,11 +219,11 @@ class FoodsViewModel @Inject constructor(
      * question back onto a screen he has left.
      */
     fun askToDelete(foodId: Long) {
-        _refusal.value = null
-        viewModelScope.launch {
-            val food = foods.byId(foodId) ?: return@launch
+        dismissRefusal()
+        act(ActionRefused.COULD_NOT_OPEN) {
+            val food = foods.byId(foodId) ?: return@act
             val using = foods.savedMealsUsing(foodId)
-            if (_editing.value?.foodId != foodId) return@launch
+            if (_editing.value?.foodId != foodId) return@act
             _deleting.value = if (using.isEmpty()) {
                 Deleting.Asking(food)
             } else {
@@ -248,9 +250,9 @@ class FoodsViewModel @Inject constructor(
     fun confirmDeleting() {
         val asking = _deleting.value as? Deleting.Asking ?: return
         _deleting.value = null
-        viewModelScope.launch {
+        act(ActionRefused.NOTHING_CHANGED) {
             val result = foods.delete(asking.food.id)
-            if (_editing.value?.foodId != asking.food.id) return@launch
+            if (_editing.value?.foodId != asking.food.id) return@act
             when (result) {
                 is EditResult.Refused ->
                     _deleting.value = Deleting.Refused(asking.food, FoodWording.refusal(result.why))
@@ -269,7 +271,7 @@ class FoodsViewModel @Inject constructor(
         val food = state.value.foods.firstOrNull { it.id == foodId } ?: return
         _editing.value = null
         _deleting.value = null
-        _refusal.value = null
+        dismissRefusal()
         _merging.value = Merging(keeping = food)
     }
 
@@ -303,11 +305,11 @@ class FoodsViewModel @Inject constructor(
     fun mergeInto(loserId: Long) {
         val keeping = _merging.value?.keeping ?: return
         if (keeping.id == loserId) return
-        viewModelScope.launch {
+        act(ActionRefused.COULD_NOT_OPEN) {
             // Gone only in a race — the row he tapped comes from the observed list and leaves it with
             // the food — and the join before D36 said nothing here either: there is nothing to join.
-            val losing = foods.byId(loserId) ?: return@launch
-            if (_merging.value != Merging(keeping)) return@launch
+            val losing = foods.byId(loserId) ?: return@act
+            if (_merging.value != Merging(keeping)) return@act
             _merging.value = Merging(keeping, losing)
         }
     }
@@ -334,12 +336,12 @@ class FoodsViewModel @Inject constructor(
         // Merging is pairwise and stays pairwise, so this is a no-op at any other size — and the
         // screen only offers it at two.
         val both = _chosen.value.sorted().takeIf { it.size == 2 } ?: return
-        viewModelScope.launch {
-            val keeping = foods.byId(both[0]) ?: return@launch
-            val losing = foods.byId(both[1]) ?: return@launch
+        act(ActionRefused.COULD_NOT_OPEN) {
+            val keeping = foods.byId(both[0]) ?: return@act
+            val losing = foods.byId(both[1]) ?: return@act
             _editing.value = null
             _deleting.value = null
-            _refusal.value = null
+            dismissRefusal()
             _merging.value = Merging(keeping = keeping, losing = losing)
         }
     }
@@ -357,7 +359,7 @@ class FoodsViewModel @Inject constructor(
         val merging = _merging.value ?: return
         val losing = merging.losing ?: return
         if (merging.keeping.id == losing.id) return
-        viewModelScope.launch {
+        act(ActionRefused.NOTHING_CHANGED) {
             when (val result = foods.merge(winnerId = merging.keeping.id, loserId = losing.id)) {
                 // Left standing, choice and all, so the refusal names something he can still act on.
                 is EditResult.Refused -> refuse(result.why)
@@ -400,13 +402,26 @@ class FoodsViewModel @Inject constructor(
         _chosen.value = emptySet()
     }
 
+    /** Take down whichever sentence is in the refusal slot — a refusal, or an action that failed. */
     fun dismissRefusal() {
         _refusal.value = null
+        _failed.value = null
     }
 
     private fun refuse(why: EditRefused) {
+        _failed.value = null
         _refusal.value = FoodWording.refusal(why)
     }
+
+    /**
+     * Run an action under the guard. If it throws, [how] goes in the refusal slot in place of
+     * whatever was there — one sentence at a time, the latest.
+     */
+    private fun act(how: ActionRefused, block: suspend () -> Unit) =
+        guarded(problems, onRefused = {
+            _refusal.value = null
+            _failed.value = how
+        }) { block() }
 
     private fun closeEditor() {
         stopEditing()
@@ -419,12 +434,13 @@ class FoodsViewModel @Inject constructor(
         _deleting.value = null
     }
 
-    /** The four things that are not about looking, as one value, because `combine` takes five. */
+    /** The five things that are not about looking, as one value, because `combine` takes five. */
     private data class Aside(
         val merging: Merging?,
         val refusal: String?,
         val chosen: Set<Long>,
         val deleting: Deleting?,
+        val failed: ActionRefused?,
     )
 
     /** What is being looked for, as one value, so five things can be combined rather than seven. */

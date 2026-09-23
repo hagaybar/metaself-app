@@ -11,6 +11,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metaself.app.data.backup.BackupOutcome
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.day.InMemoryMealRepository
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.movement.StepAccess
@@ -339,7 +340,8 @@ private fun ManagerHere(
     // Keyed on nothing: the manager is the root, and a view model rebuilt on every recomposition
     // would forget which tab is in front between one press and the next.
     val managerViewModel = remember { ManagerViewModel() }
-    val foodsViewModel = remember { FoodsViewModel(world.foods, world.now, savedState) }
+    val foodsViewModel =
+        remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, savedState) }
     val mealsViewModel = remember { MealsViewModel(world.savedMeals) }
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()

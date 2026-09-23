@@ -173,7 +173,9 @@ fun FoodsContent(
     }
 
     // A refusal is not a failure: it names what stands in the way so he can go and deal with it.
-    state.refusal?.let { refusal ->
+    // An action that threw is a failure, and says so in the same place (ActionRefused).
+    val sentence = state.refusal ?: state.failed?.let { stringResource(it.sentence) }
+    sentence?.let { refusal ->
         Text(
             text = refusal,
             style = MaterialTheme.typography.bodyMedium,
