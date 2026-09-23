@@ -15,6 +15,10 @@ Scripts carried in version control so they are not only on one machine.
   group that holds a figure the food form would refuse) against `sqlite3` from the latest exported
   schema, and reads the result back the way the app reads a food. CI's `RoomFoodRepositoryTest` is
   still the real check.
+- `check-correct-keeps.py` — runs the food form's Save (D54: a group whose figures did not change
+  gets no statement) against `sqlite3` from the latest exported schema. It plans each group from the
+  food as the app READS it, not from its columns, and asserts what the app reads afterwards. CI's
+  `RoomFoodRepositoryTest` is still the real check.
 
 The copies that actually run live in `~/bin`. These are the source of truth for what they should
 contain.

@@ -120,7 +120,11 @@ interface FoodRepository {
     /** Putting a real brand on a food splits it away from the plain one, which is correct. */
     suspend fun setBrand(foodId: Long, brand: String?): EditResult
 
-    /** The owner's own correction, which is not subject to the ranking: his hand beats the guard. */
+    /**
+     * The owner's own correction, which is not subject to the ranking: a group that changed
+     * replaces what was there, whatever its rank; a group that did not change is not touched, so it
+     * keeps its source, confidence and date (D54). Which is which is decided by `Correction`.
+     */
     suspend fun correct(foodId: Long, facts: FoodFacts): EditResult
 
     /**

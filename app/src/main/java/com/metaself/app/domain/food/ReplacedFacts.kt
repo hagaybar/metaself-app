@@ -175,7 +175,7 @@ object ReplacedFacts {
      * and the macros are visible in *Correct the food*, so rewriting them silently is the same
      * defect.
      */
-    private fun sameFigures(held: Nutrients, holds: Nutrients): Boolean =
+    internal fun sameFigures(held: Nutrients, holds: Nutrients): Boolean =
         sameFigure(held.kcal, holds.kcal) &&
             sameFigure(held.proteinG, holds.proteinG) &&
             sameFigure(held.carbsG, holds.carbsG) &&
@@ -190,7 +190,7 @@ object ReplacedFacts {
      * change any form can express is 0.1 of a gram, which is orders of magnitude larger than this
      * tolerance, so nothing he can actually type is swallowed by it.
      */
-    private fun sameFigure(held: Double, holds: Double): Boolean {
+    internal fun sameFigure(held: Double, holds: Double): Boolean {
         if (held == holds) return true
         val apart = abs(held - holds)
         // The absolute floor is for figures at or near zero, where a relative comparison has

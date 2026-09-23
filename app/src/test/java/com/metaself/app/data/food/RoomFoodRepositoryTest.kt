@@ -10,6 +10,7 @@ import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.GramsPerUnit
@@ -518,6 +519,112 @@ class RoomFoodRepositoryTest {
         repository.correct(food.id, FoodFacts(per100g = per100g()))
 
         assertThat(repository.byId(food.id)!!.facts.perUnit).isNull()
+    }
+
+    // --- D54: Save leaves a group it did not change alone ----------------------------------------
+
+    /**
+     * D54's invented Oat biscuit: a label per 100 g, a typed per biscuit and a typed weight. What
+     * the food form hands over when nothing on it was changed — every group `TYPED`.
+     */
+    private suspend fun oatBiscuit() = repository.findOrCreate(
+        "Oat biscuit",
+        facts = FoodFacts(
+            per100g = PerHundredGrams(
+                Nutrients(480.0, 7.0, 62.0, 22.0),
+                Provenance(Source.LABEL, null, moment),
+            ),
+            perUnit = perUnit(unitName = "biscuit", kcal = 90.0).copy(
+                nutrients = Nutrients(90.0, 1.0, 12.0, 1.0),
+            ),
+            gramsPerUnit = weighs(grams = 18.0),
+        ),
+    ).food
+
+    private fun asTyped(facts: FoodFacts, at: Long) = FoodFacts(
+        per100g = facts.per100g?.copy(provenance = Provenance(Source.TYPED, null, at)),
+        perUnit = facts.perUnit?.copy(provenance = Provenance(Source.TYPED, null, at)),
+        gramsPerUnit = facts.gramsPerUnit?.copy(provenance = Provenance(Source.TYPED, null, at)),
+    )
+
+    @Test
+    fun `a Save that leaves the label group unchanged keeps it a label, with its date`() = runTest {
+        val food = oatBiscuit()
+        val held = food.facts.per100g!!
+
+        moment = 2_000
+        val accepted = food.facts.perUnit!!.copy(
+            nutrients = Nutrients(90.0, 1.0, 12.0, 4.0),
+            provenance = Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, moment),
+        )
+        val result = repository.saveForm(
+            food.id,
+            name = "Oat biscuit",
+            brand = null,
+            facts = asTyped(food.facts, moment).copy(perUnit = accepted),
+        )
+
+        assertThat(result).isEqualTo(EditResult.Done)
+        val after = repository.byId(food.id)!!.facts
+        assertThat(after.per100g).isEqualTo(held)
+        assertThat(after.perUnit!!.nutrients.fatG).isEqualTo(4.0)
+        assertThat(after.perUnit!!.provenance)
+            .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 2_000))
+        assertThat(after.gramsPerUnit).isEqualTo(food.facts.gramsPerUnit)
+    }
+
+    @Test
+    fun `an accepted estimate that changes a label group replaces it`() = runTest {
+        val food = oatBiscuit()
+
+        moment = 2_000
+        val accepted = PerHundredGrams(
+            Nutrients(370.0, 7.0, 62.0, 22.0),
+            Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, moment),
+        )
+        repository.correct(food.id, food.facts.copy(per100g = accepted))
+
+        assertThat(repository.byId(food.id)!!.facts.per100g).isEqualTo(accepted)
+    }
+
+    @Test
+    fun `an estimate equal to a label group leaves the label`() = runTest {
+        val food = oatBiscuit()
+
+        moment = 2_000
+        val echoed = food.facts.per100g!!.copy(
+            provenance = Provenance(Source.AI_ESTIMATE, Confidence.LOW, moment),
+        )
+        repository.correct(food.id, food.facts.copy(per100g = echoed))
+
+        assertThat(repository.byId(food.id)!!.facts.per100g).isEqualTo(food.facts.per100g)
+    }
+
+    /** Checked before anything is written, and the whole Save — the rename included — rolls back. */
+    @Test
+    fun `emptying a group a saved meal counts in still refuses the Save and undoes it`() = runTest {
+        val food = oatBiscuit()
+        val meals = RoomSavedMealRepository(
+            database,
+            database.savedMealDao(),
+            database.foodDao(),
+            Now { moment },
+        )
+        val meal = (meals.create("Snack") as MealResult.Built).mealId
+        meals.put(meal, food.id, 1.0, CountedAs.UNITS)
+
+        val result = repository.saveForm(
+            food.id,
+            name = "Oat cracker",
+            brand = null,
+            facts = FoodFacts(per100g = food.facts.per100g),
+        )
+
+        assertThat((result as EditResult.Refused).why)
+            .isInstanceOf(EditRefused.NeededBySavedMeals::class.java)
+        val after = repository.byId(food.id)!!
+        assertThat(after.name).isEqualTo("Oat biscuit")
+        assertThat(after.facts).isEqualTo(food.facts)
     }
 
     // --- Hiding and deleting ---------------------------------------------------------------------------
