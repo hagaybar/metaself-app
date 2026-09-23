@@ -109,14 +109,14 @@ object Logging {
         val perUnit = facts.perUnit
         return when {
             // What is known, used as it stands.
-            per100g != null -> numbers(
+            per100g != null -> rounded(
                 per100g.nutrients * (grams / HUNDRED_GRAMS),
                 per100g.provenance,
                 grams,
                 GRAMS_UNIT,
             )
             // Filling the gap: what one is worth, and what one weighs, are both known.
-            perUnit != null && weight != null -> numbers(
+            perUnit != null && weight != null -> rounded(
                 perUnit.nutrients * (grams / weight.grams),
                 perUnit.provenance.weakerOf(weight.provenance),
                 grams,
@@ -133,13 +133,13 @@ object Logging {
         val weight = facts.gramsPerUnit
         val per100g = facts.per100g
         return when {
-            perUnit != null -> numbers(
+            perUnit != null -> rounded(
                 perUnit.nutrients * howMany,
                 perUnit.provenance,
                 howMany,
                 perUnit.unitName,
             )
-            per100g != null && weight != null -> numbers(
+            per100g != null && weight != null -> rounded(
                 per100g.nutrients * (weight.grams * howMany / HUNDRED_GRAMS),
                 per100g.provenance.weakerOf(weight.provenance),
                 howMany,
@@ -159,13 +159,16 @@ object Logging {
      *
      * Rounding happens here and only here. The facts stay in fractions so that a 30 g slice does not
      * accumulate error through every step; the row gets whole numbers, once, as it always has.
+     *
+     * Public so that an item described in words and costed from the model's worth (D53, `ItemToLog`)
+     * is rounded by this same function, and the one place that rounds stays the one place.
      */
-    private fun numbers(
+    fun rounded(
         nutrients: Nutrients,
         provenance: Provenance,
         amount: Double,
         unit: String,
-    ) = LoggedFrom.Numbers(
+    ): LoggedFrom.Numbers = LoggedFrom.Numbers(
         kcal = nutrients.kcal.roundToInt(),
         proteinG = nutrients.proteinG.roundToInt(),
         carbsG = nutrients.carbsG.roundToInt(),

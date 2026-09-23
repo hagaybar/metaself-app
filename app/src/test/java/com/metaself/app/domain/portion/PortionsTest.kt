@@ -107,6 +107,26 @@ class PortionsTest {
         }
     }
 
+    /** A per-100 ml worth is only ever multiplied by an amount in millilitres (D53 §1). */
+    @Test
+    fun `millilitres are recognised however spelled`() {
+        listOf(
+            "ml", "ML", " ml ", "millilitre", "millilitres", "milliliter", "milliliters",
+            "מ\"ל", "מל",
+        ).forEach {
+            assertThat(Portions.isMillilitres(it)).isTrue()
+            assertThat(Portions.isMass(it)).isTrue()
+        }
+    }
+
+    @Test
+    fun `millilitres are not grams`() {
+        assertThat(Portions.isGrams("ml")).isFalse()
+        assertThat(Portions.isMillilitres("g")).isFalse()
+        assertThat(Portions.isMillilitres("l")).isFalse()
+        assertThat(Portions.isMillilitres("slice")).isFalse()
+    }
+
     @Test
     fun `a counted unit is neither`() {
         assertThat(Portions.isMass("slice")).isFalse()

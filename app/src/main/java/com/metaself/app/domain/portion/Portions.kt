@@ -28,15 +28,25 @@ object Portions {
     private val GRAM_SPELLINGS = setOf("g", "gram", "grams", "גרם")
 
     /**
+     * The ways the millilitre is written, kept apart for the same reason as [GRAM_SPELLINGS]: a
+     * worth stated per 100 ml is multiplied by an amount in millilitres and by nothing else (D53
+     * §1). Grams and millilitres are never turned into each other here. Folded into [MASS_UNITS].
+     */
+    private val MILLILITRE_SPELLINGS = setOf(
+        "ml", "millilitre", "millilitres", "milliliter", "milliliters",
+        "מ\"ל", "מל",
+    )
+
+    /**
      * Units that are an amount of a substance rather than a number of things.
      *
      * Everything else is counted. Getting this list wrong in the countable direction is the safe
      * error: offering "2" for something measured in grams is odd but harmless, whereas offering
      * "1.5" for a pizza slice is the thing being fixed.
      */
-    private val MASS_UNITS = GRAM_SPELLINGS + setOf(
-        "kg", "ml", "l", "cl", "oz", "lb",
-        "מ\"ל", "ליטר", "קג",
+    private val MASS_UNITS = GRAM_SPELLINGS + MILLILITRE_SPELLINGS + setOf(
+        "kg", "l", "cl", "oz", "lb",
+        "ליטר", "קג",
     )
 
     /**
@@ -76,6 +86,12 @@ object Portions {
      * with it has to know. Everything else [isMass] accepts needs a conversion, and there is none.
      */
     fun isGrams(unit: String): Boolean = unit.trim().lowercase() in GRAM_SPELLINGS
+
+    /**
+     * Whether this unit IS the millilitre, however it was spelled — the one unit a per-100 ml worth
+     * can be multiplied by. Like [isGrams], narrower than [isMass] and needing no factor.
+     */
+    fun isMillilitres(unit: String): Boolean = unit.trim().lowercase() in MILLILITRE_SPELLINGS
 
     /** What to offer for this portion: a scale, a count, or nothing. */
     fun controlFor(amount: Double, unit: String): PortionControl = when {
