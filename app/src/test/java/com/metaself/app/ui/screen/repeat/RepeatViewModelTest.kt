@@ -85,12 +85,139 @@ class RepeatViewModelTest {
 
         viewModel.beginAdjusting(0)
         advanceUntilIdle()
-        viewModel.setComponentAmount(10, 200.0)
+        viewModel.setComponentAmount(10, "200")
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.adjusting!!.rows.first().amount).isEqualTo(200.0)
         // The definition is untouched: tomorrow's salad still has 100 g of cucumber in it.
         assertThat(meals.current.single().components.first().amount).isEqualTo(100.0)
+    }
+
+    // --- A typed amount for each part, just for today (D53 §6) ----------------------------------
+
+    /** His own stored numbers, not a default (D30): 100 g of cucumber and one spoon of oil. */
+    @Test
+    fun `each part opens holding the meal's own amount`() = runTest(dispatcher) {
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad())))
+
+        viewModel.beginAdjusting(0)
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.rows.map { adjusting.amountText(it) }).containsExactly("100", "1").inOrder()
+        assertThat(adjusting.blockedBy).isNull()
+    }
+
+    @Test
+    fun `typing an amount changes that part for today and the meal not at all`() = runTest(dispatcher) {
+        val meals = FakeSavedMealRepository(listOf(salad()))
+        val viewModel = watched(savedMeals = meals)
+
+        viewModel.beginAdjusting(0)
+        viewModel.setComponentAmount(10, "150")
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.amountText(adjusting.rows[0])).isEqualTo("150")
+        assertThat(adjusting.rows[0].amount).isEqualTo(150.0)
+        assertThat(adjusting.asDefined).isEqualTo(salad())
+        assertThat(adjusting.adjusted).isTrue()
+        // 150 g of cucumber at 16 kcal per 100 g is 24, and the spoon of oil 119.
+        assertThat(adjusting.totalKcal).isEqualTo(143)
+        assertThat(meals.current.single()).isEqualTo(salad())
+    }
+
+    @Test
+    fun `typing the meal's amount back is not an adjustment`() = runTest(dispatcher) {
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad())))
+
+        viewModel.beginAdjusting(0)
+        viewModel.setComponentAmount(10, "150")
+        viewModel.setComponentAmount(10, "100")
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.adjusting!!.adjusted).isFalse()
+        assertThat(viewModel.adjusted()!!.adjusted).isFalse()
+    }
+
+    /** A blank box is no amount: nothing is logged, and the part it belongs to is the one named. */
+    @Test
+    fun `a blank box blocks logging and names the part`() = runTest(dispatcher) {
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad())))
+
+        viewModel.beginAdjusting(0)
+        viewModel.setComponentAmount(11, "")
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.blockedBy).isEqualTo(11L)
+        assertThat(adjusting.amountText(adjusting.rows[1])).isEmpty()
+        assertThat(viewModel.adjusted()).isNull()
+        // Still open, so the box can be filled in.
+        assertThat(viewModel.state.value.adjusting).isNotNull()
+
+        viewModel.setComponentAmount(11, "2")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.adjusting!!.blockedBy).isNull()
+        assertThat(viewModel.adjusted()!!.items.last().kcal).isEqualTo(238)
+    }
+
+    /** D42's ceiling: past 100 of something counted, the box refuses and nothing is logged. */
+    @Test
+    fun `an amount past the ceiling blocks logging`() = runTest(dispatcher) {
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad())))
+
+        viewModel.beginAdjusting(0)
+        viewModel.setComponentAmount(11, "101")
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.blockedBy).isEqualTo(11L)
+        assertThat(adjusting.amountTooMuch(adjusting.rows[1])).isTrue()
+        assertThat(adjusting.rows[1].amount).isEqualTo(1.0)
+        assertThat(viewModel.adjusted()).isNull()
+    }
+
+    @Test
+    fun `plus and minus step a counted part and never go below one`() = runTest(dispatcher) {
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+
+        viewModel.stepComponent(11, +1)
+        advanceUntilIdle()
+        var adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.amountText(adjusting.rows[1])).isEqualTo("2")
+        assertThat(adjusting.rows[1].amount).isEqualTo(2.0)
+
+        viewModel.stepComponent(11, -1)
+        viewModel.stepComponent(11, -1)
+        advanceUntilIdle()
+        adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.amountText(adjusting.rows[1])).isEqualTo("1")
+
+        // A typed half is kept: − does nothing that would go below one.
+        viewModel.setComponentAmount(11, "0.5")
+        viewModel.stepComponent(11, -1)
+        advanceUntilIdle()
+        adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.amountText(adjusting.rows[1])).isEqualTo("0.5")
+        viewModel.stepComponent(11, +1)
+        advanceUntilIdle()
+        adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.amountText(adjusting.rows[1])).isEqualTo("1.5")
+    }
+
+    /** Grams have only the box: a step of one gram is no step anyone takes. */
+    @Test
+    fun `a weighed part is not stepped`() = runTest(dispatcher) {
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+
+        viewModel.stepComponent(10, +1)
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.amountText(adjusting.rows[0])).isEqualTo("100")
     }
 
     /**
@@ -145,7 +272,7 @@ class RepeatViewModelTest {
         val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
 
         viewModel.beginAdjusting(0)
-        viewModel.setComponentAmount(10, 200.0)
+        viewModel.setComponentAmount(10, "200")
         viewModel.beginAddingToMeal()
         viewModel.searchToAdd("tom")
         advanceUntilIdle()
@@ -224,7 +351,7 @@ class RepeatViewModelTest {
         assertThat(rows.map { it.id }).containsNoDuplicates()
 
         val tomato = rows.single { it.food.id == TOMATO }
-        viewModel.setComponentAmount(tomato.id, 200.0)
+        viewModel.setComponentAmount(tomato.id, "200")
         viewModel.removeComponent(rows.single { it.food.id == RICE }.id)
         advanceUntilIdle()
 
@@ -437,7 +564,7 @@ class RepeatViewModelTest {
 
         viewModel.beginAdjusting(0)
         advanceUntilIdle()
-        viewModel.setComponentAmount(10, 200.0)
+        viewModel.setComponentAmount(10, "200")
         advanceUntilIdle()
 
         assertThat(viewModel.adjusted()!!.adjusted).isTrue()

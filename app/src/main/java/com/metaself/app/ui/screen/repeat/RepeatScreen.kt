@@ -32,14 +32,17 @@ import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
-import com.metaself.app.domain.portion.Portions
+import com.metaself.app.domain.amount.BelievableAmount
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.food.HowItIsCounted
 import com.metaself.app.ui.food.named
 import com.metaself.app.ui.food.namesTogether
+import com.metaself.app.ui.portion.AmountBox
+import com.metaself.app.ui.portion.PortionWording
 import com.metaself.app.ui.portion.portionWords
+import com.metaself.app.ui.portion.unitWord
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 import java.util.Locale
@@ -87,7 +90,8 @@ fun RepeatScreen(
     onShowTab: (RepeatTab) -> Unit,
     onSearch: (String) -> Unit,
     onBeginAdjusting: (Int) -> Unit,
-    onSetComponentAmount: (Long, Double) -> Unit,
+    onSetComponentAmount: (Long, String) -> Unit,
+    onStepComponent: (Long, Int) -> Unit,
     onRemoveComponent: (Long) -> Unit,
     onCancelAdjusting: () -> Unit,
     onLogAdjusted: () -> Unit,
@@ -317,6 +321,7 @@ fun RepeatScreen(
                     Adjuster(
                         adjusting = adjusting,
                         onSetAmount = onSetComponentAmount,
+                        onStep = onStepComponent,
                         onRemove = onRemoveComponent,
                         onCancel = onCancelAdjusting,
                         onLog = onLogAdjusted,
@@ -423,6 +428,9 @@ private fun BuiltMeal(
  * because he has dropped the oil four times running: if the meal is to change, he changes it, on
  * the builder.
  *
+ * **Each part's amount is typed** (D53 §6): its box opens holding what the meal has for it, and the
+ * three proportions it replaced — Less, As it was, More — are gone with the proposal's.
+ *
  * **It can add as well as take away** (issue #10): "Put something in" opens a search of its own
  * under the rows. While that step is open, Log it and Leave it alone step aside — the step has its
  * own way out, and a food with an amount typed but not yet put in must not be left behind by a
@@ -431,7 +439,8 @@ private fun BuiltMeal(
 @Composable
 private fun Adjuster(
     adjusting: Adjusting,
-    onSetAmount: (Long, Double) -> Unit,
+    onSetAmount: (Long, String) -> Unit,
+    onStep: (Long, Int) -> Unit,
     onRemove: (Long) -> Unit,
     onCancel: () -> Unit,
     onLog: () -> Unit,
@@ -456,26 +465,22 @@ private fun Adjuster(
                     text = describeComponent(component, portionWords(component)),
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Small(stringResource(R.string.propose_less)) {
-                        onSetAmount(component.id, component.amount * Portions.LESS)
-                    }
-                    Small(stringResource(R.string.repeat_as_it_was)) {
-                        onSetAmount(
-                            component.id,
-                            adjusting.asDefined.components
-                                .firstOrNull { it.id == component.id }?.amount
-                                ?: component.amount,
-                        )
-                    }
-                    Small(stringResource(R.string.propose_more)) {
-                        onSetAmount(component.id, component.amount * Portions.MORE)
-                    }
-                    Small(stringResource(R.string.propose_remove)) { onRemove(component.id) }
-                }
+                // The amount the meal has for it, typed over for today (D53 §6), in the part's own
+                // unit; − and + for a counted part. The worth is the food's and is not edited here.
+                AmountBox(
+                    text = adjusting.amountText(component),
+                    unitWords = unitWord(
+                        usableAmount(component, adjusting.amountText(component)),
+                        PortionWording.unitOf(component),
+                    ),
+                    counted = component.countedAs == CountedAs.UNITS,
+                    tooMuch = adjusting.amountTooMuch(component),
+                    most = BelievableAmount.amountEaten(component.countedAs),
+                    inGrams = component.countedAs == CountedAs.GRAMS,
+                    onText = { onSetAmount(component.id, it) },
+                    onStep = { onStep(component.id, it) },
+                )
+                Small(stringResource(R.string.propose_remove)) { onRemove(component.id) }
             }
         }
 
@@ -496,7 +501,16 @@ private fun Adjuster(
         )
 
         if (adjusting.finding == null) {
-            Button(onClick = onLog, modifier = Modifier.fillMaxWidth()) {
+            // Nothing is logged at a part's last amount while its box says something else: the
+            // part is named, as the proposal screen names a row (D53 §6).
+            val blocked = adjusting.rows.firstOrNull { it.id == adjusting.blockedBy }
+            blocked?.let {
+                Text(
+                    text = stringResource(R.string.propose_blocked, it.food.name),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            Button(onClick = onLog, enabled = blocked == null, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.repeat_adjust_log))
             }
             TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {

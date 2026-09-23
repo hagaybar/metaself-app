@@ -179,8 +179,6 @@
     <string name="propose_hint">A sentence is enough: "chicken shawarma in a pita, hummus, side salad"</string>
     <string name="propose_ask">Work it out</string>
     <string name="propose_waiting">Asking the model…</string>
-    <string name="propose_less">Less</string>
-    <string name="propose_more">More</string>
     <string name="propose_count_fewer">−</string>
     <string name="propose_count_more">+</string>
     <string name="propose_remove">Remove</string>
@@ -222,7 +220,6 @@
     <string name="repeat_found_in_foods">Found in your foods — show them</string>
     <string name="repeat_found_in_meals">Found in your meals — show them</string>
     <string name="repeat_adjust">Adjust</string>
-    <string name="repeat_as_it_was">As it was</string>
     <string name="repeat_adjust_log">Log it</string>
     <string name="repeat_adjust_cancel">Leave it alone</string>
     <!-- Leaves the one-day adjuster's "Put something in" step without adding anything (issue #10). -->

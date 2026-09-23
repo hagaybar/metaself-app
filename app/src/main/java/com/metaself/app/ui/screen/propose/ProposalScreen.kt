@@ -35,7 +35,7 @@ import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.day.DayTotalsWording
-import com.metaself.app.ui.food.AmountTooMuch
+import com.metaself.app.ui.portion.AmountBox
 import com.metaself.app.ui.portion.unitWord
 import com.metaself.app.ui.propose.ProposalWording
 import com.metaself.app.ui.screen.day.MealNamingSheet
@@ -353,36 +353,18 @@ private fun ProposedRow(
             )
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (counted) Small(stringResource(R.string.propose_count_fewer)) { onStep(-1) }
-            OutlinedTextField(
-                value = item.amountText,
-                onValueChange = onSetAmount,
-                label = { Text(stringResource(R.string.propose_amount_label)) },
-                isError = item.amountTooMuch,
-                singleLine = true,
-                // Decimal, not Number: an amount is read as a decimal and a comma is accepted for
-                // the point, so a keyboard with neither would refuse half a bun.
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.weight(1f),
-            )
-            // The unit is not edited on its own: a different unit needs a different worth (D53 §1).
-            // Only the app's own "portion" takes a plural (D37).
-            Text(
-                text = unitWord(item.amountOrNull, item.unit),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            if (counted) Small(stringResource(R.string.propose_count_more)) { onStep(+1) }
-        }
-        // Only grams are said as grams: a ceiling of millilitres or of pieces names no unit.
-        AmountTooMuch(
+        // The unit is not edited on its own: a different unit needs a different worth (D53 §1).
+        // Only the app's own "portion" takes a plural (D37), and only grams are said as grams: a
+        // ceiling of millilitres or of pieces names no unit.
+        AmountBox(
+            text = item.amountText,
+            unitWords = unitWord(item.amountOrNull, item.unit),
+            counted = counted,
             tooMuch = item.amountTooMuch,
             most = item.most,
-            countedAs = if (Portions.isGrams(item.unit)) CountedAs.GRAMS else CountedAs.UNITS,
+            inGrams = Portions.isGrams(item.unit),
+            onText = onSetAmount,
+            onStep = onStep,
         )
 
         item.rateLine?.let { rate ->

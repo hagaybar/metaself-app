@@ -57,15 +57,6 @@ object Portions {
      */
     private val NUMBER_THEN_WORD = Regex("""(\d+(?:\.\d+)?)\s*([\p{L}"']+)""")
 
-    /**
-     * The proportions offered for something measured rather than counted, on the repeat screen's
-     * one-day adjuster. The model's proposal took a typed amount in their place (D53 §6); the
-     * adjuster follows it in the same decision's next step.
-     */
-    const val LESS = 0.75
-    const val AS_IT_WAS = 1.0
-    const val MORE = 1.5
-
     fun canScale(amount: Double, unit: String): Boolean = amount > 0.0 && unit.isNotBlank()
 
     /**

@@ -321,6 +321,7 @@ private fun AddSomethingHere(
         onSearch = repeatViewModel::search,
         onBeginAdjusting = repeatViewModel::beginAdjusting,
         onSetComponentAmount = repeatViewModel::setComponentAmount,
+        onStepComponent = repeatViewModel::stepComponent,
         onRemoveComponent = repeatViewModel::removeComponent,
         onCancelAdjusting = repeatViewModel::cancelAdjusting,
         onLogAdjusted = {
