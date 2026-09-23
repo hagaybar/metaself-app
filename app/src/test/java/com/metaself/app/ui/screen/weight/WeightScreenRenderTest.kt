@@ -134,12 +134,12 @@ class WeightScreenRenderTest {
         // the screen; this one looks at the screen.
         //
         // Both figures are COMPUTED, not chosen: aFortnight starts at 80.0 and loses 100 g a day,
-        // so it spans 1.3 kg, the axis widens to its two-kilogram minimum, and the ends of that
-        // window are 80.4 and 78.4.
+        // so it spans 1.3 kg, the axis widens to its two-kilogram minimum, 80.35 down to 78.35, and
+        // the whole kilos inside that are 80 and 79 — gridlines, the top one carrying the unit.
         val texts = drawFortnight()
 
-        assertThat(texts.any { it == "80.4 kg" }).isTrue()
-        assertThat(texts.any { it == "78.4 kg" }).isTrue()
+        assertThat(texts).contains("80 kg")
+        assertThat(texts).contains("79")
     }
 
     @Test

@@ -38,16 +38,55 @@ class WeightChartScreenRenderTest {
     fun `the full-screen chart shows the axis and the dates`() {
         val texts = drawFortnight()
 
-        // The same four labels the weight screen draws: what the axis covers, and the two ends of
-        // what is shown. A bigger chart that lost them would be a bigger picture of less.
+        // The same labels the weight screen draws: the gridlines, and the two ends of what is
+        // shown. A bigger chart that lost them would be a bigger picture of less.
         //
         // The two kilogram figures are COMPUTED from the fixture: aFortnight starts at 80.0 and
-        // loses 100 g a day, so the axis widens to its two-kilogram minimum around that data and
-        // its ends are 80.4 and 78.4.
-        assertThat(texts).contains("80.4 kg")
-        assertThat(texts).contains("78.4 kg")
+        // loses 100 g a day, so the axis widens to its two-kilogram minimum around that data,
+        // 80.35 down to 78.35, and the whole kilos inside it are 80 and 79.
+        assertThat(texts).contains("80 kg")
+        assertThat(texts).contains("79")
         assertThat(texts).contains("21 Aug")
         assertThat(texts).contains("3 Sep")
+    }
+
+    @Test
+    fun `the goal line says what it is`() {
+        // aFortnight runs 80.0 down to 78.7, so a goal of 79 sits inside what is drawn and stays.
+        val readings = aFortnight()
+        val texts = render.texts {
+            WeightChartBlock(
+                trend = WeightTrend.of(readings),
+                range = ChartRange.All,
+                todayEpochDay = TEST_EPOCH_DAY,
+                onRange = {},
+                targetKg = 79.0,
+            )
+        }
+
+        assertThat(texts).contains("Goal 79 kg")
+    }
+
+    @Test
+    fun `a screen reader hears the chart summed up in a sentence`() {
+        // The trend at each end is COMPUTED from aFortnight: 80.0 on the first day, and 79.371 on
+        // the last after thirteen days smoothed a tenth at a time towards readings falling 100 g a
+        // day — 79.4 to one decimal.
+        val readings = aFortnight()
+        val texts = render.texts {
+            WeightChartBlock(
+                trend = WeightTrend.of(readings),
+                range = ChartRange.All,
+                todayEpochDay = TEST_EPOCH_DAY,
+                onRange = {},
+                targetKg = 79.0,
+            )
+        }
+
+        assertThat(texts).contains(
+            "Weight chart, 21 Aug to 3 Sep. The trend went from 80.0 kg to 79.4 kg. " +
+                "The dashed line is the goal weight, 79 kg.",
+        )
     }
 
     @Test

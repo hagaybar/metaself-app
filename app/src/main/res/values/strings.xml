@@ -472,6 +472,7 @@
     <string name="weight_range_empty">Nothing weighed in the %1$s.</string>
     <string name="weight_goal_off_chart">Your goal weight is off this view.</string>
     <string name="weight_chart_open">Tap the chart for a bigger view</string>
+    <string name="weight_chart_hold">Hold and drag to read a day</string>
     <string name="weight_chart_title">Weight chart</string>
     <string name="weight_chart_close">Close</string>
     <!-- D33: when a meal was eaten, shown on the day and corrected there. -->
