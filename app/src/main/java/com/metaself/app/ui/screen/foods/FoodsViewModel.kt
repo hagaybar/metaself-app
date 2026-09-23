@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.foods
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.food.EditRefused
@@ -39,6 +40,7 @@ import javax.inject.Inject
 class FoodsViewModel @Inject constructor(
     private val foods: FoodRepository,
     private val now: Now,
+    savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     private val _looking = MutableStateFlow(Looking())
@@ -81,26 +83,52 @@ class FoodsViewModel @Inject constructor(
         initialValue = FoodsUiState(),
     )
 
+    init {
+        // Opened from "Give this a portion" on the logging screen, for one food: its editor is
+        // opened, and the list searched down to it, so the editor is on screen rather than below
+        // however many foods come before it. Read before the first frame for the reason the meal
+        // builder reads its chosen foods then. A food that has gone meanwhile opens nothing.
+        //
+        // Once only: the route's arguments outlive the process, so without the mark a manager
+        // recreated after the system ended the app would reopen an editor he had closed.
+        val openFor = savedState.get<String>("food")?.toLongOrNull()
+            ?.takeUnless { savedState.get<Boolean>(FOOD_OPENED) == true }
+        savedState[FOOD_OPENED] = true
+        openFor?.let { foodId ->
+            viewModelScope.launch {
+                val food = foods.byId(foodId) ?: return@launch
+                _looking.value = _looking.value.copy(query = food.name)
+                _editing.value = Editing(foodId = food.id, form = FoodForm.of(food))
+            }
+        }
+    }
+
     private fun visible(all: List<Food>, looking: Looking): List<Food> {
         val shown = all.filter { looking.showHidden || !it.hidden }
         val filtered = if (looking.onlyPortions) shown.filter { it.facts.onlyAPortion } else shown
         return FoodSearch.matching(filtered, looking.query)
     }
 
+    /**
+     * Searching, and the two filters below, close an open food but leave a join alone, for the
+     * reason [clearChoosing] gives about what is chosen: while a join waits for its duplicate, the
+     * search is how he finds it, and Show hidden is the only way to reach a hidden one. Looking that
+     * ended the join would cancel the one act that cannot be undone, silently, the moment it was used.
+     */
     fun search(query: String) {
         _looking.value = _looking.value.copy(query = query)
-        closeEditor()
+        stopEditing()
     }
 
     /** The foods the conversion could say least about, so he can go through them in one sitting. */
     fun showOnlyPortions(only: Boolean) {
         _looking.value = _looking.value.copy(onlyPortions = only)
-        closeEditor()
+        stopEditing()
     }
 
     fun showHidden(show: Boolean) {
         _looking.value = _looking.value.copy(showHidden = show)
-        closeEditor()
+        stopEditing()
     }
 
     fun edit(foodId: Long) {
@@ -268,8 +296,8 @@ class FoodsViewModel @Inject constructor(
      * words, and [confirmJoining] answers for both ways in (D36).
      *
      * **A pick whose read lands after he has backed out is dropped.** The picked food is looked up
-     * first; if meanwhile he pressed Not now, searched, held a row or opened a food, the join he was
-     * in has ended, and writing the pair now would bring back a question he had walked away from.
+     * first; if meanwhile he pressed Not now, held a row or opened a food, the join he was in has
+     * ended, and writing the pair now would bring back a question he had walked away from.
      * Only the same join, still waiting for its pick, takes it.
      */
     fun mergeInto(loserId: Long) {
@@ -381,9 +409,14 @@ class FoodsViewModel @Inject constructor(
     }
 
     private fun closeEditor() {
+        stopEditing()
+        _merging.value = null
+    }
+
+    /** Close an open food and any question about deleting it, and nothing else. */
+    private fun stopEditing() {
         _editing.value = null
         _deleting.value = null
-        _merging.value = null
     }
 
     /** The four things that are not about looking, as one value, because `combine` takes five. */
@@ -403,5 +436,8 @@ class FoodsViewModel @Inject constructor(
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+
+        /** Saved once the route's food has been acted on, so a recreation does not act on it again. */
+        const val FOOD_OPENED = "foodOpened"
     }
 }

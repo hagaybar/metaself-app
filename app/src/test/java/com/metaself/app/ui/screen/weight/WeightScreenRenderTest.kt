@@ -132,6 +132,7 @@ class WeightScreenRenderTest {
                 onDelete = {},
                 onRange = {},
                 onOpenChart = {},
+                onChangeGoal = {},
                 onBack = {},
             )
         }
@@ -159,6 +160,35 @@ class WeightScreenRenderTest {
         assertThat(texts.any { it.contains("kg to go, to 75 kg") }).isTrue()
         // The rate must be in the same sentence as the weeks: it is a division, not a promise.
         assertThat(texts.any { it.contains("weeks at 0.5 kg a week") }).isTrue()
+    }
+
+    /**
+     * Public issue #11: the screen names the goal weight and the weekly rate, so it offers the way
+     * to change them — the profile editor, where both are set.
+     */
+    @Test
+    fun `the goal it names can be changed from here`() {
+        val readings = aFortnight()
+        val trend = WeightTrend.of(readings)
+        var changing = false
+        draw(
+            WeightUiState(
+                readings = readings,
+                trend = trend,
+                progress = GoalProgress.of(Goal.lose(0.5, targetKg = 75.0), trend),
+            ),
+            onChangeGoal = { changing = true },
+        )
+
+        render.click(CHANGE_GOAL)
+
+        assertThat(changing).isTrue()
+    }
+
+    /** With no goal weight there is nothing to change, but the same editor is where one is set. */
+    @Test
+    fun `with no goal weight the way to set one is still there`() {
+        assertThat(drawFortnight()).contains(CHANGE_GOAL)
     }
 
     @Test
@@ -282,6 +312,7 @@ class WeightScreenRenderTest {
         state: WeightUiState,
         onRange: (ChartRange) -> Unit = {},
         onOpenChart: () -> Unit = {},
+        onChangeGoal: () -> Unit = {},
     ): List<String> = render.texts {
         WeightScreen(
             state = state,
@@ -292,7 +323,13 @@ class WeightScreenRenderTest {
             onDelete = {},
             onRange = onRange,
             onOpenChart = onOpenChart,
+            onChangeGoal = onChangeGoal,
             onBack = {},
         )
+    }
+
+    private companion object {
+        /** `R.string.weight_change_goal`, as the phone draws it. */
+        const val CHANGE_GOAL = "Change your goal"
     }
 }

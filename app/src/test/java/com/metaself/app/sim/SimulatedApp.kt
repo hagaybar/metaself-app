@@ -120,6 +120,9 @@ sealed interface Where {
 
     data object Manager : Where
 
+    /** The manager opened on one food's editor, as "Give this a portion" opens it. */
+    data class EditingFood(val foodId: Long) : Where
+
     /** [mealId] zero means a meal that does not exist yet, exactly as the real route means it. */
     data class BuildingMeal(val mealId: Long, val foodIds: List<Long> = emptyList()) : Where
 
@@ -174,6 +177,7 @@ fun SimulatedApp(world: World) {
         is Where.AddSomething -> AddSomethingHere(world, dayViewModel, stack, goBack)
         is Where.TypingTheNumbers -> TypingTheNumbersHere(dayViewModel, goBack)
         is Where.Manager -> ManagerHere(world, stack, goBack)
+        is Where.EditingFood -> ManagerHere(world, stack, goBack, SavedStateHandle(mapOf("food" to here.foodId.toString())))
         is Where.BuildingMeal -> BuildingMealHere(world, here, goBack)
         is Where.Record -> RecordHere(dayViewModel, here, goBack)
     }
@@ -290,6 +294,7 @@ private fun AddSomethingHere(
         state = state,
         onDescribe = {},
         onManageFoods = { stack.add(Where.Manager) },
+        onGivePortion = { foodId -> stack.add(Where.EditingFood(foodId)) },
         onRepeat = { meal ->
             dayViewModel.logSavedMeal(
                 LoggedMeal(
@@ -325,11 +330,16 @@ private fun AddSomethingHere(
 }
 
 @Composable
-private fun ManagerHere(world: World, stack: MutableList<Where>, goBack: () -> Unit) {
+private fun ManagerHere(
+    world: World,
+    stack: MutableList<Where>,
+    goBack: () -> Unit,
+    savedState: SavedStateHandle = SavedStateHandle(),
+) {
     // Keyed on nothing: the manager is the root, and a view model rebuilt on every recomposition
     // would forget which tab is in front between one press and the next.
     val managerViewModel = remember { ManagerViewModel() }
-    val foodsViewModel = remember { FoodsViewModel(world.foods, world.now) }
+    val foodsViewModel = remember { FoodsViewModel(world.foods, world.now, savedState) }
     val mealsViewModel = remember { MealsViewModel(world.savedMeals) }
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()

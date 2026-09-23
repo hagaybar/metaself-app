@@ -127,7 +127,8 @@ A spec is published prose and gets the same reading as a comment: its worked exa
 say so.
 
 Issue numbers in code comments are the OLD private ones and were deliberately not rewritten — many
-are closed and have no counterpart here. This repository's own issues start from 1.
+are closed and have no counterpart here. This repository's own issues start from 1. New comments
+cite this repository's issues as "public issue #N", so they cannot be mistaken for the old ones.
 
 ## Working rhythm
 

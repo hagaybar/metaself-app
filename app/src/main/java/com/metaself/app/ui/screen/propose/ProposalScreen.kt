@@ -10,6 +10,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -61,6 +62,7 @@ fun ProposalScreen(
     onTellItMore: (String) -> Unit,
     onSave: () -> Unit,
     onTypeItMyself: () -> Unit,
+    onAddKey: () -> Unit,
     onCancel: () -> Unit,
     // Deliberately without defaults, all seven: the sheet is reachable from one place only, and a
     // default would let that one place forget a piece of the wiring and fail in silence on the
@@ -74,7 +76,11 @@ fun ProposalScreen(
     refusal: String?,
     modifier: Modifier = Modifier,
 ) {
-    var typed by remember(description) { mutableStateOf(description) }
+    // Saved rather than merely remembered, so that stepping out to settings for a key and coming
+    // back keeps what he typed since the last ask as well as the ask itself, which the view model
+    // holds (public issue #11). The back stack saves this screen's saveable state while another is
+    // on top.
+    var typed by rememberSaveable(description) { mutableStateOf(description) }
     var extra by remember { mutableStateOf("") }
 
     // That the offer was pressed is remembered here, beside the name being typed, for the reason
@@ -129,6 +135,14 @@ fun ProposalScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )
+                }
+
+                // Said AND offered: the sentence above names settings, and this is the way there,
+                // straight to the key (public issue #11).
+                if (state.needsKey) {
+                    OutlinedButton(onClick = onAddKey, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.propose_add_key))
+                    }
                 }
 
                 Button(

@@ -722,6 +722,16 @@ internal fun Chosen(
                 Text(stringResource(R.string.day_clear_choosing))
             }
         }
+        // At one, the hint about holding has been acted on and is gone, and nothing else on screen
+        // says the next tap adds to the choice (public issue #12). From two on the choice plainly
+        // grows by tapping.
+        if (count == 1) {
+            Text(
+                text = stringResource(R.string.record_tap_to_add),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+        }
         Button(onClick = onMakeMeal, modifier = Modifier.fillMaxWidth()) {
             Text(pluralStringResource(R.plurals.day_make_meal, count, count))
         }
@@ -1254,8 +1264,13 @@ private fun LoggedMeal(
  * One thing eaten.
  *
  * Holding it starts choosing; while choosing, a tap ticks it. That way round for the same reason the
- * foods list uses: a tap on a day's row already means something, and choosing that began on a tap
- * would turn every look at the day into the start of a meal.
+ * foods list uses: a tap on a row already means something, and choosing that began on a tap would
+ * turn every look at the record into the start of a meal.
+ *
+ * **What a plain tap means is what Edit means: it opens the row to be corrected**
+ * (public issue #12). The row lit up under a tap and then did nothing, which reads as a broken
+ * screen; correcting is what the record is for (D50), so that is the tap's answer. Edit stays, for
+ * whoever looks for a word, not a row.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1274,7 +1289,7 @@ private fun LoggedItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = { if (choosing) onToggleChosen() },
+                    onClick = { if (choosing) onToggleChosen() else onEdit(item) },
                     onLongClick = onBeginChoosing,
                 )
                 .padding(vertical = 6.dp),
@@ -1354,8 +1369,9 @@ internal fun EatenAt(meal: Meal, onTime: (Meal) -> Unit, enabled: Boolean = true
     val said = DayTotalsWording.eatenAtDescription(meal, zone)
     Box(
         // The usual 48 of touch, however small the figure drawn in it: a near-miss otherwise lands
-        // on the row, which does nothing on a plain tap. While rows are being chosen for a meal the
-        // time is not a separate control at all, so a tap there ticks the row like anywhere else.
+        // on the row, which opens the row's editor instead of the time. While rows are being chosen
+        // for a meal the time is not a separate control at all, so a tap there ticks the row like
+        // anywhere else.
         modifier = Modifier
             .width(TIME_WIDTH)
             .heightIn(min = 48.dp)

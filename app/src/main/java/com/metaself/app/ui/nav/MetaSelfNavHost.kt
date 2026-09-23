@@ -65,8 +65,9 @@ import com.metaself.app.ui.screen.weight.WeightViewModel
 /**
  * The places this host can be.
  *
- * The profile is not one of them: it is the root's business, reached through `onEditProfile`, for
- * the same reason step 2 gave — it is chosen by data rather than pushed onto a stack.
+ * The profile is not one of them: it is the root's business, reached through `onEditProfile` (and
+ * its editor through `onEditGoal`), for the same reason step 2 gave — it is chosen by data rather
+ * than pushed onto a stack.
  */
 sealed class Destination(val route: String) {
     data object Today : Destination("today")
@@ -76,14 +77,20 @@ sealed class Destination(val route: String) {
             if (name.isBlank()) route else "entry/add?name=" + Uri.encode(name)
     }
     data object Weight : Destination("weight")
-    data object Settings : Destination("settings")
+    data object Settings : Destination("settings") {
+        /** Scrolled to the key: where the describe screen's "Add a key in settings" goes. */
+        val atKey: String = "settings?at=key"
+    }
     data object Describe : Destination("meal/describe") {
         /** Carrying the words already typed into the search, so a miss costs a tap, not a retype. */
         fun withWords(text: String): String =
             if (text.isBlank()) route else "meal/describe?text=" + Uri.encode(text)
     }
     data object Repeat : Destination("meal/repeat")
-    data object Foods : Destination("foods")
+    data object Foods : Destination("foods") {
+        /** With this food's editor already open: where "Give this a portion" goes. */
+        fun editing(foodId: Long): String = "foods?food=$foodId"
+    }
     data object BuildMeal : Destination("meal/build/{mealId}") {
         /** Zero means a meal that does not exist yet: he is starting one. */
         fun of(mealId: Long): String = "meal/build/$mealId"
@@ -151,6 +158,8 @@ private val describeRoute = Destination.Describe.route + "?text={text}"
 @Composable
 fun MetaSelfNavHost(
     onEditProfile: () -> Unit,
+    /** The profile editor, opened straight away: where the goal weight and weekly rate are set. */
+    onEditGoal: () -> Unit,
     dayViewModel: DayViewModel = hiltViewModel(),
     weightViewModel: WeightViewModel = hiltViewModel(),
 ) {
@@ -211,6 +220,12 @@ fun MetaSelfNavHost(
                 onUndoDelete = weightViewModel::undoDelete,
                 onRange = weightViewModel::setRange,
                 onOpenChart = { navController.navigate(Destination.WeightChart.route) },
+                // The editor is the root's, like the profile (see `Destination`); the root keeps
+                // this screen where it is underneath, so closing the editor comes back here.
+                onChangeGoal = {
+                    justLogged = null
+                    onEditGoal()
+                },
                 onBack = {
                     justLogged = null
                     navController.popBackStack()
@@ -277,7 +292,18 @@ fun MetaSelfNavHost(
             }
         }
 
-        composable(Destination.Settings.route) {
+        // Registered with where to open as an optional argument and still reachable by the bare
+        // route the menu uses, exactly as the food manager is.
+        composable(
+            route = Destination.Settings.route + "?at={at}",
+            arguments = listOf(
+                navArgument("at") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
             val clipboard = LocalClipboardManager.current
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
@@ -377,6 +403,7 @@ fun MetaSelfNavHost(
                 },
                 onClearProblems = settingsViewModel::clearProblems,
                 onBack = { navController.popBackStack() },
+                openAtKey = entry.arguments?.getString("at") == "key",
             )
         }
 
@@ -446,6 +473,9 @@ fun MetaSelfNavHost(
                     navController.navigate(Destination.Describe.withWords(words))
                 },
                 onManageFoods = { navController.navigate(Destination.Foods.route) },
+                // Back from the editor comes back here, with the question still open: the food is
+                // observed, so the portion he gave it is on offer when he returns.
+                onGivePortion = { foodId -> navController.navigate(Destination.Foods.editing(foodId)) },
                 onRepeat = { meal ->
                     // Straight to the day being looked at. No model, no network, no waiting.
                     dayViewModel.logSavedMeal(
@@ -550,7 +580,18 @@ fun MetaSelfNavHost(
         // screen's link kept, returning to the day would throw away a half-finished log he stepped
         // out of to fix a duplicate, and would be a back arrow that skips a screen. Design §3.1
         // corrected to match. From the menu this is the day anyway.
-        composable(Destination.Foods.route) {
+        // Registered with the food to open as an optional argument and still reachable by the bare
+        // route, exactly as the meal builder is. A String for the reason `Destination.Record` gives.
+        composable(
+            route = Destination.Foods.route + "?food={food}",
+            arguments = listOf(
+                navArgument("food") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) {
             val managerViewModel: ManagerViewModel = hiltViewModel()
             val tab by managerViewModel.tab.collectAsStateWithLifecycle()
             val foodsViewModel: FoodsViewModel = hiltViewModel()
@@ -686,6 +727,13 @@ fun MetaSelfNavHost(
                     navController.navigate(
                         Destination.AddEntry.withName(proposeViewModel.description),
                     )
+                },
+                // Forward, not back: the describe screen stays on the stack underneath settings,
+                // its view model with it, so Back from settings lands on his words (public
+                // issue #11).
+                onAddKey = {
+                    proposeViewModel.leaveToAddKey()
+                    navController.navigate(Destination.Settings.atKey)
                 },
                 onCancel = { navController.popBackStack() },
             )

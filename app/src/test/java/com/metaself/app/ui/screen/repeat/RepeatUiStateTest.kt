@@ -9,6 +9,7 @@ import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.Provenance
+import com.metaself.app.domain.food.SavedMeal
 import org.junit.jupiter.api.Test
 
 /**
@@ -45,6 +46,35 @@ class RepeatUiStateTest {
     }
 
     /**
+     * A miss on the list in front while the other list holds a match: the other list is named, so
+     * the screen can offer it. Nothing is named when this list matched, when neither did, or when
+     * nothing was searched for.
+     */
+    @Test
+    fun `a miss here names the other list when that one matched`() {
+        assertThat(
+            RepeatUiState(tab = RepeatTab.MEALS, query = "hummus", foods = someFoods())
+                .matchesOnOtherTab,
+        ).isEqualTo(RepeatTab.FOODS)
+
+        assertThat(
+            RepeatUiState(tab = RepeatTab.FOODS, query = "salad", meals = listOf(aMeal()))
+                .matchesOnOtherTab,
+        ).isEqualTo(RepeatTab.MEALS)
+
+        assertThat(
+            RepeatUiState(tab = RepeatTab.FOODS, query = "hummus", foods = someFoods())
+                .matchesOnOtherTab,
+        ).isNull()
+
+        assertThat(RepeatUiState(tab = RepeatTab.MEALS, query = "fish").matchesOnOtherTab).isNull()
+
+        assertThat(
+            RepeatUiState(tab = RepeatTab.MEALS, query = "", foods = someFoods()).matchesOnOtherTab,
+        ).isNull()
+    }
+
+    /**
      * The third dead end: nothing searched for, the list in front empty, the other list not. With a
      * query typed this case belongs to the searched-and-found-nothing sentence instead, so the
      * property must stay out of it.
@@ -75,6 +105,8 @@ class RepeatUiStateTest {
     }
 
     private fun someFoods() = listOf(aFood(name = "Hummus"))
+
+    private fun aMeal() = SavedMeal(id = 1, name = "Salad", components = emptyList())
 
     // --- An amount has a ceiling (D42, issue #32) ------------------------------------------------
 

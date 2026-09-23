@@ -1,6 +1,7 @@
 package com.metaself.app.ui.screen.settings
 
 import java.time.LocalDate
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -8,6 +9,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -24,9 +27,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,7 +59,10 @@ import com.metaself.app.ui.theme.Spacing
  * A saved key is never shown back — not even masked-with-a-reveal. There is nothing the owner can do
  * with seeing it that he cannot do by pasting a new one, and a credential on screen is a credential
  * in a screenshot.
+ *
+ * [openAtKey] opens it scrolled to the key, for the describe screen's way here when there is none.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
@@ -83,6 +92,7 @@ fun SettingsScreen(
     onCopyProblems: () -> Unit,
     onClearProblems: () -> Unit,
     onBack: () -> Unit,
+    openAtKey: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     var typedKey by remember { mutableStateOf("") }
@@ -538,44 +548,64 @@ fun SettingsScreen(
 
         // --- the key ---
 
-        Text(
-            text = stringResource(R.string.settings_key_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = stringResource(
-                if (state.hasKey) R.string.settings_key_saved else R.string.settings_key_none,
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        OutlinedTextField(
-            value = typedKey,
-            onValueChange = { typedKey = it },
-            label = { Text(stringResource(R.string.settings_key_field)) },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            Button(
-                onClick = {
-                    onSaveKey(typedKey)
-                    typedKey = ""
-                },
-                enabled = typedKey.isNotBlank(),
-            ) { Text(stringResource(R.string.settings_key_save)) }
+        // One block, so that settings opened from "Add a key in settings" on the describe screen
+        // can bring the whole of it into view — title, field and Save — rather than stop at the
+        // first line with the field still below the edge (public issue #11). Spaced as the screen's
+        // own column spaces its children, so wrapping them changes nothing. Once per visit: turning
+        // the phone must not drag him back here from wherever he has scrolled since.
+        val keySection = remember { BringIntoViewRequester() }
+        var broughtToKey by rememberSaveable { mutableStateOf(false) }
+        Column(
+            modifier = Modifier.bringIntoViewRequester(keySection),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Section),
+        ) {
+            Text(
+                text = stringResource(R.string.settings_key_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                text = stringResource(
+                    if (state.hasKey) R.string.settings_key_saved else R.string.settings_key_none,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedTextField(
+                value = typedKey,
+                onValueChange = { typedKey = it },
+                label = { Text(stringResource(R.string.settings_key_field)) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Button(
+                    onClick = {
+                        onSaveKey(typedKey)
+                        typedKey = ""
+                    },
+                    enabled = typedKey.isNotBlank(),
+                ) { Text(stringResource(R.string.settings_key_save)) }
 
-            if (state.hasKey) {
-                TextButton(onClick = onClearKey) {
-                    Text(stringResource(R.string.settings_key_clear))
+                if (state.hasKey) {
+                    TextButton(onClick = onClearKey) {
+                        Text(stringResource(R.string.settings_key_clear))
+                    }
                 }
             }
+            Text(
+                text = stringResource(R.string.settings_key_privacy),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
         }
-        Text(
-            text = stringResource(R.string.settings_key_privacy),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
+        if (openAtKey && !broughtToKey) {
+            LaunchedEffect(Unit) {
+                // bringIntoView() does nothing before the block has been placed; see FoodsScreen.
+                withFrameNanos { }
+                keySection.bringIntoView()
+                broughtToKey = true
+            }
+        }
 
         HorizontalDivider()
 

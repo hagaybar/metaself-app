@@ -34,6 +34,7 @@ import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.food.FoodWording
+import com.metaself.app.ui.food.HowItIsCounted
 import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
@@ -69,6 +70,7 @@ fun RepeatScreen(
     onDescribe: (String) -> Unit,
     /** Something on this list is wrong, or is a duplicate: the place to put it right. */
     onManageFoods: () -> Unit,
+    onGivePortion: (foodId: Long) -> Unit,
     onRepeat: (SavedMeal) -> Unit,
     /** Start a new meal, or open one to change for good. */
     onBuildMeal: () -> Unit,
@@ -96,8 +98,8 @@ fun RepeatScreen(
         // and landing on the meals already past their top, losing his place in both at once.
         scrollKey = state.tab,
         // Chrome, not content: the strip and the box that serves it stay put while the list moves.
-        // The foods manager was given this and it was never carried back here — the screen he
-        // crosses three times a day was the one still scrolling its own search out of reach.
+        // The foods manager was given this and it was never carried back here — the screen every
+        // log passes through was the one still scrolling its own search out of reach.
         belowBar = {
             // Nothing logged yet means no tabs and no search: a search box over nothing is noise,
             // and the branch below draws a front door instead.
@@ -153,16 +155,39 @@ fun RepeatScreen(
         )
 
         if (state.searchedAndFoundNothing) {
+            // "Nothing you have logged" is only true when neither list matches. With the match one
+            // tab away, the sentence names the list in front, so it does not contradict the offer.
             Text(
-                text = stringResource(R.string.repeat_no_match, state.query.trim()),
+                text = stringResource(
+                    when (state.matchesOnOtherTab) {
+                        null -> R.string.repeat_no_match
+                        RepeatTab.FOODS -> R.string.repeat_no_match_in_meals
+                        else -> R.string.repeat_no_match_in_foods
+                    },
+                    state.query.trim(),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             // The sentence above is about the list in front and stays per-tab. The offer is not:
-            // if the other tab holds the match it is one tap above, and offering to describe it
-            // here would manufacture exactly the duplicate this screen exists to prevent.
+            // if the other tab holds the match it is one tap away, and offering to describe it
+            // here would manufacture exactly the duplicate this screen exists to prevent. So the
+            // offer is the other tab itself, named — both lists are already filtered by these words.
             //
             // A Button rather than a TextButton, because it is the only thing to do on a screen
             // that has just said it has nothing.
+            state.matchesOnOtherTab?.let { other ->
+                Button(onClick = { onShowTab(other) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        stringResource(
+                            if (other == RepeatTab.FOODS) {
+                                R.string.repeat_found_in_foods
+                            } else {
+                                R.string.repeat_found_in_meals
+                            },
+                        ),
+                    )
+                }
+            }
             if (state.nothingMatchedEither) {
                 Button(
                     onClick = { onDescribe(state.query.trim()) },
@@ -216,6 +241,19 @@ fun RepeatScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                // A question whose food the search no longer finds — renamed in the editor — is
+                // still about his food, so it stays open, above the rows rather than in one.
+                state.choosing?.takeIf { it.index < 0 }?.let { choosing ->
+                    HowMuch(
+                        choosing = choosing,
+                        onCountAs = onCountAs,
+                        onSetAmount = onSetAmount,
+                        onGivePortion = { onGivePortion(choosing.food.id) },
+                        onCancel = onCancelChoosing,
+                        onLog = onLogChosen,
+                    )
+                    HorizontalDivider()
+                }
                 state.foods.forEachIndexed { index, food ->
                     val choosing = state.choosing?.takeIf { it.index == index }
 
@@ -226,6 +264,7 @@ fun RepeatScreen(
                             choosing = choosing,
                             onCountAs = onCountAs,
                             onSetAmount = onSetAmount,
+                            onGivePortion = { onGivePortion(choosing.food.id) },
                             onCancel = onCancelChoosing,
                             onLog = onLogChosen,
                         )
@@ -504,6 +543,7 @@ private fun HowMuch(
     choosing: Choosing,
     onCountAs: (CountedAs) -> Unit,
     onSetAmount: (String) -> Unit,
+    onGivePortion: () -> Unit,
     onCancel: () -> Unit,
     onLog: () -> Unit,
 ) {
@@ -515,51 +555,16 @@ private fun HowMuch(
     ) {
         Text(text = choosing.food.name, style = MaterialTheme.typography.bodyLarge)
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
-        ) {
-            TextButton(
-                onClick = { onCountAs(CountedAs.GRAMS) },
-                enabled = choosing.cannotWeigh == null,
-            ) {
-                Text(
-                    text = stringResource(R.string.food_in_grams),
-                    color = if (choosing.countedAs == CountedAs.GRAMS) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            TextButton(
-                onClick = { onCountAs(CountedAs.UNITS) },
-                enabled = choosing.cannotCount == null,
-            ) {
-                Text(
-                    text = stringResource(
-                        R.string.food_in_units,
-                        choosing.food.facts.perUnit?.unitName
-                            ?: FoodFacts.PORTION,
-                    ),
-                    color = if (choosing.countedAs == CountedAs.UNITS) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-        }
-
-        // The reason the other way is unavailable, said where the button is, and only when it is
-        // actually unavailable.
-        listOfNotNull(choosing.cannotWeigh, choosing.cannotCount).forEach { reason ->
-            Text(
-                text = FoodWording.why(reason),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        // The reason the other way is unavailable, said as that option's reason, and only when it
+        // is actually unavailable — with the way to make counting possible when that is the gap.
+        HowItIsCounted(
+            countedAs = choosing.countedAs,
+            unitName = choosing.food.facts.perUnit?.unitName ?: FoodFacts.PORTION,
+            cannotWeigh = choosing.cannotWeigh,
+            cannotCount = choosing.cannotCount,
+            onCountAs = onCountAs,
+            onGivePortion = onGivePortion,
+        )
 
         OutlinedTextField(
             value = choosing.amount,

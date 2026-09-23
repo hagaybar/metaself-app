@@ -96,6 +96,8 @@
     -->
     <string name="record_hold_to_choose">Hold anything here to start choosing. What you pick keeps the numbers it was logged with.</string>
     <string name="day_chosen">%1$s chosen</string>
+    <!-- Under the count while exactly one row is chosen: the hold hint is gone by then (public issue #12). -->
+    <string name="record_tap_to_add">Tap anything else to add it.</string>
     <!--
       The day's title bar gave this up when the rows left the day (D51); the record screen's action
       bar has it, where what it selects is on the screen it is pressed from (D50).
@@ -147,6 +149,7 @@
 
     <string name="weight_title">Weight</string>
     <string name="weight_add">Log a weight</string>
+    <string name="weight_change_goal">Change your goal</string>
     <string name="weight_editor_add">Log a weight</string>
     <string name="weight_editor_edit">Change this reading</string>
     <string name="weight_save">Save</string>
@@ -178,6 +181,7 @@
     <string name="propose_tell_more_field">Anything it got wrong?</string>
     <string name="propose_tell_more_send">Ask again</string>
     <string name="propose_manual">Type the numbers myself</string>
+    <string name="propose_add_key">Add a key in settings</string>
     <string name="propose_describe_meal">Describe a meal</string>
     <string name="repeat_title">Add something</string>
     <string name="repeat_none">Nothing to repeat yet. Anything you log will appear here.</string>
@@ -188,6 +192,10 @@
     <string name="repeat_tab_meals">My meals</string>
     <string name="repeat_search">Search what you have eaten</string>
     <string name="repeat_no_match">Nothing you have logged matches “%1$s”.</string>
+    <string name="repeat_no_match_in_foods">None of your foods matches “%1$s”.</string>
+    <string name="repeat_no_match_in_meals">None of your meals matches “%1$s”.</string>
+    <string name="repeat_found_in_foods">Found in your foods — show them</string>
+    <string name="repeat_found_in_meals">Found in your meals — show them</string>
     <string name="repeat_adjust">Adjust</string>
     <string name="repeat_as_it_was">As it was</string>
     <string name="repeat_adjust_log">Log it</string>
@@ -299,6 +307,8 @@
     <string name="foods_refusal_dismiss">All right</string>
     <string name="foods_hold_to_choose">Hold a food to start choosing. Tap the rest.</string>
     <string name="foods_chosen">%1$s chosen</string>
+    <!-- Under the count while exactly one food is chosen: the hold hint is gone by then (public issue #12). -->
+    <string name="foods_tap_to_add">Tap another food to add it.</string>
     <string name="foods_clear_choosing">Clear</string>
     <plurals name="foods_make_meal">
         <item quantity="one">Make a meal from this one</item>
@@ -314,6 +324,8 @@
     <string name="food_in_grams">Weigh it</string>
     <string name="food_in_units">Count %1$s</string>
     <string name="food_how_much">How much</string>
+    <!-- Under a switched-off count, for a food nobody has named a portion of: opens that food in the food editor. -->
+    <string name="food_give_a_portion">Give this a portion</string>
     <string name="repeat_kcal">%1$s kcal</string>
     <string name="scan_title">Scan a barcode</string>
     <string name="scan_open">Scan</string>

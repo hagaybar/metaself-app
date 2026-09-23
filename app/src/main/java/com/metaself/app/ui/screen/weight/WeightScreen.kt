@@ -66,6 +66,7 @@ fun WeightScreen(
     onUndoDelete: () -> Unit = {},
     onRange: (ChartRange) -> Unit,
     onOpenChart: () -> Unit,
+    onChangeGoal: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -137,6 +138,13 @@ fun WeightScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+
+        // The goal weight and the weekly rate are named above and set in the profile editor, so the
+        // way there is here (public issue #11). Drawn with no goal weight too: that editor is also
+        // where one is set.
+        TextButton(onClick = onChangeGoal) {
+            Text(stringResource(R.string.weight_change_goal))
         }
 
         if (state.trend.isEmpty()) {

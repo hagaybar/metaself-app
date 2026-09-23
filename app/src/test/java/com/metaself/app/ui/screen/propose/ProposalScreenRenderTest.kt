@@ -156,6 +156,7 @@ class ProposalScreenRenderTest {
             onTellItMore = {},
             onSave = {},
             onTypeItMyself = {},
+            onAddKey = {},
             onCancel = {},
             // The naming half, wired to nothing on purpose: the sheet draws into a window of its
             // own that this renderer cannot read, so what is asserted here is the offer that opens

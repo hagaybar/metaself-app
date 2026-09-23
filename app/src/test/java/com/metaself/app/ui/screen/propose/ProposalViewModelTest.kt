@@ -154,6 +154,46 @@ class ProposalViewModelTest {
             .contains("No API key")
     }
 
+    /**
+     * Public issue #11: the only failure the screen offers a way to settings for is the missing key.
+     */
+    @Test
+    fun `no key offers the way to the key, and keeps the words`() = runTest {
+        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey))
+
+        viewModel.describe("risotto")
+        advanceUntilIdle()
+
+        assertThat((viewModel.state.value as ProposalUiState.Describing).needsKey).isTrue()
+        assertThat(viewModel.description).isEqualTo("risotto")
+    }
+
+    @Test
+    fun `a failure that is not the key offers no way to it`() = runTest {
+        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.Unreachable))
+
+        viewModel.describe("risotto")
+        advanceUntilIdle()
+
+        assertThat((viewModel.state.value as ProposalUiState.Describing).needsKey).isFalse()
+    }
+
+    /**
+     * Going to add the key takes the complaint down with it: coming back with a key saved to a
+     * screen still saying there is none would be the screen contradicting settings.
+     */
+    @Test
+    fun `leaving to add the key clears the complaint and keeps the words`() = runTest {
+        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey))
+        viewModel.describe("risotto")
+        advanceUntilIdle()
+
+        viewModel.leaveToAddKey()
+
+        assertThat(viewModel.state.value).isEqualTo(ProposalUiState.Describing())
+        assertThat(viewModel.description).isEqualTo("risotto")
+    }
+
     @Test
     fun `telling it more asks again with both the original and the addition`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))

@@ -16,8 +16,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 /**
@@ -57,25 +58,56 @@ class RepeatViewModel @Inject constructor(
      * until meals built by hand exist to replace it.
      */
     val state: StateFlow<RepeatUiState> = combine(
-        foods.observeOffered(),
+        foods.observeOffered().onEach { offered ->
+            _choosing.update { open -> open?.let { refreshed(it, offered) } }
+        },
         savedMeals.observeOffered(),
         _adjusting,
         _choosing,
         _looking,
     ) { ownFoods, ownMeals, adjusting, choosing, looking ->
+        val foods = FoodSearch.matching(ownFoods, looking.query)
         RepeatUiState(
             tab = looking.tab,
             query = looking.query,
-            foods = FoodSearch.matching(ownFoods, looking.query),
+            foods = foods,
             meals = ownMeals.filter { it.name.contains(looking.query.trim(), ignoreCase = true) },
             adjusting = adjusting,
-            choosing = choosing,
+            choosing = choosing?.let { current(it, foods) },
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
         initialValue = RepeatUiState(),
     )
+
+    /**
+     * The question open, about the food as it is NOW rather than as it was when he picked it.
+     *
+     * "Give this a portion" leaves this screen for the food's editor with the question still open,
+     * and he comes back to it. The foods are observed, so the list already shows the new portion; a
+     * question still holding the food as picked would keep counting switched off beside a row that
+     * says it can be counted — and, worse, would log from the old figures while the preview drew the
+     * new ones. So the food is replaced in the question itself, where [countAs], [setAmount] and
+     * [chosen] read it, not only in the copy the screen draws. Found by id, because a rename can
+     * move it.
+     *
+     * Looked for among every food offered, not only those the search finds. One gone from that —
+     * deleted, hidden, or joined into another in the editor — closes the question: logging it would
+     * write a row about a food that no longer exists.
+     */
+    private fun refreshed(choosing: Choosing, offered: List<Food>): Choosing? {
+        val food = offered.firstOrNull { it.id == choosing.food.id } ?: return null
+        return choosing.copy(food = food)
+    }
+
+    /**
+     * The question with the row it sits at in the list as filtered now — or at no row, -1, when a
+     * rename has taken the food out of what the search finds. It is still his food, so the question
+     * stays open, but the row it was at may now be a different food's.
+     */
+    private fun current(choosing: Choosing, foods: List<Food>): Choosing =
+        choosing.copy(index = foods.indexOfFirst { it.id == choosing.food.id })
 
     fun showTab(tab: RepeatTab) {
         _looking.value = _looking.value.copy(tab = tab)

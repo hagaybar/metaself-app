@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.foods
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.data.food.EditRefused
@@ -489,13 +490,13 @@ class FoodsViewModelTest {
             assertThat(viewModel.state.value.merging).isNull()
             assertThat(foods.current).hasSize(2)
         }
-        // (e) ...or searched, which also ends the join.
+        // (e) ...or opened a food, which also ends the join. (Searching does not: see below.)
         run {
             val foods = FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood(name = "יוגורט")))
             val viewModel = watched(foods)
             viewModel.beginMerging(1)
             viewModel.mergeInto(2)
-            viewModel.search("x")
+            viewModel.edit(2)
             advanceUntilIdle()
 
             assertThat(viewModel.state.value.merging).isNull()
@@ -599,6 +600,72 @@ class FoodsViewModelTest {
             assertThat(viewModel.state.value.refusal).contains("Vegetable salad")
             assertThat(viewModel.state.value.merging?.losing?.name).isEqualTo("יוגורט")
         }
+
+    /**
+     * Looking is not backing out. On a list of any length the search is how he finds the duplicate,
+     * and a search that ended the join would make the one flow that cannot be undone cancel itself,
+     * silently, the moment it was used — the same reasoning that keeps what is chosen through a
+     * search.
+     */
+    @Test
+    fun `searching or filtering while picking the duplicate keeps the join`() = runTest(dispatcher) {
+        val ways: List<Pair<String, (FoodsViewModel) -> Unit>> = listOf(
+            "searching" to { it.search("יוגורט") },
+            "showing hidden foods" to { it.showHidden(true) },
+            "narrowing to the foods that only know a portion" to { it.showOnlyPortions(true) },
+        )
+        ways.forEach { (way, look) ->
+            val foods = FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood(name = "יוגורט")))
+            val viewModel = watched(foods)
+            viewModel.beginMerging(1)
+            advanceUntilIdle()
+
+            look(viewModel)
+            advanceUntilIdle()
+
+            assertWithMessage(way).that(viewModel.state.value.merging?.keeping?.name)
+                .isEqualTo("Yoghurt")
+            assertWithMessage(way).that(viewModel.state.value.merging?.losing).isNull()
+        }
+    }
+
+    /** The search that found the duplicate is not the end of the join: picking it still asks. */
+    @Test
+    fun `the duplicate found by searching can be picked`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(
+            listOf(aFood(name = "Yoghurt"), aFood(name = "Tahini"), aFood(name = "יוגורט")),
+        )
+        val viewModel = watched(foods)
+        viewModel.beginMerging(1)
+        advanceUntilIdle()
+
+        viewModel.search("יוגורט")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.foods.map { it.name }).containsExactly("יוגורט")
+        viewModel.mergeInto(3)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.merging?.keeping?.name).isEqualTo("Yoghurt")
+        assertThat(viewModel.state.value.merging?.losing?.name).isEqualTo("יוגורט")
+        assertThat(foods.current).hasSize(3)
+    }
+
+    /** A hidden duplicate is still a duplicate, and Show hidden is the only way to reach it. */
+    @Test
+    fun `a hidden duplicate can be picked once hidden foods are shown`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood(name = "יוגורט")))
+        foods.hide(2)
+        val viewModel = watched(foods)
+        viewModel.beginMerging(1)
+        advanceUntilIdle()
+
+        viewModel.showHidden(true)
+        advanceUntilIdle()
+        viewModel.mergeInto(2)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.merging?.losing?.name).isEqualTo("יוגורט")
+    }
 
     @Test
     fun `merging a food into itself does nothing`() = runTest(dispatcher) {
@@ -885,6 +952,59 @@ class FoodsViewModelTest {
         assertThat(viewModel.state.value.merging).isNull()
         assertThat(viewModel.state.value.chosen).containsExactly(1L, 2L, 3L)
         assertThat(foods.current).hasSize(3)
+    }
+
+    /**
+     * Arriving from "Give this a portion" on the logging screen: that food's editor is already open,
+     * and the list is searched down to it so the editor is on screen rather than somewhere below a
+     * long list.
+     */
+    @Test
+    fun `opened for one food, its editor is open and in view`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice"), aFood(name = "Tahini")))
+        val viewModel = FoodsViewModel(foods, Now { 1_000 }, SavedStateHandle(mapOf("food" to "2")))
+        backgroundScope.launch { viewModel.state.collect { } }
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertThat(state.editing?.foodId).isEqualTo(2L)
+        assertThat(state.editing?.form?.name).isEqualTo("Rice")
+        assertThat(state.query).isEqualTo("Rice")
+        assertThat(state.foods.map { it.name }).containsExactly("Rice")
+    }
+
+    /**
+     * The route's food is acted on once. Recreated after the system ended the process, with the same
+     * saved state, the manager must not reopen an editor he closed and search down to it again.
+     */
+    @Test
+    fun `recreated after the process ended, the editor opened for one food is not opened again`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice")))
+            val saved = SavedStateHandle(mapOf("food" to "2"))
+            val first = FoodsViewModel(foods, Now { 1_000 }, saved)
+            backgroundScope.launch { first.state.collect { } }
+            advanceUntilIdle()
+            assertThat(first.state.value.editing?.foodId).isEqualTo(2L)
+
+            val recreated = FoodsViewModel(foods, Now { 1_000 }, saved)
+            backgroundScope.launch { recreated.state.collect { } }
+            advanceUntilIdle()
+
+            assertThat(recreated.state.value.editing).isNull()
+            assertThat(recreated.state.value.query).isEmpty()
+        }
+
+    /** A food that has gone by the time the manager opens leaves the manager as it always opens. */
+    @Test
+    fun `opened for a food that is not there, nothing is open`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Apple")))
+        val viewModel = FoodsViewModel(foods, Now { 1_000 }, SavedStateHandle(mapOf("food" to "9")))
+        backgroundScope.launch { viewModel.state.collect { } }
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.editing).isNull()
+        assertThat(viewModel.state.value.query).isEmpty()
     }
 
     /** "Join with a duplicate" on Yoghurt's own screen, then the duplicate picked off the list. */

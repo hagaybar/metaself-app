@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -399,6 +400,15 @@ private fun Chosen(
                 Text(stringResource(R.string.foods_clear_choosing))
             }
         }
+        // At one, the hint about holding has been acted on and is gone, and nothing can be done with
+        // one food alone — so without this the screen has no next step on it (public issue #12).
+        if (state.chosen.size == 1) {
+            Text(
+                text = stringResource(R.string.foods_tap_to_add),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+        }
         if (state.canMakeAMeal) {
             Button(onClick = onMakeMeal, modifier = Modifier.fillMaxWidth()) {
                 Text(
@@ -460,49 +470,64 @@ private fun FoodRow(
                 modifier = Modifier.semantics { contentDescription = tick },
             )
         }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
-        ) {
-            Text(text = food.name, style = MaterialTheme.typography.bodyLarge)
+        FoodSummary(food = food, modifier = Modifier.weight(1f))
+    }
+}
 
-            FoodWording.brand(food)?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            // What merging two duplicates leaves behind, and the reason it is worth doing: the other
-            // name still finds this food.
-            FoodWording.alsoKnownAs(food)?.let {
-                Text(
-                    text = stringResource(R.string.foods_also_known_as, it),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            FoodWording.whatItKnows(food).forEach {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            FoodWording.disagreement(food)?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            if (food.hidden) {
-                Text(
-                    text = stringResource(R.string.foods_hidden),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+/**
+ * Everything a closed food says about itself: its name, its brand, the other names it answers to,
+ * what it knows, and anything wrong with that. One copy, drawn by the ordinary row and by the row he
+ * picks a duplicate from — the brand and the numbers are what tell two duplicates apart, so the one
+ * irreversible decision on this screen must not be made on a bare name.
+ */
+@Composable
+private fun FoodSummary(
+    food: Food,
+    modifier: Modifier = Modifier,
+    nameColor: Color = Color.Unspecified,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+    ) {
+        Text(text = food.name, style = MaterialTheme.typography.bodyLarge, color = nameColor)
+
+        FoodWording.brand(food)?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        // What merging two duplicates leaves behind, and the reason it is worth doing: the other
+        // name still finds this food.
+        FoodWording.alsoKnownAs(food)?.let {
+            Text(
+                text = stringResource(R.string.foods_also_known_as, it),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FoodWording.whatItKnows(food).forEach {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        FoodWording.disagreement(food)?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        if (food.hidden) {
+            Text(
+                text = stringResource(R.string.foods_hidden),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -517,10 +542,9 @@ private fun MergeCandidate(food: Food, isTheOneKept: Boolean, onPick: () -> Unit
             .padding(vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
     ) {
-        Text(
-            text = food.name,
-            style = MaterialTheme.typography.bodyLarge,
-            color = if (isTheOneKept) {
+        FoodSummary(
+            food = food,
+            nameColor = if (isTheOneKept) {
                 MaterialTheme.colorScheme.onSurfaceVariant
             } else {
                 MaterialTheme.colorScheme.onSurface

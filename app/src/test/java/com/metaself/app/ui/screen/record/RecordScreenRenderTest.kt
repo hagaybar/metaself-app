@@ -468,6 +468,79 @@ class RecordScreenRenderTest {
         assertThat(texts).doesNotContain("08:00")
     }
 
+    // --- a plain tap on a row, and the hint about holding one (public issue #12) --------------
+
+    /**
+     * A tap on a row opens it to be corrected, exactly as its Edit does.
+     *
+     * The row lit up under a tap and then did nothing, unless rows were already being chosen — a
+     * touch that answers with a ripple and no result reads as a broken screen. Correcting is what
+     * this screen is for (D50), so that is what the tap means; Edit stays, for anyone who looks for
+     * a word rather than a row.
+     */
+    @Test
+    fun `a tap on a row opens it to be corrected, as its Edit does`() {
+        val hummus = anItem(id = 10, name = "Hummus")
+        val opened = mutableListOf<FoodItem>()
+        record(listOf(aMeal(id = 1, items = listOf(hummus))), onEditItem = { opened += it })
+
+        render.click("Hummus")
+
+        assertThat(opened).containsExactly(hummus)
+    }
+
+    /** While choosing, the same tap ticks the row instead, and opens nothing. */
+    @Test
+    fun `while choosing, a tap on a row ticks it and opens nothing`() {
+        val opened = mutableListOf<FoodItem>()
+        val ticked = mutableListOf<Long>()
+        record(
+            listOf(
+                aMeal(
+                    id = 1,
+                    items = listOf(anItem(id = 10, name = "Eggs"), anItem(id = 11, name = "Tomato")),
+                ),
+            ),
+            chosen = setOf(10L),
+            onEditItem = { opened += it },
+            onToggleChosen = { ticked += it },
+        )
+
+        render.click("Tomato")
+
+        assertThat(ticked).containsExactly(11L)
+        assertThat(opened).isEmpty()
+    }
+
+    /**
+     * The hint on how choosing starts is read BEFORE the rows it is about. Printed after the whole
+     * list, it was below the fold on any day long enough to need it.
+     */
+    @Test
+    fun `the hint on holding a row is drawn above the list, not after it`() {
+        record(
+            listOf(
+                aMeal(id = 1, items = listOf(anItem(id = 10, name = "Porridge"))),
+                aMeal(id = 2, items = listOf(anItem(id = 11, name = "Coffee"))),
+            ),
+        )
+
+        assertThat(render.isDrawnBefore("Hold anything here", "Porridge")).isTrue()
+    }
+
+    /**
+     * With one row ticked, the bar says how to tick more. The hint about holding is gone by then —
+     * it has been acted on — and without a line in its place nothing on screen says the next tap
+     * adds to the choice.
+     */
+    @Test
+    fun `with one row chosen the bar says how to add more, and with two it does not`() {
+        val meals = listOf(fourRows())
+
+        assertThat(record(meals, chosen = setOf(1L))).contains("Tap anything else to add it.")
+        assertThat(record(meals, chosen = setOf(1L, 2L))).doesNotContain("Tap anything else to add it.")
+    }
+
     // --- choosing rows, and what they become (design §3.5, D50) ---------------------------------
 
     /**
@@ -772,6 +845,7 @@ class RecordScreenRenderTest {
         onEditItem: (FoodItem) -> Unit = {},
         onDeleteItem: (FoodItem) -> Unit = {},
         onUndoDelete: () -> Unit = {},
+        onToggleChosen: (Long) -> Unit = {},
         onChooseMeal: (Meal) -> Unit = {},
         onChooseAll: () -> Unit = {},
         onDeleteChosen: () -> Unit = {},
@@ -795,7 +869,7 @@ class RecordScreenRenderTest {
             onUndoDelete = onUndoDelete,
             onSetEatenAt = { _, _, _ -> },
             onBeginChoosing = {},
-            onToggleChosen = {},
+            onToggleChosen = onToggleChosen,
             onChooseMeal = onChooseMeal,
             onChooseAll = onChooseAll,
             onClearChoosing = {},

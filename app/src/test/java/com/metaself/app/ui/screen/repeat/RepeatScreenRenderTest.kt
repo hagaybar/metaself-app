@@ -26,6 +26,12 @@ class RepeatScreenRenderTest {
     /** What the describe fallback was called with, or null if it was never taken. */
     private var describedWith: String? = null
 
+    /** The food "Give this a portion" was pressed for, or null if it never was. */
+    private var portionFor: Long? = null
+
+    /** The tab asked for, or null if none was. */
+    private var shownTab: RepeatTab? = null
+
     @After
     fun tearDown() = render.dispose()
 
@@ -124,8 +130,40 @@ class RepeatScreenRenderTest {
             ),
         )
 
-        assertThat(texts.any { it.contains("Nothing you have logged matches") }).isTrue()
+        assertThat(texts).contains("None of your meals matches “hummus”.")
+        assertThat(texts.any { it.contains("Nothing you have logged matches") }).isFalse()
         assertThat(texts.any { it.startsWith("Describe") }).isFalse()
+    }
+
+    /**
+     * A miss here while the other list holds the match: the screen already knows, so it says where
+     * and takes him there — rather than leaving the owner to guess that the other tab is worth a look.
+     */
+    @Test
+    fun `a miss on the meals tab offers the foods that matched`() {
+        draw(RepeatUiState(tab = RepeatTab.MEALS, query = "hummus", foods = someFoods()))
+
+        render.click("Found in your foods")
+
+        assertThat(shownTab).isEqualTo(RepeatTab.FOODS)
+    }
+
+    @Test
+    fun `a miss on the foods tab offers the meals that matched`() {
+        val meal = SavedMeal(id = 1, name = "Salad", components = emptyList())
+        draw(RepeatUiState(tab = RepeatTab.FOODS, query = "salad", meals = listOf(meal)))
+
+        render.click("Found in your meals")
+
+        assertThat(shownTab).isEqualTo(RepeatTab.MEALS)
+    }
+
+    /** Nothing to point at when neither list matched: describing is the offer there. */
+    @Test
+    fun `a miss on both lists points at neither`() {
+        val texts = draw(RepeatUiState(tab = RepeatTab.MEALS, query = "fish"))
+
+        assertThat(texts.any { it.startsWith("Found in your") }).isFalse()
     }
 
     /** A meal he built, listed by its own name and by what he put in it. */
@@ -449,6 +487,28 @@ class RepeatScreenRenderTest {
     }
 
     /**
+     * A food renamed in the editor so the search no longer finds it keeps its question open, at no
+     * row of the list. It is drawn above the list, and every row the search does find is drawn as
+     * itself — never replaced by a question about a different food.
+     */
+    @Test
+    fun `a question about a food the search no longer finds is drawn above the list, not in a row`() {
+        val porridge = aFood(name = "Porridge")
+        val texts = draw(
+            RepeatUiState(
+                query = "rice",
+                foods = listOf(aFood(name = "Rice cake")),
+                choosing = Choosing(index = -1, food = porridge, countedAs = CountedAs.GRAMS),
+            ),
+        )
+
+        assertThat(texts).contains("How much")
+        assertThat(texts).contains("Porridge")
+        assertThat(texts).contains("Rice cake")
+        assertThat(render.isDrawnBefore("Porridge", "Rice cake")).isTrue()
+    }
+
+    /**
      * **Nothing is guessed, and the owner is told so where the field would be.** A way of counting
      * the food does not support is shown with its reason rather than quietly missing, because a
      * field that is simply absent looks like a fault in the app.
@@ -464,7 +524,51 @@ class RepeatScreenRenderTest {
             ),
         )
 
-        assertThat(texts).contains("Nothing knows what one slice weighs")
+        assertThat(texts).contains("Weigh it: nothing knows what one slice weighs")
+    }
+
+    /**
+     * A food with no named portion: counting is off, it looks off, the reason names the option it
+     * belongs to, and the way to fix it is offered on the spot rather than three screens away.
+     */
+    @Test
+    fun `a food with no portion offers to give it one, for that food`() {
+        val rice = aFood(name = "Rice", facts = FoodFacts(per100g = aPer100g())).copy(id = 7)
+
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(rice),
+                choosing = Choosing(index = 0, food = rice, countedAs = CountedAs.GRAMS),
+            ),
+        )
+
+        assertThat(render.isEnabled("Count portion")).isFalse()
+        assertThat(render.isEnabled("Weigh it")).isTrue()
+        assertThat(texts).contains("Count portion: nothing has said what one of this is")
+        assertThat(render.isDrawnBefore("Count portion:", "How much")).isTrue()
+
+        render.click("Give this a portion")
+
+        assertThat(portionFor).isEqualTo(7L)
+    }
+
+    /** A food that already has a portion has nothing to be given, so nothing offers to give it. */
+    @Test
+    fun `a food with a portion is not offered one`() {
+        val bread = aFood(
+            name = "Bread",
+            facts = FoodFacts(per100g = aPer100g(), perUnit = aPerUnit("slice", 80.0), gramsPerUnit = weighing(30.0)),
+        )
+
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(bread),
+                choosing = Choosing(index = 0, food = bread, countedAs = CountedAs.GRAMS),
+            ),
+        )
+
+        assertThat(render.isEnabled("Count slice")).isTrue()
+        assertThat(texts).doesNotContain("Give this a portion")
     }
 
     /** He sees the number before it lands on the record rather than afterwards. */
@@ -606,6 +710,7 @@ class RepeatScreenRenderTest {
             state = state,
             onDescribe = { words -> describedWith = words },
             onManageFoods = {},
+            onGivePortion = { foodId -> portionFor = foodId },
             onRepeat = {},
             onBuildMeal = {},
             onEditMeal = {},
@@ -614,7 +719,7 @@ class RepeatScreenRenderTest {
             onSetAmount = {},
             onCancelChoosing = {},
             onLogChosen = {},
-            onShowTab = {},
+            onShowTab = { tab -> shownTab = tab },
             onSearch = {},
             onBeginAdjusting = {},
             onSetComponentAmount = onSetComponentAmount,

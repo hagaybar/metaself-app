@@ -35,6 +35,7 @@ import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.food.AskBeforeDeleting
 import com.metaself.app.ui.food.FoodWording
+import com.metaself.app.ui.food.HowItIsCounted
 import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
@@ -445,43 +446,15 @@ private fun Waiting(
         Text(text = pending.food.name, style = MaterialTheme.typography.bodyLarge)
         BrandLine(pending.food)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            TextButton(
-                onClick = { onCountAs(CountedAs.GRAMS) },
-                enabled = pending.cannotWeigh == null,
-            ) {
-                Text(
-                    text = stringResource(R.string.food_in_grams),
-                    color = if (pending.countedAs == CountedAs.GRAMS) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            TextButton(
-                onClick = { onCountAs(CountedAs.UNITS) },
-                enabled = pending.cannotCount == null,
-            ) {
-                Text(
-                    text = stringResource(R.string.food_in_units, pending.unitName),
-                    color = if (pending.countedAs == CountedAs.UNITS) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-        }
         // A way of counting this food does not support is shown WITH ITS REASON, never hidden: the
         // owner is owed the reason his own food cannot answer the question, not a shorter list.
-        listOfNotNull(pending.cannotWeigh, pending.cannotCount).forEach { reason ->
-            Text(
-                text = FoodWording.why(reason),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        HowItIsCounted(
+            countedAs = pending.countedAs,
+            unitName = pending.unitName,
+            cannotWeigh = pending.cannotWeigh,
+            cannotCount = pending.cannotCount,
+            onCountAs = onCountAs,
+        )
 
         OutlinedTextField(
             value = pending.amount,
@@ -551,35 +524,13 @@ private fun HowMuchOfIt(
             )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            TextButton(onClick = { onCountAs(CountedAs.GRAMS) }, enabled = adding.cannotWeigh == null) {
-                Text(
-                    text = stringResource(R.string.food_in_grams),
-                    color = if (adding.countedAs == CountedAs.GRAMS) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            TextButton(onClick = { onCountAs(CountedAs.UNITS) }, enabled = adding.cannotCount == null) {
-                Text(
-                    text = stringResource(R.string.food_in_units, adding.unitName),
-                    color = if (adding.countedAs == CountedAs.UNITS) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-        }
-        listOfNotNull(adding.cannotWeigh, adding.cannotCount).forEach { reason ->
-            Text(
-                text = FoodWording.why(reason),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        HowItIsCounted(
+            countedAs = adding.countedAs,
+            unitName = adding.unitName,
+            cannotWeigh = adding.cannotWeigh,
+            cannotCount = adding.cannotCount,
+            onCountAs = onCountAs,
+        )
 
         OutlinedTextField(
             value = adding.amount,
