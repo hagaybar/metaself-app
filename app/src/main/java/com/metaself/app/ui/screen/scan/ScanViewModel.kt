@@ -1,7 +1,7 @@
 package com.metaself.app.ui.screen.scan
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.product.OffCredentials
 import com.metaself.app.data.product.OpenFoodFactsWriter
 import com.metaself.app.data.product.ProductRepository
@@ -9,12 +9,13 @@ import com.metaself.app.data.secret.SecretStore
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.product.Product
 import com.metaself.app.domain.product.ProductForm
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.guarded
 import com.metaself.app.ui.scan.ContributeWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -23,23 +24,65 @@ import javax.inject.Inject
  * The camera reads continuously and will report the same barcode many times a second. Only the
  * first is acted on: [onBarcodeRead] does nothing once anything other than [ScanUiState.Looking] is
  * showing, which is what stops a scan turning into a burst of identical lookups.
+ *
+ * **Nothing here takes the app down.** Every action goes through [guarded]; one that throws puts
+ * [failed] at the top of the screen and is written to the problem log. The lookup and the contribution
+ * already turn a missing network into an answer of their own, so what reaches the guard is the phone
+ * itself failing — its own table, most likely.
  */
 @HiltViewModel
-class ScanViewModel @Inject constructor(
+class ScanViewModel internal constructor(
     private val products: ProductRepository,
     private val writer: OpenFoodFactsWriter,
-    private val secrets: SecretStore,
+    /**
+     * The Open Food Facts account, read when it is needed. A function rather than the secret store,
+     * for a test to hand one in: the store needs the phone's keystore, which a test does not have,
+     * and that is what kept this view model out of its tests until now.
+     */
+    private val credentials: () -> OffCredentials,
+    private val problems: ProblemLog,
 ) : ViewModel() {
+
+    @Inject
+    constructor(
+        products: ProductRepository,
+        writer: OpenFoodFactsWriter,
+        secrets: SecretStore,
+        problems: ProblemLog,
+    ) : this(
+        products,
+        writer,
+        {
+            OffCredentials(
+                username = secrets.read(SecretStore.OFF_USERNAME).orEmpty(),
+                password = secrets.read(SecretStore.OFF_PASSWORD).orEmpty(),
+            )
+        },
+        problems,
+    )
 
     private val _state = MutableStateFlow<ScanUiState>(ScanUiState.Looking)
     val state: StateFlow<ScanUiState> = _state.asStateFlow()
 
+    private val _failed = MutableStateFlow<ActionRefused?>(null)
+
+    /** The last action that threw rather than finishing, until he dismisses it or does another. */
+    val failed: StateFlow<ActionRefused?> = _failed.asStateFlow()
+
+    /**
+     * Look a barcode up.
+     *
+     * A lookup that throws goes back to the camera with the failure above it, and the camera's
+     * reads are ignored until he has dismissed it: the same packet is still in front of the lens,
+     * and without that it would be read, fail and be written down again many times a second.
+     */
     fun onBarcodeRead(barcode: String) {
         if (_state.value != ScanUiState.Looking) return
+        if (_failed.value != null) return
         if (barcode.isBlank()) return
 
         _state.value = ScanUiState.Resolving
-        viewModelScope.launch {
+        act(ActionRefused.COULD_NOT_OPEN, onRefused = { _state.value = ScanUiState.Looking }) {
             _state.value = scanStateFor(barcode, products.lookUp(barcode, System.currentTimeMillis()))
         }
     }
@@ -74,7 +117,8 @@ class ScanViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        // One write. The form stays as he typed it when it fails, so Save can simply be pressed again.
+        act(ActionRefused.NOTHING_CHANGED) {
             products.remember(product, System.currentTimeMillis())
             _state.value = ScanUiState.Found(
                 product = product,
@@ -86,28 +130,52 @@ class ScanViewModel @Inject constructor(
         }
     }
 
-    /** Send it up. Opt-in, per product, and it never touches the copy already saved here. */
+    /**
+     * Send it up. Opt-in, per product, and it never touches the copy already saved here.
+     *
+     * A failure to send is an answer the writer gives, not a throw; what can throw comes before the
+     * request is made, so "nothing was changed" is true of it. The button comes back either way.
+     */
     fun contribute() {
         val found = _state.value as? ScanUiState.Found ?: return
         if (found.contributing) return
 
-        viewModelScope.launch {
+        act(
+            ActionRefused.NOTHING_CHANGED,
+            onRefused = {
+                _state.value = (_state.value as? ScanUiState.Found)?.copy(contributing = false)
+                    ?: _state.value
+            },
+        ) {
             _state.value = found.copy(contributing = true, contributionMessage = null)
             val result = writer.contribute(found.product, credentials())
             _state.value = (_state.value as? ScanUiState.Found)?.copy(
                 contributing = false,
                 contributionMessage = ContributeWording.result(result),
-            ) ?: return@launch
+            ) ?: return@act
         }
     }
 
-    private fun credentials(): OffCredentials = OffCredentials(
-        username = secrets.read(SecretStore.OFF_USERNAME).orEmpty(),
-        password = secrets.read(SecretStore.OFF_PASSWORD).orEmpty(),
-    )
+    /** He has read the failure; take it down, and the camera listens again. */
+    fun dismissFailure() {
+        _failed.value = null
+    }
+
+    /**
+     * Run one action under the guard. The last failure is let go of as the next action starts, so
+     * what is on screen is always about the latest thing he did.
+     */
+    private fun act(how: ActionRefused, onRefused: () -> Unit = {}, block: suspend () -> Unit) {
+        _failed.value = null
+        guarded(problems, onRefused = {
+            onRefused()
+            _failed.value = how
+        }) { block() }
+    }
 
     /** Point the camera again — after a miss, or after reading the wrong packet. */
     fun scanAgain() {
+        _failed.value = null
         _state.value = ScanUiState.Looking
     }
 

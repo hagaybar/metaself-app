@@ -91,6 +91,8 @@ fun SettingsScreen(
     onDismissBackupMessage: () -> Unit,
     onCopyProblems: () -> Unit,
     onClearProblems: () -> Unit,
+    /** Take down the sentence of an action that threw. Required, so it cannot be left unwired. */
+    onDismissFailure: () -> Unit,
     onBack: () -> Unit,
     openAtKey: Boolean = false,
     modifier: Modifier = Modifier,
@@ -232,6 +234,7 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MetaSelfInk.two,
         )
+        RefusedHere(state.failed, SettingsPart.WINDOW, onDismissFailure)
 
         HorizontalDivider()
 
@@ -331,6 +334,7 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MetaSelfInk.two,
         )
+        RefusedHere(state.failed, SettingsPart.OFF_ACCOUNT, onDismissFailure)
 
         HorizontalDivider()
 
@@ -475,6 +479,7 @@ fun SettingsScreen(
                 ) { Text(stringResource(R.string.settings_backup_dismiss)) }
             }
         }
+        RefusedHere(state.failed, SettingsPart.BACKUP, onDismissFailure)
 
         HorizontalDivider()
 
@@ -543,6 +548,7 @@ fun SettingsScreen(
                 Text(stringResource(R.string.settings_reminder_test))
             }
         }
+        RefusedHere(state.failed, SettingsPart.REMINDER, onDismissFailure)
 
         HorizontalDivider()
 
@@ -597,6 +603,7 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MetaSelfInk.two,
             )
+            RefusedHere(state.failed, SettingsPart.KEY, onDismissFailure)
         }
         if (openAtKey && !broughtToKey) {
             LaunchedEffect(Unit) {
@@ -630,6 +637,7 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MetaSelfInk.two,
         )
+        RefusedHere(state.failed, SettingsPart.MODEL, onDismissFailure)
 
         HorizontalDivider()
 
@@ -663,6 +671,7 @@ fun SettingsScreen(
             style = MaterialTheme.typography.bodySmall,
             color = MetaSelfInk.two,
         )
+        RefusedHere(state.failed, SettingsPart.CEILING, onDismissFailure)
 
         HorizontalDivider()
 
@@ -692,6 +701,7 @@ fun SettingsScreen(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+        RefusedHere(state.failed, SettingsPart.TEST, onDismissFailure)
 
         HorizontalDivider()
 
@@ -725,6 +735,26 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * The sentence for an action that threw, if it was started from [part]: drawn under the part it
+ * belongs to, because on a page this long a line anywhere else could be off screen.
+ */
+@Composable
+private fun RefusedHere(failed: SettingsRefusal?, part: SettingsPart, onDismiss: () -> Unit) {
+    if (failed == null || failed.part != part) return
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        Text(
+            text = stringResource(failed.refused.sentence),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+        TextButton(
+            onClick = onDismiss,
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+        ) { Text(stringResource(R.string.action_refused_dismiss)) }
     }
 }
 

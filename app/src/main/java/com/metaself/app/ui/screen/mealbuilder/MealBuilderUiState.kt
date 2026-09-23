@@ -7,6 +7,7 @@ import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Logging
 import com.metaself.app.domain.food.SavedMeal
+import com.metaself.app.ui.ActionRefused
 
 /**
  * A food picked out of the list, and how much of it is going into the meal.
@@ -122,6 +123,8 @@ data class Pending(
  * @property alreadyWaiting foods the search found that are already waiting above for an amount.
  *   Named as that, never as in the meal: a food with no amount is not in it (D37). Empty while the
  *   search box is.
+ * @property failed an action that threw rather than finishing, drawn in [refusal]'s slot and never
+ *   beside it.
  */
 data class MealBuilderUiState(
     val meal: SavedMeal? = null,
@@ -134,6 +137,7 @@ data class MealBuilderUiState(
     val refusal: String? = null,
     val alreadyIn: List<Food> = emptyList(),
     val alreadyWaiting: List<Food> = emptyList(),
+    val failed: ActionRefused? = null,
 ) {
     /** True before the meal has a name, which is the only gate in this screen. */
     val needsAName: Boolean get() = meal == null

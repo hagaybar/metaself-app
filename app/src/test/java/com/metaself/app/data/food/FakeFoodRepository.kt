@@ -158,6 +158,21 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         return EditResult.Done
     }
 
+    /** All or nothing, as the real one: a refusal puts every food back as it was. */
+    override suspend fun saveForm(
+        foodId: Long,
+        name: String,
+        brand: String?,
+        facts: FoodFacts,
+    ): EditResult {
+        val before = foods.value
+        val refused = rename(foodId, name).takeIf { it is EditResult.Refused }
+            ?: setBrand(foodId, brand).takeIf { it is EditResult.Refused }
+            ?: correct(foodId, facts).takeIf { it is EditResult.Refused }
+        if (refused != null) foods.value = before
+        return refused ?: EditResult.Done
+    }
+
     override suspend fun hide(foodId: Long) {
         replace(foodId) { it.copy(hidden = true) }
     }

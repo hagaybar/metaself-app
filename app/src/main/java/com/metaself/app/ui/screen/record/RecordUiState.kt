@@ -2,6 +2,7 @@ package com.metaself.app.ui.screen.record
 
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.screen.day.DayUiState
 
 /**
@@ -38,6 +39,8 @@ data class RecordUiState(
     val chosen: Set<Long> = emptySet(),
     /** Why the last attempt to make a meal was not made — always naming the row that stood in it. */
     val refusal: String? = null,
+    /** An action on the record that threw rather than finishing, in [refusal]'s slot. */
+    val failed: ActionRefused? = null,
 ) {
 
     /** Every row of the record, across the loggings they were written in. */
@@ -62,7 +65,7 @@ data class RecordUiState(
          * The record's own state, narrowed from the day's.
          *
          * One view model serves both screens (see [RecordScreen]), so this is where the narrowing
-         * happens: the record takes the six things it draws and leaves the rest of the day behind.
+         * happens: the record takes the seven things it draws and leaves the rest of the day behind.
          */
         fun of(day: DayUiState.Ready, todayEpochDay: Long): RecordUiState = RecordUiState(
             epochDay = day.epochDay,
@@ -72,6 +75,7 @@ data class RecordUiState(
             openMeals = day.openMeals,
             chosen = day.chosen,
             refusal = day.refusal,
+            failed = day.failed,
         )
     }
 }

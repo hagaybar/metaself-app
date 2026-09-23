@@ -1,12 +1,30 @@
 package com.metaself.app.ui.screen.scan
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.product.Lookup
+import com.metaself.app.data.product.OffCredentials
+import com.metaself.app.data.product.OpenFoodFactsWriter
+import com.metaself.app.data.product.ProductDao
+import com.metaself.app.data.product.ProductEntity
+import com.metaself.app.data.product.ProductRepository
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.product.Product
 import com.metaself.app.domain.product.ProductField
 import com.metaself.app.domain.product.ProductForm
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.RecordingProblemLog
 import com.metaself.app.ui.scan.ScanWording
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 
 /**
@@ -15,7 +33,16 @@ import org.junit.jupiter.api.Test
  * Nothing here touches a camera or a network. The camera cannot be tested on this machine at all, so
  * everything that could be moved out of it was.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class ScanViewModelTest {
+
+    private val dispatcher = StandardTestDispatcher()
+
+    @BeforeEach
+    fun setUp() = Dispatchers.setMain(dispatcher)
+
+    @AfterEach
+    fun tearDown() = Dispatchers.resetMain()
 
     private val bamba = Product(
         barcode = "7290000066318",
@@ -236,5 +263,139 @@ class ScanViewModelTest {
         assertThat(typedAgain.nothingLogged).isNull()
         assertThat(typedAgain.grams).isEqualTo("90")
         assertThat(typedAgain.gramsOrNull).isEqualTo(90.0)
+    }
+
+    // --- When an action throws -----------------------------------------------------------------------
+    //
+    // The phone's own table failing, not a miss: a miss is an answer the lookup already gives. An
+    // exception that got past the guard would fail each of these on its own — `runTest` reports a
+    // coroutine's uncaught exception when it ends. The table is read and written off the main thread,
+    // so these wait for the answer rather than advancing a clock.
+
+    @Test
+    fun `a lookup that throws goes back to the camera and says it could not be opened`() =
+        runTest(dispatcher) {
+            val table = FailingTable(reads = true)
+            val problems = RecordingProblemLog()
+            val viewModel = scanning(table, problems)
+
+            viewModel.onBarcodeRead(bamba.barcode)
+
+            assertThat(viewModel.failed.first { it != null }).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+            assertThat(viewModel.state.value).isEqualTo(ScanUiState.Looking)
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+            assertThat(problems.recorded.single().detail).contains("disk full")
+        }
+
+    /** The same packet is still in front of the lens; without this it would fail many times a second. */
+    @Test
+    fun `while a failed lookup is on screen the camera's reads are ignored`() = runTest(dispatcher) {
+        val table = FailingTable(reads = true)
+        val viewModel = scanning(table, RecordingProblemLog())
+
+        viewModel.onBarcodeRead(bamba.barcode)
+        viewModel.failed.first { it != null }
+        viewModel.onBarcodeRead(bamba.barcode)
+        viewModel.onBarcodeRead(bamba.barcode)
+        advanceUntilIdle()
+
+        assertThat(table.finds).isEqualTo(1)
+        assertThat(viewModel.state.value).isEqualTo(ScanUiState.Looking)
+
+        table.reads = false
+        viewModel.dismissFailure()
+        viewModel.onBarcodeRead(bamba.barcode)
+        viewModel.state.first { it is ScanUiState.NotFound }
+        assertThat(table.finds).isEqualTo(2)
+        assertThat(viewModel.failed.value).isNull()
+    }
+
+    @Test
+    fun `a typed packet that cannot be saved keeps the form and says nothing was changed`() =
+        runTest(dispatcher) {
+            val problems = RecordingProblemLog()
+            val viewModel = scanning(FailingTable(writes = true), problems)
+
+            viewModel.onBarcodeRead("0000000000017")
+            viewModel.state.first { it is ScanUiState.NotFound }
+            viewModel.addByHand()
+            viewModel.setForm(typedForm("0000000000017"))
+            viewModel.saveTypedProduct()
+
+            assertThat(viewModel.failed.first { it != null }).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            assertThat((viewModel.state.value as ScanUiState.Adding).form.name).isEqualTo("Crackers")
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        }
+
+    /** Nothing is sent when it throws, and the button comes back so it can be pressed again. */
+    @Test
+    fun `a contribution that throws gives the button back and says nothing was changed`() =
+        runTest(dispatcher) {
+            var accountReadable = true
+            val problems = RecordingProblemLog()
+            val viewModel = scanning(
+                FailingTable(),
+                problems,
+                credentials = {
+                    check(accountReadable) { "disk full" }
+                    OffCredentials("someone", "secret")
+                },
+            )
+
+            viewModel.onBarcodeRead("0000000000017")
+            viewModel.state.first { it is ScanUiState.NotFound }
+            viewModel.addByHand()
+            viewModel.setForm(typedForm("0000000000017"))
+            viewModel.saveTypedProduct()
+            viewModel.state.first { it is ScanUiState.Found }
+
+            accountReadable = false
+            viewModel.contribute()
+            advanceUntilIdle()
+
+            assertThat(viewModel.failed.value).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            assertThat((viewModel.state.value as ScanUiState.Found).contributing).isFalse()
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        }
+
+    private fun typedForm(barcode: String) = ProductForm(
+        barcode = barcode,
+        name = "Crackers",
+        kcalPer100g = "400",
+        proteinPer100g = "10",
+        carbsPer100g = "70",
+        fatPer100g = "10",
+    )
+
+    private fun scanning(
+        table: ProductDao,
+        problems: RecordingProblemLog,
+        credentials: () -> OffCredentials = { OffCredentials("", "") },
+    ) = ScanViewModel(
+        // No network: a miss on the phone is answered "never heard of it".
+        products = ProductRepository(table, ProblemLog.NONE, fetchReply = { """{"status":0}""" }),
+        writer = OpenFoodFactsWriter(ProblemLog.NONE),
+        credentials = credentials,
+        problems = problems,
+    )
+
+    /** The phone's own packet table, empty, throwing where a test says to. */
+    private class FailingTable(
+        var reads: Boolean = false,
+        var writes: Boolean = false,
+    ) : ProductDao {
+        var finds = 0
+        private val saved = mutableMapOf<String, ProductEntity>()
+
+        override suspend fun find(barcode: String): ProductEntity? {
+            finds++
+            check(!reads) { "disk full" }
+            return saved[barcode]
+        }
+
+        override suspend fun save(product: ProductEntity) {
+            check(!writes) { "disk full" }
+            saved[product.barcode] = product
+        }
     }
 }

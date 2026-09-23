@@ -6,6 +6,7 @@ import com.metaself.app.domain.streak.Streak
 import com.metaself.app.domain.window.DayVerdict
 import com.metaself.app.domain.day.Remaining
 import com.metaself.app.domain.target.DailyTarget
+import com.metaself.app.ui.ActionRefused
 
 /** What the Today screen is showing. */
 sealed interface DayUiState {
@@ -118,6 +119,11 @@ sealed interface DayUiState {
          * way, so it is a next step rather than a dead end.
          */
         val refusal: String? = null,
+        /**
+         * An action that threw rather than finishing, drawn in [refusal]'s slot and never beside it:
+         * there is nothing to act on, only the fact, and where it was written down.
+         */
+        val failed: ActionRefused? = null,
     ) : DayUiState {
 
         /**

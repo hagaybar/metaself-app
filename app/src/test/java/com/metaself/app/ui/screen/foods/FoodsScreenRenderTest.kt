@@ -14,6 +14,7 @@ import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.Provenance
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -433,6 +434,41 @@ class FoodsScreenRenderTest {
         assertThat(texts).doesNotContain("All right")
     }
 
+    /**
+     * A Save or a Delete that threw, on a food far down the list, is said in its editor beside the
+     * buttons he pressed. At the top of the list it would be off screen, and the tap would look dead.
+     */
+    @Test
+    fun `a failure while a food is open is drawn in its editor, not at the top of the list`() {
+        val foods = threeFoods()
+        val olive = foods.last()
+
+        val texts = draw(
+            FoodsUiState(
+                foods = foods,
+                editing = Editing(olive.id, FoodForm.of(olive)),
+                failed = ActionRefused.NOTHING_CHANGED,
+            ),
+        )
+
+        assertThat(texts).contains(NOTHING_CHANGED)
+        // After the rows above the open food, and before the button that failed.
+        assertThat(render.isDrawnBefore("Tomato", NOTHING_CHANGED)).isTrue()
+        assertThat(render.isDrawnBefore(NOTHING_CHANGED, "Save")).isTrue()
+        // Once, and dismissible where it is.
+        assertThat(texts.count { it == NOTHING_CHANGED }).isEqualTo(1)
+        assertThat(texts).contains("All right")
+    }
+
+    /** With nothing open there is nowhere nearer to say it, so it stays at the top. */
+    @Test
+    fun `a failure with no food open is drawn at the top of the list`() {
+        val texts = draw(FoodsUiState(foods = threeFoods(), failed = ActionRefused.NOTHING_CHANGED))
+
+        assertThat(texts).contains(NOTHING_CHANGED)
+        assertThat(render.isDrawnBefore(NOTHING_CHANGED, "Cucumber")).isTrue()
+    }
+
     @Test
     fun `a hidden food says it is hidden`() {
         val texts = draw(FoodsUiState(foods = listOf(aFood().copy(hidden = true))))
@@ -613,6 +649,10 @@ class FoodsScreenRenderTest {
          * Shared by the two food forms: this editor and the builder's. The packet-label form has its
          * own sentence, "…for this packet…" (D38), because "on this food" is not true there.
          */
+        /** `R.string.action_refused_nothing_changed`, as the phone draws it. */
+        const val NOTHING_CHANGED = "That didn't work, and nothing was changed. " +
+            "What went wrong is under Settings → Recent problems."
+
         const val DECIMALS_KEPT =
             "Numbers here can have a decimal point: 0.5 g is kept as 0.5 g on this food."
     }

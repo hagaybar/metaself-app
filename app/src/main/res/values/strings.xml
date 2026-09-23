@@ -471,4 +471,10 @@
     <string name="day_time_save">Save</string>
     <string name="day_time_cancel">Cancel</string>
     <string name="day_time_unknown">--:--</string>
+
+    <!-- Anything a screen started that threw instead of finishing (ui/Guarded.kt). -->
+    <string name="action_refused_nothing_changed">That didn\'t work, and nothing was changed. What went wrong is under Settings → Recent problems.</string>
+    <string name="action_refused_maybe_partial">That didn\'t finish, and may have only partly happened. What went wrong is under Settings → Recent problems.</string>
+    <string name="action_refused_could_not_open">That couldn\'t be opened. What went wrong is under Settings → Recent problems.</string>
+    <string name="action_refused_dismiss">All right</string>
 </resources>

@@ -173,15 +173,16 @@ fun FoodsContent(
     }
 
     // A refusal is not a failure: it names what stands in the way so he can go and deal with it.
-    state.refusal?.let { refusal ->
-        Text(
-            text = refusal,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
-        )
-        TextButton(onClick = onDismissRefusal) {
-            Text(stringResource(R.string.foods_refusal_dismiss))
-        }
+    // An action that threw is a failure, and says so in the same place (ActionRefused).
+    //
+    // While a food is open the sentence is drawn in its editor instead, beside the Save or Delete
+    // that produced it: the editor can be far down the list, and a sentence at the top would be off
+    // screen from there, making the tap look dead. Only when the open food is actually drawn — a
+    // search that has since hidden it leaves nowhere nearer than here.
+    val sentence = state.refusal ?: state.failed?.let { stringResource(it.sentence) }
+    val saidInTheEditor = state.editing != null && state.foods.any { it.id == state.editing.foodId }
+    if (!saidInTheEditor) {
+        sentence?.let { SlotSentence(it, onDismissRefusal) }
     }
 
     // Two shapes, because there are two ways in. From a food's own editor only the survivor is
@@ -343,6 +344,8 @@ fun FoodsContent(
                     deleting = state.deleting?.takeIf { it.food.id == food.id },
                     onConfirmDelete = onConfirmDeleting,
                     onKeep = onCancelDeleting,
+                    sentence = sentence,
+                    onDismissSentence = onDismissRefusal,
                 )
 
                 // Only while the other food is still to be picked. With both already ticked the
@@ -586,6 +589,9 @@ private fun Editor(
     deleting: Deleting?,
     onConfirmDelete: () -> Unit,
     onKeep: () -> Unit,
+    /** The screen's refusal or failure, drawn here rather than at the top while this is open. */
+    sentence: String?,
+    onDismissSentence: () -> Unit,
 ) {
     val form = editing.form
     Column(
@@ -673,6 +679,9 @@ private fun Editor(
             color = MetaSelfInk.two,
         )
 
+        // A Save refused or an action that threw, said directly above the buttons that did it.
+        sentence?.let { SlotSentence(it, onDismissSentence) }
+
         // The question takes the buttons' place, so it is where his finger is and exactly one thing
         // on the editor says Delete (D36).
         if (deleting is Deleting.Asking) {
@@ -714,6 +723,19 @@ private fun Editor(
             style = MaterialTheme.typography.bodySmall,
             color = MetaSelfInk.two,
         )
+    }
+}
+
+/** The screen's one refusal or failure, with the button that takes it down. */
+@Composable
+private fun SlotSentence(sentence: String, onDismiss: () -> Unit) {
+    Text(
+        text = sentence,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.error,
+    )
+    TextButton(onClick = onDismiss) {
+        Text(stringResource(R.string.foods_refusal_dismiss))
     }
 }
 

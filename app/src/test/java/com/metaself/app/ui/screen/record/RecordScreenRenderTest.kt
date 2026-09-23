@@ -9,6 +9,7 @@ import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.portion.Portions
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import com.metaself.app.ui.screen.day.DayMeals
 import org.junit.After
@@ -828,6 +829,24 @@ class RecordScreenRenderTest {
             .toInstant()
             .toEpochMilli()
 
+    /** A delete, a time or a meal that threw says so where a refusal would, with the same way out. */
+    @Test
+    fun `an action on the record that failed says so where a refusal would`() {
+        var dismissed = 0
+        val texts = record(
+            listOf(aMeal(items = listOf(anItem(id = 1, name = "Eggs")))),
+            failed = ActionRefused.NOTHING_CHANGED,
+            onDismissRefusal = { dismissed++ },
+        )
+
+        assertThat(texts).contains(
+            "That didn't work, and nothing was changed. " +
+            "What went wrong is under Settings → Recent problems.",
+        )
+        render.click("All right")
+        assertThat(dismissed).isEqualTo(1)
+    }
+
     /**
      * The record screen, drawn as the app draws it.
      *
@@ -839,6 +858,7 @@ class RecordScreenRenderTest {
         openMeals: Set<Long> = emptySet(),
         chosen: Set<Long> = emptySet(),
         refusal: String? = null,
+        failed: ActionRefused? = null,
         canUndo: Boolean = false,
         isToday: Boolean = true,
         todayEpochDay: Long = shownDay,
@@ -860,6 +880,7 @@ class RecordScreenRenderTest {
                 openMeals = openMeals,
                 chosen = chosen,
                 refusal = refusal,
+                failed = failed,
             ),
             canUndo = canUndo,
             onBack = {},

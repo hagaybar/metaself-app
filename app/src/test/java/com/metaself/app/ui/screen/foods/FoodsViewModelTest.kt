@@ -3,8 +3,10 @@ package com.metaself.app.ui.screen.foods
 import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.EditRefused
 import com.metaself.app.data.food.FakeFoodRepository
+import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
@@ -12,6 +14,8 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -962,7 +966,8 @@ class FoodsViewModelTest {
     @Test
     fun `opened for one food, its editor is open and in view`() = runTest(dispatcher) {
         val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice"), aFood(name = "Tahini")))
-        val viewModel = FoodsViewModel(foods, Now { 1_000 }, SavedStateHandle(mapOf("food" to "2")))
+        val viewModel =
+            FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, SavedStateHandle(mapOf("food" to "2")))
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
 
@@ -982,12 +987,12 @@ class FoodsViewModelTest {
         runTest(dispatcher) {
             val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice")))
             val saved = SavedStateHandle(mapOf("food" to "2"))
-            val first = FoodsViewModel(foods, Now { 1_000 }, saved)
+            val first = FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, saved)
             backgroundScope.launch { first.state.collect { } }
             advanceUntilIdle()
             assertThat(first.state.value.editing?.foodId).isEqualTo(2L)
 
-            val recreated = FoodsViewModel(foods, Now { 1_000 }, saved)
+            val recreated = FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, saved)
             backgroundScope.launch { recreated.state.collect { } }
             advanceUntilIdle()
 
@@ -999,12 +1004,168 @@ class FoodsViewModelTest {
     @Test
     fun `opened for a food that is not there, nothing is open`() = runTest(dispatcher) {
         val foods = FakeFoodRepository(listOf(aFood(name = "Apple")))
-        val viewModel = FoodsViewModel(foods, Now { 1_000 }, SavedStateHandle(mapOf("food" to "9")))
+        val viewModel =
+            FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, SavedStateHandle(mapOf("food" to "9")))
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.editing).isNull()
         assertThat(viewModel.state.value.query).isEmpty()
+    }
+
+    // --- When an action throws -----------------------------------------------------------------------
+
+    /**
+     * Storage throwing on a Save is said in the refusal slot, written down, and goes no further — an
+     * exception that escaped would fail this test on its own, because `runTest` reports it.
+     */
+    @Test
+    fun `a Save that throws says nothing was changed and leaves the form as typed`() =
+        runTest(dispatcher) {
+            val foods = Failing(FakeFoodRepository(listOf(aFood(name = "Yoghurt"))))
+            val problems = RecordingProblemLog()
+            val viewModel = watched(foods, problems)
+            viewModel.edit(1)
+            advanceUntilIdle()
+            val typed = viewModel.state.value.editing!!.form.copy(name = "Kefir")
+            viewModel.setForm(typed)
+
+            foods.writesFail = true
+            viewModel.save()
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            assertThat(state.refusal).isNull()
+            assertThat(state.editing?.form).isEqualTo(typed)
+            assertThat(foods.inner.current.single().name).isEqualTo("Yoghurt")
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+            assertThat(problems.recorded.single().detail).contains("disk full")
+        }
+
+    /** Every write here is one transaction, so every one of them can honestly say nothing changed. */
+    @Test
+    fun `every write that throws says nothing was changed`() = runTest(dispatcher) {
+        val ways: List<Pair<String, (FoodsViewModel) -> Unit>> = listOf(
+            "hiding" to { it.hide(1) },
+            "unhiding" to { it.unhide(1) },
+            "deleting" to { it.confirmDeleting() },
+            "joining" to { it.confirmJoining() },
+        )
+        ways.forEach { (way, act) ->
+            val foods = Failing(FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood("Tahini"))))
+            val problems = RecordingProblemLog()
+            val viewModel = watched(foods, problems)
+            if (way == "deleting") {
+                viewModel.edit(1)
+                viewModel.askToDelete(1)
+            }
+            if (way == "joining") pickedFromItsOwnScreen(viewModel)
+            advanceUntilIdle()
+
+            foods.writesFail = true
+            act(viewModel)
+            advanceUntilIdle()
+
+            assertWithMessage(way).that(viewModel.state.value.failed)
+                .isEqualTo(ActionRefused.NOTHING_CHANGED)
+            assertWithMessage(way).that(problems.recorded).hasSize(1)
+            assertWithMessage(way).that(foods.inner.current).hasSize(2)
+        }
+    }
+
+    /** A read that was to open a question or an editor wrote nothing, and says it could not open. */
+    @Test
+    fun `a lookup that throws says it could not be opened`() = runTest(dispatcher) {
+        val ways: List<Pair<String, (FoodsViewModel) -> Unit>> = listOf(
+            "asking to delete" to { it.edit(1); it.askToDelete(1) },
+            "picking the duplicate" to { it.beginMerging(1); it.mergeInto(2) },
+            "joining the two chosen" to { it.beginChoosing(1); it.toggleChosen(2); it.joinChosen() },
+        )
+        ways.forEach { (way, act) ->
+            val foods = Failing(FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood("Tahini"))))
+            val problems = RecordingProblemLog()
+            val viewModel = watched(foods, problems)
+
+            foods.readsFail = true
+            act(viewModel)
+            advanceUntilIdle()
+
+            assertWithMessage(way).that(viewModel.state.value.failed)
+                .isEqualTo(ActionRefused.COULD_NOT_OPEN)
+            assertWithMessage(way).that(problems.recorded).hasSize(1)
+        }
+    }
+
+    @Test
+    fun `opened for one food whose lookup throws, it says it could not be opened`() =
+        runTest(dispatcher) {
+            val foods = Failing(FakeFoodRepository(listOf(aFood(name = "Rice"))))
+            foods.readsFail = true
+            val problems = RecordingProblemLog()
+            val viewModel =
+                FoodsViewModel(foods, Now { 1_000 }, problems, SavedStateHandle(mapOf("food" to "1")))
+            backgroundScope.launch { viewModel.state.collect { } }
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+            assertThat(viewModel.state.value.editing).isNull()
+            assertThat(problems.recorded).hasSize(1)
+        }
+
+    /** One sentence in the slot at a time: dismissing takes it down, and a refusal replaces it. */
+    @Test
+    fun `the failure is dismissed like a refusal, and a later refusal replaces it`() =
+        runTest(dispatcher) {
+            val foods = Failing(FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood("Tahini"))))
+            val viewModel = watched(foods, RecordingProblemLog())
+            foods.writesFail = true
+            viewModel.hide(1)
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.failed).isNotNull()
+
+            viewModel.dismissRefusal()
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.failed).isNull()
+
+            viewModel.edit(1)
+            advanceUntilIdle()
+            viewModel.setForm(viewModel.state.value.editing!!.form.copy(name = "Tahini"))
+            viewModel.hide(2)
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.failed).isNotNull()
+            foods.writesFail = false
+            viewModel.save()
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.refusal).isNotNull()
+            assertThat(viewModel.state.value.failed).isNull()
+        }
+
+    /** The fake, with a switch that makes its writes — or its lookups — throw. */
+    private class Failing(val inner: FakeFoodRepository) : FoodRepository by inner {
+        var writesFail = false
+        var readsFail = false
+
+        private fun write() {
+            if (writesFail) throw IllegalStateException("disk full")
+        }
+
+        override suspend fun byId(id: Long): Food? {
+            if (readsFail) throw IllegalStateException("disk unreadable")
+            return inner.byId(id)
+        }
+
+        override suspend fun saveForm(foodId: Long, name: String, brand: String?, facts: FoodFacts) =
+            write().let { inner.saveForm(foodId, name, brand, facts) }
+
+        override suspend fun hide(foodId: Long) = write().let { inner.hide(foodId) }
+
+        override suspend fun unhide(foodId: Long) = write().let { inner.unhide(foodId) }
+
+        override suspend fun delete(foodId: Long) = write().let { inner.delete(foodId) }
+
+        override suspend fun merge(winnerId: Long, loserId: Long) =
+            write().let { inner.merge(winnerId, loserId) }
     }
 
     /** "Join with a duplicate" on Yoghurt's own screen, then the duplicate picked off the list. */
@@ -1022,8 +1183,11 @@ class FoodsViewModelTest {
     private fun TestScope.watched(vararg foods: Food): FoodsViewModel =
         watched(FakeFoodRepository(foods.toList()))
 
-    private fun TestScope.watched(foods: FakeFoodRepository): FoodsViewModel {
-        val viewModel = FoodsViewModel(foods, Now { 1_000 })
+    private fun TestScope.watched(
+        foods: FoodRepository,
+        problems: ProblemLog = ProblemLog.NONE,
+    ): FoodsViewModel {
+        val viewModel = FoodsViewModel(foods, Now { 1_000 }, problems)
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
         return viewModel

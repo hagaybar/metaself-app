@@ -3,6 +3,7 @@ package com.metaself.app.ui.screen.settings
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.domain.reminder.Reminder
 import com.metaself.app.domain.window.WindowRule
+import com.metaself.app.ui.ActionRefused
 import java.time.LocalDate
 
 /**
@@ -47,4 +48,12 @@ data class SettingsUiState(
     /** Whether the daily copy also goes to Drive, and what it last did. */
     val driveOn: Boolean = false,
     val driveMessage: String? = null,
+    /** The last action here that threw rather than finishing, drawn under the part it came from. */
+    val failed: SettingsRefusal? = null,
 )
+
+/** The parts of the settings page an action can be started from, each with its own title. */
+enum class SettingsPart { WINDOW, OFF_ACCOUNT, BACKUP, REMINDER, KEY, MODEL, CEILING, TEST }
+
+/** What [part] should say: that the action started there threw, and which of the sentences is true. */
+data class SettingsRefusal(val part: SettingsPart, val refused: ActionRefused)

@@ -1,10 +1,14 @@
 package com.metaself.app.ui.screen.propose
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.PortionScale
 import com.metaself.app.domain.ai.ProposedItem
 import com.metaself.app.domain.ai.aProposedItem
 import com.metaself.app.domain.day.Confidence
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -127,6 +131,82 @@ class ProposalScreenRenderTest {
         assertThat(texts).doesNotContain("Save this meal")
     }
 
+    /** Asking that threw is said where any other failure to answer is. */
+    @Test
+    fun `an ask that threw says nothing was changed`() {
+        val texts = draw(ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED))
+
+        assertThat(texts).contains(
+            "That didn't work, and nothing was changed. " +
+                "What went wrong is under Settings → Recent problems.",
+        )
+    }
+
+    /**
+     * Keeping the answer as a meal writes it first, and a write that fails never opens the naming
+     * sheet — so the sentence has to be on the accept screen itself, beside the answer that is still
+     * there to be tried again.
+     */
+    @Test
+    fun `a keep that failed says so on the answer, outside the naming sheet`() {
+        val answer = proposed(
+            anEstimate("Milk", "120 ml", 120.0, "ml"),
+            anEstimate("Espresso", "1 cup", 1.0, "cup"),
+        )
+        // The day's answer, arriving after the tap the way the real write's does.
+        var failure by mutableStateOf<String?>(null)
+        render.texts {
+            ProposalScreen(
+                state = answer,
+                description = "",
+                onDescribe = {},
+                onScale = { _, _ -> },
+                onCount = { _, _ -> },
+                onRemove = {},
+                onTellItMore = {},
+                onSave = {},
+                onTypeItMyself = {},
+                onAddKey = {},
+                onCancel = {},
+                onKeepAsMeal = { failure = MAYBE_PARTIAL },
+                onNameMeal = {},
+                onGiveUpNaming = {},
+                onKeepingDone = {},
+                chosenRows = emptyList(),
+                isToday = true,
+                refusal = failure,
+            )
+        }
+
+        render.click(KEEP_AS_MEAL)
+        val texts = render.textsAgain()
+
+        assertThat(texts).contains(MAYBE_PARTIAL)
+        // The answer is still there to try again, and the offer can be pressed again.
+        assertThat(texts).contains(KEEP_AS_MEAL)
+        assertThat(render.isEnabled(KEEP_AS_MEAL)).isTrue()
+    }
+
+    /**
+     * The answer now stays on screen until the day has written it, so while the write is out
+     * neither button may be pressed: a second tap would log the same meal twice.
+     */
+    @Test
+    fun `while a keep is being written the answer cannot be accepted again`() {
+        draw(
+            proposed(
+                anEstimate("Milk", "120 ml", 120.0, "ml"),
+                anEstimate("Espresso", "1 cup", 1.0, "cup"),
+            ),
+        )
+
+        render.click(KEEP_AS_MEAL)
+        render.textsAgain()
+
+        assertThat(render.isEnabled(KEEP_AS_MEAL)).isFalse()
+        assertThat(render.isEnabled("Save this meal")).isFalse()
+    }
+
     private fun anEstimate(
         name: String,
         portion: String,
@@ -176,5 +256,9 @@ class ProposalScreenRenderTest {
     private companion object {
         /** `R.string.propose_keep_as_meal`, as the phone draws it. */
         const val KEEP_AS_MEAL = "Save, and keep these as a meal"
+
+        /** `R.string.action_refused_maybe_partial`, as the phone draws it. */
+        const val MAYBE_PARTIAL = "That didn't finish, and may have only partly happened. " +
+            "What went wrong is under Settings → Recent problems."
     }
 }

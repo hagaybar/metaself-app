@@ -165,15 +165,6 @@ fun MetaSelfNavHost(
 ) {
     val navController = rememberNavController()
 
-    /**
-     * What the last weight save did, shown when the editor returns.
-     *
-     * Held here rather than in the view model because it is a fact about what just happened on
-     * screen, not about what is stored — and because it has to survive the editor being popped,
-     * which a state inside the editor cannot.
-     */
-    var justLogged: String? by remember { mutableStateOf(null) }
-
     NavHost(navController = navController, startDestination = Destination.start.route) {
 
         composable(Destination.Today.route) {
@@ -203,31 +194,35 @@ fun MetaSelfNavHost(
         composable(Destination.Weight.route) {
             val weightState by weightViewModel.state.collectAsStateWithLifecycle()
             val canUndoWeight by weightViewModel.canUndo.collectAsStateWithLifecycle()
+            val weightFailed by weightViewModel.failed.collectAsStateWithLifecycle()
+            val justLogged by weightViewModel.justLogged.collectAsStateWithLifecycle()
             WeightScreen(
                 state = weightState,
                 todayEpochDay = weightViewModel.todayEpochDay,
                 justLogged = justLogged,
                 onAdd = {
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     navController.navigate(Destination.LogWeight.route)
                 },
                 onEdit = { reading ->
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     navController.navigate(Destination.EditWeight.of(reading.epochDay))
                 },
                 onDelete = weightViewModel::delete,
                 canUndo = canUndoWeight,
                 onUndoDelete = weightViewModel::undoDelete,
+                failed = weightFailed,
+                onDismissFailure = weightViewModel::dismissFailure,
                 onRange = weightViewModel::setRange,
                 onOpenChart = { navController.navigate(Destination.WeightChart.route) },
                 // The editor is the root's, like the profile (see `Destination`); the root keeps
                 // this screen where it is underneath, so closing the editor comes back here.
                 onChangeGoal = {
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     onEditGoal()
                 },
                 onBack = {
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     navController.popBackStack()
                 },
             )
@@ -254,9 +249,12 @@ fun MetaSelfNavHost(
                 isEdit = false,
                 existingDays = weightState.readings.map { it.epochDay }.toSet(),
                 onSave = { reading ->
-                    weightViewModel.log(reading.kg, reading.epochDay)
-                    justLogged =
-                        confirmation(loggedTemplate, reading, weightViewModel.todayEpochDay)
+                    weightViewModel.log(
+                        kg = reading.kg,
+                        epochDay = reading.epochDay,
+                        confirmation =
+                            confirmation(loggedTemplate, reading, weightViewModel.todayEpochDay),
+                    )
                     navController.popBackStack()
                 },
                 onCancel = { navController.popBackStack() },
@@ -282,9 +280,15 @@ fun MetaSelfNavHost(
                     isEdit = true,
                     existingDays = emptySet(),
                     onSave = { reading ->
-                        weightViewModel.log(reading.kg, reading.epochDay)
-                        justLogged =
-                            confirmation(changedTemplate, reading, weightViewModel.todayEpochDay)
+                        weightViewModel.log(
+                            kg = reading.kg,
+                            epochDay = reading.epochDay,
+                            confirmation = confirmation(
+                                changedTemplate,
+                                reading,
+                                weightViewModel.todayEpochDay,
+                            ),
+                        )
                         navController.popBackStack()
                     },
                     onCancel = { navController.popBackStack() },
@@ -402,6 +406,7 @@ fun MetaSelfNavHost(
                     clipboard.setText(AnnotatedString(settingsViewModel.problemsAsText()))
                 },
                 onClearProblems = settingsViewModel::clearProblems,
+                onDismissFailure = settingsViewModel::dismissFailure,
                 onBack = { navController.popBackStack() },
                 openAtKey = entry.arguments?.getString("at") == "key",
             )
@@ -410,6 +415,7 @@ fun MetaSelfNavHost(
         composable(Destination.Scan.route) {
             val scanViewModel: ScanViewModel = hiltViewModel()
             val scanState by scanViewModel.state.collectAsStateWithLifecycle()
+            val scanFailed by scanViewModel.failed.collectAsStateWithLifecycle()
             val context = LocalContext.current
 
             var cameraAllowed by remember {
@@ -456,6 +462,8 @@ fun MetaSelfNavHost(
                     navController.navigate(Destination.Describe.route)
                 },
                 onBack = { navController.popBackStack() },
+                failed = scanFailed,
+                onDismissFailure = scanViewModel::dismissFailure,
             )
         }
 
@@ -562,9 +570,14 @@ fun MetaSelfNavHost(
                 onBeginCreatingFood = builderViewModel::beginCreatingFood,
                 onCreateFood = builderViewModel::createFood,
                 onCancelCreatingFood = builderViewModel::cancelCreatingFood,
+                // Left only once the meal is gone, so a delete that fails stays on screen to say so.
+                // And only from this screen: the delete answers later, and Back may have been
+                // pressed in between, when a pop would take the screen underneath with it.
                 onDelete = {
-                    builderViewModel.delete()
-                    navController.popBackStack()
+                    val here = navController.currentBackStackEntry
+                    builderViewModel.delete {
+                        if (navController.currentBackStackEntry == here) navController.popBackStack()
+                    }
                 },
                 onDismissRefusal = builderViewModel::dismissRefusal,
                 onBack = { navController.popBackStack() },
@@ -649,6 +662,7 @@ fun MetaSelfNavHost(
                 meals = mealsState,
                 onBuildMeal = { navController.navigate(Destination.BuildMeal.of(0)) },
                 onEditMeal = { mealId -> navController.navigate(Destination.BuildMeal.of(mealId)) },
+                onDismissMealsFailure = mealsViewModel::dismissFailure,
                 onBack = { navController.popBackStack() },
             )
         }
@@ -695,11 +709,13 @@ fun MetaSelfNavHost(
                 },
                 // Saved first and named afterwards (D46(b)): this writes the rows and leaves exactly
                 // them chosen, and nothing about a meal is attempted until he confirms a name. The
-                // answer is started over on the same tap as a plain save, so what is now on the day
-                // cannot be accepted a second time from a screen he comes back to.
+                // answer is started over once the rows are on the day, so what is there cannot be
+                // accepted a second time from a screen he comes back to — and not before, because a
+                // write that throws leaves him the answer to try again, with the failure beside it.
                 onKeepAsMeal = {
-                    dayViewModel.logMealAndChoose(proposeViewModel.accepted())
-                    proposeViewModel.startOver()
+                    dayViewModel.logMealAndChoose(proposeViewModel.accepted()) {
+                        proposeViewModel.startOver()
+                    }
                 },
                 // The day's own act, unchanged: one set of rules about what a part is worth and
                 // which rows can join, and one refusal when they cannot.
@@ -719,7 +735,8 @@ fun MetaSelfNavHost(
                 },
                 chosenRows = chosenRows,
                 isToday = ready?.isToday ?: true,
-                refusal = ready?.refusal,
+                // An action that threw goes in the refusal's place, as it does on the day.
+                refusal = ready?.refusal ?: ready?.failed?.let { stringResource(it.sentence) },
                 // Decision D8: whatever went wrong, the words are not lost — they arrive in the
                 // manual editor as the item's name, ready to have numbers put beside them.
                 onTypeItMyself = {

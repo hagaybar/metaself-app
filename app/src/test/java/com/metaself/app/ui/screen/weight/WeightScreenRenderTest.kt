@@ -7,6 +7,7 @@ import com.metaself.app.domain.weight.WeightTrend
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.weight.aFortnight
 import com.metaself.app.domain.weight.aReading
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -138,6 +139,37 @@ class WeightScreenRenderTest {
         }
 
         assertThat(texts).contains("Logged 80.5 kg for Today.")
+    }
+
+    /**
+     * The editor has already come back by the time a save fails, and the confirmation was set as it
+     * did. Both on screen would contradict each other; the failure is the true one.
+     */
+    @Test
+    fun `a save that failed says so in place of the confirmation`() {
+        val readings = listOf(aReading(kg = 80.5))
+        val texts = render.texts {
+            WeightScreen(
+                state = WeightUiState(readings = readings, trend = WeightTrend.of(readings)),
+                todayEpochDay = TEST_EPOCH_DAY,
+                justLogged = "Logged 80.5 kg for Today.",
+                onAdd = {},
+                onEdit = {},
+                onDelete = {},
+                failed = ActionRefused.NOTHING_CHANGED,
+                onRange = {},
+                onOpenChart = {},
+                onChangeGoal = {},
+                onBack = {},
+            )
+        }
+
+        assertThat(texts).contains(
+            "That didn't work, and nothing was changed. " +
+                "What went wrong is under Settings → Recent problems.",
+        )
+        assertThat(texts).contains("All right")
+        assertThat(texts).doesNotContain("Logged 80.5 kg for Today.")
     }
 
     @Test

@@ -11,6 +11,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metaself.app.data.backup.BackupOutcome
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.day.InMemoryMealRepository
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.movement.StepAccess
@@ -169,6 +170,7 @@ fun SimulatedApp(world: World) {
             steps = world.steps,
             currentHour = CurrentHour { NINE_IN_THE_MORNING },
             loggedFoods = world.loggedFoods,
+            problems = ProblemLog.NONE,
         )
     }
 
@@ -339,8 +341,9 @@ private fun ManagerHere(
     // Keyed on nothing: the manager is the root, and a view model rebuilt on every recomposition
     // would forget which tab is in front between one press and the next.
     val managerViewModel = remember { ManagerViewModel() }
-    val foodsViewModel = remember { FoodsViewModel(world.foods, world.now, savedState) }
-    val mealsViewModel = remember { MealsViewModel(world.savedMeals) }
+    val foodsViewModel =
+        remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, savedState) }
+    val mealsViewModel = remember { MealsViewModel(world.savedMeals, ProblemLog.NONE) }
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()
     val foodsState by foodsViewModel.state.collectAsStateWithLifecycle()
@@ -381,6 +384,7 @@ private fun ManagerHere(
         meals = mealsState,
         onBuildMeal = { stack.add(Where.BuildingMeal(mealId = 0)) },
         onEditMeal = { mealId -> stack.add(Where.BuildingMeal(mealId = mealId)) },
+        onDismissMealsFailure = mealsViewModel::dismissFailure,
         onBack = goBack,
     )
 }
@@ -392,6 +396,7 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
             meals = world.savedMeals,
             foods = world.foods,
             now = world.now,
+            problems = ProblemLog.NONE,
             savedState = savedStateFor(here),
         )
     }
@@ -417,10 +422,8 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
         onBeginCreatingFood = builderViewModel::beginCreatingFood,
         onCreateFood = builderViewModel::createFood,
         onCancelCreatingFood = builderViewModel::cancelCreatingFood,
-        onDelete = {
-            builderViewModel.delete()
-            goBack()
-        },
+        // Gone back from once the meal is gone, as the nav host does.
+        onDelete = { builderViewModel.delete(onDeleted = goBack) },
         onDismissRefusal = builderViewModel::dismissRefusal,
         onBack = goBack,
     )

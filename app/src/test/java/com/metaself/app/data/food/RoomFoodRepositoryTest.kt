@@ -349,6 +349,48 @@ class RoomFoodRepositoryTest {
             .isInstanceOf(EditRefused.AlreadyAnotherFood::class.java)
     }
 
+    // --- The form's Save, as one change ------------------------------------------------------------
+
+    /**
+     * The rename is allowed on its own — nothing plain is called Kefir — and the brand is not, because
+     * a Kefir under Dairyco exists. Done as three separate transactions, the Save that is refused
+     * would leave the food renamed; as one, it leaves it exactly as it was, brand column included.
+     */
+    @Test
+    fun `a Save refused at the brand leaves the rename undone`() = runTest {
+        val yoghurt = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+        repository.findOrCreate("Kefir", brand = "Dairyco", facts = FoodFacts(per100g = per100g()))
+
+        val result = repository.saveForm(
+            yoghurt.id,
+            name = "Kefir",
+            brand = "Dairyco",
+            facts = FoodFacts(per100g = per100g(kcal = 60.0, source = Source.TYPED, confidence = null)),
+        )
+
+        assertThat(result).isInstanceOf(EditResult.Refused::class.java)
+        assertThat((result as EditResult.Refused).why)
+            .isInstanceOf(EditRefused.AlreadyAnotherFood::class.java)
+        val after = repository.byId(yoghurt.id)!!
+        assertThat(after.name).isEqualTo("Yoghurt")
+        assertThat(after.brand).isEqualTo(yoghurt.brand)
+        assertThat(after.facts).isEqualTo(yoghurt.facts)
+    }
+
+    @Test
+    fun `a Save nothing refuses renames, brands and corrects together`() = runTest {
+        val yoghurt = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+        val typed = FoodFacts(per100g = per100g(kcal = 60.0, source = Source.TYPED, confidence = null))
+
+        val result = repository.saveForm(yoghurt.id, name = "Kefir", brand = "Dairyco", facts = typed)
+
+        assertThat(result).isEqualTo(EditResult.Done)
+        val after = repository.byId(yoghurt.id)!!
+        assertThat(after.name).isEqualTo("Kefir")
+        assertThat(after.brand).isEqualTo("Dairyco")
+        assertThat(after.facts.per100g?.nutrients?.kcal).isEqualTo(60.0)
+    }
+
     // --- Brands -------------------------------------------------------------------------------------
 
     /**
@@ -375,6 +417,16 @@ class RoomFoodRepositoryTest {
         val result = repository.setBrand(plain.id, "Dairyco")
 
         assertThat(result).isInstanceOf(EditResult.Refused::class.java)
+    }
+
+    @Test
+    fun `a refused brand change leaves the brand as it was`() = runTest {
+        val plain = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+        repository.findOrCreate("Yoghurt", brand = "Dairyco", facts = FoodFacts(per100g = per100g()))
+
+        repository.setBrand(plain.id, "Dairyco")
+
+        assertThat(repository.byId(plain.id)!!.brand).isEqualTo(FoodKeys.NO_BRAND)
     }
 
     @Test

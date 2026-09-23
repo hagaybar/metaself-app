@@ -11,6 +11,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.ui.ComposeSession
@@ -78,7 +79,7 @@ class DescribeWithoutKeySessionTest {
         NavHost(navController = nav, startDestination = "describe") {
             composable("describe") {
                 // Scoped to this entry, exactly as `hiltViewModel()` scopes it in the app.
-                val viewModel = viewModel { ProposalViewModel(Answers(result)) }
+                val viewModel = viewModel { ProposalViewModel(Answers(result), ProblemLog.NONE) }
                 val state by viewModel.state.collectAsStateWithLifecycle()
                 ProposalScreen(
                     state = state,

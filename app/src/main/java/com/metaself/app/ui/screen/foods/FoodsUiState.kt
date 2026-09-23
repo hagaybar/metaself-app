@@ -3,6 +3,7 @@ package com.metaself.app.ui.screen.foods
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
+import com.metaself.app.ui.ActionRefused
 
 /**
  * A food opened for editing.
@@ -81,6 +82,9 @@ sealed interface Deleting {
  *   Ids rather than foods, so a search that changes the list cannot lose them: he may be collecting
  *   the parts of a salad from three separate searches, which is the whole point of choosing rather
  *   than adding one at a time.
+ * @property failed an action that threw rather than finishing, drawn in the same slot as [refusal]
+ *   and never at the same time: there is nothing to act on, only the fact, and where it was written
+ *   down.
  * @property deleting the delete question, or its refusal, for the food whose editor is open. Null
  *   whenever he is not in the middle of deleting something; every way off the editor lets go of it.
  */
@@ -96,6 +100,7 @@ data class FoodsUiState(
     val refusal: String? = null,
     val chosen: Set<Long> = emptySet(),
     val deleting: Deleting? = null,
+    val failed: ActionRefused? = null,
 ) {
     /**
      * True while the list is in choosing mode, which is simply "something is chosen".

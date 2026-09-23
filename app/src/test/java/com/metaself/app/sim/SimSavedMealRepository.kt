@@ -103,6 +103,16 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
         return MealResult.Built(made.id)
     }
 
+    /** The same steps in the same order; this stand-in has no transaction to put them in. */
+    override suspend fun createThen(
+        name: String,
+        then: suspend (mealId: Long) -> Unit,
+    ): MealResult {
+        val made = create(name)
+        if (made is MealResult.Built) then(made.mealId)
+        return made
+    }
+
     override suspend fun rename(mealId: Long, name: String): MealResult {
         val key = FoodKeys.nameKey(name)
         meals.value.firstOrNull { it.id != mealId && FoodKeys.nameKey(it.name) == key }?.let {

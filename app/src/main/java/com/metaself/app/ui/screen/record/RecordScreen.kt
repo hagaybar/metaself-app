@@ -167,8 +167,9 @@ fun RecordScreen(
                 // Why nothing was made, above the list it is about. Its colour is the error one,
                 // which nothing else on this screen uses: a refusal is one of the two things in the
                 // app the owner actually has to go and put right (D48). What he chose stays chosen,
-                // so it is a next step rather than a dead end.
-                state.refusal?.let { why ->
+                // so it is a next step rather than a dead end. An action that threw says so in the
+                // same place, and the same Got it takes it down.
+                refusalOrFailure(state)?.let { why ->
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
@@ -273,7 +274,7 @@ fun RecordScreen(
             items = state.chosenRows,
             isToday = state.isToday,
             name = mealName,
-            refusal = state.refusal,
+            refusal = refusalOrFailure(state),
             onNameChange = { mealName = it },
             onConfirm = { onMakeMealFromChosen(mealName) },
             onCancel = {
@@ -283,6 +284,11 @@ fun RecordScreen(
         )
     }
 }
+
+/** The sentence for the refusal slot: a refusal, or an action that threw — never both. */
+@Composable
+private fun refusalOrFailure(state: RecordUiState): String? =
+    state.refusal ?: state.failed?.let { stringResource(it.sentence) }
 
 /**
  * What the day came to: the total recorded, and how many things.

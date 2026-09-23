@@ -29,6 +29,7 @@ import com.metaself.app.R
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.product.ProductField
 import com.metaself.app.domain.product.ProductForm
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.scan.ContributeWording
@@ -43,6 +44,9 @@ import com.metaself.app.ui.theme.Spacing
  * holds a few thousand products against a supermarket's tens of thousands, so not finding one is
  * the ordinary case rather than the exceptional one, and the way out is the meal description the
  * owner would have used anyway (D23).
+ *
+ * [failed] is something that threw rather than finishing — the phone's own table, not a miss — and
+ * is said at the top, above whatever the screen is showing, until he takes it down.
  */
 @Composable
 fun ScanScreen(
@@ -58,6 +62,10 @@ fun ScanScreen(
     onScanAgain: () -> Unit,
     onDescribeInstead: () -> Unit,
     onBack: () -> Unit,
+    // Required, as the Foods and meals tabs' are: a default would let a caller drop the way to take
+    // the failure down, and while it stands the camera's reads are ignored.
+    failed: ActionRefused?,
+    onDismissFailure: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     MetaSelfScreen(
@@ -65,6 +73,17 @@ fun ScanScreen(
         modifier = modifier,
         onBack = onBack,
     ) {
+        failed?.let { refused ->
+            Text(
+                text = stringResource(refused.sentence),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(onClick = onDismissFailure) {
+                Text(stringResource(R.string.action_refused_dismiss))
+            }
+        }
+
         when (state) {
             is ScanUiState.Looking -> {
                 var typedBarcode by remember { mutableStateOf("") }

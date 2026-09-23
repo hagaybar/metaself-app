@@ -123,6 +123,15 @@ interface FoodRepository {
     /** The owner's own correction, which is not subject to the ranking: his hand beats the guard. */
     suspend fun correct(foodId: Long, facts: FoodFacts): EditResult
 
+    /**
+     * The food form's Save: [rename], [setBrand] and [correct], in that order, as one change.
+     *
+     * All or nothing. The first refusal is returned unchanged and undoes whatever the steps before
+     * it had done, and so does an exception — so a Save that did not finish changed nothing, which
+     * is what the screen then says.
+     */
+    suspend fun saveForm(foodId: Long, name: String, brand: String?, facts: FoodFacts): EditResult
+
     suspend fun hide(foodId: Long)
 
     suspend fun unhide(foodId: Long)

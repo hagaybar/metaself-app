@@ -238,7 +238,9 @@ fun DayScreenContent(
         // one and try again. What he chose stays chosen for exactly that reason. Its edge is the
         // error colour, which nothing else on this page uses: a refusal is one of the two things in
         // the app the owner actually has to go and put right, and over target is not one of them.
-        state.refusal?.let { refusal ->
+        // An action that threw is a failure, and says so in the same place (ActionRefused).
+        val sentence = state.refusal ?: state.failed?.let { stringResource(it.sentence) }
+        sentence?.let { refusal ->
             MarginNote(
                 text = refusal,
                 accent = MaterialTheme.colorScheme.error,

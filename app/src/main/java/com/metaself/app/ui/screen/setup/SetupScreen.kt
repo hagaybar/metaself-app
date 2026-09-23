@@ -23,6 +23,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
@@ -39,6 +40,9 @@ import com.metaself.app.domain.profile.Sex
  *
  * [showErrors] is false until the owner tries to save. Colouring every empty box red before he has
  * typed a character is the app telling him off for arriving.
+ *
+ * [failed] is a save that threw. It is drawn above Save, where he pressed it, and the form keeps
+ * what he typed so Save can simply be pressed again.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -49,6 +53,8 @@ fun SetupScreen(
     onChange: (SetupFormState) -> Unit,
     onSave: () -> Unit,
     onCancel: (() -> Unit)?,
+    failed: ActionRefused? = null,
+    onDismissFailure: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val errors = if (showErrors) state.errors(currentYear) else emptyMap()
@@ -177,6 +183,17 @@ fun SetupScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MetaSelfInk.two,
             )
+        }
+
+        failed?.let {
+            Text(
+                text = stringResource(it.sentence),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(onClick = onDismissFailure) {
+                Text(stringResource(R.string.action_refused_dismiss))
+            }
         }
 
         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {

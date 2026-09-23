@@ -5,6 +5,7 @@ import com.metaself.app.data.day.DetachedRow
 import com.metaself.app.data.day.InMemoryMealRepository
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.backup.DailyBackup
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.domain.movement.DayMovement
@@ -49,7 +50,10 @@ import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.target.TargetRevision
 import com.metaself.app.domain.weight.WeightReading
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.RecordingProblemLog
 import com.metaself.app.ui.food.MealWording
+import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.ui.day.DayTotalsWording
 import com.metaself.app.ui.window.WindowWording
 import androidx.lifecycle.viewModelScope
@@ -60,6 +64,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -286,6 +291,7 @@ class DayViewModelTest {
         now: Now = Now { atHour(TEST_EPOCH_DAY, 15) },
         // The calendar day, overridable for the one test in which the night passes.
         today: Today = this.today,
+        problems: ProblemLog = ProblemLog.NONE,
     ) = DayViewModel(
         profiles = profiles,
         meals = mealRepository,
@@ -315,6 +321,7 @@ class DayViewModelTest {
         // The same foods the view model reads, so a row attached while logging or correcting is
         // attached to a food the rest of the test can see.
         loggedFoods = LoggedFoods(foods),
+        problems = problems,
     )
 
     @Test
@@ -407,9 +414,12 @@ class DayViewModelTest {
 
     private class FakeWeightRepository(
         initial: List<WeightReading> = emptyList(),
+        /** Every read throws, for the once-per-open work that reads the weights. */
+        failing: Boolean = false,
     ) : com.metaself.app.data.weight.WeightRepository {
         private val state = MutableStateFlow(initial)
-        override val readings: Flow<List<WeightReading>> = state
+        override val readings: Flow<List<WeightReading>> =
+            if (failing) flow { throw IllegalStateException("disk full") } else state
         override suspend fun log(reading: WeightReading) {
             state.value = state.value.filterNot { it.epochDay == reading.epochDay } + reading
         }
@@ -1303,6 +1313,62 @@ class DayViewModelTest {
         // 17:00 plus fourteen hours is 07:00: the fast is done by 08:00 the next morning, and
         // nothing was logged. The date moves with the clock, as it does on the phone — a read that
         // stopped at yesterday could not see the fast end, and would rightly leave it open.
+        clock = atHour(TEST_EPOCH_DAY + 1, 8)
+        date = date.plusDays(1)
+        model.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(ready(model).windowJudged).isEqualTo(1)
+        assertThat(ready(model).windowKept).isEqualTo(1)
+    }
+
+    /**
+     * The follower of the open stretch is a stream, and a stream that threw has stopped: the
+     * sentence and the tally would stay as they were for as long as the app was open. Coming back to
+     * the screen starts it again.
+     *
+     * The read that throws is armed only once the app has opened, and is the tally's first day — two
+     * days before the ratio began — so what it stops is the follower, woken by a change to the
+     * record, and nothing else.
+     */
+    @Test
+    fun `a stretch follower that threw starts again when he comes back`() = runTest {
+        val profiles = FakeProfileRepository(aProfile())
+        aRatioInForce(profiles)
+        var clock = atHour(TEST_EPOCH_DAY, 22)
+        var date = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
+        val inner = FakeMealRepository(
+            listOf(aMeal(epochDay = TEST_EPOCH_DAY, loggedAtMillis = atHour(TEST_EPOCH_DAY, 9))),
+        )
+        var brokenDay: Long? = null
+        val onceBroken = object : MealRepository by inner {
+            override fun observeDay(epochDay: Long): Flow<List<Meal>> =
+                if (epochDay == brokenDay) {
+                    brokenDay = null
+                    flow { throw IllegalStateException("disk full") }
+                } else {
+                    inner.observeDay(epochDay)
+                }
+        }
+        val problems = RecordingProblemLog()
+        val model = watched(
+            viewModel(
+                profiles = profiles,
+                mealRepository = onceBroken,
+                now = Now { clock },
+                today = Today { date },
+                problems = problems,
+            ),
+        )
+        advanceUntilIdle()
+
+        brokenDay = TEST_EPOCH_DAY - 15
+        inner.log(aMeal(epochDay = TEST_EPOCH_DAY, loggedAtMillis = atHour(TEST_EPOCH_DAY, 17)))
+        advanceUntilIdle()
+        assertThat(problems.recorded.map { it.kind }).containsExactly("refused")
+
+        // As in the tally test above: the fast is done by morning, and only a live follower can
+        // say so.
         clock = atHour(TEST_EPOCH_DAY + 1, 8)
         date = date.plusDays(1)
         model.lookedAt()
@@ -3572,6 +3638,336 @@ class DayViewModelTest {
         val shown = ready(model)
         assertThat(shown.targetChangeNotice).isNotNull()
         assertThat(shown.foodRetaughtNotice).isNotNull()
+    }
+
+    // --- When an action throws -----------------------------------------------------------------------
+    //
+    // An exception that got past the guard would fail each of these on its own: `runTest` reports a
+    // coroutine's uncaught exception when it ends.
+
+    @Test
+    fun `a log that throws says it may have partly happened, in place of the Logged line`() =
+        runTest {
+            val inner = FakeMealRepository()
+            val problems = RecordingProblemLog()
+            val model = watched(
+                viewModel(mealRepository = Failing(inner).apply { writes = true }, problems = problems),
+            )
+
+            model.log(anItem(name = "Hummus", kcal = 180))
+            advanceUntilIdle()
+
+            val shown = ready(model)
+            assertThat(shown.failed).isEqualTo(ActionRefused.MAYBE_PARTIAL)
+            assertThat(shown.justLogged).isNull()
+            assertThat(inner.logged).isEmpty()
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+            assertThat(problems.recorded.single().detail).contains("disk full")
+        }
+
+    @Test
+    fun `every way of logging says so when it throws`() = runTest {
+        val failing = Failing(FakeMealRepository()).apply { writes = true }
+        val problems = RecordingProblemLog()
+        val model = watched(viewModel(mealRepository = failing, problems = problems))
+
+        model.logMeal(listOf(anItem(name = "Eggs"), anItem(name = "Toast")))
+        model.logMealAndChoose(listOf(anItem(name = "Eggs"), anItem(name = "Toast")))
+        model.logSavedMeal(LoggedMeal(items = listOf(anItem(name = "Eggs")), savedMealId = 1, adjusted = false))
+        model.logScanned(anItem(name = "Crackers"), aPacket())
+        advanceUntilIdle()
+
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.MAYBE_PARTIAL)
+        assertThat(ready(model).chosen).isEmpty()
+        assertThat(problems.recorded.map { it.kind }).containsExactly("refused", "refused", "refused", "refused")
+    }
+
+    /**
+     * The accept screen starts over only once the rows are on the day. Started over on the tap, a
+     * failed write left him on an empty describe screen, his answer gone and nothing written.
+     */
+    @Test
+    fun `keeping what was described as a meal reports it was logged only once it was`() = runTest {
+        val failing = Failing(FakeMealRepository()).apply { writes = true }
+        val model = watched(viewModel(mealRepository = failing, problems = RecordingProblemLog()))
+        var loggedTimes = 0
+
+        model.logMealAndChoose(aDescribedSalad()) { loggedTimes++ }
+        advanceUntilIdle()
+
+        assertThat(loggedTimes).isEqualTo(0)
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.MAYBE_PARTIAL)
+
+        failing.writes = false
+        model.logMealAndChoose(aDescribedSalad()) { loggedTimes++ }
+        // Not on the tap: only once the write has answered.
+        assertThat(loggedTimes).isEqualTo(0)
+        advanceUntilIdle()
+
+        assertThat(loggedTimes).isEqualTo(1)
+        assertThat(ready(model).chosen).isNotEmpty()
+    }
+
+    /**
+     * Nothing was changed, because the meal, its parts and the gathering are one transaction in the
+     * real store (`RoomSavedMealRepositoryTest` shows it rolls back). What he chose stays chosen, and
+     * the sheet with it, so he can try again.
+     */
+    @Test
+    fun `making a meal that throws part-way says nothing was changed and keeps the choice`() =
+        runTest {
+            val foods = FakeFoodRepository(
+                listOf(
+                    aFood(name = "Cucumber"),
+                    aFood(name = "Olive oil", facts = FoodFacts(perUnit = aPerUnit("spoon"))),
+                ),
+            )
+            val savedMeals = FakeSavedMealRepository().knowsAbout(*foods.current.toTypedArray())
+            val failing = Failing(FakeMealRepository(listOf(aSaladWorthOfRows())))
+            val problems = RecordingProblemLog()
+            val model = watched(
+                viewModel(
+                    mealRepository = failing,
+                    savedMeals = savedMeals,
+                    foods = foods,
+                    problems = problems,
+                ),
+            )
+
+            model.beginChoosing(1)
+            model.toggleChosen(2)
+            failing.writes = true
+            model.makeMealFromChosen("Vegetable salad")
+            advanceUntilIdle()
+
+            val shown = ready(model)
+            assertThat(shown.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            assertThat(shown.refusal).isNull()
+            assertThat(shown.chosen).containsExactly(1L, 2L)
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        }
+
+    /** No Undo for a row that is still there. */
+    @Test
+    fun `a delete that throws offers nothing to undo`() = runTest {
+        val failing = Failing(FakeMealRepository(listOf(aDayOfThree())))
+        val problems = RecordingProblemLog()
+        val model = watched(viewModel(mealRepository = failing, problems = problems))
+
+        failing.writes = true
+        model.deleteItem(ready(model).meals.single().items.first())
+        advanceUntilIdle()
+
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(model.canUndo.value).isFalse()
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+    }
+
+    /** Several rows are several deletes, so one failing among them may leave the others gone. */
+    @Test
+    fun `deleting what is chosen, with one row refusing, says it may have partly happened`() =
+        runTest {
+            val inner = FakeMealRepository(listOf(aDayOfThree()))
+            val failing = Failing(inner).apply { deleteRefusedFor = setOf(2L) }
+            val problems = RecordingProblemLog()
+            val model = watched(viewModel(mealRepository = failing, problems = problems))
+
+            model.beginChoosing(1)
+            model.toggleChosen(2)
+            model.deleteChosen()
+            advanceUntilIdle()
+
+            assertThat(ready(model).failed).isEqualTo(ActionRefused.MAYBE_PARTIAL)
+            assertThat(inner.deleted).containsExactly(1L)
+            // The row that went can still come back; the one that stayed offers nothing.
+            assertThat(model.canUndo.value).isTrue()
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        }
+
+    @Test
+    fun `an undo that throws keeps the receipt, so Undo is still there`() = runTest {
+        val foods = FakeFoodRepository()
+        val failing = Failing(
+            performing(listOf(aMeal(id = 1, items = listOf(anItem(id = 10, name = "Eggs")))), foods),
+        )
+        val model = watched(
+            viewModel(mealRepository = failing, foods = foods, problems = RecordingProblemLog()),
+        )
+
+        model.deleteItem(ready(model).meals.single().items.single())
+        advanceUntilIdle()
+        failing.writes = true
+        model.undoDelete()
+        advanceUntilIdle()
+
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(model.canUndo.value).isTrue()
+
+        // And it works once the store does.
+        failing.writes = false
+        model.undoDelete()
+        advanceUntilIdle()
+        assertThat(ready(model).meals.single().items.single().id).isEqualTo(10L)
+        assertThat(ready(model).failed).isNull()
+    }
+
+    @Test
+    fun `a time that throws says nothing was changed`() = runTest {
+        val failing = Failing(FakeMealRepository(listOf(aDayOfThree())))
+        val problems = RecordingProblemLog()
+        val model = watched(viewModel(mealRepository = failing, problems = problems))
+
+        failing.writes = true
+        model.setEatenAt(ready(model).meals.single(), hour = 9, minute = 0)
+        advanceUntilIdle()
+
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+    }
+
+    /**
+     * Keeping the name is one write to the row. A new name first finds or makes its food, in a
+     * transaction of its own, so a failure after that may have left the food behind.
+     */
+    @Test
+    fun `a correction that throws says nothing changed, or may have partly happened on a rename`() =
+        runTest {
+            val failing = Failing(FakeMealRepository(listOf(aDayOfThree()))).apply { writes = true }
+            val problems = RecordingProblemLog()
+            val model = watched(viewModel(mealRepository = failing, problems = problems))
+            val eggs = ready(model).meals.single().items.first()
+
+            model.correctItem(eggs, eggs.copy(kcal = 140))
+            advanceUntilIdle()
+            assertThat(ready(model).failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+
+            model.correctItem(eggs, eggs.copy(name = "Omelette"))
+            advanceUntilIdle()
+            assertThat(ready(model).failed).isEqualTo(ActionRefused.MAYBE_PARTIAL)
+            assertThat(problems.recorded.map { it.kind }).containsExactly("refused", "refused")
+        }
+
+    @Test
+    fun `choosing everything when the day cannot be read says it could not be opened`() = runTest {
+        val failing = Failing(FakeMealRepository(listOf(aDayOfThree())))
+        val problems = RecordingProblemLog()
+        val model = watched(viewModel(mealRepository = failing, problems = problems))
+
+        failing.nextRead = true
+        model.chooseAll()
+        advanceUntilIdle()
+
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+        assertThat(ready(model).chosen).isEmpty()
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+    }
+
+    @Test
+    fun `a failure goes when he dismisses it, and when the next action starts`() = runTest {
+        val failing = Failing(FakeMealRepository(listOf(aDayOfThree())))
+        val model = watched(viewModel(mealRepository = failing, problems = RecordingProblemLog()))
+        val meal = ready(model).meals.single()
+
+        failing.writes = true
+        model.setEatenAt(meal, hour = 9, minute = 0)
+        advanceUntilIdle()
+        model.dismissRefusal()
+        advanceUntilIdle()
+        assertThat(ready(model).failed).isNull()
+
+        model.setEatenAt(meal, hour = 9, minute = 0)
+        advanceUntilIdle()
+        failing.writes = false
+        model.setEatenAt(meal, hour = 10, minute = 0)
+        advanceUntilIdle()
+        assertThat(ready(model).failed).isNull()
+    }
+
+    /** A refusal and a failure share one slot: the latest of the two is the one on screen. */
+    @Test
+    fun `a failure takes a refusal's place`() = runTest {
+        val failing = Failing(FakeMealRepository(listOf(aDayOfThree())))
+        val model = watched(viewModel(mealRepository = failing, problems = RecordingProblemLog()))
+        val meal = ready(model).meals.single()
+
+        model.setEatenAt(meal, hour = 23, minute = 0)
+        advanceUntilIdle()
+        assertThat(ready(model).refusal).isNotNull()
+
+        failing.writes = true
+        model.setEatenAt(meal, hour = 9, minute = 0)
+        advanceUntilIdle()
+        assertThat(ready(model).refusal).isNull()
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+    }
+
+    /**
+     * The once-per-open work — the weekly revision, milestones, the day's encouragement — is written
+     * down when it throws, and the day says nothing: he did not do anything to be told about.
+     */
+    @Test
+    fun `once-per-open work that throws is written down and the day still opens`() = runTest {
+        val problems = RecordingProblemLog()
+        val model = watched(
+            viewModel(weights = FakeWeightRepository(failing = true), problems = problems),
+        )
+
+        assertThat(ready(model).failed).isNull()
+        assertThat(problems.recorded).isNotEmpty()
+        assertThat(problems.recorded.map { it.kind }.distinct()).containsExactly("refused")
+    }
+
+    private fun aPacket() = Product(
+        barcode = "1234567890123",
+        name = "Crackers",
+        brand = null,
+        kcalPer100g = 400.0,
+        proteinPer100g = 10.0,
+        carbsPer100g = 70.0,
+        fatPer100g = 10.0,
+        servingSizeG = 30.0,
+    )
+
+    /**
+     * A meal store that throws where a test says to, and is the store it wraps everywhere else.
+     *
+     * [writes] makes every write throw; [deleteRefusedFor] only deletes of those rows; [nextRead] the
+     * next read of a day, once — once, because the day's own state reads the same days, and a read
+     * that kept failing would fail the screen rather than the action under test.
+     */
+    private class Failing(private val inner: MealRepository) : MealRepository by inner {
+        var writes = false
+        var deleteRefusedFor: Set<Long> = emptySet()
+        var nextRead = false
+
+        private fun refuse(): Nothing = throw IllegalStateException("disk full")
+
+        override fun observeDay(epochDay: Long): Flow<List<Meal>> =
+            inner.observeDay(epochDay).map { meals ->
+                if (nextRead) {
+                    nextRead = false
+                    refuse()
+                }
+                meals
+            }
+
+        override suspend fun log(meal: Meal): List<Long> =
+            if (writes) refuse() else inner.log(meal)
+
+        override suspend fun updateItem(item: FoodItem) =
+            if (writes) refuse() else inner.updateItem(item)
+
+        override suspend fun setEatenAt(mealId: Long, atMillis: Long) =
+            if (writes) refuse() else inner.setEatenAt(mealId, atMillis)
+
+        override suspend fun deleteItem(itemId: Long): DeletedEntry? =
+            if (writes || itemId in deleteRefusedFor) refuse() else inner.deleteItem(itemId)
+
+        override suspend fun restore(entry: DeletedEntry) =
+            if (writes) refuse() else inner.restore(entry)
+
+        override suspend fun gatherIntoSavedMeal(epochDay: Long, itemIds: List<Long>, savedMealId: Long) =
+            if (writes) refuse() else inner.gatherIntoSavedMeal(epochDay, itemIds, savedMealId)
     }
 
     private fun ready(model: DayViewModel): DayUiState.Ready =

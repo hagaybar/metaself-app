@@ -1,7 +1,9 @@
 package com.metaself.app.ui.screen.manager
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeSavedMealRepository
+import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
@@ -9,8 +11,12 @@ import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
@@ -45,7 +51,7 @@ class MealsViewModelTest {
     @Test
     fun `it lists the meals he has built, newest name first is not assumed`() = runTest {
         val meals = FakeSavedMeals(listOf(salad, shakshuka))
-        val model = MealsViewModel(meals)
+        val model = MealsViewModel(meals, ProblemLog.NONE)
         advanceUntilIdle()
         assertThat(model.state.value.meals.map { it.name })
             .containsExactly("Vegetable salad", "Shakshuka breakfast").inOrder()
@@ -53,7 +59,7 @@ class MealsViewModelTest {
 
     @Test
     fun `with nothing built it says so rather than showing an empty space`() = runTest {
-        val model = MealsViewModel(FakeSavedMeals(emptyList()))
+        val model = MealsViewModel(FakeSavedMeals(emptyList()), ProblemLog.NONE)
         advanceUntilIdle()
         assertThat(model.state.value.nothingBuiltYet).isTrue()
     }
@@ -61,7 +67,7 @@ class MealsViewModelTest {
     /** Having built one, there is nothing to say about an empty list. */
     @Test
     fun `with something built it is a list and not a sentence`() = runTest {
-        val model = MealsViewModel(FakeSavedMeals(listOf(salad)))
+        val model = MealsViewModel(FakeSavedMeals(listOf(salad)), ProblemLog.NONE)
         advanceUntilIdle()
         assertThat(model.state.value.nothingBuiltYet).isFalse()
     }
@@ -72,8 +78,62 @@ class MealsViewModelTest {
      */
     @Test
     fun `a meal put out of sight is not on the list`() = runTest {
-        val model = MealsViewModel(FakeSavedMeals(listOf(salad, shakshuka.copy(hidden = true))))
+        val meals = FakeSavedMeals(listOf(salad, shakshuka.copy(hidden = true)))
+        val model = MealsViewModel(meals, ProblemLog.NONE)
         advanceUntilIdle()
+        assertThat(model.state.value.meals.map { it.name }).containsExactly("Vegetable salad")
+    }
+
+    /**
+     * A list that cannot be read says it could not be opened, is written down, and goes no further —
+     * an exception that escaped would fail this on its own, because `runTest` reports it. It does not
+     * claim he has built nothing: an empty list after a failed read says nothing about that.
+     */
+    @Test
+    fun `a list that cannot be read says so rather than that none is built`() = runTest {
+        val broken = object : SavedMealRepository by FakeSavedMeals(emptyList()) {
+            override fun observeOffered(): Flow<List<SavedMeal>> =
+                flow { throw IllegalStateException("disk unreadable") }
+        }
+        val problems = RecordingProblemLog()
+        val model = MealsViewModel(broken, problems)
+        advanceUntilIdle()
+
+        assertThat(model.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+        assertThat(model.state.value.nothingBuiltYet).isFalse()
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+
+        model.dismissFailure()
+        assertThat(model.state.value.failed).isNull()
+    }
+
+    /**
+     * The list is a stream, and a stream that threw has stopped: left there, the tab would go on
+     * showing the list as last read, frozen, for as long as the app is open. Dismissing the failure
+     * starts the read again.
+     */
+    @Test
+    fun `dismissing the failure reads the list again`() = runTest {
+        var reads = 0
+        val working = FakeSavedMeals(listOf(salad))
+        val onceBroken = object : SavedMealRepository by working {
+            override fun observeOffered(): Flow<List<SavedMeal>> {
+                reads++
+                return if (reads == 1) {
+                    flow { throw IllegalStateException("disk unreadable") }
+                } else {
+                    working.observeOffered()
+                }
+            }
+        }
+        val model = MealsViewModel(onceBroken, RecordingProblemLog())
+        advanceUntilIdle()
+        assertThat(model.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+
+        model.dismissFailure()
+        advanceUntilIdle()
+
+        assertThat(model.state.value.failed).isNull()
         assertThat(model.state.value.meals.map { it.name }).containsExactly("Vegetable salad")
     }
 

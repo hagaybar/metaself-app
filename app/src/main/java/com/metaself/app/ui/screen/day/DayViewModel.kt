@@ -3,6 +3,7 @@ package com.metaself.app.ui.screen.day
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.day.DeletedEntry
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.DetachedRows
@@ -61,9 +62,12 @@ import com.metaself.app.ui.goal.GoalWording
 import com.metaself.app.ui.goal.MilestoneWording
 import com.metaself.app.ui.target.RevisionWording
 import com.metaself.app.ui.day.DayTotalsWording
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.guarded
 import com.metaself.app.ui.window.WindowWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -76,7 +80,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
@@ -86,6 +89,13 @@ import javax.inject.Inject
  *
  * The date is read once per emission rather than held, so an app left open across midnight shows
  * the new day when something changes rather than yesterday's list for ever.
+ *
+ * **Nothing here takes the app down.** Every action goes through [guarded]; one that throws puts
+ * [DayUiState.Ready.failed] in the refusal slot — on the day, on the record, and on the naming sheet —
+ * and is written to the problem log. Its sentence is true of it: an action that is one transaction
+ * says nothing was changed, one that is several says it may have partly happened, and a lookup says
+ * it could not be opened. The once-per-open work nobody asked for is guarded as well, and only
+ * written down: a sentence about something he did not do would be a puzzle, not an answer.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -110,6 +120,7 @@ class DayViewModel @Inject constructor(
     private val steps: StepSource,
     private val currentHour: CurrentHour,
     private val loggedFoods: LoggedFoods,
+    private val problems: ProblemLog,
 ) : ViewModel() {
 
     /**
@@ -174,11 +185,27 @@ class DayViewModel @Inject constructor(
     /** Bumped on each return to the screen, so the stretch and the tally are read again with it. */
     private val _looked = MutableStateFlow(0)
 
-    /** The screen came to the front: bring the day and the moment up to date, and recount. */
+    /**
+     * Whether [followTheOpenStretch]'s stream threw and ended. Quiet like the rest of the
+     * once-per-open work — recorded, nothing said on the day — but restarted by [lookedAt], because
+     * unlike the rest it is meant to run for as long as the screen does.
+     *
+     * Declared above `init`, which starts the follower: an initialiser further down would run after
+     * it and could reset a failure already recorded.
+     */
+    private var stretchFollowerStopped = false
+
+    /**
+     * The screen came to the front: bring the day and the moment up to date, and recount.
+     *
+     * And start following the open stretch again if that stream threw: a stopped follower would
+     * leave today's sentence and the tally as they were for as long as the app stayed open.
+     */
     fun lookedAt() {
         _moment.value = now()
         _calendarToday.value = today().toEpochDay()
         _looked.value++
+        if (stretchFollowerStopped) followTheOpenStretch()
     }
 
     /** What was read from Health Connect: every day's steps, and what a usual day looks like. */
@@ -197,8 +224,8 @@ class DayViewModel @Inject constructor(
         //
         // An unopened month therefore produces ONE revision, not four: the missed ones would each
         // have been computed from a trend that no longer exists to be checked.
-        viewModelScope.launch {
-            val profile = profiles.profile.first() ?: return@launch
+        quietly {
+            val profile = profiles.profile.first() ?: return@quietly
             val trend = WeightTrend.of(weights.readings.first())
             val todayEpochDay = today().toEpochDay()
 
@@ -213,7 +240,7 @@ class DayViewModel @Inject constructor(
                 today = todayEpochDay,
                 currentYear = currentYear(),
                 burnAdjustmentKcal = adjustment,
-            ) ?: return@launch
+            ) ?: return@quietly
 
             profiles.saveRevision(revision)
         }
@@ -236,7 +263,7 @@ class DayViewModel @Inject constructor(
      * be made into a meal. See [DetachedRows] for why it only looks foods up and never makes one.
      */
     private fun putBackDetachedRows() {
-        viewModelScope.launch { runCatching { DetachedRows.reattach(meals, foods) } }
+        quietly { DetachedRows.reattach(meals, foods) }
     }
 
     /**
@@ -293,7 +320,8 @@ class DayViewModel @Inject constructor(
      * correcting an old day put the sentence right too.
      */
     private fun followTheOpenStretch() {
-        viewModelScope.launch {
+        stretchFollowerStopped = false
+        guarded(problems, onRefused = { stretchFollowerStopped = true }) {
             profiles.windowRules
                 .combine(meals.observeDay(todayEpochDayNow())) { rules, _ -> rules }
                 .combine(_looked) { rules, _ -> rules }
@@ -398,13 +426,13 @@ class DayViewModel @Inject constructor(
      * bad day (D14).
      */
     private fun noticeSomethingGood() {
-        viewModelScope.launch {
+        quietly {
             val todayEpochDay = today().toEpochDay()
             val lastSeen = profiles.lastSeenDay.first()
             // Written before anything is decided, so a crash cannot make him "away" for ever.
             profiles.saveLastSeenDay(todayEpochDay)
 
-            if (profiles.lastEncouragedDay.first() == todayEpochDay) return@launch
+            if (profiles.lastEncouragedDay.first() == todayEpochDay) return@quietly
 
             val rules = profiles.windowRules.first()
             val zone = ZoneId.systemDefault()
@@ -436,7 +464,7 @@ class DayViewModel @Inject constructor(
                 streakDays = streak.currentDays,
                 stepsToday = walked?.byDay?.get(todayEpochDay)?.steps ?: 0,
                 usualSteps = walked?.normalSteps,
-            ) ?: return@launch
+            ) ?: return@quietly
 
             profiles.saveEncouragedDay(todayEpochDay)
             _encouragement.value = EncouragementWording.of(occasion, streak.currentDays)
@@ -572,15 +600,18 @@ class DayViewModel @Inject constructor(
      */
     fun refresh() {
         if (_refreshing.value) return
-        viewModelScope.launch {
+        quietly {
             _refreshing.value = true
-            runCatching { readMovement() }
-            _refreshing.value = false
+            try {
+                readMovement()
+            } finally {
+                _refreshing.value = false
+            }
         }
     }
 
     private fun readTodaysSteps() {
-        viewModelScope.launch { readMovement() }
+        quietly { readMovement() }
     }
 
     private suspend fun readMovement() {
@@ -620,9 +651,7 @@ class DayViewModel @Inject constructor(
      * got its priorities backwards.
      */
     private fun takeTheDailyCopy() {
-        viewModelScope.launch {
-            runCatching { automaticBackup.runIfDue(today(), System.currentTimeMillis()) }
-        }
+        quietly { automaticBackup.runIfDue(today(), System.currentTimeMillis()) }
     }
 
     /**
@@ -639,14 +668,14 @@ class DayViewModel @Inject constructor(
      * record that could tell the two cases apart anyway.
      */
     private fun markMilestonesOnce() {
-        viewModelScope.launch {
-            val profile = profiles.profile.first() ?: return@launch
+        quietly {
+            val profile = profiles.profile.first() ?: return@quietly
             val trend = WeightTrend.of(weights.readings.first())
             val reached = Milestones.reached(profile.goal, trend)
             val alreadySaid = profiles.milestones.first()
 
             val fresh = reached.filterNot { alreadySaid.containsKey(it) }
-            if (fresh.isEmpty()) return@launch
+            if (fresh.isEmpty()) return@quietly
 
             val today = today().toEpochDay()
             profiles.recordMilestones(alreadySaid + fresh.associateWith { today })
@@ -702,12 +731,12 @@ class DayViewModel @Inject constructor(
      * this can only happen once.
      */
     private fun celebrateArrivingOnce() {
-        viewModelScope.launch {
-            val profile = profiles.profile.first() ?: return@launch
-            val targetKg = profile.goal.targetKg ?: return@launch
+        quietly {
+            val profile = profiles.profile.first() ?: return@quietly
+            val targetKg = profile.goal.targetKg ?: return@quietly
             val trend = WeightTrend.of(weights.readings.first())
-            val progress = GoalProgress.of(profile.goal, trend) ?: return@launch
-            if (!progress.arrived) return@launch
+            val progress = GoalProgress.of(profile.goal, trend) ?: return@quietly
+            if (!progress.arrived) return@quietly
 
             profiles.saveArrival(
                 GoalArrival(targetKg = targetKg, epochDay = today().toEpochDay()),
@@ -746,6 +775,14 @@ class DayViewModel @Inject constructor(
 
     /** Why the last attempt to make a meal out of the day was refused, naming the row. */
     private val _refusal = MutableStateFlow<String?>(null)
+
+    /**
+     * The last action that threw rather than finishing, in the refusal's slot and never beside it.
+     *
+     * Not a property of a day, so a swipe leaves it standing: a log that failed is not undone by
+     * looking at yesterday. It goes when he dismisses it, and when the next action starts.
+     */
+    private val _failed = MutableStateFlow<ActionRefused?>(null)
 
     /**
      * What the last logging action changed about a food's own stored figures (D45, issue #13).
@@ -793,6 +830,7 @@ class DayViewModel @Inject constructor(
         .combine(_chosen) { inputs, chosen -> inputs.copy(chosen = chosen) }
         .combine(_refusal) { inputs, refusal -> inputs.copy(refusal = refusal) }
         .combine(_foodRetaught) { inputs, retaught -> inputs.copy(foodRetaught = retaught) }
+        .combine(_failed) { inputs, failed -> inputs.copy(failed = failed) }
         .flatMapLatest { inputs ->
             if (inputs.profile == null) {
                 flowOf(DayUiState.NeedsSetup)
@@ -966,6 +1004,7 @@ class DayViewModel @Inject constructor(
                         openMeals = inputs.openMeals,
                         chosen = inputs.chosen,
                         refusal = inputs.refusal,
+                        failed = inputs.failed,
                         justLogged = inputs.justLogged,
                         goalReached = inputs.arrival
                             ?.takeIf { it.isTodayS(today().toEpochDay()) }
@@ -994,7 +1033,7 @@ class DayViewModel @Inject constructor(
 
     /** The owner has read the notice; it does not come back. */
     fun dismissTargetChange() {
-        viewModelScope.launch { profiles.markRevisionSeen() }
+        act(ActionRefused.NOTHING_CHANGED) { profiles.markRevisionSeen() }
     }
 
     /**
@@ -1029,6 +1068,7 @@ class DayViewModel @Inject constructor(
         val chosen: Set<Long> = emptySet(),
         val refusal: String? = null,
         val foodRetaught: String? = null,
+        val failed: ActionRefused? = null,
     )
 
     /** Dismiss today's line. It does not come back: it has had its one appearance. */
@@ -1051,8 +1091,10 @@ class DayViewModel @Inject constructor(
 
     /** Write down one thing eaten, on the day being looked at. */
     fun log(item: FoodItem) {
-        logOn(selectedDay.value, item)
+        // Said before the write starts, as every other way of logging says it, so a write that
+        // fails at once still finds the line there to take the place of.
         _justLogged.value = "Logged ${item.name} — ${item.kcal} kcal"
+        logOn(selectedDay.value, item)
     }
 
     /**
@@ -1064,7 +1106,7 @@ class DayViewModel @Inject constructor(
     fun logMeal(items: List<FoodItem>) {
         if (items.isEmpty()) return
         sayWhatWasLogged(items)
-        viewModelScope.launch { writeMeal(items) }
+        logging { writeMeal(items) }
     }
 
     /**
@@ -1096,19 +1138,24 @@ class DayViewModel @Inject constructor(
      * over no rows is a Confirm that silently does nothing. It returns before the clearing on
      * purpose — a second tap on the offer hands back an empty answer, and clearing then would throw
      * away the choice the first tap has just made.
+     *
+     * [onLogged] runs once the rows are on the day, and not if the write threw: it is where the
+     * accept screen lets go of its answer, which it must keep while a failure is on screen so there
+     * is something to try again.
      */
-    fun logMealAndChoose(items: List<FoodItem>) {
+    fun logMealAndChoose(items: List<FoodItem>, onLogged: () -> Unit = {}) {
         if (items.isEmpty()) return
         // Synchronously, so that every frame between the tap and the write has an empty choice in
         // it: the sheet stays shut until the ids arrive, and it can never open over the old ones.
         _chosen.value = emptySet()
         _refusal.value = null
         sayWhatWasLogged(items)
-        viewModelScope.launch {
+        logging {
             val ids = writeMeal(items)
             // Assigned, not added to: a row ticked on the day before he came here is not part of
             // what he just described.
             _chosen.value = ids.toSet()
+            onLogged()
         }
     }
 
@@ -1156,7 +1203,7 @@ class DayViewModel @Inject constructor(
      */
     fun logScanned(item: FoodItem, product: Product) {
         _justLogged.value = "Logged ${item.name} — ${item.kcal} kcal"
-        viewModelScope.launch {
+        logging {
             val attached = loggedFoods.attach(
                 item,
                 barcode = product.barcode,
@@ -1192,7 +1239,7 @@ class DayViewModel @Inject constructor(
         } else {
             "Logged ${meal.items.size} items — ${meal.items.sumOf { it.kcal }} kcal"
         }
-        viewModelScope.launch {
+        logging {
             // Every item of a saved meal carries its food already, so this attach teaches nothing
             // and has nothing to report — which still replaces whatever the last action said.
             val attached = loggedFoods.attach(meal.items)
@@ -1264,7 +1311,7 @@ class DayViewModel @Inject constructor(
      * row ticked, and one tap to get there rather than a button of its own.
      */
     fun chooseAll() {
-        viewModelScope.launch {
+        act(ActionRefused.COULD_NOT_OPEN) {
             _chosen.value = meals.observeDay(selectedDay.value).first()
                 .flatMap { it.items }
                 .map { it.id }
@@ -1276,11 +1323,16 @@ class DayViewModel @Inject constructor(
     fun clearChoosing() {
         _chosen.value = emptySet()
         _refusal.value = null
+        _failed.value = null
     }
 
-    /** He has read the refusal. What he chose is still chosen, so he can drop a row and try again. */
+    /**
+     * He has read the refusal — or the failure in its place. What he chose is still chosen, so he can
+     * drop a row and try again.
+     */
     fun dismissRefusal() {
         _refusal.value = null
+        _failed.value = null
     }
 
     /**
@@ -1301,10 +1353,10 @@ class DayViewModel @Inject constructor(
     fun makeMealFromChosen(name: String) {
         val typed = name.trim()
         if (typed.isBlank()) return
-        viewModelScope.launch {
+        act(ActionRefused.NOTHING_CHANGED) {
             val epochDay = selectedDay.value
             val chosen = _chosen.value
-            if (chosen.isEmpty()) return@launch
+            if (chosen.isEmpty()) return@act
 
             val rows = meals.observeDay(epochDay).first()
                 .flatMap { it.items }
@@ -1322,7 +1374,7 @@ class DayViewModel @Inject constructor(
             // at all. Zero rows against two chosen is the same refusal as one against two.
             if (rows.size != chosen.size) {
                 _refusal.value = MealWording.chosenRowGone
-                return@launch
+                return@act
             }
 
             // Read once, here, so the conversion itself stays pure and synchronous.
@@ -1334,34 +1386,39 @@ class DayViewModel @Inject constructor(
             val outcome = MealFromDay.from(rows) { byId[it] }
             if (outcome.refusals.isNotEmpty()) {
                 _refusal.value = outcome.refusals.joinToString("\n")
-                return@launch
+                return@act
             }
 
-            val mealId = when (val built = savedMeals.create(typed)) {
-                is MealResult.Built -> built.mealId
+            // One change, not three: the meal, each of its parts, and the rows repointed at it
+            // commit together or not at all ([SavedMealRepository.createThen]). So a failure
+            // part-way leaves no nameless-in-effect meal with half its parts behind, and "nothing
+            // was changed" is true of it.
+            val made = savedMeals.createThen(typed) { mealId ->
+                outcome.components.forEach { component ->
+                    savedMeals.put(
+                        mealId = mealId,
+                        foodId = component.food.id,
+                        amount = component.amount,
+                        countedAs = component.countedAs,
+                    )
+                }
+
+                meals.gatherIntoSavedMeal(
+                    epochDay = epochDay,
+                    itemIds = rows.map { it.id },
+                    savedMealId = mealId,
+                )
+            }
+            when (made) {
+                is MealResult.Built -> Unit
                 is MealResult.NameTaken -> {
                     _refusal.value = MealWording.nameTaken(typed)
-                    return@launch
+                    return@act
                 }
                 // Unreachable today: `create` answers only Built or NameTaken. Named rather than
                 // dropped so this reads as a case that cannot arise, not a case forgotten.
-                MealResult.Done -> return@launch
+                MealResult.Done -> return@act
             }
-
-            outcome.components.forEach { component ->
-                savedMeals.put(
-                    mealId = mealId,
-                    foodId = component.food.id,
-                    amount = component.amount,
-                    countedAs = component.countedAs,
-                )
-            }
-
-            meals.gatherIntoSavedMeal(
-                epochDay = epochDay,
-                itemIds = rows.map { it.id },
-                savedMealId = mealId,
-            )
 
             // Done with, so the day goes back to being a day.
             _chosen.value = emptySet()
@@ -1392,15 +1449,17 @@ class DayViewModel @Inject constructor(
      * guess does not make it a measurement (D4).
      */
     fun correctItem(before: FoodItem, after: FoodItem) {
-        viewModelScope.launch {
+        val sameFood = FoodKeys.nameKey(before.name) == FoodKeys.nameKey(after.name)
+        // Keeping the name is one write to the row. A new name first finds or makes the food it
+        // names, which is its own transaction, so a failure after it may have left that food behind.
+        act(if (sameFood) ActionRefused.NOTHING_CHANGED else ActionRefused.MAYBE_PARTIAL) {
             val his = after.correctionOf(before)
-            val sameFood = FoodKeys.nameKey(before.name) == FoodKeys.nameKey(after.name)
             // A rename teaches the food it renames onto exactly as logging does — D44's own route
             // — so it speaks exactly as logging does (D45), and replaces whatever the last action
             // said. A correction that KEEPS the name teaches no food and is not a logging action,
-            // so it leaves the last sentence alone: fixing the grams on one row is the commonest
-            // thing he does after logging, and clearing here would wipe the notice unread —
-            // exactly the silence issue #13 exists to close.
+            // so it leaves the last sentence alone: fixing the grams on a row just logged is an
+            // ordinary next step, and clearing here would wipe the notice unread — exactly the
+            // silence issue #13 exists to close.
             val attached = if (sameFood) null else loggedFoods.attach(his.copy(foodId = null))
             if (attached != null) {
                 _foodRetaught.value =
@@ -1430,12 +1489,13 @@ class DayViewModel @Inject constructor(
             .toInstant()
             .toEpochMilli()
         if (at > now()) {
+            _failed.value = null
             _refusal.value = DayTotalsWording.laterThanNow(hour, minute)
             return
         }
         // A refusal from an earlier try goes with the success that replaces it.
         _refusal.value = null
-        viewModelScope.launch { meals.setEatenAt(meal.id, at) }
+        act(ActionRefused.NOTHING_CHANGED) { meals.setEatenAt(meal.id, at) }
     }
 
     /**
@@ -1445,16 +1505,29 @@ class DayViewModel @Inject constructor(
      * row's id is gone the moment the row is and its meal may go with it. It is held as a promise,
      * set here before the delete runs, so an Undo pressed before the delete has finished waits for
      * THIS delete rather than acting on whatever an earlier one left behind.
+     *
+     * A delete that throws takes its promise back off the stack, so Undo is not offered for a row
+     * that is still there; an Undo already waiting on it finishes with nothing to put back.
      */
     fun deleteItem(item: FoodItem) {
+        _failed.value = null
+        deleteOne(item, ActionRefused.NOTHING_CHANGED)
+    }
+
+    private fun deleteOne(item: FoodItem, how: ActionRefused) {
         val deleted = CompletableDeferred<DeletedEntry?>()
         undoable.addLast(deleted)
         _canUndo.value = true
-        viewModelScope.launch {
+        failing(
+            how,
+            onRefused = {
+                undoable.remove(deleted)
+                _canUndo.value = undoable.isNotEmpty()
+            },
+        ) {
             // Completed in `finally` as well, for a delete that is cancelled — the screen going away
-            // mid-delete — so an Undo waiting on it finishes with nothing to put back rather than
-            // waiting for ever. A delete that throws still surfaces its error as before. The second
-            // `complete` does nothing.
+            // mid-delete — or that throws, so an Undo waiting on it finishes with nothing to put
+            // back rather than waiting for ever. The second `complete` does nothing.
             try {
                 deleted.complete(meals.deleteItem(item.id))
             } finally {
@@ -1476,17 +1549,22 @@ class DayViewModel @Inject constructor(
      *
      * The choice is spent as it is used. Leaving it standing would leave the bar offering to make a
      * meal out of rows that are no longer there.
+     *
+     * One delete per row is one transaction per row, so a failure among several may leave some of
+     * them gone, and says so. A failure reading the rows comes before any of them, and changed
+     * nothing.
      */
     fun deleteChosen() {
-        viewModelScope.launch {
+        act(ActionRefused.NOTHING_CHANGED) {
             val chosen = _chosen.value
-            if (chosen.isEmpty()) return@launch
+            if (chosen.isEmpty()) return@act
             val rows = meals.observeDay(selectedDay.value).first()
                 .flatMap { it.items }
                 .filter { it.id in chosen }
             _chosen.value = emptySet()
             _refusal.value = null
-            rows.forEach(::deleteItem)
+            val how = if (rows.size > 1) ActionRefused.MAYBE_PARTIAL else ActionRefused.NOTHING_CHANGED
+            rows.forEach { deleteOne(it, how) }
         }
     }
 
@@ -1499,16 +1577,23 @@ class DayViewModel @Inject constructor(
      * undoing, which on a past day falls on another date and left the meal untimed, and it ran the
      * row through the food list, which could make a food or offer one figures.
      *
-     * Cleared as it is used, so a second press does not put the row back twice.
+     * Cleared as it is used, so a second press does not put the row back twice. A restore that
+     * throws puts the receipt back, so Undo is still there to try again.
      */
     fun undoDelete() {
         val deleted = undoable.removeLastOrNull() ?: return
         _canUndo.value = undoable.isNotEmpty()
-        viewModelScope.launch { deleted.await()?.let { meals.restore(it) } }
+        act(
+            ActionRefused.NOTHING_CHANGED,
+            onRefused = {
+                undoable.addLast(deleted)
+                _canUndo.value = true
+            },
+        ) { deleted.await()?.let { meals.restore(it) } }
     }
 
     private fun logOn(epochDay: Long, item: FoodItem) {
-        viewModelScope.launch {
+        logging {
             val attached = loggedFoods.attach(item)
             // The issue's own door: typing a name he has used before still teaches that food, and
             // now says which figure it replaced (D45, issue #13).
@@ -1521,6 +1606,61 @@ class DayViewModel @Inject constructor(
                 ),
             )
         }
+    }
+
+    /**
+     * Run one action under the guard, letting go of the last failure first so what is on screen is
+     * about the latest thing he did.
+     */
+    private fun act(
+        how: ActionRefused,
+        onRefused: () -> Unit = {},
+        block: suspend CoroutineScope.() -> Unit,
+    ) {
+        _failed.value = null
+        failing(how, onRefused, block)
+    }
+
+    /**
+     * The guard itself: if [block] throws, [how] goes in the refusal slot in place of whatever was
+     * there — one sentence at a time, the latest.
+     */
+    private fun failing(
+        how: ActionRefused,
+        onRefused: () -> Unit = {},
+        block: suspend CoroutineScope.() -> Unit,
+    ) {
+        guarded(problems, onRefused = {
+            onRefused()
+            _refusal.value = null
+            _failed.value = how
+        }, block = block)
+    }
+
+    /**
+     * Logging, under the guard.
+     *
+     * **May have partly happened**, because it is two changes and cannot honestly be made one: the
+     * row is attached to its food first — finding or making it, and offering it figures, in a
+     * transaction of its own per row — and only then written to the day. Wrapping the two in one
+     * transaction would not make them all-or-nothing: attaching swallows a failure to find its food
+     * and logs the row unattached, and a failure swallowed inside an outer transaction rolls the
+     * whole of it back in silence — a meal lost under a line saying it was logged.
+     *
+     * The "Logged …" line goes with a failure: it was said as the tap landed, before the write, and
+     * the failure is the answer that replaces it.
+     */
+    private fun logging(block: suspend CoroutineScope.() -> Unit) {
+        act(ActionRefused.MAYBE_PARTIAL, onRefused = { _justLogged.value = null }, block = block)
+    }
+
+    /**
+     * Once-per-open work nobody asked for, under the guard: a failure is written to the problem log
+     * and nothing is said on the day. Each of these was already meant to be silent (D8) — a backup,
+     * a step count, a repair — or has nothing he could do about it from here.
+     */
+    private fun quietly(block: suspend CoroutineScope.() -> Unit) {
+        guarded(problems, onRefused = {}, block = block)
     }
 
     /**
