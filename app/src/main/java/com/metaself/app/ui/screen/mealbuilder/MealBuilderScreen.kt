@@ -369,10 +369,12 @@ private fun InMeal(
         // The food no longer knows the thing this counts it in. Said rather than shown as a
         // smaller total that looks right.
         if (component.cannotBeCosted) {
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = stringResource(R.string.builder_cannot_cost),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         Row(

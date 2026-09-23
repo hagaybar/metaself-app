@@ -442,10 +442,13 @@ fun SettingsScreen(
             ) { Text(stringResource(R.string.settings_backup_restore)) }
         }
 
-        // Nothing has been destroyed at this point. The question names what would be.
+        // Nothing has been destroyed at this point. The question names what would be. On the
+        // app's ordinary card, not an error-red one: it is a question before a destructive act, as
+        // "Delete …? This cannot be undone." is, and red is kept for a refusal and a field that is
+        // wrong (D48). The question's own words carry the weight.
         state.pendingRestore?.let { question ->
             Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
+                color = MaterialTheme.colorScheme.surfaceVariant,
                 shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -456,7 +459,7 @@ fun SettingsScreen(
                     Text(
                         text = question,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
                         Button(onClick = onConfirmRestore) {

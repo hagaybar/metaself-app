@@ -12,9 +12,10 @@ import androidx.compose.ui.graphics.Color
  * defaults, which are derived from a purple. Green buttons sat beside grey-purple surfaces and a
  * secondary nobody had chosen: nothing was wrong and nothing agreed.
  *
- * **The error red is left red.** It is the only colour in this app that carries meaning — over
- * target, and a field that is wrong — and harmonising it into the green would take that meaning
- * away. Everything else is a green or a near-neutral warmed towards it.
+ * **The error red is left red.** It carries one meaning — something the owner has to put right:
+ * a refusal, or a field that is wrong (D48) — and harmonising it into the green would take that
+ * meaning away. Over target is not one of them and is drawn in ink. Everything else is a green or a
+ * near-neutral warmed towards it.
  */
 
 // The green, and the family around it.

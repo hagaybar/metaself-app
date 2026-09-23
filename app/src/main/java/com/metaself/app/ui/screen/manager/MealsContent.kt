@@ -114,10 +114,12 @@ private fun BuiltMeal(meal: SavedMeal, onOpen: () -> Unit) {
 
         // Something in it can no longer be costed, so the total below is short. Said, not hidden.
         if (meal.incomplete) {
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = stringResource(R.string.repeat_meal_incomplete),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
 

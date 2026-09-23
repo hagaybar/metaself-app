@@ -519,10 +519,12 @@ private fun FoodSummary(
             )
         }
         FoodWording.disagreement(food)?.let {
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = it,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         if (food.hidden) {

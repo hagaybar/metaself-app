@@ -375,10 +375,12 @@ private fun BuiltMeal(
         // A component whose food no longer knows what it is counted in cannot be costed, and the
         // total would quietly be smaller than the meal. Said rather than hidden.
         if (meal.incomplete) {
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = stringResource(R.string.repeat_meal_incomplete),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
 
@@ -642,10 +644,12 @@ private fun OwnFood(food: Food, onPick: () -> Unit) {
         // Shown, never reconciled. The app cannot know which of the three facts is the wrong one,
         // and picking would be exactly the silent guess this whole model exists to avoid.
         FoodWording.disagreement(food)?.let { warning ->
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = warning,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }
