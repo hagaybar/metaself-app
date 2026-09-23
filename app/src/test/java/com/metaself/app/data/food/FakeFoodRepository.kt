@@ -5,6 +5,7 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.GramsPerUnit
+import com.metaself.app.domain.food.JoinedFacts
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
@@ -195,7 +196,18 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         mergeRefusal?.let { return EditResult.Refused(it) }
         if (winnerId == loserId) return EditResult.Done
         val loser = byId(loserId) ?: return EditResult.Done
-        replace(winnerId) { it.copy(alsoKnownAs = it.alsoKnownAs + loser.everyName) }
+        // The winner keeps what it holds and fills only its blanks, by the rule the real merge uses.
+        replace(winnerId) { winner ->
+            val filling = JoinedFacts.fill(winner.facts, loser.facts)
+            winner.copy(
+                alsoKnownAs = winner.alsoKnownAs + loser.everyName,
+                facts = FoodFacts(
+                    per100g = winner.facts.per100g ?: filling.per100g,
+                    perUnit = winner.facts.perUnit ?: filling.perUnit,
+                    gramsPerUnit = winner.facts.gramsPerUnit ?: filling.gramsPerUnit,
+                ),
+            )
+        }
         foods.value = foods.value.filterNot { it.id == loserId }
         // The real merge moves the loser's meal components onto the winner, so the meals that used
         // the loser now use the winner — and a delete of the winner is refused for them.
