@@ -44,12 +44,18 @@ object BackupFoods {
 
     // --- Out ---------------------------------------------------------------------------------------
 
+    /**
+     * A number group holding a figure that is not finite is written as null — "not known", as the
+     * file already says it — rather than stopping the export (issue #7): JSON cannot write one. Only
+     * that group; the food's others are written as they are. Such a figure could be typed until
+     * 0.32.6 (D42), and the repair on opening the app clears it from the phone too.
+     */
     fun toBackup(food: Food): BackupFood = BackupFood(
         key = keyOf(food),
         name = food.name,
         brand = food.brand,
         alsoKnownAs = food.alsoKnownAs,
-        per100g = food.facts.per100g?.let {
+        per100g = food.facts.per100g?.takeIf { it.nutrients.isFinite() }?.let {
             BackupNutrients(
                 kcal = it.nutrients.kcal,
                 proteinG = it.nutrients.proteinG,
@@ -59,7 +65,7 @@ object BackupFoods {
                 confidence = it.provenance.confidence?.name,
             )
         },
-        perUnit = food.facts.perUnit?.let {
+        perUnit = food.facts.perUnit?.takeIf { it.nutrients.isFinite() }?.let {
             BackupPerUnit(
                 unit = it.unitName,
                 kcal = it.nutrients.kcal,
@@ -70,7 +76,7 @@ object BackupFoods {
                 confidence = it.provenance.confidence?.name,
             )
         },
-        gramsPerUnit = food.facts.gramsPerUnit?.let {
+        gramsPerUnit = food.facts.gramsPerUnit?.takeIf { it.grams.isFinite() }?.let {
             BackupWeight2(
                 grams = it.grams,
                 source = it.provenance.source.name,
@@ -79,6 +85,9 @@ object BackupFoods {
         },
         barcode = food.barcode,
     )
+
+    private fun Nutrients.isFinite(): Boolean =
+        kcal.isFinite() && proteinG.isFinite() && carbsG.isFinite() && fatG.isFinite()
 
     fun toBackup(meal: SavedMeal): BackupSavedMeal = BackupSavedMeal(
         name = meal.name,

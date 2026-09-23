@@ -2,6 +2,16 @@ package com.metaself.app.domain.backup
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.backup.BackupCodec
+import com.metaself.app.data.backup.BackupFoods
+import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.GramsPerUnit
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
+import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.Test
 
 class BackupCodecTest {
@@ -109,4 +119,112 @@ class BackupCodecTest {
         assertThat(decoded.meals).isEmpty()
         assertThat(decoded.profile).isNull()
     }
+
+    /**
+     * The file's format for every ordinary number is the one it always had. Written against a
+     * plain encoder with the codec's settings, so a change to how a finite number, a null or a
+     * string is printed shows up here rather than in a file that no longer restores.
+     */
+    @Test
+    fun `an ordinary file is written exactly as a plain encoder writes it`() {
+        val plain = Json {
+            prettyPrint = true
+            encodeDefaults = true
+        }
+        val withFoods = full.copy(foods = listOf(BackupFoods.toBackup(aBar())))
+
+        assertThat(BackupCodec.encode(withFoods))
+            .isEqualTo(plain.encodeToString(Backup.serializer(), withFoods))
+    }
+
+    /**
+     * Issue #7. Until 0.32.6 (D42) a food form took "Infinity", and the encoder refuses a number
+     * that is not finite — so one such food made every export and every daily copy fail. The group
+     * holding it is written as null, which is how the file already says "not known"; the food's
+     * other groups are written as they are.
+     */
+    @Test
+    fun `a food holding an infinite figure is exported, with that group as not known`() {
+        val broken = aBar(per100gKcal = Double.POSITIVE_INFINITY)
+
+        val text = BackupCodec.encode(Backup(foods = listOf(BackupFoods.toBackup(broken))))
+        val food = BackupCodec.decode(text)!!.foods.single()
+
+        assertThat(food.per100g).isNull()
+        assertThat(food.perUnit!!.kcal).isEqualTo(190.0)
+        assertThat(food.gramsPerUnit!!.grams).isEqualTo(45.0)
+    }
+
+    @Test
+    fun `an infinite weight of one is exported as not known, and the rest of the food with it`() {
+        val broken = aBar(gramsPerUnit = Double.POSITIVE_INFINITY)
+
+        val food = BackupCodec.decode(
+            BackupCodec.encode(Backup(foods = listOf(BackupFoods.toBackup(broken)))),
+        )!!.foods.single()
+
+        assertThat(food.gramsPerUnit).isNull()
+        assertThat(food.per100g!!.kcal).isEqualTo(422.0)
+    }
+
+    /**
+     * A logged row keeps what it holds (D42): the export does not judge it. But an amount saved as
+     * "Infinity" before 0.32.6 cannot be written as a number, so it is written as null and read
+     * back as no amount — the row, its name and its calories all restore.
+     */
+    @Test
+    fun `a logged row with an infinite amount is exported, and restores with no amount`() {
+        val item = full.meals.single().items.single().copy(portionAmount = Double.POSITIVE_INFINITY)
+        val backup = full.copy(meals = listOf(full.meals.single().copy(items = listOf(item))))
+
+        val text = BackupCodec.encode(backup)
+        val restored = BackupCodec.decode(text)!!.meals.single().items.single()
+
+        assertThat(text).contains("\"portion_amount\": null")
+        assertThat(restored.portionAmount).isEqualTo(0.0)
+        assertThat(restored.kcal).isEqualTo(130)
+        assertThat(restored.name).isEqualTo(item.name)
+    }
+
+    /** A meal part with an infinite amount is read back as none, which a restore already skips. */
+    @Test
+    fun `a meal part with an infinite amount is exported, and restores as no amount`() {
+        val backup = full.copy(
+            savedMeals = listOf(
+                BackupSavedMeal(
+                    name = "Salad",
+                    components = listOf(
+                        BackupMealComponent("cucumber|na", Double.POSITIVE_INFINITY, "GRAMS"),
+                        BackupMealComponent("feta|na", 30.0, "GRAMS"),
+                    ),
+                ),
+            ),
+        )
+
+        val parts = BackupCodec.decode(BackupCodec.encode(backup))!!.savedMeals.single().components
+
+        assertThat(parts.map { it.amount }).containsExactly(0.0, 30.0).inOrder()
+    }
+
+    /** Invented figures throughout, chosen to be told apart. */
+    private fun aBar(
+        per100gKcal: Double = 422.0,
+        gramsPerUnit: Double = 45.0,
+    ) = Food(
+        id = 1,
+        name = "Protein bar",
+        brand = "Dairyco",
+        facts = FoodFacts(
+            per100g = PerHundredGrams(
+                Nutrients(per100gKcal, 33.0, 38.0, 14.0),
+                Provenance(Source.LABEL, null, 1_000),
+            ),
+            perUnit = PerUnit(
+                "bar",
+                Nutrients(190.0, 15.0, 17.0, 6.0),
+                Provenance(Source.TYPED, null, 1_000),
+            ),
+            gramsPerUnit = GramsPerUnit(gramsPerUnit, Provenance(Source.TYPED, null, 1_000)),
+        ),
+    )
 }
