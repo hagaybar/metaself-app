@@ -114,13 +114,15 @@ fun HomeScreen(
 
         // Under the two buttons that can put it here.
         failed?.let {
-            Text(
-                text = stringResource(it.sentence),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = onDismissFailure) {
-                Text(stringResource(R.string.action_refused_dismiss))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = stringResource(it.sentence),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onDismissFailure) {
+                    Text(stringResource(R.string.action_refused_dismiss))
+                }
             }
         }
 
