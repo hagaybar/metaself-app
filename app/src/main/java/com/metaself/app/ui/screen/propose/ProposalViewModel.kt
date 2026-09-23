@@ -106,7 +106,7 @@ class ProposalViewModel @Inject constructor(
             ?: emptyList()
 
     /**
-     * He is going to settings to add the key the last answer said was missing (issue #11).
+     * He is going to settings to add the key the last answer said was missing (public issue #11).
      *
      * The complaint is taken down now rather than on his return, because nothing here can tell that
      * he saved one; left up, it would contradict settings the moment he had. The words stay — in

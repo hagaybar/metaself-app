@@ -550,8 +550,8 @@ fun SettingsScreen(
 
         // One block, so that settings opened from "Add a key in settings" on the describe screen
         // can bring the whole of it into view — title, field and Save — rather than stop at the
-        // first line with the field still below the edge (issue #11). Spaced as the screen's own
-        // column spaces its children, so wrapping them changes nothing. Once per visit: turning
+        // first line with the field still below the edge (public issue #11). Spaced as the screen's
+        // own column spaces its children, so wrapping them changes nothing. Once per visit: turning
         // the phone must not drag him back here from wherever he has scrolled since.
         val keySection = remember { BringIntoViewRequester() }
         var broughtToKey by rememberSaveable { mutableStateOf(false) }

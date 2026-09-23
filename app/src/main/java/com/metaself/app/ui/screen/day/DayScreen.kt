@@ -723,7 +723,8 @@ internal fun Chosen(
             }
         }
         // At one, the hint about holding has been acted on and is gone, and nothing else on screen
-        // says the next tap adds to the choice (#12). From two on the choice plainly grows by tapping.
+        // says the next tap adds to the choice (public issue #12). From two on the choice plainly
+        // grows by tapping.
         if (count == 1) {
             Text(
                 text = stringResource(R.string.record_tap_to_add),
@@ -1266,9 +1267,10 @@ private fun LoggedMeal(
  * foods list uses: a tap on a row already means something, and choosing that began on a tap would
  * turn every look at the record into the start of a meal.
  *
- * **What a plain tap means is what Edit means: it opens the row to be corrected** (#12). The row lit
- * up under a tap and then did nothing, which reads as a broken screen; correcting is what the record
- * is for (D50), so that is the tap's answer. Edit stays, for whoever looks for a word, not a row.
+ * **What a plain tap means is what Edit means: it opens the row to be corrected**
+ * (public issue #12). The row lit up under a tap and then did nothing, which reads as a broken
+ * screen; correcting is what the record is for (D50), so that is the tap's answer. Edit stays, for
+ * whoever looks for a word, not a row.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable

@@ -154,7 +154,9 @@ class ProposalViewModelTest {
             .contains("No API key")
     }
 
-    /** Issue #11: the only failure the screen offers a way to settings for is the missing key. */
+    /**
+     * Public issue #11: the only failure the screen offers a way to settings for is the missing key.
+     */
     @Test
     fun `no key offers the way to the key, and keeps the words`() = runTest {
         val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey))

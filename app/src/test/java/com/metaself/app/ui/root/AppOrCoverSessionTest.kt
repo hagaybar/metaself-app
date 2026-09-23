@@ -20,7 +20,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * The profile editor, opened from a screen deep in the app, closes back onto that screen (issue #11).
+ * The profile editor, opened from a screen deep in the app, closes back onto that screen (public
+ * issue #11).
  *
  * The root draws the editor INSTEAD of the app, not over it, so the app's navigation leaves the
  * composition while the editor is up. Whether its back stack comes back afterwards is the whole

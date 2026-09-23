@@ -560,9 +560,9 @@ class FoodsScreenRenderTest {
     }
 
     /**
-     * With one food ticked, the bar says how to tick more (#12). The hint about holding is gone by
-     * then, and nothing can be done with one food alone, so without this the screen has no next
-     * step on it at all.
+     * With one food ticked, the bar says how to tick more (public issue #12). The hint about
+     * holding is gone by then, and nothing can be done with one food alone, so without this the
+     * screen has no next step on it at all.
      */
     @Test
     fun `with one food chosen the bar says how to add more, and with two it does not`() {

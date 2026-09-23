@@ -401,7 +401,7 @@ private fun Chosen(
             }
         }
         // At one, the hint about holding has been acted on and is gone, and nothing can be done with
-        // one food alone — so without this the screen has no next step on it (#12).
+        // one food alone — so without this the screen has no next step on it (public issue #12).
         if (state.chosen.size == 1) {
             Text(
                 text = stringResource(R.string.foods_tap_to_add),

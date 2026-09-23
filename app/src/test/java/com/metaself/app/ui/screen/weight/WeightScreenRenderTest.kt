@@ -163,8 +163,8 @@ class WeightScreenRenderTest {
     }
 
     /**
-     * Issue #11: the screen names the goal weight and the weekly rate, so it offers the way to
-     * change them — the profile editor, where both are set.
+     * Public issue #11: the screen names the goal weight and the weekly rate, so it offers the way
+     * to change them — the profile editor, where both are set.
      */
     @Test
     fun `the goal it names can be changed from here`() {

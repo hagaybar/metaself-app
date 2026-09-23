@@ -203,7 +203,7 @@ fun RecordScreen(
                     // A gesture nothing on screen mentions is a gesture nobody finds. Said once,
                     // quietly, and only while there is nothing to say about a choice already made.
                     // ABOVE the list, where it is read before the rows it is about: after the list
-                    // it was below the fold on any day long enough to need it (#12).
+                    // it was below the fold on any day long enough to need it (public issue #12).
                     if (!state.choosing) {
                         Text(
                             text = stringResource(R.string.record_hold_to_choose),

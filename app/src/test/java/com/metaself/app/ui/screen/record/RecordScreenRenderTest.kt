@@ -468,7 +468,7 @@ class RecordScreenRenderTest {
         assertThat(texts).doesNotContain("08:00")
     }
 
-    // --- a plain tap on a row, and the hint about holding one (#12) ----------------------------
+    // --- a plain tap on a row, and the hint about holding one (public issue #12) --------------
 
     /**
      * A tap on a row opens it to be corrected, exactly as its Edit does.

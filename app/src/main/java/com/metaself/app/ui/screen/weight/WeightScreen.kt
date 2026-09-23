@@ -140,8 +140,8 @@ fun WeightScreen(
             )
         }
 
-        // The goal weight and the weekly rate are named above and set in the profile editor, so
-        // the way there is here (issue #11). Drawn with no goal weight too: that editor is also
+        // The goal weight and the weekly rate are named above and set in the profile editor, so the
+        // way there is here (public issue #11). Drawn with no goal weight too: that editor is also
         // where one is set.
         TextButton(onClick = onChangeGoal) {
             Text(stringResource(R.string.weight_change_goal))

@@ -78,7 +78,8 @@ fun ProposalScreen(
 ) {
     // Saved rather than merely remembered, so that stepping out to settings for a key and coming
     // back keeps what he typed since the last ask as well as the ask itself, which the view model
-    // holds (issue #11). The back stack saves this screen's saveable state while another is on top.
+    // holds (public issue #11). The back stack saves this screen's saveable state while another is
+    // on top.
     var typed by rememberSaveable(description) { mutableStateOf(description) }
     var extra by remember { mutableStateOf("") }
 
@@ -137,7 +138,7 @@ fun ProposalScreen(
                 }
 
                 // Said AND offered: the sentence above names settings, and this is the way there,
-                // straight to the key (issue #11).
+                // straight to the key (public issue #11).
                 if (state.needsKey) {
                     OutlinedButton(onClick = onAddKey, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.propose_add_key))

@@ -132,9 +132,9 @@ fun MetaSelfRoot(
             MetaSelfNavHost(
                 onEditProfile = { showingProfile = true },
                 // Straight to the editor, where the goal weight and the weekly rate are set, and
-                // back to the weight screen when it closes (issue #11): with the profile page not
-                // open underneath, closing the editor falls through to the app, which AppOrCover
-                // has kept where it was.
+                // back to the weight screen when it closes (public issue #11): with the profile
+                // page not open underneath, closing the editor falls through to the app, which
+                // AppOrCover has kept where it was.
                 onEditGoal = {
                     form = SetupFormState.from(current.profile)
                     showErrors = false
@@ -152,8 +152,9 @@ fun MetaSelfRoot(
  * is out of the composition, and its back stack is saveable state like any other. Left unsaved, it
  * was thrown away and the app restarted at the day: harmless while the profile could be opened only
  * from the day, a trip to the wrong screen once the weight screen's "Change your goal" opens the
- * editor (issue #11). Held here, the app's saveable state is put away when the cover goes up and
- * handed back when it comes down, which is what brings the navigation back to the screen it left.
+ * editor (public issue #11). Held here, the app's saveable state is put away when the cover goes up
+ * and handed back when it comes down, which is what brings the navigation back to the screen it
+ * left.
  */
 @Composable
 internal fun AppOrCover(cover: (@Composable () -> Unit)?, app: @Composable () -> Unit) {

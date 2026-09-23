@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Settings opened from "Add a key in settings" opens where the key goes (issue #11).
+ * Settings opened from "Add a key in settings" opens where the key goes (public issue #11).
  *
  * The key is several sections down a long page, so settings opened at the top would be a way there
  * that still leaves him to find it. Asked of Compose's own finders, whose `assertIsDisplayed` clips a

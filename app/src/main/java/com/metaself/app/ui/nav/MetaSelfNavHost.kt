@@ -729,7 +729,8 @@ fun MetaSelfNavHost(
                     )
                 },
                 // Forward, not back: the describe screen stays on the stack underneath settings,
-                // its view model with it, so Back from settings lands on his words (issue #11).
+                // its view model with it, so Back from settings lands on his words (public
+                // issue #11).
                 onAddKey = {
                     proposeViewModel.leaveToAddKey()
                     navController.navigate(Destination.Settings.atKey)

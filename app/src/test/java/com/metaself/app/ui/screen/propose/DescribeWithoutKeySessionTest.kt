@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Describing a meal with no key saved, out to settings and back (issue #11).
+ * Describing a meal with no key saved, out to settings and back (public issue #11).
  *
  * The words must still be in the box on return, and two different things keep them: the view model,
  * which holds what was asked and lives as long as the describe screen's place on the back stack, and
