@@ -203,6 +203,7 @@ fun MetaSelfNavHost(
         composable(Destination.Weight.route) {
             val weightState by weightViewModel.state.collectAsStateWithLifecycle()
             val canUndoWeight by weightViewModel.canUndo.collectAsStateWithLifecycle()
+            val weightFailed by weightViewModel.failed.collectAsStateWithLifecycle()
             WeightScreen(
                 state = weightState,
                 todayEpochDay = weightViewModel.todayEpochDay,
@@ -218,6 +219,8 @@ fun MetaSelfNavHost(
                 onDelete = weightViewModel::delete,
                 canUndo = canUndoWeight,
                 onUndoDelete = weightViewModel::undoDelete,
+                failed = weightFailed,
+                onDismissFailure = weightViewModel::dismissFailure,
                 onRange = weightViewModel::setRange,
                 onOpenChart = { navController.navigate(Destination.WeightChart.route) },
                 // The editor is the root's, like the profile (see `Destination`); the root keeps

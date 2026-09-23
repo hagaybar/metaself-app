@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.weight.WeightReading
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.day.DayWording
 import com.metaself.app.ui.goal.GoalWording
@@ -52,6 +53,9 @@ import java.time.LocalDate
  *
  * [justLogged] is the confirmation of the last save, shown on return. Without it, saving a weight
  * and landing back on a list is ambiguous: the new row is there, but nothing SAYS the save worked.
+ *
+ * [failed] is the opposite answer, and takes the confirmation's place: the editor has already come
+ * back by the time a save fails, so without this the screen would say it was logged.
  */
 @Composable
 fun WeightScreen(
@@ -64,6 +68,9 @@ fun WeightScreen(
     /** Whether a reading deleted here is still waiting to be put back. The view model counts. */
     canUndo: Boolean = false,
     onUndoDelete: () -> Unit = {},
+    /** The last action here that threw rather than finishing. The view model holds it. */
+    failed: ActionRefused? = null,
+    onDismissFailure: () -> Unit = {},
     onRange: (ChartRange) -> Unit,
     onOpenChart: () -> Unit,
     onChangeGoal: () -> Unit,
@@ -77,7 +84,16 @@ fun WeightScreen(
         modifier = modifier,
         onBack = onBack,
     ) {
-        if (justLogged != null) {
+        if (failed != null) {
+            Text(
+                text = stringResource(failed.sentence),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(onClick = onDismissFailure) {
+                Text(stringResource(R.string.action_refused_dismiss))
+            }
+        } else if (justLogged != null) {
             Text(
                 text = justLogged,
                 style = MaterialTheme.typography.bodyMedium,
