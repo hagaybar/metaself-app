@@ -39,39 +39,46 @@ fun MealsContent(
     onDismissFailure: () -> Unit = {},
 ) {
     state.failed?.let { failed ->
-        Text(
-            text = stringResource(failed.sentence),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.error,
-        )
-        TextButton(onClick = onDismissFailure) {
-            Text(stringResource(R.string.action_refused_dismiss))
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(
+                text = stringResource(failed.sentence),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(onClick = onDismissFailure) {
+                Text(stringResource(R.string.action_refused_dismiss))
+            }
         }
     }
 
     if (state.nothingBuiltYet) {
         // An empty list is not a dead end to be escaped: it is the one place where building a meal
         // is the obvious thing to do, so the offer stands where the list would have been.
-        Text(
-            text = stringResource(R.string.meals_none),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.repeat_build_meal))
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Text(
+                text = stringResource(R.string.meals_none),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.repeat_build_meal))
+            }
         }
         return
     }
 
-    // The same honesty the food editor already shows about a correction: a meal is a definition from
-    // now on, and the days it is already on keep the numbers they were logged with.
-    Text(
-        text = stringResource(R.string.meals_note),
-        style = MaterialTheme.typography.bodySmall,
-        color = MetaSelfInk.two,
-    )
+    // D48's grouping: the note and the button it stands over are one block.
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        // The same honesty the food editor already shows about a correction: a meal is a definition
+        // from now on, and the days it is already on keep the numbers they were logged with.
+        Text(
+            text = stringResource(R.string.meals_note),
+            style = MaterialTheme.typography.bodySmall,
+            color = MetaSelfInk.two,
+        )
 
-    Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
-        Text(stringResource(R.string.repeat_build_meal))
+        Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.repeat_build_meal))
+        }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
