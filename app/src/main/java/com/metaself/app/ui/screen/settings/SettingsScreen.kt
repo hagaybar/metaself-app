@@ -110,168 +110,176 @@ fun SettingsScreen(
         modifier = modifier,
         onBack = onBack,
     ) {
+        // D48's grouping: each part of this screen is one child of the frame, so the frame's
+        // section gap and the hairline fall only between parts, and inside a part things are a
+        // related step apart. They were all a section apart, heading and field alike.
+
         // --- when to eat ---
 
-        Text(
-            text = stringResource(R.string.settings_window_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Text(
+                text = stringResource(R.string.settings_window_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
 
-        // BOTH kinds are on screen at once, and that is the arrangement rather than a mode toggle
-        // or a tab. The two-way choice is which one he SAVES, not which one he can see: a toggle
-        // would hide the kind he is not using behind the kind he is, and picking a ratio would then
-        // mean two decisions instead of one.
-        val rule = state.windowRule
-        val fixed = (rule as? WindowRule.Fixed)?.window
-        val measured = (rule as? WindowRule.Measured)?.window
+            // BOTH kinds are on screen at once, and that is the arrangement rather than a mode toggle
+            // or a tab. The two-way choice is which one he SAVES, not which one he can see: a toggle
+            // would hide the kind he is not using behind the kind he is, and picking a ratio would then
+            // mean two decisions instead of one.
+            val rule = state.windowRule
+            val fixed = (rule as? WindowRule.Fixed)?.window
+            val measured = (rule as? WindowRule.Measured)?.window
 
-        var startHour by remember(fixed) { mutableStateOf(fixed?.startHour ?: DEFAULT_START) }
-        var endHour by remember(fixed) { mutableStateOf(fixed?.endHour ?: DEFAULT_END) }
-        var fastingHours by remember(measured) {
-            mutableStateOf(measured?.fastingHours ?: DEFAULT_FASTING)
-        }
-
-        Text(
-            // Once there is a tally it replaces the summary — which is why the ratio and its
-            // spoken-out form live below, under the chips, rather than only in this sentence.
-            //
-            // The tally is in the unit its own kind judges in, and says so in as many words. The
-            // fixed hours count days, because "eat between 06:00 and 20:00" is a statement about a
-            // day; a ratio counts eating stretches bounded by the fast, because a ratio is a
-            // statement about hours (design §3.1, §4). One number in the other's unit would answer
-            // a question he did not ask.
-            text = when (rule) {
-                null -> stringResource(R.string.settings_window_none)
-
-                is WindowRule.Fixed ->
-                    WindowWording.kept(state.windowKept, state.windowJudged)
-                        ?: stringResource(
-                            R.string.settings_window_set,
-                            WindowWording.hours(rule.window),
-                        )
-
-                is WindowRule.Measured ->
-                    WindowWording.keptStretches(
-                        kept = state.windowKept,
-                        judged = state.windowJudged,
-                        since = LocalDate.ofEpochDay(rule.fromEpochDay),
-                    )
-                        ?: stringResource(
-                            R.string.settings_window_ratio_set,
-                            WindowWording.ratio(rule.window),
-                            WindowWording.inWords(rule.window),
-                        )
-            },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        Text(
-            text = stringResource(R.string.settings_window_kind_hours),
-            style = MaterialTheme.typography.titleSmall,
-        )
-
-        HourPicker(
-            label = stringResource(R.string.settings_window_start),
-            hour = startHour,
-            onChange = { startHour = it },
-        )
-        HourPicker(
-            label = stringResource(R.string.settings_window_end),
-            hour = endHour,
-            onChange = { endHour = it },
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            Button(onClick = { onSetWindow(startHour, endHour) }) {
-                Text(stringResource(R.string.settings_window_save))
+            var startHour by remember(fixed) { mutableStateOf(fixed?.startHour ?: DEFAULT_START) }
+            var endHour by remember(fixed) { mutableStateOf(fixed?.endHour ?: DEFAULT_END) }
+            var fastingHours by remember(measured) {
+                mutableStateOf(measured?.fastingHours ?: DEFAULT_FASTING)
             }
-            if (rule != null) {
-                TextButton(onClick = onClearWindow) {
-                    Text(stringResource(R.string.settings_window_clear))
+
+            Text(
+                // Once there is a tally it replaces the summary — which is why the ratio and its
+                // spoken-out form live below, under the chips, rather than only in this sentence.
+                //
+                // The tally is in the unit its own kind judges in, and says so in as many words. The
+                // fixed hours count days, because "eat between 06:00 and 20:00" is a statement about a
+                // day; a ratio counts eating stretches bounded by the fast, because a ratio is a
+                // statement about hours (design §3.1, §4). One number in the other's unit would answer
+                // a question he did not ask.
+                text = when (rule) {
+                    null -> stringResource(R.string.settings_window_none)
+
+                    is WindowRule.Fixed ->
+                        WindowWording.kept(state.windowKept, state.windowJudged)
+                            ?: stringResource(
+                                R.string.settings_window_set,
+                                WindowWording.hours(rule.window),
+                            )
+
+                    is WindowRule.Measured ->
+                        WindowWording.keptStretches(
+                            kept = state.windowKept,
+                            judged = state.windowJudged,
+                            since = LocalDate.ofEpochDay(rule.fromEpochDay),
+                        )
+                            ?: stringResource(
+                                R.string.settings_window_ratio_set,
+                                WindowWording.ratio(rule.window),
+                                WindowWording.inWords(rule.window),
+                            )
+                },
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            Text(
+                text = stringResource(R.string.settings_window_kind_hours),
+                style = MaterialTheme.typography.titleSmall,
+            )
+
+            HourPicker(
+                label = stringResource(R.string.settings_window_start),
+                hour = startHour,
+                onChange = { startHour = it },
+            )
+            HourPicker(
+                label = stringResource(R.string.settings_window_end),
+                hour = endHour,
+                onChange = { endHour = it },
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Button(onClick = { onSetWindow(startHour, endHour) }) {
+                    Text(stringResource(R.string.settings_window_save))
+                }
+                if (rule != null) {
+                    TextButton(onClick = onClearWindow) {
+                        Text(stringResource(R.string.settings_window_clear))
+                    }
                 }
             }
-        }
 
-        Text(
-            text = stringResource(R.string.settings_window_kind_ratio),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        Text(
-            text = stringResource(R.string.settings_window_ratio_explainer),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
+            Text(
+                text = stringResource(R.string.settings_window_kind_ratio),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(
+                text = stringResource(R.string.settings_window_ratio_explainer),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            RATIOS.forEach { hours ->
-                FilterChip(
-                    selected = fastingHours == hours,
-                    onClick = { fastingHours = hours },
-                    label = { Text(WindowWording.ratio(MeasuredWindow(hours))) },
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                RATIOS.forEach { hours ->
+                    FilterChip(
+                        selected = fastingHours == hours,
+                        onClick = { fastingHours = hours },
+                        label = { Text(WindowWording.ratio(MeasuredWindow(hours))) },
+                    )
+                }
             }
+
+            // The slash never stands alone, and this is its OWN line rather than the tail of a longer
+            // sentence: "16/8" means sixteen hours fasting to most of the world and eight to the rest
+            // of it, and a figure whose meaning has to be inferred is a figure that will be read wrong.
+            Text(
+                text = WindowWording.inWords(MeasuredWindow(fastingHours)),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            // Reads the chosen ratio when it RUNS, not when it is composed. This lambda was built
+            // before the chip was pressed, so a value lifted out of it would save the default for ever
+            // — a bug that is completely invisible on screen.
+            Button(onClick = { onSetRatio(fastingHours) }) {
+                Text(stringResource(R.string.settings_window_ratio_save))
+            }
+
+            // D27's one firm rule about this feature, said where it is set — and said once for both
+            // kinds, because neither of them reaches backwards.
+            Text(
+                text = WindowWording.FROM_TODAY,
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+            RefusedHere(state.failed, SettingsPart.WINDOW, onDismissFailure)
         }
-
-        // The slash never stands alone, and this is its OWN line rather than the tail of a longer
-        // sentence: "16/8" means sixteen hours fasting to most of the world and eight to the rest
-        // of it, and a figure whose meaning has to be inferred is a figure that will be read wrong.
-        Text(
-            text = WindowWording.inWords(MeasuredWindow(fastingHours)),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        // Reads the chosen ratio when it RUNS, not when it is composed. This lambda was built
-        // before the chip was pressed, so a value lifted out of it would save the default for ever
-        // — a bug that is completely invisible on screen.
-        Button(onClick = { onSetRatio(fastingHours) }) {
-            Text(stringResource(R.string.settings_window_ratio_save))
-        }
-
-        // D27's one firm rule about this feature, said where it is set — and said once for both
-        // kinds, because neither of them reaches backwards.
-        Text(
-            text = WindowWording.FROM_TODAY,
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-        RefusedHere(state.failed, SettingsPart.WINDOW, onDismissFailure)
 
         HorizontalDivider()
 
         // --- steps ---
 
-        Text(
-            text = stringResource(R.string.settings_steps_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-
-        Text(
-            text = MovementWording.status(
-                access = state.stepAccess,
-                hasNormal = state.hasStepNormal,
-                daysSoFar = state.stepDaysSoFar,
-                earliest = state.earliestStepDay,
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        // A session and its energy are two different records. This says which the band writes,
-        // because the day screen cannot: a swim earning nothing looks identical whether the energy
-        // was never reported or the day simply was not above his usual.
-        MovementWording.bandEnergy(
-            daysWithEnergy = state.daysWithBandEnergy,
-            daysSeen = state.stepDaysSoFar,
-        )?.let { band ->
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             Text(
-                text = band,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = stringResource(R.string.settings_steps_title),
+                style = MaterialTheme.typography.titleMedium,
             )
-        }
 
-        if (state.stepAccess == StepAccess.NOT_PERMITTED) {
-            Button(onClick = onConnectSteps) {
-                Text(stringResource(R.string.settings_steps_connect))
+            Text(
+                text = MovementWording.status(
+                    access = state.stepAccess,
+                    hasNormal = state.hasStepNormal,
+                    daysSoFar = state.stepDaysSoFar,
+                    earliest = state.earliestStepDay,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+
+            // A session and its energy are two different records. This says which the band writes,
+            // because the day screen cannot: a swim earning nothing looks identical whether the energy
+            // was never reported or the day simply was not above his usual.
+            MovementWording.bandEnergy(
+                daysWithEnergy = state.daysWithBandEnergy,
+                daysSeen = state.stepDaysSoFar,
+            )?.let { band ->
+                Text(
+                    text = band,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (state.stepAccess == StepAccess.NOT_PERMITTED) {
+                Button(onClick = onConnectSteps) {
+                    Text(stringResource(R.string.settings_steps_connect))
+                }
             }
         }
 
@@ -279,276 +287,288 @@ fun SettingsScreen(
 
         // --- the food database account ---
 
-        Text(
-            text = stringResource(R.string.settings_off_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Text(
+                text = stringResource(R.string.settings_off_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
 
-        Text(
-            text = if (state.hasOffPassword) {
-                stringResource(R.string.settings_off_set, state.offUsername)
-            } else {
-                stringResource(R.string.settings_off_none)
-            },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        OutlinedTextField(
-            value = typedOffUser,
-            onValueChange = { typedOffUser = it },
-            label = { Text(stringResource(R.string.settings_off_user)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        // Hidden as it is typed, and never read back out of the store onto a screen. The same rule
-        // as the API key: a credential on screen is a credential in a screenshot.
-        OutlinedTextField(
-            value = typedOffPassword,
-            onValueChange = { typedOffPassword = it },
-            label = { Text(stringResource(R.string.settings_off_password)) },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            Button(
-                onClick = {
-                    onSaveOffAccount(typedOffUser, typedOffPassword)
-                    typedOffPassword = ""
+            Text(
+                text = if (state.hasOffPassword) {
+                    stringResource(R.string.settings_off_set, state.offUsername)
+                } else {
+                    stringResource(R.string.settings_off_none)
                 },
-                enabled = typedOffUser.isNotBlank() && typedOffPassword.isNotBlank(),
-            ) { Text(stringResource(R.string.settings_off_save)) }
+                style = MaterialTheme.typography.bodyMedium,
+            )
 
-            if (state.hasOffPassword) {
-                TextButton(onClick = onClearOffAccount) {
-                    Text(stringResource(R.string.settings_off_clear))
+            OutlinedTextField(
+                value = typedOffUser,
+                onValueChange = { typedOffUser = it },
+                label = { Text(stringResource(R.string.settings_off_user)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            // Hidden as it is typed, and never read back out of the store onto a screen. The same rule
+            // as the API key: a credential on screen is a credential in a screenshot.
+            OutlinedTextField(
+                value = typedOffPassword,
+                onValueChange = { typedOffPassword = it },
+                label = { Text(stringResource(R.string.settings_off_password)) },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Button(
+                    onClick = {
+                        onSaveOffAccount(typedOffUser, typedOffPassword)
+                        typedOffPassword = ""
+                    },
+                    enabled = typedOffUser.isNotBlank() && typedOffPassword.isNotBlank(),
+                ) { Text(stringResource(R.string.settings_off_save)) }
+
+                if (state.hasOffPassword) {
+                    TextButton(onClick = onClearOffAccount) {
+                        Text(stringResource(R.string.settings_off_clear))
+                    }
                 }
             }
-        }
 
-        Text(
-            text = stringResource(R.string.settings_off_note),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-        RefusedHere(state.failed, SettingsPart.OFF_ACCOUNT, onDismissFailure)
+            Text(
+                text = stringResource(R.string.settings_off_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+            RefusedHere(state.failed, SettingsPart.OFF_ACCOUNT, onDismissFailure)
+        }
 
         HorizontalDivider()
 
         // --- keeping a copy ---
 
-        Text(
-            text = stringResource(R.string.settings_backup_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-
-        Text(
-            text = stringResource(R.string.settings_backup_note),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        // Automatic, into a folder he picks once. No Cloud project, no account, no secret in the
-        // app — and it works just as well pointed at a card or a NAS as at Drive (D26).
-        Text(
-            text = if (state.hasBackupFolder) {
-                AutomaticBackupWording.set(state.lastBackup)
-            } else {
-                AutomaticBackupWording.NOT_SET
-            },
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            Button(onClick = onPickBackupFolder, enabled = !state.busy) {
-                Text(
-                    stringResource(
-                        if (state.hasBackupFolder) {
-                            R.string.settings_backup_folder_change
-                        } else {
-                            R.string.settings_backup_folder_pick
-                        },
-                    ),
-                )
-            }
-            if (state.hasBackupFolder) {
-                TextButton(onClick = onBackUpNow) {
-                    Text(stringResource(R.string.settings_backup_now))
-                }
-                TextButton(onClick = onForgetBackupFolder) {
-                    Text(stringResource(R.string.settings_backup_folder_forget))
-                }
-            }
-        }
-
-        // A SECOND destination beside the folder, never a replacement: if Drive fails, the copy on
-        // the phone is untouched. A backup with one way to fail is not a backup.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             Text(
-                text = if (state.driveOn) {
-                    AutomaticBackupWording.DRIVE_ON
+                text = stringResource(R.string.settings_backup_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+
+            Text(
+                text = stringResource(R.string.settings_backup_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+
+            // Automatic, into a folder he picks once. No Cloud project, no account, no secret in the
+            // app — and it works just as well pointed at a card or a NAS as at Drive (D26).
+            Text(
+                text = if (state.hasBackupFolder) {
+                    AutomaticBackupWording.set(state.lastBackup)
                 } else {
-                    AutomaticBackupWording.DRIVE_OFF
+                    AutomaticBackupWording.NOT_SET
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
             )
-            Switch(checked = state.driveOn, onCheckedChange = onSetDrive)
-        }
 
-        if (state.driveOn) {
-            TextButton(onClick = onDriveNow) {
-                Text(stringResource(R.string.settings_drive_now))
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Button(onClick = onPickBackupFolder, enabled = !state.busy) {
+                    Text(
+                        stringResource(
+                            if (state.hasBackupFolder) {
+                                R.string.settings_backup_folder_change
+                            } else {
+                                R.string.settings_backup_folder_pick
+                            },
+                        ),
+                    )
+                }
+                if (state.hasBackupFolder) {
+                    TextButton(onClick = onBackUpNow) {
+                        Text(stringResource(R.string.settings_backup_now))
+                    }
+                    TextButton(onClick = onForgetBackupFolder) {
+                        Text(stringResource(R.string.settings_backup_folder_forget))
+                    }
+                }
             }
-        }
 
-        state.driveMessage?.let { message ->
-            Text(text = message, style = MaterialTheme.typography.bodyMedium)
-        }
+            // A SECOND destination beside the folder, never a replacement: if Drive fails, the copy on
+            // the phone is untouched. A backup with one way to fail is not a backup.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = if (state.driveOn) {
+                        AutomaticBackupWording.DRIVE_ON
+                    } else {
+                        AutomaticBackupWording.DRIVE_OFF
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = state.driveOn, onCheckedChange = onSetDrive)
+            }
 
-        state.automaticBackupMessage?.let { message ->
-            Text(text = message, style = MaterialTheme.typography.bodyMedium)
-        }
+            if (state.driveOn) {
+                TextButton(onClick = onDriveNow) {
+                    Text(stringResource(R.string.settings_drive_now))
+                }
+            }
 
-        Text(
-            text = AutomaticBackupWording.KEY_NOT_INCLUDED,
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
+            state.driveMessage?.let { message ->
+                Text(text = message, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            state.automaticBackupMessage?.let { message ->
+                Text(text = message, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            Text(
+                text = AutomaticBackupWording.KEY_NOT_INCLUDED,
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+        }
 
         HorizontalDivider()
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
-        ) {
-            Button(
-                onClick = onExport,
-                enabled = !state.busy,
-                modifier = Modifier.weight(1f),
-            ) { Text(stringResource(R.string.settings_backup_save)) }
 
-            OutlinedButton(
-                onClick = onRestore,
-                enabled = !state.busy,
-                modifier = Modifier.weight(1f),
-            ) { Text(stringResource(R.string.settings_backup_restore)) }
-        }
-
-        // Nothing has been destroyed at this point. The question names what would be.
-        state.pendingRestore?.let { question ->
-            Surface(
-                color = MaterialTheme.colorScheme.errorContainer,
-                shape = MaterialTheme.shapes.medium,
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
             ) {
-                Column(
-                    modifier = Modifier.padding(Spacing.Related),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+                Button(
+                    onClick = onExport,
+                    enabled = !state.busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.settings_backup_save)) }
+
+                OutlinedButton(
+                    onClick = onRestore,
+                    enabled = !state.busy,
+                    modifier = Modifier.weight(1f),
+                ) { Text(stringResource(R.string.settings_backup_restore)) }
+            }
+
+            // Nothing has been destroyed at this point. The question names what would be. On the
+            // app's ordinary card, not an error-red one: it is a question before a destructive act, as
+            // "Delete …? This cannot be undone." is, and red is kept for a refusal and a field that is
+            // wrong (D48). The question's own words carry the weight.
+            state.pendingRestore?.let { question ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        text = question,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-                        Button(onClick = onConfirmRestore) {
-                            Text(stringResource(R.string.settings_backup_replace))
-                        }
-                        TextButton(onClick = onCancelRestore) {
-                            Text(stringResource(R.string.settings_backup_keep))
+                    Column(
+                        modifier = Modifier.padding(Spacing.Related),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+                    ) {
+                        Text(
+                            text = question,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                            Button(onClick = onConfirmRestore) {
+                                Text(stringResource(R.string.settings_backup_replace))
+                            }
+                            TextButton(onClick = onCancelRestore) {
+                                Text(stringResource(R.string.settings_backup_keep))
+                            }
                         }
                     }
                 }
             }
-        }
 
-        state.backupMessage?.let { message ->
-            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Text(text = message, style = MaterialTheme.typography.bodyMedium)
-                TextButton(
-                    onClick = onDismissBackupMessage,
-                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-                ) { Text(stringResource(R.string.settings_backup_dismiss)) }
+            state.backupMessage?.let { message ->
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Text(text = message, style = MaterialTheme.typography.bodyMedium)
+                    TextButton(
+                        onClick = onDismissBackupMessage,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                    ) { Text(stringResource(R.string.settings_backup_dismiss)) }
+                }
             }
+            RefusedHere(state.failed, SettingsPart.BACKUP, onDismissFailure)
         }
-        RefusedHere(state.failed, SettingsPart.BACKUP, onDismissFailure)
 
         HorizontalDivider()
 
         // --- the reminder ---
 
-        Text(
-            text = stringResource(R.string.settings_reminder_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             Text(
-                text = ReminderWording.schedule(state.reminder),
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f),
+                text = stringResource(R.string.settings_reminder_title),
+                style = MaterialTheme.typography.titleMedium,
             )
-            Switch(
-                checked = state.reminder.enabled,
-                onCheckedChange = { on -> onSetReminder(state.reminder.copy(enabled = on)) },
-            )
-        }
 
-        if (state.reminder.enabled) {
-            // Whole hours only. A reminder is not an appointment, and a minute picker invites a
-            // precision that the alarm itself — inexact on most phones — cannot honour.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                TextButton(
-                    onClick = {
-                        onSetReminder(
-                            state.reminder.copy(hour = (state.reminder.hour + 23) % 24),
-                        )
-                    },
-                ) { Text(stringResource(R.string.settings_reminder_earlier)) }
+                Text(
+                    text = ReminderWording.schedule(state.reminder),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(
+                    checked = state.reminder.enabled,
+                    onCheckedChange = { on -> onSetReminder(state.reminder.copy(enabled = on)) },
+                )
+            }
+
+            if (state.reminder.enabled) {
+                // Whole hours only. A reminder is not an appointment, and a minute picker invites a
+                // precision that the alarm itself — inexact on most phones — cannot honour.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = {
+                            onSetReminder(
+                                state.reminder.copy(hour = (state.reminder.hour + 23) % 24),
+                            )
+                        },
+                    ) { Text(stringResource(R.string.settings_reminder_earlier)) }
+
+                    Text(
+                        text = ReminderWording.clock(state.reminder),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+
+                    TextButton(
+                        onClick = {
+                            onSetReminder(
+                                state.reminder.copy(hour = (state.reminder.hour + 1) % 24),
+                            )
+                        },
+                    ) { Text(stringResource(R.string.settings_reminder_later)) }
+                }
 
                 Text(
-                    text = ReminderWording.clock(state.reminder),
-                    style = MaterialTheme.typography.headlineSmall,
+                    text = stringResource(R.string.settings_reminder_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MetaSelfInk.two,
                 )
 
-                TextButton(
-                    onClick = {
-                        onSetReminder(
-                            state.reminder.copy(hour = (state.reminder.hour + 1) % 24),
-                        )
-                    },
-                ) { Text(stringResource(R.string.settings_reminder_later)) }
+                // No test on the build machine can prove a notification arrives on a phone. This is the
+                // same button, and the same reasoning, as the one that proves the API key works.
+                TextButton(onClick = onSendReminderNow) {
+                    Text(stringResource(R.string.settings_reminder_test))
+                }
             }
-
-            Text(
-                text = stringResource(R.string.settings_reminder_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
-
-            // No test on the build machine can prove a notification arrives on a phone. This is the
-            // same button, and the same reasoning, as the one that proves the API key works.
-            TextButton(onClick = onSendReminderNow) {
-                Text(stringResource(R.string.settings_reminder_test))
-            }
+            RefusedHere(state.failed, SettingsPart.REMINDER, onDismissFailure)
         }
-        RefusedHere(state.failed, SettingsPart.REMINDER, onDismissFailure)
 
         HorizontalDivider()
 
@@ -556,14 +576,14 @@ fun SettingsScreen(
 
         // One block, so that settings opened from "Add a key in settings" on the describe screen
         // can bring the whole of it into view — title, field and Save — rather than stop at the
-        // first line with the field still below the edge (public issue #11). Spaced as the screen's
-        // own column spaces its children, so wrapping them changes nothing. Once per visit: turning
-        // the phone must not drag him back here from wherever he has scrolled since.
+        // first line with the field still below the edge (public issue #11). Spaced as every other
+        // section on this screen is (D48). Once per visit: turning the phone must not drag him back
+        // here from wherever he has scrolled since.
         val keySection = remember { BringIntoViewRequester() }
         var broughtToKey by rememberSaveable { mutableStateOf(false) }
         Column(
             modifier = Modifier.bringIntoViewRequester(keySection),
-            verticalArrangement = Arrangement.spacedBy(Spacing.Section),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Related),
         ) {
             Text(
                 text = stringResource(R.string.settings_key_title),
@@ -618,120 +638,128 @@ fun SettingsScreen(
 
         // --- the model ---
 
-        Text(
-            text = stringResource(R.string.settings_model_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        OutlinedTextField(
-            value = typedModel,
-            onValueChange = {
-                typedModel = it
-                onSetModel(it)
-            },
-            label = { Text(stringResource(R.string.settings_model_field)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = stringResource(R.string.settings_model_note),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-        RefusedHere(state.failed, SettingsPart.MODEL, onDismissFailure)
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Text(
+                text = stringResource(R.string.settings_model_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            OutlinedTextField(
+                value = typedModel,
+                onValueChange = {
+                    typedModel = it
+                    onSetModel(it)
+                },
+                label = { Text(stringResource(R.string.settings_model_field)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(R.string.settings_model_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+            RefusedHere(state.failed, SettingsPart.MODEL, onDismissFailure)
+        }
 
         HorizontalDivider()
 
         // --- the ceiling ---
 
-        Text(
-            text = stringResource(R.string.settings_ceiling_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        OutlinedTextField(
-            value = typedCeiling,
-            onValueChange = {
-                typedCeiling = it
-                it.trim().toIntOrNull()?.let(onSetCeiling)
-            },
-            label = { Text(stringResource(R.string.settings_ceiling_field)) },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = stringResource(
-                R.string.settings_used_today,
-                state.usedToday,
-                state.dailyCeiling,
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        Text(
-            text = stringResource(R.string.settings_ceiling_note),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-        RefusedHere(state.failed, SettingsPart.CEILING, onDismissFailure)
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Text(
+                text = stringResource(R.string.settings_ceiling_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            OutlinedTextField(
+                value = typedCeiling,
+                onValueChange = {
+                    typedCeiling = it
+                    it.trim().toIntOrNull()?.let(onSetCeiling)
+                },
+                label = { Text(stringResource(R.string.settings_ceiling_field)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = stringResource(
+                    R.string.settings_used_today,
+                    state.usedToday,
+                    state.dailyCeiling,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = stringResource(R.string.settings_ceiling_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+            RefusedHere(state.failed, SettingsPart.CEILING, onDismissFailure)
+        }
 
         HorizontalDivider()
 
         // --- proving the whole chain ---
 
-        Button(onClick = onTest, enabled = state.hasKey && !state.testing) {
-            Text(stringResource(R.string.settings_test))
-        }
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Button(onClick = onTest, enabled = state.hasKey && !state.testing) {
+                Text(stringResource(R.string.settings_test))
+            }
 
-        if (state.testing) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp))
+            if (state.testing) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp))
+                    Text(
+                        text = stringResource(R.string.settings_testing),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+
+            state.testResult?.let { result ->
                 Text(
-                    text = stringResource(R.string.settings_testing),
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = result,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
+            RefusedHere(state.failed, SettingsPart.TEST, onDismissFailure)
         }
-
-        state.testResult?.let { result ->
-            Text(
-                text = result,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        RefusedHere(state.failed, SettingsPart.TEST, onDismissFailure)
 
         HorizontalDivider()
 
         // --- what has gone wrong ---
 
-        Text(
-            text = stringResource(R.string.settings_problems_title),
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            text = stringResource(R.string.settings_problems_note),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        if (state.problems.isEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             Text(
-                text = stringResource(R.string.settings_problems_none),
-                style = MaterialTheme.typography.bodyMedium,
+                text = stringResource(R.string.settings_problems_title),
+                style = MaterialTheme.typography.titleMedium,
             )
-        } else {
-            state.problems.forEach { line ->
-                Text(text = line, style = MaterialTheme.typography.bodySmall)
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-                TextButton(onClick = onCopyProblems) {
-                    Text(stringResource(R.string.settings_problems_copy))
+            Text(
+                text = stringResource(R.string.settings_problems_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+
+            if (state.problems.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.settings_problems_none),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                state.problems.forEach { line ->
+                    Text(text = line, style = MaterialTheme.typography.bodySmall)
                 }
-                TextButton(onClick = onClearProblems) {
-                    Text(stringResource(R.string.settings_problems_clear))
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    TextButton(onClick = onCopyProblems) {
+                        Text(stringResource(R.string.settings_problems_copy))
+                    }
+                    TextButton(onClick = onClearProblems) {
+                        Text(stringResource(R.string.settings_problems_clear))
+                    }
                 }
             }
         }

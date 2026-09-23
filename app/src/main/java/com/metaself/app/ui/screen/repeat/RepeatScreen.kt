@@ -147,17 +147,20 @@ fun RepeatScreen(
         },
     ) {
         if (state.nothingEverLogged) {
-            Text(
-                text = stringResource(R.string.repeat_none),
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            // A search box over nothing is noise, so this branch still returns before drawing one —
-            // but it is the first screen a new owner sees, and a front door with nothing behind it
-            // is worse than noise. Nothing was typed, so there is nothing to carry.
-            Button(onClick = { onDescribe("") }, modifier = Modifier.fillMaxWidth()) {
-                Text(stringResource(R.string.propose_describe_meal))
+            // D48's grouping: a sentence and the thing to do about it are one block.
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Text(
+                    text = stringResource(R.string.repeat_none),
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                // A search box over nothing is noise, so this branch still returns before drawing one —
+                // but it is the first screen a new owner sees, and a front door with nothing behind it
+                // is worse than noise. Nothing was typed, so there is nothing to carry.
+                Button(onClick = { onDescribe("") }, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.propose_describe_meal))
+                }
             }
             return@MetaSelfScreen
         }
@@ -171,43 +174,45 @@ fun RepeatScreen(
         if (state.searchedAndFoundNothing) {
             // "Nothing you have logged" is only true when neither list matches. With the match one
             // tab away, the sentence names the list in front, so it does not contradict the offer.
-            Text(
-                text = stringResource(
-                    when (state.matchesOnOtherTab) {
-                        null -> R.string.repeat_no_match
-                        RepeatTab.FOODS -> R.string.repeat_no_match_in_meals
-                        else -> R.string.repeat_no_match_in_foods
-                    },
-                    state.query.trim(),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            // The sentence above is about the list in front and stays per-tab. The offer is not:
-            // if the other tab holds the match it is one tap away, and offering to describe it
-            // here would manufacture exactly the duplicate this screen exists to prevent. So the
-            // offer is the other tab itself, named — both lists are already filtered by these words.
-            //
-            // A Button rather than a TextButton, because it is the only thing to do on a screen
-            // that has just said it has nothing.
-            state.matchesOnOtherTab?.let { other ->
-                Button(onClick = { onShowTab(other) }, modifier = Modifier.fillMaxWidth()) {
-                    Text(
-                        stringResource(
-                            if (other == RepeatTab.FOODS) {
-                                R.string.repeat_found_in_foods
-                            } else {
-                                R.string.repeat_found_in_meals
-                            },
-                        ),
-                    )
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Text(
+                    text = stringResource(
+                        when (state.matchesOnOtherTab) {
+                            null -> R.string.repeat_no_match
+                            RepeatTab.FOODS -> R.string.repeat_no_match_in_meals
+                            else -> R.string.repeat_no_match_in_foods
+                        },
+                        state.query.trim(),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                // The sentence above is about the list in front and stays per-tab. The offer is not:
+                // if the other tab holds the match it is one tap away, and offering to describe it
+                // here would manufacture exactly the duplicate this screen exists to prevent. So the
+                // offer is the other tab itself, named — both lists are already filtered by these words.
+                //
+                // A Button rather than a TextButton, because it is the only thing to do on a screen
+                // that has just said it has nothing.
+                state.matchesOnOtherTab?.let { other ->
+                    Button(onClick = { onShowTab(other) }, modifier = Modifier.fillMaxWidth()) {
+                        Text(
+                            stringResource(
+                                if (other == RepeatTab.FOODS) {
+                                    R.string.repeat_found_in_foods
+                                } else {
+                                    R.string.repeat_found_in_meals
+                                },
+                            ),
+                        )
+                    }
                 }
-            }
-            if (state.nothingMatchedEither) {
-                Button(
-                    onClick = { onDescribe(state.query.trim()) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.repeat_describe_instead, state.query.trim()))
+                if (state.nothingMatchedEither) {
+                    Button(
+                        onClick = { onDescribe(state.query.trim()) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(stringResource(R.string.repeat_describe_instead, state.query.trim()))
+                    }
                 }
             }
             return@MetaSelfScreen
@@ -225,23 +230,25 @@ fun RepeatScreen(
         // starts one, offering to describe a meal to the model instead. An empty meals tab is not a
         // dead end to be escaped, it is the one place building a meal is the obvious thing to do.
         if (state.thisTabIsEmpty) {
-            Text(
-                text = stringResource(
-                    if (state.tab == RepeatTab.MEALS) {
-                        R.string.repeat_no_meals_yet
-                    } else {
-                        R.string.repeat_tab_none
-                    },
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            if (state.tab == RepeatTab.MEALS) {
-                Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.repeat_build_meal))
-                }
-            } else {
-                Button(onClick = { onDescribe("") }, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.propose_describe_meal))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Text(
+                    text = stringResource(
+                        if (state.tab == RepeatTab.MEALS) {
+                            R.string.repeat_no_meals_yet
+                        } else {
+                            R.string.repeat_tab_none
+                        },
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (state.tab == RepeatTab.MEALS) {
+                    Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.repeat_build_meal))
+                    }
+                } else {
+                    Button(onClick = { onDescribe("") }, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.propose_describe_meal))
+                    }
                 }
             }
             return@MetaSelfScreen
@@ -375,10 +382,12 @@ private fun BuiltMeal(
         // A component whose food no longer knows what it is counted in cannot be costed, and the
         // total would quietly be smaller than the meal. Said rather than hidden.
         if (meal.incomplete) {
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = stringResource(R.string.repeat_meal_incomplete),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
 
@@ -642,10 +651,12 @@ private fun OwnFood(food: Food, onPick: () -> Unit) {
         // Shown, never reconciled. The app cannot know which of the three facts is the wrong one,
         // and picking would be exactly the silent guess this whole model exists to avoid.
         FoodWording.disagreement(food)?.let { warning ->
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = warning,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
     }

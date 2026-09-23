@@ -91,94 +91,103 @@ fun MealBuilderScreen(
         // An action that threw says so in the refusal's place (ActionRefused), with the same way out.
         val sentence = state.refusal ?: state.failed?.let { stringResource(it.sentence) }
         sentence?.let { refusal ->
-            Text(
-                text = refusal,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = onDismissRefusal) {
-                Text(stringResource(R.string.foods_refusal_dismiss))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = refusal,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onDismissRefusal) {
+                    Text(stringResource(R.string.foods_refusal_dismiss))
+                }
             }
         }
 
         // The one gate: a meal is only something he built AND named, and the app never invents a
         // name for him.
         if (state.needsAName) {
-            Text(
-                text = stringResource(R.string.builder_name_first),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            OutlinedTextField(
-                value = state.typedName,
-                onValueChange = onSetName,
-                label = { Text(stringResource(R.string.builder_name)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Button(
-                onClick = onName,
-                enabled = state.canName,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.builder_start))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Text(
+                    text = stringResource(R.string.builder_name_first),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                OutlinedTextField(
+                    value = state.typedName,
+                    onValueChange = onSetName,
+                    label = { Text(stringResource(R.string.builder_name)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = onName,
+                    enabled = state.canName,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.builder_start))
+                }
             }
             return@MetaSelfScreen
         }
 
         val meal = state.meal ?: return@MetaSelfScreen
 
-        Text(
-            text = stringResource(R.string.builder_nothing_to_save),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        // Renaming a meal retitles every day it was ever eaten, exactly as renaming a food
-        // re-labels every day that food appears on — and not one stored number moves for either.
-        // Keyed on the stored name so that a rename made elsewhere is picked up rather than
-        // overwritten by a stale field.
-        var typedName by remember(meal.name) { mutableStateOf(meal.name) }
-        OutlinedTextField(
-            value = typedName,
-            onValueChange = { typedName = it },
-            label = { Text(stringResource(R.string.builder_name)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (typedName.isNotBlank() && typedName != meal.name) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Button(onClick = { onRename(typedName) }) {
-                    Text(stringResource(R.string.builder_rename))
-                }
-                TextButton(onClick = { typedName = meal.name }) {
-                    Text(stringResource(R.string.foods_cancel))
-                }
-            }
+        // D48's grouping: the name and everything said about it are one block.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             Text(
-                text = stringResource(R.string.builder_rename_retitles),
+                text = stringResource(R.string.builder_nothing_to_save),
                 style = MaterialTheme.typography.bodySmall,
                 color = MetaSelfInk.two,
             )
+
+            // Renaming a meal retitles every day it was ever eaten, exactly as renaming a food
+            // re-labels every day that food appears on — and not one stored number moves for either.
+            // Keyed on the stored name so that a rename made elsewhere is picked up rather than
+            // overwritten by a stale field.
+            var typedName by remember(meal.name) { mutableStateOf(meal.name) }
+            OutlinedTextField(
+                value = typedName,
+                onValueChange = { typedName = it },
+                label = { Text(stringResource(R.string.builder_name)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (typedName.isNotBlank() && typedName != meal.name) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Button(onClick = { onRename(typedName) }) {
+                        Text(stringResource(R.string.builder_rename))
+                    }
+                    TextButton(onClick = { typedName = meal.name }) {
+                        Text(stringResource(R.string.foods_cancel))
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.builder_rename_retitles),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MetaSelfInk.two,
+                )
+            }
         }
 
         // --- Waiting for an amount -------------------------------------------------------------
         // Above what is in the meal, because these are the unfinished business: each one is a food he
         // chose in the list, and each becomes part of the meal the moment its amount can be costed.
         if (state.pending.isNotEmpty()) {
-            Text(
-                text = stringResource(R.string.builder_how_much_each),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                state.pending.forEach { waiting ->
-                    Waiting(
-                        pending = waiting,
-                        onCountAs = { onCountPendingAs(waiting.food.id, it) },
-                        onSetAmount = { onSetPendingAmount(waiting.food.id, it) },
-                        onConfirm = { onConfirmPending(waiting.food.id) },
-                        onDrop = { onDropPending(waiting.food.id) },
-                    )
-                    HorizontalDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = stringResource(R.string.builder_how_much_each),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    state.pending.forEach { waiting ->
+                        Waiting(
+                            pending = waiting,
+                            onCountAs = { onCountPendingAs(waiting.food.id, it) },
+                            onSetAmount = { onSetPendingAmount(waiting.food.id, it) },
+                            onConfirm = { onConfirmPending(waiting.food.id) },
+                            onDrop = { onDropPending(waiting.food.id) },
+                        )
+                        HorizontalDivider()
+                    }
                 }
             }
         }
@@ -190,21 +199,23 @@ fun MealBuilderScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
         } else {
-            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
-                meal.components.forEach { component ->
-                    InMeal(
-                        component = component,
-                        onRemove = { onRemove(component.id) },
-                        onUp = { onMove(component.id, -1) },
-                        onDown = { onMove(component.id, 1) },
-                    )
-                    HorizontalDivider()
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                    meal.components.forEach { component ->
+                        InMeal(
+                            component = component,
+                            onRemove = { onRemove(component.id) },
+                            onUp = { onMove(component.id, -1) },
+                            onDown = { onMove(component.id, 1) },
+                        )
+                        HorizontalDivider()
+                    }
                 }
+                Text(
+                    text = stringResource(R.string.repeat_kcal, meal.kcal.toString()),
+                    style = MaterialTheme.typography.titleMedium,
+                )
             }
-            Text(
-                text = stringResource(R.string.repeat_kcal, meal.kcal.toString()),
-                style = MaterialTheme.typography.titleMedium,
-            )
         }
 
         // --- Putting something in --------------------------------------------------------------
@@ -225,47 +236,50 @@ fun MealBuilderScreen(
             return@MetaSelfScreen
         }
 
-        Text(
-            text = stringResource(R.string.builder_add_something),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = onSearch,
-            label = { Text(stringResource(R.string.foods_search)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        // The search and what it says about what it found are one block.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(
+                text = stringResource(R.string.builder_add_something),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            OutlinedTextField(
+                value = state.query,
+                onValueChange = onSearch,
+                label = { Text(stringResource(R.string.foods_search)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        // A food left out of the results because it is already here is named, not denied (D41):
-        // saying nothing matched a food drawn a few lines up was issue #14. Shown beside any new
-        // foods offered below, so every food the search found is on screen as a row or a name.
-        if (state.alreadyIn.isNotEmpty()) {
-            Text(
-                text = pluralStringResource(
-                    R.plurals.builder_already_in,
-                    state.alreadyIn.size,
-                    namesTogether(state.alreadyIn.map { named(it) }),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        // Never "in this meal": a food with no amount is not in it (D37).
-        if (state.alreadyWaiting.isNotEmpty()) {
-            Text(
-                text = pluralStringResource(
-                    R.plurals.builder_already_waiting,
-                    state.alreadyWaiting.size,
-                    namesTogether(state.alreadyWaiting.map { named(it) }),
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-        if (state.searchedAndFoundNothing) {
-            Text(
-                text = stringResource(R.string.foods_no_match, state.query.trim()),
-                style = MaterialTheme.typography.bodyMedium,
-            )
+            // A food left out of the results because it is already here is named, not denied (D41):
+            // saying nothing matched a food drawn a few lines up was issue #14. Shown beside any new
+            // foods offered below, so every food the search found is on screen as a row or a name.
+            if (state.alreadyIn.isNotEmpty()) {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.builder_already_in,
+                        state.alreadyIn.size,
+                        namesTogether(state.alreadyIn.map { named(it) }),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            // Never "in this meal": a food with no amount is not in it (D37).
+            if (state.alreadyWaiting.isNotEmpty()) {
+                Text(
+                    text = pluralStringResource(
+                        R.plurals.builder_already_waiting,
+                        state.alreadyWaiting.size,
+                        namesTogether(state.alreadyWaiting.map { named(it) }),
+                    ),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            if (state.searchedAndFoundNothing) {
+                Text(
+                    text = stringResource(R.string.foods_no_match, state.query.trim()),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
 
         // Here rather than on another screen: he has realised the tahini is not in his list, and
@@ -369,10 +383,12 @@ private fun InMeal(
         // The food no longer knows the thing this counts it in. Said rather than shown as a
         // smaller total that looks right.
         if (component.cannotBeCosted) {
+            // Ink, not red (D48): red is a refusal or a field that is wrong, and this is neither —
+            // a fact about the record, set one step above the captions around it.
             Text(
                 text = stringResource(R.string.builder_cannot_cost),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
         Row(
@@ -542,55 +558,66 @@ private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
     var showErrors by remember { mutableStateOf(false) }
     val errors = form.errors()
 
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-        Text(
-            text = stringResource(R.string.builder_make_a_food),
-            style = MaterialTheme.typography.titleSmall,
-        )
-        Field(form.name, { form = form.copy(name = it) }, stringResource(R.string.foods_field_name), errors[FoodField.NAME].takeIf { showErrors })
-        // The same food form as My foods, so the same true sentence: decimals are kept here (D38).
-        Text(
-            text = stringResource(R.string.food_facts_decimals_kept),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        Text(
-            text = stringResource(R.string.foods_group_per_100g),
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Field(form.kcalPer100g, { form = form.copy(kcalPer100g = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_100G].takeIf { showErrors }, numeric = true)
-        Field(form.proteinPer100g, { form = form.copy(proteinPer100g = it) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-        Field(form.carbsPer100g, { form = form.copy(carbsPer100g = it) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-        Field(form.fatPer100g, { form = form.copy(fatPer100g = it) }, stringResource(R.string.foods_field_fat), null, numeric = true)
-
-        Text(
-            text = stringResource(R.string.foods_group_per_unit),
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Field(form.unitName, { form = form.copy(unitName = it) }, stringResource(R.string.foods_field_unit), errors[FoodField.UNIT_NAME].takeIf { showErrors })
-        Field(form.kcalPerUnit, { form = form.copy(kcalPerUnit = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_UNIT].takeIf { showErrors }, numeric = true)
-        Field(form.proteinPerUnit, { form = form.copy(proteinPerUnit = it) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-        Field(form.carbsPerUnit, { form = form.copy(carbsPerUnit = it) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-        Field(form.fatPerUnit, { form = form.copy(fatPerUnit = it) }, stringResource(R.string.foods_field_fat), null, numeric = true)
-
-        if (showErrors) {
-            errors[FoodField.NOTHING_KNOWN]?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
+    // Grouped as My foods' editor is (D48): each group one block, tight inside, a section apart.
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(
+                text = stringResource(R.string.builder_make_a_food),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Field(form.name, { form = form.copy(name = it) }, stringResource(R.string.foods_field_name), errors[FoodField.NAME].takeIf { showErrors })
+            // The same food form as My foods, so the same true sentence: decimals are kept here (D38).
+            Text(
+                text = stringResource(R.string.food_facts_decimals_kept),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
         }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            Button(
-                onClick = { if (errors.isEmpty()) onCreate(form) else showErrors = true },
-            ) {
-                Text(stringResource(R.string.builder_make_it))
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            // Each group's heading is a kicker, as My foods sets it — not small print level with the
+            // notes, which left the two groups of four identical labels with nothing between them.
+            Text(
+                text = stringResource(R.string.foods_group_per_100g),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Field(form.kcalPer100g, { form = form.copy(kcalPer100g = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_100G].takeIf { showErrors }, numeric = true)
+            Field(form.proteinPer100g, { form = form.copy(proteinPer100g = it) }, stringResource(R.string.foods_field_protein), null, numeric = true)
+            Field(form.carbsPer100g, { form = form.copy(carbsPer100g = it) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
+            Field(form.fatPer100g, { form = form.copy(fatPer100g = it) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(
+                text = stringResource(R.string.foods_group_per_unit),
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Field(form.unitName, { form = form.copy(unitName = it) }, stringResource(R.string.foods_field_unit), errors[FoodField.UNIT_NAME].takeIf { showErrors })
+            Field(form.kcalPerUnit, { form = form.copy(kcalPerUnit = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_UNIT].takeIf { showErrors }, numeric = true)
+            Field(form.proteinPerUnit, { form = form.copy(proteinPerUnit = it) }, stringResource(R.string.foods_field_protein), null, numeric = true)
+            Field(form.carbsPerUnit, { form = form.copy(carbsPerUnit = it) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
+            Field(form.fatPerUnit, { form = form.copy(fatPerUnit = it) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            if (showErrors) {
+                errors[FoodField.NOTHING_KNOWN]?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
-            TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Button(
+                    onClick = { if (errors.isEmpty()) onCreate(form) else showErrors = true },
+                ) {
+                    Text(stringResource(R.string.builder_make_it))
+                }
+                TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
+            }
         }
     }
 }

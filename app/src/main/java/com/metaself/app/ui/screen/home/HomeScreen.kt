@@ -26,6 +26,7 @@ import com.metaself.app.domain.target.MeasuredBurn
 import com.metaself.app.ui.target.BurnWording
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.VersionMarker
+import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.target.ExplanationLine
 import com.metaself.app.ui.target.TargetWording
@@ -113,13 +114,15 @@ fun HomeScreen(
 
         // Under the two buttons that can put it here.
         failed?.let {
-            Text(
-                text = stringResource(it.sentence),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = onDismissFailure) {
-                Text(stringResource(R.string.action_refused_dismiss))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = stringResource(it.sentence),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onDismissFailure) {
+                    Text(stringResource(R.string.action_refused_dismiss))
+                }
             }
         }
 
@@ -129,9 +132,11 @@ fun HomeScreen(
 
         Button(onClick = onEdit) { Text(stringResource(R.string.home_edit)) }
 
+        // A colophon: the caption step, not the ink the numbers above are set in.
         Text(
             text = VersionMarker.line(versionName, versionCode),
             style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -158,7 +163,11 @@ private fun Explanation(line: ExplanationLine, showDetail: Boolean) {
             // The heading is the number; the detail is why. The why is worth having and is not
             // worth reading every time, so it waits behind the button at the top of the screen.
             if (showDetail) {
-                Text(text = line.detail, style = MaterialTheme.typography.bodySmall)
+                Text(
+                    text = line.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MetaSelfInk.two,
+                )
             }
         }
     }

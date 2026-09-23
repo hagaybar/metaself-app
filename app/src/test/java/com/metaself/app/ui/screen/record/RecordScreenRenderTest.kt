@@ -306,8 +306,10 @@ class RecordScreenRenderTest {
 
         assertThat(opened).contains("Cucumber")
         assertThat(opened).contains("Olive oil")
-        assertThat(opened).contains("Edit")
-        assertThat(opened).contains("Delete")
+        assertThat(opened).contains("Edit Cucumber")
+        assertThat(opened).contains("Delete Cucumber")
+        assertThat(opened).contains("Edit Olive oil")
+        assertThat(opened).contains("Delete Olive oil")
     }
 
     // --- how much room a row costs --------------------------------------------------------------
@@ -366,7 +368,41 @@ class RecordScreenRenderTest {
      */
     @Test
     fun `each logged item can be corrected`() {
-        assertThat(record(listOf(aMeal(items = listOf(anItem()))))).contains("Edit")
+        var edited: FoodItem? = null
+        val texts = record(
+            listOf(aMeal(items = listOf(anItem(id = 10, name = "Yoghurt")))),
+            onEditItem = { edited = it },
+        )
+
+        assertThat(texts).contains("Edit Yoghurt")
+
+        render.clickDescribed("Edit Yoghurt")
+
+        assertThat(edited?.id).isEqualTo(10)
+    }
+
+    /**
+     * A row's two actions are icons, and each says aloud what it acts on (#14, public issue #3).
+     *
+     * They were two buttons spelling out "Edit" and "Delete" on every row, which cost the row more
+     * width than its figures got, and every copy of them answered to the same two names — so nothing
+     * reading the screen rather than seeing it could tell one row's Delete from the next. Two rows
+     * here, so the names have something to be told apart from.
+     */
+    @Test
+    fun `a row's actions are named for the thing they act on, and no bare word is drawn`() {
+        val texts = record(
+            listOf(
+                aMeal(
+                    id = 1,
+                    items = listOf(anItem(id = 10, name = "Yoghurt"), anItem(id = 11, name = "Apple")),
+                ),
+            ),
+        )
+
+        assertThat(texts).containsAtLeast("Edit Yoghurt", "Delete Yoghurt", "Edit Apple", "Delete Apple")
+        assertThat(texts).doesNotContain("Edit")
+        assertThat(texts).doesNotContain("Delete")
     }
 
     /**
@@ -379,7 +415,7 @@ class RecordScreenRenderTest {
         var deleted = 0
         record(listOf(aMeal(items = listOf(anItem(name = "Hummus")))), onDeleteItem = { deleted++ })
 
-        render.click("Delete")
+        render.clickDescribed("Delete Hummus")
 
         assertThat(deleted).isEqualTo(1)
     }

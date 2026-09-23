@@ -2,7 +2,6 @@ package com.metaself.app.ui.screen.weight
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +12,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -84,14 +88,18 @@ fun WeightScreen(
         modifier = modifier,
         onBack = onBack,
     ) {
+        // D48's grouping: the frame spaces its children a section apart, so anything that belongs
+        // together is one child here, spaced inside by the step that says how closely.
         if (failed != null) {
-            Text(
-                text = stringResource(failed.sentence),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = onDismissFailure) {
-                Text(stringResource(R.string.action_refused_dismiss))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = stringResource(failed.sentence),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onDismissFailure) {
+                    Text(stringResource(R.string.action_refused_dismiss))
+                }
             }
         } else if (justLogged != null) {
             Text(
@@ -101,76 +109,84 @@ fun WeightScreen(
             )
         }
 
-        WeightWording.trend(state.trend)?.let { trend ->
-            // The trend is the largest figure on this screen and is a number the owner has never
-            // typed. Unlabelled it reads as the app getting the weight wrong rather than smoothing
-            // it.
-            Text(
-                text = stringResource(R.string.weight_trend_label),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(text = trend, style = MaterialTheme.typography.headlineLarge)
-            Text(
-                text = stringResource(R.string.weight_trend_explainer),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
-        }
-
-        WeightWording.change(state.trend)?.let { change ->
-            Text(text = change, style = MaterialTheme.typography.bodyLarge)
-        }
-
-        WeightWording.latestReading(state.trend, todayEpochDay)?.let { latest ->
-            Text(text = latest, style = MaterialTheme.typography.bodyLarge)
+        // The trend and what the readings say beside it: one block. Only drawn when there is
+        // something in it, because an empty child still takes the frame's gap.
+        val trend = WeightWording.trend(state.trend)
+        val change = WeightWording.change(state.trend)
+        val latest = WeightWording.latestReading(state.trend, todayEpochDay)
+        if (trend != null || change != null || latest != null) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                trend?.let {
+                    // The trend is the largest figure on this screen and is a number the owner has
+                    // never typed. Unlabelled it reads as the app getting the weight wrong rather
+                    // than smoothing it. Label, figure and explainer are one thing.
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                        Text(
+                            text = stringResource(R.string.weight_trend_label),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(text = it, style = MaterialTheme.typography.headlineLarge)
+                        Text(
+                            text = stringResource(R.string.weight_trend_explainer),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MetaSelfInk.two,
+                        )
+                    }
+                }
+                change?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge) }
+                latest?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge) }
+            }
         }
 
         // The goal, above the chart that draws it. "To go" is the number he came for; the
-        // projection underneath it is a division and says so.
-        GoalWording.arrived(state.progress)?.let { arrived ->
-            Text(
-                text = arrived,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
+        // projection underneath it is a division and says so. One block, with the way to change it.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            GoalWording.arrived(state.progress)?.let { arrived ->
+                Text(
+                    text = arrived,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
 
-        GoalWording.toGo(state.progress)?.let { toGo ->
-            Text(text = toGo, style = MaterialTheme.typography.titleMedium)
-        }
+            GoalWording.toGo(state.progress)?.let { toGo ->
+                Text(text = toGo, style = MaterialTheme.typography.titleMedium)
+            }
 
-        GoalWording.projection(state.forecast)?.let { projection ->
-            Text(
-                text = projection,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            GoalWording.projection(state.forecast)?.let { projection ->
+                Text(
+                    text = projection,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
-        // The rate he is ACTUALLY managing, directly under the one he chose, so the two are read
-        // together (D47). Same style as the projection above it: neither outranks the other.
-        GoalWording.measured(state.forecast)?.let { measured ->
-            Text(
-                text = measured,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            // The rate he is ACTUALLY managing, directly under the one he chose, so the two are
+            // read together (D47). Same style as the projection above it: neither outranks the
+            // other.
+            GoalWording.measured(state.forecast)?.let { measured ->
+                Text(
+                    text = measured,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
-        GoalWording.done(state.progress)?.let { done ->
-            Text(
-                text = done,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+            GoalWording.done(state.progress)?.let { done ->
+                Text(
+                    text = done,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
-        // The goal weight and the weekly rate are named above and set in the profile editor, so the
-        // way there is here (public issue #11). Drawn with no goal weight too: that editor is also
-        // where one is set.
-        TextButton(onClick = onChangeGoal) {
-            Text(stringResource(R.string.weight_change_goal))
+            // The goal weight and the weekly rate are named above and set in the profile editor,
+            // so the way there is here (public issue #11). Drawn with no goal weight too: that
+            // editor is also where one is set.
+            TextButton(onClick = onChangeGoal) {
+                Text(stringResource(R.string.weight_change_goal))
+            }
         }
 
         if (state.trend.isEmpty()) {
@@ -187,9 +203,11 @@ fun WeightScreen(
                 targetKg = state.progress?.targetKg,
                 onOpen = onOpenChart,
             ) {
+                // A caption, so on the caption step: it was drawn in full ink, level with the trend.
                 Text(
                     text = stringResource(R.string.weight_trend_caption),
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
@@ -216,19 +234,25 @@ fun WeightScreen(
             }
         }
 
+        // The history is one list: its heading a step above it, and the rows touching, divided by
+        // their own hairlines. They were a section apart each, as if every reading were a subject
+        // of its own.
         if (state.readings.isNotEmpty()) {
-            Text(
-                text = stringResource(R.string.weight_history),
-                style = MaterialTheme.typography.titleMedium,
-            )
-
-            state.readings.sortedByDescending { it.epochDay }.forEach { reading ->
-                ReadingRow(
-                    reading = reading,
-                    today = today,
-                    onEdit = { onEdit(reading) },
-                    onDelete = { onDelete(reading.epochDay) },
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = stringResource(R.string.weight_history),
+                    style = MaterialTheme.typography.titleMedium,
                 )
+                Column {
+                    state.readings.sortedByDescending { it.epochDay }.forEach { reading ->
+                        ReadingRow(
+                            reading = reading,
+                            today = today,
+                            onEdit = { onEdit(reading) },
+                            onDelete = { onDelete(reading.epochDay) },
+                        )
+                    }
+                }
             }
         }
     }
@@ -254,30 +278,29 @@ private fun ReadingRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
         ) {
+            val day = DayWording.label(LocalDate.ofEpochDay(reading.epochDay), today)
             Text(
-                text = "${DayWording.label(LocalDate.ofEpochDay(reading.epochDay), today)} — " +
-                    WeightWording.reading(reading),
+                text = "$day — " + WeightWording.reading(reading),
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(
-                onClick = onEdit,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.weight_edit),
-                    style = MaterialTheme.typography.labelMedium,
+            // Icons, not the words "Edit" and "Delete" (#14): the words cost the row more width
+            // than the reading got. Each says aloud which day it acts on, so a list of readings is
+            // not a list of controls all called Delete (public issue #3). Delete is not red — red is
+            // for a refusal and a field that is wrong (D48) — and stays set apart by the extra gap.
+            IconButton(onClick = onEdit) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = stringResource(R.string.weight_edit_reading, day),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             Spacer(modifier = Modifier.width(Spacing.Related))
-            TextButton(
-                onClick = onDelete,
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.weight_delete),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
+            IconButton(onClick = onDelete) {
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = stringResource(R.string.weight_delete_reading, day),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

@@ -52,7 +52,8 @@
     <string name="today_add">Add something</string>
     <string name="today_type_numbers">Type the numbers</string>
     <string name="today_nothing_logged">Nothing logged yet today.</string>
-    <string name="today_delete">Delete</string>
+    <!-- A row's bin icon, said aloud with the thing it deletes, so two rows' bins are two controls. -->
+    <string name="day_delete_item">Delete %1$s</string>
     <string name="today_undo">Undo</string>
     <string name="today_deleted">Deleted</string>
     <string name="today_logged_dismiss">Got it</string>
@@ -63,7 +64,8 @@
     <string name="day_meal_adjusted">Changed for this day</string>
     <string name="day_meal_open">Open · %1$s</string>
     <string name="day_meal_close">Close</string>
-    <string name="day_edit">Edit</string>
+    <!-- A row's pencil icon, said aloud with the thing it corrects. -->
+    <string name="day_edit_item">Edit %1$s</string>
     <string name="day_target_changed_dismiss">Got it</string>
     <!-- Its own label rather than the one above, so the two notices can be worded apart later. -->
     <string name="day_food_retaught_dismiss">Got it</string>
@@ -155,7 +157,8 @@
     <string name="weight_editor_add">Log a weight</string>
     <string name="weight_editor_edit">Change this reading</string>
     <string name="weight_save">Save</string>
-    <string name="weight_edit">Edit</string>
+    <!-- A reading's pencil icon, said aloud with the day it is for: "Edit reading, Yesterday". -->
+    <string name="weight_edit_reading">Edit reading, %1$s</string>
     <string name="weight_logged">Logged %1$s for %2$s.</string>
     <string name="weight_updated">Changed to %1$s for %2$s.</string>
     <string name="weight_field">Weight in kilograms</string>
@@ -451,7 +454,8 @@
     <string name="weight_history">Every reading</string>
     <string name="weight_trend_label">Your trend</string>
     <string name="weight_trend_explainer">Your readings, smoothed. It is deliberately not the same as this morning\'s number.</string>
-    <string name="weight_delete">Delete</string>
+    <!-- A reading's bin icon, said aloud with the day it is for. -->
+    <string name="weight_delete_reading">Delete reading, %1$s</string>
     <string name="weight_on_day">Logging against %1$s</string>
     <string name="weight_change_day">Change the day</string>
     <string name="weight_replaces">There is already a reading on this day. Saving replaces it.</string>

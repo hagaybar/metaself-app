@@ -1,14 +1,20 @@
 package com.metaself.app.ui.day
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
+import com.metaself.app.ui.theme.LocalMoves
+import com.metaself.app.ui.theme.Motion
 
 /**
  * A hairline filled to a proportion — what the ring used to say, in a hundredth of its height (D49).
@@ -36,6 +42,11 @@ import androidx.compose.ui.unit.Dp
  *
  * [fraction] is clamped, so a day 40% past its target draws a full rule rather than one that has
  * run off the page. That the day went over is said by the words above, not twice by the rule.
+ *
+ * **On today it fills** (public issue #16): from empty to its value when the page arrives, and from
+ * the old value to the new one when something is logged, over [Motion.SETTLE_MILLIS] with no
+ * overshoot — a rule that ran past its value would, for a frame, be drawing a day that did not
+ * happen. On a past day, or with animations removed ([LocalMoves]), it is drawn at its value.
  */
 @Composable
 internal fun ProportionRule(
@@ -50,7 +61,7 @@ internal fun ProportionRule(
             .height(thickness)
             .background(MaterialTheme.colorScheme.outlineVariant),
     ) {
-        val filled = fraction.coerceIn(0f, 1f)
+        val filled = settled(fraction.coerceIn(0f, 1f))
         if (filled > 0f) {
             Box(
                 modifier = Modifier
@@ -60,4 +71,15 @@ internal fun ProportionRule(
             )
         }
     }
+}
+
+/** [target] as drawn: eased to from wherever it was when [LocalMoves] allows, and exact when not. */
+@Composable
+private fun settled(target: Float): Float {
+    if (!LocalMoves.current) return target
+    val shown = remember { Animatable(0f) }
+    LaunchedEffect(target) {
+        shown.animateTo(target, tween(durationMillis = Motion.SETTLE_MILLIS, easing = Motion.Easing))
+    }
+    return shown.value
 }

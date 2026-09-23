@@ -1,6 +1,9 @@
 package com.metaself.app.ui.screen.record
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.runtime.CompositionLocalProvider
+import com.metaself.app.ui.theme.LocalMoves
+import com.metaself.app.ui.theme.Motion
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -111,7 +114,10 @@ fun RecordScreen(
     onDismissRefusal: () -> Unit,
     /** The logging the record was opened at, if it was opened at one. See [Loggings]. */
     openAtMealId: Long? = null,
-) {
+) = CompositionLocalProvider(LocalMoves provides Motion.moves(state.isToday, LocalMoves.current)) {
+    // Today moves, the past is still (public issue #16): a past day's record arrives and answers a
+    // press without moving, whatever the system allows. The ripple and the feel in the hand stay.
+
     // Which logging's time is being set (D33). Here rather than in the view model for the reason the
     // meal name below is: it exists only while the picker is open, and nothing else reads it.
     var timing by remember { mutableStateOf<Meal?>(null) }
