@@ -246,13 +246,21 @@ interface FoodDao {
     suspend fun setBrand(id: Long, brand: String, nowMillis: Long)
 
     /**
-     * Editing a brand rewrites the key on every one of the food's names, in the same transaction.
+     * Editing a brand rewrites the key on the food's own names, in the same transaction — those under
+     * its current brand. Names a join brought in keep the brand they came with.
      *
      * The cost of putting the brand key on the name row — which is where it has to be, because the
      * identity rule spans a name and a brand and a unique index cannot span two tables.
      */
-    @Query("UPDATE food_names SET brandKey = :brandKey WHERE foodId = :foodId")
-    suspend fun setBrandKeyOnNames(foodId: Long, brandKey: String)
+    @Query("UPDATE food_names SET brandKey = :to WHERE foodId = :foodId AND brandKey = :from")
+    suspend fun moveNamesToBrand(foodId: Long, from: String, to: String)
+
+    /** A name a join brought in, already under the brand another of the food's names is moving to. */
+    @Query(
+        "DELETE FROM food_names WHERE foodId = :foodId AND nameKey = :nameKey AND brandKey = :brandKey " +
+            "AND isPreferred = 0",
+    )
+    suspend fun dropJoinedName(foodId: Long, nameKey: String, brandKey: String)
 
     @Query("UPDATE foods SET barcode = :barcode, updatedAtMillis = :nowMillis WHERE id = :id")
     suspend fun setBarcode(id: Long, barcode: String?, nowMillis: Long)

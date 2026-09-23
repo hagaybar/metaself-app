@@ -386,6 +386,51 @@ class RoomFoodRepositoryTest {
         assertThat(repository.byId(food.id)!!.brand).isEqualTo(FoodKeys.NO_BRAND)
     }
 
+    /**
+     * Two foods sharing a name under different brands, joined: the absorbed name keeps its brand, so
+     * the winner holds the same name twice. Saving the winner's form sets its brand every time, and
+     * that once rewrote every name to one brand, which the unique index refused — Save crashed.
+     */
+    @Test
+    fun `a food that absorbed a same-named food of another brand can still have its brand set`() = runTest {
+        val plain = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+        val branded = repository.findOrCreate("Yoghurt", brand = "Dairyco", facts = FoodFacts(per100g = per100g())).food
+        repository.merge(winnerId = plain.id, loserId = branded.id)
+
+        assertThat(repository.setBrand(plain.id, null)).isEqualTo(EditResult.Done)
+        assertThat(repository.setBrand(plain.id, "Othermilk")).isEqualTo(EditResult.Done)
+        assertThat(repository.byId(plain.id)!!.brand).isEqualTo("Othermilk")
+    }
+
+    /** The absorbed name keeps its brand through a brand change, so its next log finds the winner. */
+    @Test
+    fun `after a brand change the absorbed food's next log still finds the one that absorbed it`() = runTest {
+        val plain = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+        val branded = repository.findOrCreate("Yoghurt", brand = "Dairyco", facts = FoodFacts(per100g = per100g())).food
+        repository.merge(winnerId = plain.id, loserId = branded.id)
+        repository.setBrand(plain.id, "Othermilk")
+
+        val again = repository.findOrCreate("Yoghurt", brand = "Dairyco", facts = FoodFacts(per100g = per100g()))
+
+        assertThat(again.wasCreated).isFalse()
+        assertThat(again.food.id).isEqualTo(plain.id)
+    }
+
+    /** Branding the winner with the absorbed food's own brand makes the two names one, not a crash. */
+    @Test
+    fun `branding a food with the brand of a name it absorbed folds the two names into one`() = runTest {
+        val plain = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+        val branded = repository.findOrCreate("Yoghurt", brand = "Dairyco", facts = FoodFacts(per100g = per100g())).food
+        repository.merge(winnerId = plain.id, loserId = branded.id)
+
+        assertThat(repository.setBrand(plain.id, "Dairyco")).isEqualTo(EditResult.Done)
+
+        val food = repository.byId(plain.id)!!
+        assertThat(food.brand).isEqualTo("Dairyco")
+        assertThat(food.name).isEqualTo("Yoghurt")
+        assertThat(food.alsoKnownAs).isEmpty()
+    }
+
     // --- Correcting ----------------------------------------------------------------------------------
 
     /**
