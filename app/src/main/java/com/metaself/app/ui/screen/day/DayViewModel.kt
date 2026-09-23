@@ -260,6 +260,7 @@ class DayViewModel @Inject constructor(
         noticeSomethingGood()
         followTheOpenStretch()
         putBackDetachedRows()
+        clearImpossibleFigures()
     }
 
     /**
@@ -272,6 +273,19 @@ class DayViewModel @Inject constructor(
      */
     private fun putBackDetachedRows() {
         quietly { DetachedRows.reattach(meals, foods) }
+    }
+
+    /**
+     * Clear the figures on his foods that the number boxes took before 0.32.6 and refuse now — an
+     * infinite, negative or absurd one — and nothing else (issue #7).
+     *
+     * Every time the app opens, for the same reason as the repair above: one read of the foods when
+     * there is nothing to do, and a restored backup can bring such a figure back. Silent: a cleared
+     * box reads as not known, as a blank always has (D4). What it leaves, and why no logged row is
+     * touched, is on [FoodRepository.clearImpossibleFigures].
+     */
+    private fun clearImpossibleFigures() {
+        quietly { foods.clearImpossibleFigures() }
     }
 
     /**

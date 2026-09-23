@@ -18,11 +18,12 @@ import java.math.BigDecimal
  * asks here only about the number that parser produced. A refused number is never rounded, clamped
  * or replaced (D4); the box says why and nothing is saved.
  *
- * Typing, and one stored thing. A packet kept on this phone is judged again each time a scan looks
+ * Typing, and two stored things. A packet kept on this phone is judged again each time a scan looks
  * it up, by D39's per-100 g ceilings here, so one cached before these ceilings existed is not found
- * rather than believed. Nothing else stored is judged on the way back in: a backup restores its
- * numbers as they are, however large, and a food or logged row keeps what it holds until he next
- * saves it through a form.
+ * rather than believed. And a food's number groups are judged each time the app opens, with the
+ * food form's ceilings here, and a group holding a refused figure is cleared (issue #7,
+ * `ImpossibleFigures`). Nothing else stored is judged: a backup restores its numbers as they are,
+ * however large, and a logged row keeps what it holds until he next saves it through a form.
  */
 object BelievableAmount {
 

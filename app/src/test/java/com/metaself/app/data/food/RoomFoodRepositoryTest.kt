@@ -4,6 +4,8 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.assumeSqliteRuntime
+import com.metaself.app.data.day.FoodItemEntity
+import com.metaself.app.data.day.MealEntity
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.day.Confidence
@@ -723,5 +725,100 @@ class RoomFoodRepositoryTest {
 
         assertThat(made.wasCreated).isTrue()
         assertThat(made.before).isNull()
+    }
+
+    // --- issue #7: figures saved before the number boxes refused them ---------------------------
+
+    /**
+     * An infinite per-100 g group is cleared; the per-unit group and the weight beside it are kept,
+     * with their sources, and the food stays where it was in the list.
+     */
+    @Test
+    fun `an impossible group is cleared and the food keeps its others`() = runTest {
+        val food = repository.findOrCreate(
+            "Protein bar",
+            facts = FoodFacts(
+                per100g = per100g(kcal = Double.POSITIVE_INFINITY),
+                perUnit = perUnit(),
+                gramsPerUnit = weighs(),
+            ),
+        ).food
+        moment = 9_000
+
+        val cleared = repository.clearImpossibleFigures()
+
+        val after = repository.byId(food.id)!!
+        assertThat(cleared).isEqualTo(1)
+        assertThat(after.facts.per100g).isNull()
+        assertThat(after.facts.perUnit).isEqualTo(food.facts.perUnit)
+        assertThat(after.facts.gramsPerUnit!!.grams).isEqualTo(45.0)
+        assertThat(after.updatedAtMillis).isEqualTo(food.updatedAtMillis)
+    }
+
+    /** Finite but absurd — "1e12" was a number to the old form — is refused the same way. */
+    @Test
+    fun `an absurd finite figure is cleared, and a believable food is untouched`() = runTest {
+        val absurd = repository.findOrCreate(
+            "Oil",
+            facts = FoodFacts(per100g = per100g(), perUnit = perUnit(kcal = 1e12)),
+        ).food
+        val fine = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+
+        repository.clearImpossibleFigures()
+
+        assertThat(repository.byId(absurd.id)!!.facts.perUnit).isNull()
+        assertThat(repository.byId(absurd.id)!!.facts.per100g).isNotNull()
+        assertThat(repository.byId(fine.id)).isEqualTo(fine)
+    }
+
+    @Test
+    fun `clearing twice clears nothing the second time`() = runTest {
+        repository.findOrCreate(
+            "Protein bar",
+            facts = FoodFacts(per100g = per100g(kcal = Double.POSITIVE_INFINITY), perUnit = perUnit()),
+        )
+
+        assertThat(repository.clearImpossibleFigures()).isEqualTo(1)
+        val once = repository.observeAll().first()
+        assertThat(repository.clearImpossibleFigures()).isEqualTo(0)
+        assertThat(repository.observeAll().first()).isEqualTo(once)
+    }
+
+    /**
+     * A food whose only group was impossible is not deleted: its rows still point at it and keep
+     * every figure they hold, including the absurd one (D42 — a past day is the record). It reads as
+     * no food, so it leaves the list, and logging it again under its name teaches it again.
+     */
+    @Test
+    fun `a food left knowing nothing keeps its history and comes back when taught`() = runTest {
+        val food = repository.findOrCreate(
+            "Halva",
+            facts = FoodFacts(per100g = per100g(kcal = Double.POSITIVE_INFINITY)),
+        ).food
+        val mealId = database.mealDao().insertMeal(
+            MealEntity(epochDay = 20_699, loggedAtMillis = 1_000, note = null),
+        )
+        database.mealDao().insertItems(
+            listOf(
+                FoodItemEntity(
+                    mealId = mealId, name = "Halva", portion = "Infinity g",
+                    portionAmount = Double.POSITIVE_INFINITY, portionUnit = "g",
+                    kcal = Int.MAX_VALUE, proteinG = 0, carbsG = 0, fatG = 0,
+                    source = "TYPED", confidence = null, foodId = food.id,
+                ),
+            ),
+        )
+
+        repository.clearImpossibleFigures()
+
+        assertThat(repository.observeAll().first()).isEmpty()
+        val row = database.mealDao().allMeals().single().items.single()
+        assertThat(row.foodId).isEqualTo(food.id)
+        assertThat(row.kcal).isEqualTo(Int.MAX_VALUE)
+        assertThat(row.portionAmount).isEqualTo(Double.POSITIVE_INFINITY)
+
+        val taught = repository.findOrCreate("Halva", facts = FoodFacts(per100g = per100g()))
+        assertThat(taught.wasCreated).isFalse()
+        assertThat(taught.food.id).isEqualTo(food.id)
     }
 }

@@ -318,6 +318,23 @@ class RoomFoodRepository @Inject constructor(
         EditResult.Done
     }
 
+    override suspend fun clearImpossibleFigures(): Int = database.withTransaction {
+        var cleared = 0
+        dao.everyFood().forEach { food ->
+            val groups = ImpossibleFigures.of(food)
+            // The food's own edit stamp, not now: the clearing statements set it, and a repair he
+            // did not make must not send the food to the top of his list.
+            val stamp = food.updatedAtMillis
+            if (ImpossibleFigures.Group.PER_100G in groups) dao.clearPer100g(food.id, stamp)
+            if (ImpossibleFigures.Group.PER_UNIT in groups) dao.clearPerUnit(food.id, stamp)
+            if (ImpossibleFigures.Group.GRAMS_PER_UNIT in groups) {
+                dao.clearGramsPerUnit(food.id, stamp)
+            }
+            cleared += groups.size
+        }
+        cleared
+    }
+
     override suspend fun merge(winnerId: Long, loserId: Long): EditResult =
         database.withTransaction {
             if (winnerId == loserId) return@withTransaction EditResult.Done

@@ -169,4 +169,21 @@ interface FoodRepository {
      * with one name, and a caller that needs a single food must decline to choose between them.
      */
     suspend fun foodIdsNamed(name: String): List<Long>
+
+    /**
+     * Clear every number group a food holds that today's rule would refuse — an infinite, negative
+     * or absurd figure saved before 0.32.6 (D42) — and nothing else (issue #7).
+     *
+     * **Cleared, not flagged**, the owner's choice: a blank already means "not known" everywhere
+     * (D4), so the food keeps its other groups and the box waits for him to fill it. A food left
+     * knowing nothing at all is not deleted — its logged rows still point at it — but reads as no
+     * food, so it leaves the lists until something teaches it a figure again under the same name.
+     * No logged row is touched: what a past day holds is the record, and D42 has it keep its figures.
+     *
+     * One transaction, and idempotent: a second call finds nothing. Clearing is not an edit he made,
+     * so a food does not move up the list for it.
+     *
+     * @return how many groups were cleared, across every food.
+     */
+    suspend fun clearImpossibleFigures(): Int
 }
