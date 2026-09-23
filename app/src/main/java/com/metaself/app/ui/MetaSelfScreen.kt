@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -44,9 +45,10 @@ import com.metaself.app.ui.theme.Spacing
  * of the things a tab strip does. A search box put in with the content scrolls away too, and a
  * search box you have to scroll back up to is one you stop using.
  *
- * [scrollKey] resets the scroll position when it changes. Two tabs sharing one scroller share one
+ * [scrollKey] gives each list its own scroll position. Two tabs sharing one scroller share one
  * position, so switching from a food list scrolled halfway down landed on the meals already past
- * their top — his place lost in both lists at once. Pass whatever identifies "a different list".
+ * their top — his place lost in both lists at once. A list seen for the first time starts at its
+ * top; a list come back to is where it was left. Pass whatever identifies "a different list".
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -56,7 +58,7 @@ fun MetaSelfScreen(
     onBack: (() -> Unit)? = null,
     onTitleClick: (() -> Unit)? = null,
     scrolls: Boolean = true,
-    /** What identifies the list being scrolled; changing it returns to the top. See the KDoc. */
+    /** What identifies the list being scrolled; each one keeps its own place. See the KDoc. */
     scrollKey: Any? = Unit,
     /** Full-bleed chrome drawn under the title bar, above and outside the padded content. */
     belowBar: @Composable () -> Unit = {},
@@ -124,11 +126,15 @@ fun MetaSelfScreen(
                 modifier = (
                     if (scrolls) {
                         // rememberSaveable, exactly as rememberScrollState() does it, so turning
-                        // the phone still keeps the place. The key is the only addition.
+                        // the phone still keeps the place. Keyed, so another list starts at its
+                        // top; and each key's scroller is kept, so coming back to a list finds it
+                        // where it was left rather than at the top again. Only the list in front
+                        // survives turning the phone — the others live in memory, not the Bundle.
+                        val scrollers = remember { mutableMapOf<Any?, ScrollState>() }
                         base.verticalScroll(
                             rememberSaveable(scrollKey, saver = ScrollState.Saver) {
-                                ScrollState(0)
-                            },
+                                scrollers[scrollKey] ?: ScrollState(0)
+                            }.also { scrollers[scrollKey] = it },
                         )
                     } else {
                         base
