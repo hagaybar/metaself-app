@@ -173,7 +173,7 @@ class FoodsViewModel @Inject constructor(
      * the numbers changed and the name not — and a Save that throws has changed nothing either.
      *
      * An earlier refusal to delete is let go of first, for the reason [setForm] lets go of it: left
-     * above Save, it would read as this Save's refusal, and this Save's own answer lands elsewhere.
+     * above Save, it would read as this Save's refusal, beside this Save's own answer.
      */
     fun save() {
         val editing = _editing.value ?: return
