@@ -600,131 +600,146 @@ private fun Editor(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+        // D48's grouping. Every field here was 4 dp from every other, so the per-100 g four and the
+        // per-portion four — the same four labels — ran together with nothing between them. Each
+        // group is now one block, tight inside, and the blocks are a section apart.
+        verticalArrangement = Arrangement.spacedBy(Spacing.Section),
     ) {
-        Field(
-            value = form.name,
-            onValueChange = { onSetForm(form.copy(name = it)) },
-            label = stringResource(R.string.foods_field_name),
-            error = editing.errorFor(FoodField.NAME),
-        )
-        Field(
-            value = form.brand,
-            onValueChange = { onSetForm(form.copy(brand = it)) },
-            label = stringResource(R.string.foods_field_brand),
-            error = null,
-        )
-        // Putting a real brand on a food changes what it is, so the next plain one starts a new
-        // entry. Correct, and it will look like a duplicate coming back unless it was expected.
-        Text(
-            text = stringResource(R.string.foods_brand_splits),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-        // A food's facts are kept as typed, decimals included. Said once above both groups, so the
-        // whole-grams rule of Type the numbers is not taken for this form's and a packet's 0.5 g is
-        // not rounded by hand before it is typed (D38).
-        Text(
-            text = stringResource(R.string.food_facts_decimals_kept),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        FactHeading(
-            title = stringResource(R.string.foods_group_per_100g),
-            origin = food.facts.per100g
-                ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
-        )
-        Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_100G), numeric = true)
-        Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-        Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-        Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
-
-        FactHeading(
-            title = stringResource(R.string.foods_group_per_unit),
-            origin = food.facts.perUnit
-                ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
-        )
-        Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), editing.errorFor(FoodField.UNIT_NAME))
-        Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_UNIT), numeric = true)
-        Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-        Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-        Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
-
-        FactHeading(
-            title = stringResource(R.string.foods_group_weight),
-            origin = food.facts.gramsPerUnit
-                ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
-        )
-        // Nothing works this out. It is the number that turns one way of counting into the other, so
-        // a wrong one propagates into every future gram-counted log of this food.
-        Text(
-            text = stringResource(R.string.foods_weight_never_guessed),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-        Field(form.gramsPerUnit, { onSetForm(form.copy(gramsPerUnit = it)) }, stringResource(R.string.foods_field_weight), editing.errorFor(FoodField.WEIGHT), numeric = true)
-
-        editing.errorFor(FoodField.NOTHING_KNOWN)?.let {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Field(
+                value = form.name,
+                onValueChange = { onSetForm(form.copy(name = it)) },
+                label = stringResource(R.string.foods_field_name),
+                error = editing.errorFor(FoodField.NAME),
+            )
+            Field(
+                value = form.brand,
+                onValueChange = { onSetForm(form.copy(brand = it)) },
+                label = stringResource(R.string.foods_field_brand),
+                error = null,
+            )
+            // Putting a real brand on a food changes what it is, so the next plain one starts a new
+            // entry. Correct, and it will look like a duplicate coming back unless it was expected.
             Text(
-                text = it,
+                text = stringResource(R.string.foods_brand_splits),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                color = MetaSelfInk.two,
+            )
+            // A food's facts are kept as typed, decimals included. Said once above both groups, so the
+            // whole-grams rule of Type the numbers is not taken for this form's and a packet's 0.5 g is
+            // not rounded by hand before it is typed (D38).
+            Text(
+                text = stringResource(R.string.food_facts_decimals_kept),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
             )
         }
 
-        // Correcting fixes the food from now on. The days already logged keep the numbers they were
-        // logged with, which is his own decision and worth restating where he is about to act on it.
-        Text(
-            text = stringResource(R.string.foods_correction_not_retroactive),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        // A Save refused or an action that threw, said directly above the buttons that did it.
-        sentence?.let { SlotSentence(it, onDismissSentence) }
-
-        // The question takes the buttons' place, so it is where his finger is and exactly one thing
-        // on the editor says Delete (D36).
-        if (deleting is Deleting.Asking) {
-            AskBeforeDeleting(
-                name = deleting.food.name,
-                onDelete = onConfirmDelete,
-                onKeep = onKeep,
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            FactHeading(
+                title = stringResource(R.string.foods_group_per_100g),
+                origin = food.facts.per100g
+                    ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
             )
-        } else {
-            // The refusal to delete is said here, directly above the buttons, and not in the slot at
-            // the top of the list: Delete sits at the foot of this editor, the top of the list is off
-            // screen from there, and a refusal he cannot see makes the tap look dead. The buttons
-            // stay, because the sentence tells him to hide it instead and Hide must be in reach.
-            if (deleting is Deleting.Refused) {
+            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_100G), numeric = true)
+            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
+            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
+            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            FactHeading(
+                title = stringResource(R.string.foods_group_per_unit),
+                origin = food.facts.perUnit
+                    ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
+            )
+            Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), editing.errorFor(FoodField.UNIT_NAME))
+            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_UNIT), numeric = true)
+            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
+            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
+            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            FactHeading(
+                title = stringResource(R.string.foods_group_weight),
+                origin = food.facts.gramsPerUnit
+                    ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
+            )
+            // Nothing works this out. It is the number that turns one way of counting into the other, so
+            // a wrong one propagates into every future gram-counted log of this food.
+            Text(
+                text = stringResource(R.string.foods_weight_never_guessed),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+            Field(form.gramsPerUnit, { onSetForm(form.copy(gramsPerUnit = it)) }, stringResource(R.string.foods_field_weight), editing.errorFor(FoodField.WEIGHT), numeric = true)
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            editing.errorFor(FoodField.NOTHING_KNOWN)?.let {
                 Text(
-                    text = deleting.sentence,
-                    style = MaterialTheme.typography.bodyMedium,
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Button(onClick = onSave) { Text(stringResource(R.string.foods_save)) }
-                TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                TextButton(onClick = onBeginMerging) { Text(stringResource(R.string.foods_merge)) }
-                if (food.hidden) {
-                    TextButton(onClick = onUnhide) { Text(stringResource(R.string.foods_unhide)) }
-                } else {
-                    TextButton(onClick = onHide) { Text(stringResource(R.string.foods_hide)) }
-                }
-                TextButton(onClick = onDelete) { Text(stringResource(R.string.foods_delete)) }
-            }
+
+            // Correcting fixes the food from now on. The days already logged keep the numbers they were
+            // logged with, which is his own decision and worth restating where he is about to act on it.
+            Text(
+                text = stringResource(R.string.foods_correction_not_retroactive),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
         }
-        // Hiding keeps the history pointing here, so every past day still shows this food's current
-        // name. Deleting lets those days fall back to whatever was typed on the day.
-        Text(
-            text = stringResource(R.string.foods_hide_or_delete),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            // A Save refused or an action that threw, said directly above the buttons that did it.
+            sentence?.let { SlotSentence(it, onDismissSentence) }
+
+            // The question takes the buttons' place, so it is where his finger is and exactly one thing
+            // on the editor says Delete (D36).
+            if (deleting is Deleting.Asking) {
+                AskBeforeDeleting(
+                    name = deleting.food.name,
+                    onDelete = onConfirmDelete,
+                    onKeep = onKeep,
+                )
+            } else {
+                // The refusal to delete is said here, directly above the buttons, and not in the slot at
+                // the top of the list: Delete sits at the foot of this editor, the top of the list is off
+                // screen from there, and a refusal he cannot see makes the tap look dead. The buttons
+                // stay, because the sentence tells him to hide it instead and Hide must be in reach.
+                if (deleting is Deleting.Refused) {
+                    Text(
+                        text = deleting.sentence,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Button(onClick = onSave) { Text(stringResource(R.string.foods_save)) }
+                    TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    TextButton(onClick = onBeginMerging) { Text(stringResource(R.string.foods_merge)) }
+                    if (food.hidden) {
+                        TextButton(onClick = onUnhide) { Text(stringResource(R.string.foods_unhide)) }
+                    } else {
+                        TextButton(onClick = onHide) { Text(stringResource(R.string.foods_hide)) }
+                    }
+                    TextButton(onClick = onDelete) { Text(stringResource(R.string.foods_delete)) }
+                }
+            }
+            // Hiding keeps the history pointing here, so every past day still shows this food's current
+            // name. Deleting lets those days fall back to whatever was typed on the day.
+            Text(
+                text = stringResource(R.string.foods_hide_or_delete),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+        }
     }
 }
 
