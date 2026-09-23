@@ -1,0 +1,462 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MetaSelf</string>
+    <string name="back">Back</string>
+
+    <string name="setup_title">About you</string>
+    <string name="setup_intro">Six answers, once. They are the whole of what your daily target is worked out from, and you can change any of them later.</string>
+    <string name="setup_height">Height in centimetres</string>
+    <string name="setup_birth_year">Year of birth</string>
+    <string name="setup_sex">Sex</string>
+    <string name="setup_sex_male">Male</string>
+    <string name="setup_sex_female">Female</string>
+    <string name="setup_weight">Weight in kilograms</string>
+    <string name="setup_activity">A normal day</string>
+    <string name="setup_activity_sedentary">Mostly sitting</string>
+    <string name="setup_activity_light">Lightly active</string>
+    <string name="setup_activity_moderate">Moderately active</string>
+    <string name="setup_activity_active">Active</string>
+    <string name="setup_activity_very_active">Very active</string>
+    <string name="setup_goal">What you want to happen</string>
+    <string name="setup_goal_lose">Lose weight</string>
+    <string name="setup_goal_hold">Hold weight</string>
+    <string name="setup_goal_gain">Gain weight</string>
+    <string name="setup_rate">How fast</string>
+    <string name="setup_target">Goal weight (kg)</string>
+    <string name="setup_target_hint">Optional. Leave it empty to just keep going at this rate.</string>
+    <string name="setup_save">Work out my target</string>
+
+    <string name="home_show_working">Show how these are worked out</string>
+    <string name="home_hide_working">Hide the working</string>
+    <string name="home_forget_correction">Start this correction again</string>
+    <string name="home_measured_title">Checked against your weight</string>
+    <string name="home_edit">Change these</string>
+    <string name="home_arithmetic_title">How this was worked out</string>
+    <string name="home_macros_title">And what to eat it as</string>
+    <string name="home_floor_override">Use the number I asked for anyway</string>
+
+    <string name="entry_title_add">Type the numbers</string>
+    <string name="entry_title_edit">Correct this item</string>
+    <string name="entry_name">What was it?</string>
+    <string name="entry_amount">How much (%1$s)</string>
+    <string name="entry_amount_note">Change this and the calories follow. You can still correct them by hand afterwards.</string>
+    <string name="entry_kcal">Calories</string>
+    <string name="entry_protein">Protein (g)</string>
+    <string name="entry_carbs">Carbohydrate (g)</string>
+    <string name="entry_fat">Fat (g)</string>
+    <string name="entry_save">Add it</string>
+    <string name="entry_macros_optional">Leave a macro blank if you do not know it — it counts as zero.</string>
+    <!-- Said before the first box it governs, not only in the refusal after Add it (issue #18, D38). -->
+    <string name="entry_whole_numbers">Whole numbers only: calories, and protein, carbohydrate and fat in whole grams. A number with a decimal point or comma is refused, not rounded.</string>
+
+    <string name="today_add">Add something</string>
+    <string name="today_type_numbers">Type the numbers</string>
+    <string name="today_nothing_logged">Nothing logged yet today.</string>
+    <string name="today_delete">Delete</string>
+    <string name="today_undo">Undo</string>
+    <string name="today_deleted">Deleted</string>
+    <string name="today_logged_dismiss">Got it</string>
+    <string name="today_more">More</string>
+    <string name="today_got_it">Got it</string>
+    <string name="today_profile">Your numbers</string>
+
+    <string name="day_meal_adjusted">Changed for this day</string>
+    <string name="day_meal_open">Open · %1$s</string>
+    <string name="day_meal_close">Close</string>
+    <string name="day_edit">Edit</string>
+    <string name="day_target_changed_dismiss">Got it</string>
+    <!-- Its own label rather than the one above, so the two notices can be worded apart later. -->
+    <string name="day_food_retaught_dismiss">Got it</string>
+    <string name="day_nothing_logged_past">Nothing was logged on this day.</string>
+    <string name="day_picker_confirm">Show it</string>
+    <string name="day_picker_dismiss">Cancel</string>
+
+    <!--
+      D51: the four fixed parts of the clock the day's loggings are gathered into, and the one row
+      for anything written down on another day. Parts of the clock, never names for meals — there is
+      no Breakfast, Lunch or Dinner anywhere in this app, and none may be added here.
+    -->
+    <string name="day_part_night">Night</string>
+    <string name="day_part_morning">Morning</string>
+    <string name="day_part_midday">Midday</string>
+    <string name="day_part_evening">Evening</string>
+    <!-- The row for loggings with no honest time. It has no hours, so it says why instead. -->
+    <string name="day_part_untimed">Time not known</string>
+    <!-- How many things are behind the row, drawn only when there is more than one. -->
+    <plurals name="day_part_things">
+        <item quantity="one">%1$d thing</item>
+        <item quantity="other">%1$d things</item>
+    </plurals>
+    <!-- What a screen reader hears: the part and its hours, what is in it, what it came to (#12). -->
+    <string name="day_part_description">%1$s: %2$s, %3$s. Open the day\'s record.</string>
+
+    <!--
+      The hint now lives on the record screen, which is the screen that has rows to hold (D50, D51),
+      and says "here" rather than "on the day" because that is where it is read.
+    -->
+    <string name="record_hold_to_choose">Hold anything here to start choosing. What you pick keeps the numbers it was logged with.</string>
+    <string name="day_chosen">%1$s chosen</string>
+    <!--
+      The day's title bar gave this up when the rows left the day (D51); the record screen's action
+      bar has it, where what it selects is on the screen it is pressed from (D50).
+    -->
+    <string name="day_choose_all">All</string>
+    <string name="day_clear_choosing">Clear</string>
+    <plurals name="day_make_meal">
+        <item quantity="one">Make a meal from this one</item>
+        <item quantity="other">Make a meal from these %1$d</item>
+    </plurals>
+    <string name="day_is_chosen">Chosen</string>
+    <string name="day_not_chosen">Not chosen</string>
+    <string name="day_refusal_dismiss">All right</string>
+    <string name="day_meal_name_title">Name this meal</string>
+    <string name="day_meal_name_label">What is it called?</string>
+    <string name="day_meal_name_total">%1$s in all</string>
+    <string name="day_meal_will_group">Today will show these as one row called %1$s. Not one number you logged changes, and you can open the row to see the parts.</string>
+    <string name="day_meal_will_group_past">That day will show these as one row called %1$s. Not one number you logged changes, and you can open the row to see the parts.</string>
+    <!-- Before a name is typed: a sentence that needs no name, not a placeholder in one that does (D37). -->
+    <string name="day_meal_will_group_unnamed">Today will show these as one row, under the name you give it. Not one number you logged changes, and you can open the row to see the parts.</string>
+    <string name="day_meal_will_group_unnamed_past">That day will show these as one row, under the name you give it. Not one number you logged changes, and you can open the row to see the parts.</string>
+    <string name="day_meal_name_confirm">Make the meal</string>
+    <string name="day_meal_name_cancel">Not now</string>
+
+    <!--
+      The day's record (D50): the screen the loggings moved to, where each one is a row again and
+      correcting one is the point. Reached from a part of the clock on the day, for that day only.
+    -->
+    <string name="record_title">The day\'s record</string>
+    <!-- What the day came to: the total recorded and how many things. Never the target (D50). -->
+    <plurals name="record_things">
+        <item quantity="one">%1$d thing</item>
+        <item quantity="other">%1$d things</item>
+    </plurals>
+    <!--
+      Deleting everything that is ticked, in one go (#50). Its own words rather than the row's plain
+      "Delete", so a screen reader is not read two different controls under one name (#12), and so
+      that the count he is about to lose is on the button that loses it.
+    -->
+    <plurals name="record_delete_chosen">
+        <item quantity="one">Delete this one</item>
+        <item quantity="other">Delete these %1$d</item>
+    </plurals>
+    <!-- Only the app's own word "portion" is drawn through this — on the day, a meal's parts, the adjuster, and the model's proposal; any other unit is shown exactly as it was written (D37). -->
+    <plurals name="portions_count">
+        <item quantity="one">%1$s portion</item>
+        <item quantity="other">%1$s portions</item>
+    </plurals>
+
+    <string name="weight_title">Weight</string>
+    <string name="weight_add">Log a weight</string>
+    <string name="weight_editor_add">Log a weight</string>
+    <string name="weight_editor_edit">Change this reading</string>
+    <string name="weight_save">Save</string>
+    <string name="weight_edit">Edit</string>
+    <string name="weight_logged">Logged %1$s for %2$s.</string>
+    <string name="weight_updated">Changed to %1$s for %2$s.</string>
+    <string name="weight_field">Weight in kilograms</string>
+    <string name="weight_nothing">No weights logged yet. Log one and the trend starts from it.</string>
+    <string name="weight_trend_caption">The line is the trend; the dots are what the scale actually said.</string>
+    <string name="weight_open">Weight</string>
+
+    <string name="settings_title">Settings</string>
+    <string name="settings_open">Settings</string>
+
+    <string name="propose_title">Describe a meal</string>
+    <string name="propose_field">What did you eat?</string>
+    <string name="propose_hint">A sentence is enough: "chicken shawarma in a pita, hummus, side salad"</string>
+    <string name="propose_ask">Work it out</string>
+    <string name="propose_waiting">Asking the model…</string>
+    <string name="propose_less">Less</string>
+    <string name="propose_as_described">As described</string>
+    <string name="propose_more">More</string>
+    <string name="propose_count_fewer">−</string>
+    <string name="propose_count_more">+</string>
+    <string name="propose_remove">Remove</string>
+    <string name="propose_total">%1$s kcal in total</string>
+    <string name="propose_save">Save this meal</string>
+    <string name="propose_keep_as_meal">Save, and keep these as a meal</string>
+    <string name="propose_tell_more_field">Anything it got wrong?</string>
+    <string name="propose_tell_more_send">Ask again</string>
+    <string name="propose_manual">Type the numbers myself</string>
+    <string name="propose_describe_meal">Describe a meal</string>
+    <string name="repeat_title">Add something</string>
+    <string name="repeat_none">Nothing to repeat yet. Anything you log will appear here.</string>
+    <string name="repeat_tab_none">Nothing on this list yet.</string>
+    <string name="repeat_describe_instead">Describe “%1$s” instead</string>
+    <string name="repeat_note">Tap a meal and it goes on the day you are on, as you built it. Tap a food and it asks how much first. Nothing is sent anywhere.</string>
+    <string name="repeat_tab_foods">My foods</string>
+    <string name="repeat_tab_meals">My meals</string>
+    <string name="repeat_search">Search what you have eaten</string>
+    <string name="repeat_no_match">Nothing you have logged matches “%1$s”.</string>
+    <string name="repeat_adjust">Adjust</string>
+    <string name="repeat_as_it_was">As it was</string>
+    <string name="repeat_adjust_log">Log it</string>
+    <string name="repeat_adjust_cancel">Leave it alone</string>
+
+    <!-- The foods manager: renaming, correcting, deleting, hiding, and joining two duplicates. -->
+
+    <!-- Building a meal the owner names himself. -->
+    <string name="builder_title">Build a meal</string>
+    <string name="builder_name_first">Give it a name. Nothing else can happen until it has one — the app will not invent one for you.</string>
+    <string name="builder_name">What do you call it?</string>
+    <string name="builder_start">Start it</string>
+    <string name="builder_nothing_to_save">Nothing to save. What is in the meal is kept as you go, so you can leave and come back. A food you have picked but not put in yet is not in the meal when you come back.</string>
+    <string name="builder_empty">Nothing in it yet.</string>
+    <string name="builder_add_something">Put something in</string>
+    <string name="builder_make_a_food">Make a food that is not on your list</string>
+    <string name="builder_make_it">Make it</string>
+    <string name="builder_put_it_in">Put it in</string>
+    <string name="builder_rename">Rename it</string>
+    <string name="builder_rename_retitles">Every day you have eaten this will show the new name. No calorie count changes.</string>
+    <string name="builder_delete">Delete this meal</string>
+    <string name="builder_up">Up</string>
+    <string name="builder_down">Down</string>
+    <string name="builder_cannot_cost">This food no longer knows what it is counted in here.</string>
+    <string name="builder_how_much_each">How much of each goes in it? Nothing is filled in for you where nothing knows the answer.</string>
+    <string name="builder_waiting_for_amount">waiting for an amount</string>
+    <string name="builder_drop_pending">Not this one</string>
+    <!-- Meal builder search (D41, issue #14). A food the meal already holds is not offered again
+         (a meal holds a food once), so a search that finds it names it instead of saying nothing
+         matched. %1$s is the list of food names joined by builder_names_last / builder_names_more,
+         which live here so a translation can reorder them. -->
+    <plurals name="builder_already_in">
+        <item quantity="one">%1$s is already in this meal.</item>
+        <item quantity="other">%1$s are already in this meal.</item>
+    </plurals>
+    <plurals name="builder_already_waiting">
+        <item quantity="one">%1$s is already here, waiting for an amount.</item>
+        <item quantity="other">%1$s are already here, waiting for an amount.</item>
+    </plurals>
+    <string name="builder_names_more">%1$s, %2$s</string>
+    <string name="builder_names_last">%1$s and %2$s</string>
+    <!-- A food named in those sentences when it has a real brand: %1$s the name, %2$s the brand.
+         Two foods can share a name and differ only in brand, and the search finds by brand. -->
+    <string name="builder_food_with_brand">%1$s (%2$s)</string>
+    <string name="repeat_no_meals_yet">No meals yet. A meal is something you build from your foods and give a name to — a salad, a breakfast — and then log in one tap.</string>
+    <string name="repeat_build_meal">Build a meal</string>
+    <string name="repeat_meal_empty">Nothing in it yet. Add foods whenever you like.</string>
+    <string name="repeat_meal_incomplete">Something in this no longer knows what it is counted in, so the total is short.</string>
+    <string name="repeat_meal_edit">Change it</string>
+    <string name="repeat_adjust_today_only">Just for today. The meal itself stays as you built it.</string>
+    <string name="repeat_manage_foods">Fix or join up your foods</string>
+
+    <!-- The one screen the food list and the meals he has built live on, a tab each. -->
+    <string name="manager_title">Foods &amp; meals</string>
+    <string name="manager_open">Foods &amp; meals</string>
+    <string name="manager_tab_foods">My foods</string>
+    <string name="manager_tab_meals">My meals</string>
+    <string name="meals_none">Nothing built yet. A meal is a few foods with amounts, saved under a name you choose.</string>
+    <string name="meals_note">Changing a meal here changes it from now on. The days it is already on keep the numbers they were logged with.</string>
+    <string name="foods_title">My foods</string>
+    <string name="foods_none">No foods yet. Anything you log becomes one.</string>
+    <string name="foods_search">Search your foods</string>
+    <string name="foods_no_match">Nothing matches “%1$s”.</string>
+    <string name="foods_only_portions">Only know a portion (%1$s)</string>
+    <string name="foods_all_hidden">Every food is hidden. Turn on Show hidden above to bring them back.</string>
+    <string name="foods_nothing_left_to_fix">Nothing left on this list. Every food knows more than a portion now.</string>
+    <string name="foods_show_hidden">Show hidden</string>
+    <string name="foods_hidden">Hidden — not offered when you log something</string>
+    <string name="foods_also_known_as">Also: %1$s</string>
+    <string name="foods_origin">This came %1$s</string>
+    <string name="foods_group_per_100g">What 100 g of it are worth</string>
+    <string name="foods_group_per_unit">What one of it is worth</string>
+    <string name="foods_group_weight">What one of it weighs</string>
+    <!-- Shared by the food editor and the meal builder's new-food form: the two that store a
+         food's facts as decimals and keep them. The opposite of entry_whole_numbers, because each
+         sentence must be true of the form it sits on (D38). "Decimal point", not "comma". The
+         packet-label form has its own sentence (scan_label_figures_kept): what is typed there is
+         kept on the packet's record, and reaches a food only when the packet is logged. -->
+    <string name="food_facts_decimals_kept">Numbers here can have a decimal point: 0.5 g is kept as 0.5 g on this food.</string>
+    <!-- The packet-label form only (Scan → Add it yourself). The packet's own record stores the
+         label's figures as printed; what reaches the day is a logged row in whole grams. "For this
+         packet", not "on this food": what is typed here is kept on the packet's record, and reaches
+         a food only when the packet is logged (D38; since issue #28 the food then takes the
+         packet's figures as printed). -->
+    <string name="scan_label_figures_kept">Type the numbers as printed — 0.5 g is kept as 0.5 g for this packet. What goes on the day is counted in whole grams.</string>
+    <string name="foods_weight_never_guessed">Nothing works this out for you. It is what turns grams into units and back, so a wrong one would follow into everything you log afterwards.</string>
+    <string name="foods_field_name">Name</string>
+    <string name="foods_field_brand">Brand</string>
+    <string name="foods_field_kcal">Calories</string>
+    <string name="foods_field_protein">Protein (g)</string>
+    <string name="foods_field_carbs">Carbs (g)</string>
+    <string name="foods_field_fat">Fat (g)</string>
+    <string name="foods_field_unit">One what? A bar, a slice, an egg</string>
+    <string name="foods_field_weight">Grams</string>
+    <string name="foods_brand_splits">Giving this a brand makes it a different food, so the next unbranded one starts a new entry.</string>
+    <string name="foods_correction_not_retroactive">Fixing this changes the food from now on. Days you have already logged keep the numbers they were logged with.</string>
+    <string name="foods_hide_or_delete">Hiding keeps it off your lists and every past day still shows its name. Deleting leaves those days showing whatever you typed at the time.</string>
+    <string name="foods_save">Save</string>
+    <string name="foods_cancel">Leave it alone</string>
+    <string name="foods_merge">Join with a duplicate</string>
+    <string name="foods_hide">Hide</string>
+    <string name="foods_unhide">Show again</string>
+    <string name="foods_delete">Delete</string>
+    <string name="foods_merge_pick">Pick the food that is the same thing as “%1$s”. It will keep this name and these numbers, and answer to both.</string>
+    <string name="foods_merge_both">Joining “%2$s” into “%1$s”. “%1$s” keeps its name and its numbers, and answers to both afterwards. This cannot be undone.</string>
+    <string name="foods_merge_do_it">Join them</string>
+    <string name="foods_merge_this_one_stays">This is the one that stays</string>
+    <string name="foods_merge_cancel">Not now</string>
+    <string name="foods_refusal_dismiss">All right</string>
+    <string name="foods_hold_to_choose">Hold a food to start choosing. Tap the rest.</string>
+    <string name="foods_chosen">%1$s chosen</string>
+    <string name="foods_clear_choosing">Clear</string>
+    <plurals name="foods_make_meal">
+        <item quantity="one">Make a meal from this one</item>
+        <item quantity="other">Make a meal from these %1$d</item>
+    </plurals>
+    <string name="foods_join_two">Join these two into one food</string>
+    <string name="foods_is_chosen">Chosen</string>
+    <string name="foods_not_chosen">Not chosen</string>
+    <!-- Asked before a whole food or a whole saved meal is deleted; shared by the food editor and the meal builder (D36). -->
+    <string name="delete_question">Delete “%1$s”? This cannot be undone.</string>
+    <string name="delete_do_it">Delete</string>
+    <string name="delete_keep_it">Keep it</string>
+    <string name="food_in_grams">Weigh it</string>
+    <string name="food_in_units">Count %1$s</string>
+    <string name="food_how_much">How much</string>
+    <string name="repeat_kcal">%1$s kcal</string>
+    <string name="scan_title">Scan a barcode</string>
+    <string name="scan_open">Scan</string>
+    <string name="scan_aim">Point the camera at the barcode on the packet.</string>
+    <string name="scan_no_camera">This needs the camera. Allow it, or describe the food in words instead.</string>
+    <string name="scan_looking_up">Looking it up…</string>
+    <string name="scan_grams">How much, in grams</string>
+    <string name="scan_save">Log it</string>
+    <string name="scan_again">Scan another</string>
+    <string name="scan_describe_instead">Describe it in words instead</string>
+    <!-- Under Log it, when it was pressed and nothing could be logged: the screen stays and says
+         why, because leaving with nothing logged looked exactly like success (D42, issue #32). -->
+    <string name="scan_nothing_logged_amount">Nothing was logged — the amount above is not one this can count.</string>
+    <string name="scan_nothing_logged_packet">Nothing was logged — this packet\'s figures are not ones this app can count. Scan again to look it up afresh.</string>
+    <!-- Under an amount box that had no refusal before D42 (issue #32) — the scan's grams, Add
+         something's amount, the meal builder's two — shown only when what he typed is a number past
+         the ceiling; a blank, a zero or a half-typed number just leaves the button off. %1$s is the
+         ceiling from BelievableAmount. The counted one names no unit: the app's unit words take their
+         plural on the screen (D37), and "at most 100 slice" would be wrong. -->
+    <string name="amount_at_most_grams">At most %1$s g at a time.</string>
+    <string name="amount_at_most_count">At most %1$s at a time.</string>
+    <string name="settings_window_title">When you eat</string>
+    <string name="settings_window_none">Off. Set the hours you mean to eat between and the app will keep tab, from today onwards.</string>
+    <string name="settings_window_set">Your window is %1$s.</string>
+    <string name="settings_window_start">From</string>
+    <string name="settings_window_end">Until</string>
+    <string name="settings_window_save">Keep tab on this</string>
+    <string name="settings_window_clear">Stop keeping tab</string>
+    <string name="settings_window_kind_hours">Set the hours</string>
+    <string name="settings_window_kind_ratio">Set a ratio</string>
+    <string name="settings_window_ratio_explainer">Measured over each stretch of eating, from its first input to its last, to the minute. A stretch ends once you have fasted the hours you set, so it can run past midnight. A stretch with only one thing logged is not judged either way.</string>
+    <!--
+      Shaped like settings_window_set on purpose: it must never BEGIN with the figure. A line
+      starting "16/8" would be found before the 16/8 chip by anything matching on a prefix, and a
+      sentence has nothing to press.
+    -->
+    <string name="settings_window_ratio_set">Your ratio is %1$s — %2$s.</string>
+    <!-- Not "Keep tab on this ratio": that extends the hours button's label, and a prefix match
+         would press the wrong one and silently save an hours window. -->
+    <string name="settings_window_ratio_save">Save this ratio</string>
+    <string name="settings_steps_title">Steps</string>
+    <string name="settings_steps_connect">Allow MetaSelf to read your steps</string>
+    <string name="settings_off_title">Open Food Facts account</string>
+    <string name="settings_off_none">Not set. You can scan and log without one; it is only needed to send missing products up.</string>
+    <string name="settings_off_set">Signed in as %1$s. The password is encrypted on this phone and never shown again.</string>
+    <string name="settings_off_user">Username (not your email)</string>
+    <string name="settings_off_password">Password</string>
+    <string name="settings_off_save">Save the account</string>
+    <string name="settings_off_clear">Forget it</string>
+    <string name="settings_off_note">Free to create at openfoodfacts.org. Products you send are credited to this username.</string>
+    <string name="scan_type_note">Barcodes on tubes and bottles curve away from the camera. If it will not read, type the digits.</string>
+    <string name="scan_type_label">Barcode digits</string>
+    <string name="scan_type_look_up">Look it up</string>
+    <string name="scan_add_it">Add it yourself</string>
+    <string name="scan_add_title">What the package says</string>
+    <string name="scan_add_name">Name</string>
+    <string name="scan_add_brand">Brand (optional)</string>
+    <string name="scan_add_kcal">Calories per 100 g</string>
+    <string name="scan_add_protein">Protein per 100 g</string>
+    <string name="scan_add_carbs">Carbohydrate per 100 g</string>
+    <string name="scan_add_fat">Fat per 100 g</string>
+    <string name="scan_add_serving">Serving size in grams (optional)</string>
+    <string name="scan_add_save">Save it on this phone</string>
+    <!-- Scan → a packet the database has but without every figure (D40, issue #30). Said above
+         the form; %1$s is the list built from scan_lacks_* joined by scan_lacks_list_*, which
+         live here so a translation can reorder the words. "calorie", not "calories": it is an
+         adjective here ("no calorie figure"). -->
+    <plurals name="scan_database_lacks">
+        <item quantity="one">The food database has this packet but no %1$s figure for it. Copy it from the packet — the figures it has are filled in from the database.</item>
+        <item quantity="other">The food database has this packet but no %1$s figures for it. Copy them from the packet — the figures it has are filled in from the database.</item>
+    </plurals>
+    <string name="scan_lacks_kcal">calorie</string>
+    <string name="scan_lacks_protein">protein</string>
+    <string name="scan_lacks_carbs">carbohydrate</string>
+    <string name="scan_lacks_fat">fat</string>
+    <string name="scan_lacks_list_two">%1$s or %2$s</string>
+    <string name="scan_lacks_list_three">%1$s, %2$s or %3$s</string>
+    <string name="scan_lacks_list_four">%1$s, %2$s, %3$s or %4$s</string>
+    <string name="scan_contribute">Send it to Open Food Facts</string>
+    <string name="scan_contribute_note">Optional. It sends the barcode, the name and the label\'s numbers — nothing about you but your username.</string>
+    <string name="settings_backup_title">Keeping a copy</string>
+    <string name="settings_backup_note">Everything you have logged, in one file. Automatically into a folder you choose, or saved by hand wherever you like.</string>
+    <string name="settings_backup_folder_pick">Pick a folder</string>
+    <string name="settings_backup_folder_change">Change the folder</string>
+    <string name="settings_backup_folder_forget">Turn it off</string>
+    <string name="settings_backup_now">Copy now</string>
+    <string name="settings_drive_now">Copy to Drive now</string>
+    <string name="settings_backup_save">Save to a file</string>
+    <string name="settings_backup_restore">Restore from a file</string>
+    <string name="settings_backup_replace">Replace everything</string>
+    <string name="settings_backup_keep">Keep what I have</string>
+    <string name="settings_backup_dismiss">Got it</string>
+    <string name="settings_reminder_title">Daily reminder</string>
+    <string name="settings_reminder_earlier">Earlier</string>
+    <string name="settings_reminder_later">Later</string>
+    <string name="settings_reminder_note">The only notification this app sends. It stays quiet on any day you have already logged something.</string>
+    <string name="settings_reminder_test">Send it now, to check it arrives</string>
+    <string name="settings_key_title">Your OpenAI API key</string>
+    <string name="settings_key_none">No key yet. Estimating a meal from words needs one.</string>
+    <string name="settings_key_saved">A key is saved. It is encrypted on this phone and is never shown again.</string>
+    <string name="settings_key_field">Paste your key</string>
+    <string name="settings_key_save">Save the key</string>
+    <string name="settings_key_clear">Forget it</string>
+    <string name="settings_key_privacy">It is stored encrypted on this phone, is excluded from Android\'s backup, and never leaves except as the header of a request to OpenAI.</string>
+    <string name="settings_model_title">Model</string>
+    <string name="settings_model_field">Model name</string>
+    <string name="settings_model_note">Change this when a newer or cheaper one appears; you do not need a new version of the app.</string>
+    <string name="settings_ceiling_title">Estimates per day</string>
+    <string name="settings_ceiling_field">How many</string>
+    <string name="settings_ceiling_note">A ceiling on how many times a day the app may ask the model. It bounds a runaway loop; it is not a security measure.</string>
+    <string name="settings_used_today">Used today: %1$d of %2$d.</string>
+    <string name="settings_test">Test it</string>
+    <string name="settings_testing">Asking the model about one apple…</string>
+    <string name="settings_problems_title">Recent problems</string>
+    <string name="settings_problems_none">Nothing has gone wrong.</string>
+    <string name="settings_problems_note">Kept on this phone only and never sent anywhere. It records what failed, never what you ate.</string>
+    <string name="settings_problems_copy">Copy them</string>
+    <string name="settings_problems_clear">Clear them</string>
+    <string name="weight_history">Every reading</string>
+    <string name="weight_trend_label">Your trend</string>
+    <string name="weight_trend_explainer">Your readings, smoothed. It is deliberately not the same as this morning\'s number.</string>
+    <string name="weight_delete">Delete</string>
+    <string name="weight_on_day">Logging against %1$s</string>
+    <string name="weight_change_day">Change the day</string>
+    <string name="weight_replaces">There is already a reading on this day. Saving replaces it.</string>
+
+    <string name="weight_range_1m">1M</string>
+    <string name="weight_range_3m">3M</string>
+    <string name="weight_range_6m">6M</string>
+    <string name="weight_range_1y">1Y</string>
+    <string name="weight_range_all">All</string>
+    <string name="weight_range_span_1m">last month</string>
+    <string name="weight_range_span_3m">last three months</string>
+    <string name="weight_range_span_6m">last six months</string>
+    <string name="weight_range_span_1y">last year</string>
+    <string name="weight_range_empty">Nothing weighed in the %1$s.</string>
+    <string name="weight_goal_off_chart">Your goal weight is off this view.</string>
+    <string name="weight_chart_open">Tap the chart for a bigger view</string>
+    <string name="weight_chart_title">Weight chart</string>
+    <string name="weight_chart_close">Close</string>
+    <!-- D33: when a meal was eaten, shown on the day and corrected there. -->
+    <string name="day_time_title">When did you eat it?</string>
+    <string name="day_time_save">Save</string>
+    <string name="day_time_cancel">Cancel</string>
+    <string name="day_time_unknown">--:--</string>
+</resources>

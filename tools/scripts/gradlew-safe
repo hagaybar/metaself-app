@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# gradlew-safe — the ONLY sanctioned way to run Gradle on this box.
+#
+# Why this exists: on 2026-08-24 concurrent Gradle invocations (several agents,
+# each re-running the suite for mutation checks) exhausted the development box
+# and locked its owner out of SSH. Capping heap was not
+# enough — the multiplier was CONCURRENCY, not any single build.
+#
+# Two guarantees:
+#   1. flock  — at most ONE build at a time, no matter how many callers ask.
+#   2. cap    — an optional hard cgroup ceiling, so a runaway build dies
+#               instead of starving sshd. Off by default because it also kills
+#               the reusable daemon; set GRADLE_HARD_CAP=1 for untrusted runs.
+#
+# Heap limits themselves live in ~/.gradle/gradle.properties and still apply.
+set -euo pipefail
+
+LOCK=/tmp/gradle-build.lock
+WAIT=${GRADLE_LOCK_WAIT:-3600}
+MEM=${GRADLE_MEM_MAX:-5G}
+
+if [ ! -x ./gradlew ]; then
+    echo "gradlew-safe: no ./gradlew in $PWD — run me from a Gradle project root." >&2
+    exit 2
+fi
+
+if ! flock -w 0 "$LOCK" true 2>/dev/null; then
+    echo "gradlew-safe: another Gradle build is running; waiting up to ${WAIT}s for the lock." >&2
+fi
+
+if [ "${GRADLE_HARD_CAP:-0}" = "1" ]; then
+    exec flock -w "$WAIT" "$LOCK" \
+        systemd-run --user --scope --quiet -p MemoryMax="$MEM" -p MemorySwapMax=2G \
+        ./gradlew "$@"
+else
+    exec flock -w "$WAIT" "$LOCK" ./gradlew "$@"
+fi

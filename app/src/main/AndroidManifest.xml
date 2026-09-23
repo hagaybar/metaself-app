@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      The only permission this app has, and the only one it should ever need.
+
+      It arrives in step 7 with the model seam. Steps 1 to 6 genuinely needed none, and the
+      manifest said so; adding networking without adding this is what made the first Test button
+      press crash rather than fail politely.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+      The one notification this app sends (D15). POST_NOTIFICATIONS is asked for at the moment the
+      owner turns the reminder on; RECEIVE_BOOT_COMPLETED exists because Android forgets every alarm
+      when the phone restarts, and a reminder that stops after the first reboot is worse than none.
+
+      The two exact-alarm permissions are best effort. On Android 12 the first is granted at install
+      and revocable; from Android 13 the second covers an app whose whole purpose for the alarm is to
+      notify at a time the owner chose. Where neither is in force the app falls back to an inexact
+      alarm rather than nagging for a permission.
+    -->
+    <!--
+      Movement, out of Android's shared health store. Read only, and only the three things this app
+      can actually use: steps and active calories for the arithmetic, and exercise sessions so the
+      screen can say "Swimming" rather than "movement". No heart rate, no sleep, no weight — asking
+      for what cannot be used is how permission screens become things people dismiss without
+      reading.
+    -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+
+    <!-- Reading a barcode. Asked for at the moment he presses Scan, never at startup. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission
+        android:name="android.permission.SCHEDULE_EXACT_ALARM"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+
+    <application
+        android:name=".MetaSelfApp"
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MetaSelf">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:theme="@style/Theme.MetaSelf">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <!--
+          Health Connect requires an app to be able to explain, from its own permission screen, why
+          it wants what it wants. Both forms are declared because the platform changed which one it
+          launches: the activity-alias covers Android 14 and later.
+        -->
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".MainActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
+        <receiver
+            android:name=".data.reminder.ReminderReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name=".data.reminder.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+    </application>
+
+</manifest>

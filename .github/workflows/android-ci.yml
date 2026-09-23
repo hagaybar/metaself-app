@@ -1,0 +1,115 @@
+name: Android CI
+
+# MetaSelf is developed partly from sessions with no Android SDK, so a change cannot always be
+# compiled where it is written. This workflow is the build: push a branch and CI compiles it, runs
+# the JVM unit tests, lints it, and uploads a debug APK.
+#
+# The debug APK here is NOT the rc. The APK the owner installs must be release-signed (the keystore
+# lives outside this repository and CI cannot produce it), so release builds are a local step.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push on the same branch makes the previous run obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Test, lint & assemble
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # JDK 17: AGP 8.2.2 / Kotlin 1.9.22 do not support a newer toolchain.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # `packages: ''` because the action's default asks for `tools`, which Google has since
+      # removed from the SDK repository — sdkmanager then fails and the whole run dies before a
+      # line of this project is compiled. The runner image already carries platform-tools, the
+      # android-34 platform and the build tools, which is everything AGP needs here.
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew :app:testDebugUnitTest --stacktrace
+
+      # Every database test stands aside on a machine whose processor has no native SQLite for
+      # Robolectric (see SqliteRuntime.kt), and passes as "skipped" there. This runner is the only
+      # place those tests execute, and Gradle calls a skipped test a success — so if they ever stood
+      # aside here too (an aarch64 runner, a mis-wired condition), this run would stay green over
+      # zero database coverage. "0 skipped" is the CI invariant; this step is what enforces it.
+      - name: No test skipped
+        run: |
+          python3 - <<'PY'
+          import glob, sys
+          import xml.etree.ElementTree as ET
+          files = glob.glob("app/build/test-results/testDebugUnitTest/*.xml")
+          tests = skipped = 0
+          names = []
+          for f in files:
+              suite = ET.parse(f).getroot()
+              tests += int(suite.get("tests", 0))
+              skipped += int(suite.get("skipped", 0))
+              if int(suite.get("skipped", 0)):
+                  names.append(suite.get("name"))
+          print(f"{tests} tests, {skipped} skipped, from {len(files)} result files")
+          if tests == 0:
+              sys.exit("No test results found; the suite did not run.")
+          if skipped:
+              sys.exit("Skipped here, where nothing may skip:\n  " + "\n  ".join(sorted(names)))
+          PY
+
+      - name: Lint
+        run: ./gradlew :app:lintDebug --stacktrace
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      # Reports on failure are what make a red run diagnosable from a session with no SDK — so they
+      # are uploaded only when there is a failure to diagnose. Uploading them on every green run
+      # filled the account's artifact storage, and a full quota then failed this step and turned
+      # passing builds red, which is worse than having no reports: a red badge that is not about the
+      # code is a red badge nobody reads.
+      #
+      # `continue-on-error` for the same reason. Whether an artifact could be stored says nothing
+      # about whether the tests passed, and must never be allowed to claim otherwise.
+      - name: Upload reports
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # The debug APK is 17 MB and is NOT what the owner installs — his builds are release-signed
+      # and made locally. It exists so a session with no SDK can get something runnable, which is
+      # worth keeping and is not worth 17 MB on every push to every branch. So: on `main`, or when
+      # somebody asks for a run deliberately.
+      - name: Upload debug APK
+        if: success() && (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: warn
+          retention-days: 14

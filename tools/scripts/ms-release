@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# ms-release — build the SIGNED release APK for MetaSelf on this box.
+#
+# Why this exists: :app:minifyReleaseWithR8 needs far more heap than everyday builds, and the box's
+# default (2048m) is sized for tests and debug builds. With that default the release build fails
+# with OutOfMemoryError after 20-30 minutes, deterministically. The 4g is asked for
+# HERE rather than raised globally, and --no-daemon means the process exits when the build does.
+# Everything still goes through gradlew-safe, so the one-build-at-a-time lock still applies.
+#
+# Run from the project root. Do NOT pipe it if you intend to report the result: the pipe returns the
+# FILTER's exit code, so a FAILED build reports success.
+set -euo pipefail
+
+export ANDROID_HOME="${ANDROID_HOME:-/home/ubuntu/android-sdk}"
+
+exec "$HOME/bin/gradlew-safe" :app:assembleRelease --console=plain --no-daemon \
+    -Dorg.gradle.jvmargs="-Xmx4g -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+    "$@"

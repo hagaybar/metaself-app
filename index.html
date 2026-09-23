@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MetaSelf</title>
+<meta name="description" content="A personal, offline-first Android fitness tracker. Describe a meal in words; the numbers follow.">
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #fbfbf9;
+    --fg: #1c1c1a;
+    --muted: #5f6360;
+    --accent: #2e7d5b;
+    --rule: #e2e2dd;
+    --card: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141614;
+      --fg: #e8e8e4;
+      --muted: #9aa09b;
+      --accent: #7fd1a8;
+      --rule: #2a2d2a;
+      --card: #1c1f1c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 17px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 46rem; margin: 0 auto; padding: 0 1.5rem; }
+  header { padding: 5rem 0 3rem; border-bottom: 1px solid var(--rule); }
+  .mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 3rem; height: 3rem; border-radius: 0.9rem;
+    background: var(--accent); color: var(--bg);
+    font-weight: 700; font-size: 1.4rem; margin-bottom: 1.5rem;
+  }
+  h1 { font-size: 2.6rem; line-height: 1.1; margin: 0 0 0.75rem; letter-spacing: -0.02em; }
+  .lede { font-size: 1.2rem; color: var(--muted); margin: 0; max-width: 32rem; }
+  h2 { font-size: 1.05rem; letter-spacing: 0.06em; text-transform: uppercase;
+       color: var(--muted); margin: 3.5rem 0 1.25rem; font-weight: 600; }
+  h3 { font-size: 1.05rem; margin: 0 0 0.35rem; }
+  p { margin: 0 0 1.1rem; }
+  .grid { display: grid; gap: 1.25rem; grid-template-columns: 1fr; }
+  @media (min-width: 40rem) { .grid { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--rule);
+    border-radius: 0.8rem; padding: 1.25rem 1.35rem;
+  }
+  .card p { margin: 0; color: var(--muted); font-size: 0.97rem; }
+  .note {
+    border-left: 3px solid var(--accent); padding: 0.1rem 0 0.1rem 1.1rem;
+    color: var(--muted); margin: 2rem 0;
+  }
+  footer {
+    margin-top: 4.5rem; padding: 2rem 0 4rem;
+    border-top: 1px solid var(--rule); color: var(--muted); font-size: 0.93rem;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  footer a { margin-right: 1.25rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="mark">M</div>
+    <h1>MetaSelf</h1>
+    <p class="lede">A personal, offline-first Android fitness tracker. Describe a meal in
+    plain words; the numbers follow.</p>
+  </header>
+
+  <h2>What it does</h2>
+
+  <div class="grid">
+    <div class="card">
+      <h3>Logging by description</h3>
+      <p>Write what you ate, in English or Hebrew. It comes back as one row per component,
+      each carrying the portion assumed and how sure it was — never a single unarguable total.</p>
+    </div>
+    <div class="card">
+      <h3>Barcodes</h3>
+      <p>Scan a packet and get the manufacturer's own label, via Open Food Facts. A product
+      scanned once works afterwards with no signal at all.</p>
+    </div>
+    <div class="card">
+      <h3>A target that checks itself</h3>
+      <p>Computed from your body and your goal, then corrected by what your weight actually
+      does. Most apps guess once and never look again.</p>
+    </div>
+    <div class="card">
+      <h3>Weight as a trend</h3>
+      <p>Smoothed, so a salty Sunday reads as noise rather than a setback. The daily target
+      follows it, and says on screen what changed and why.</p>
+    </div>
+    <div class="card">
+      <h3>Movement that isn't double-counted</h3>
+      <p>Only movement above your own usual day earns anything, discounted and capped. An
+      ordinary Tuesday is worth nothing; a long hike is worth a snack.</p>
+    </div>
+    <div class="card">
+      <h3>Your data, yours</h3>
+      <p>Everything lives on the phone. Export it to one readable file whenever you like, or
+      have a copy written automatically to a folder you choose.</p>
+    </div>
+  </div>
+
+  <h2>How it thinks</h2>
+
+  <p>Every stored number records where it came from — typed, estimated, read off a label, or
+  repeated — so an estimate can never quietly become a measurement. The arithmetic behind the
+  daily target is shown rather than asserted.</p>
+
+  <p>Going over is stated as a plain fact — "210 kcal over", "you ate over 11h; your ratio allows
+  10h" — in the same ink as everything else, never as a reproach. There is no message anywhere in
+  the app for a failure: no broken streak, nothing red on a day you cannot change.</p>
+
+  <div class="note">
+    MetaSelf is a personal project, written for one person. It is not on any app store, has no
+    accounts, no analytics and no advertising, and there is no server behind it.
+  </div>
+
+  <h2>Not medical advice</h2>
+
+  <p>Calorie and macronutrient targets come from population formulas carrying real error bars,
+  and nutrition figures come from AI estimates and a community food database. Both are often
+  approximately right and sometimes wrong. Nothing here is medical or dietary advice — see a
+  qualified professional for that.</p>
+
+  <footer>
+    <a href="./privacy.html">Privacy</a>
+    <a href="./terms.html">Terms of use</a>
+    <br><br>
+    A personal project. No warranty, no tracking, no accounts.
+  </footer>
+
+</div>
+</body>
+</html>

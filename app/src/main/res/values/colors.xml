@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#FF1B5E44</color>
+    <!-- The window's own background, which Android paints BEFORE a single Compose frame
+         exists. This and its values-night twin must stay equal to MetaSelfLightColours.background
+         and MetaSelfDarkColours.background in ui/theme/Colours.kt: one colour expressed twice,
+         once for the platform and once for Compose, because nothing can read a Compose value
+         this early. Letting them drift apart shows as a flash of the wrong colour on launch. -->
+    <color name="window_background">#FFFBFDF8</color>
+</resources>

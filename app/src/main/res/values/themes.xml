@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- windowBackground is what Android paints BEFORE a single Compose frame exists. Left to the
+         platform's Light default it was white under every launch, including a launch in dark mode,
+         where it showed as a full white flash. Named explicitly here, and overridden by the dark
+         parent in values-night/themes.xml.
+
+         android:Theme.Material rather than DeviceDefault.DayNight: the DayNight platform themes
+         arrive at API 29 and this app runs from 26, so the -night resource qualifier does the
+         switching instead. It has worked since long before this app's floor. -->
+    <style name="Theme.MetaSelf" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+    </style>
+</resources>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What Android's automatic backup may copy to the owner's own Google account, on Android 11 and
+  below. See data_extraction_rules.xml for Android 12 and above; both are needed because this app
+  runs from API 26.
+
+  Everything is backed up EXCEPT the API key. The key is encrypted with a key held in this phone's
+  hardware keystore, so a copy restored onto a different phone would be undecryptable rubbish — and
+  a spending credential is the one thing that should not travel even in a form nobody can read.
+  Re-entering it after a restore is ten seconds.
+-->
+<full-backup-content>
+    <!-- Now holds two credentials: the OpenAI key and the Open Food Facts account. -->
+    <exclude domain="sharedpref" path="metaself_api_key.xml" />
+</full-backup-content>
