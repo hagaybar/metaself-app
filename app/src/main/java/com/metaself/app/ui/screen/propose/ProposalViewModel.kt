@@ -4,9 +4,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.ToLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
-import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
@@ -194,12 +194,13 @@ class ProposalViewModel @Inject constructor(
 
     /**
      * What would be logged if the owner accepted it now — nothing at all while any row cannot be
-     * logged, so that saving never quietly leaves one of the rows behind (D53 §6).
+     * logged, so that saving never quietly leaves one of the rows behind (D53 §6). Each row comes
+     * with the worth its food is to learn, and the brand it is saved under (D53 §3, §4).
      */
-    fun accepted(): List<FoodItem> {
+    fun accepted(): List<ToLog> {
         val proposed = _state.value as? ProposalUiState.Proposed ?: return emptyList()
         if (proposed.blockedBy != null) return emptyList()
-        return proposed.rows.mapNotNull { it.item.toFoodItem() }
+        return proposed.rows.mapNotNull { it.toLog() }
     }
 
     /**

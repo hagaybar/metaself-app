@@ -5,6 +5,7 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.ai.ProposedItem
@@ -12,6 +13,8 @@ import com.metaself.app.domain.ai.aBun
 import com.metaself.app.domain.ai.aModelPita
 import com.metaself.app.domain.ai.aProposal
 import com.metaself.app.domain.ai.aProposedItem
+import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.Rate
 import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
@@ -176,7 +179,7 @@ class ProposalViewModelTest {
         val viewModel = proposedViewModel()
 
         viewModel.setAmount(0, "150")
-        val accepted = viewModel.accepted()
+        val accepted = viewModel.accepted().map { it.item }
 
         assertThat(accepted).hasSize(2)
         assertThat(accepted.all { it.source == Source.AI_ESTIMATE }).isTrue()
@@ -368,7 +371,7 @@ class ProposalViewModelTest {
         assertThat(listOf(numbers.kcal, numbers.proteinG, numbers.carbsG, numbers.fatG))
             .containsExactly(250, 8, 50, 1).inOrder()
         assertThat(numbers.source).isEqualTo(Source.TYPED)
-        assertThat(viewModel.accepted().single().foodId).isEqualTo(pita.id)
+        assertThat(viewModel.accepted().single().item.foodId).isEqualTo(pita.id)
     }
 
     @Test
@@ -508,6 +511,88 @@ class ProposalViewModelTest {
         val back = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
         assertThat(back.numbers!!.kcal).isEqualTo(165)
         assertThat(back.editingWorth).isNull()
+    }
+
+    // --- What a saved row teaches its food (D53 §3) ----------------------------------------------
+
+    /** The estimate's own worth goes with the row, unrounded, for the food it lands on. */
+    @Test
+    fun `a row on the estimate hands over its worth for its food to learn`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.setAmount(0, "150")
+        val burger = viewModel.accepted()[0]
+
+        assertThat(burger.taught!!.per100g!!.nutrients).isEqualTo(Nutrients(250.0, 18.0, 0.0, 20.0))
+        assertThat(burger.taught!!.per100g!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(burger.brand).isNull()
+    }
+
+    /** His food's figures, or his typing over them: the food is changed in My foods, not here. */
+    @Test
+    fun `a row on his food hands over nothing to teach`() = runTest {
+        val viewModel =
+            proposedViewModelOf(aModelPita(), foods = FakeFoodRepository(listOf(hisPita())))
+        assertThat(viewModel.accepted().single().taught).isNull()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "240")
+        assertThat(viewModel.accepted().single().taught).isNull()
+    }
+
+    /**
+     * A branded food is only ever a close match (identity is name and brand; the model names none).
+     * Taken, and unable to cost a glass, the row stays the estimate under the food's name — and so
+     * it must carry the food's brand, or saving it would make an unbranded food of the same name
+     * beside his. With the brand, it lands on his food as the §5 rows do, and teaches it what a
+     * glass is worth as an estimate, beside the per-100 g he typed.
+     */
+    @Test
+    fun `a branded close match taken but not counted in its unit keeps the food's brand`() = runTest {
+        val foods = FakeFoodRepository(listOf(hisOatDrink()))
+        val oat = foods.current.single()
+        val viewModel = proposedViewModelOf(aGlassOfOatDrink(), foods = foods)
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).rows[0].match)
+            .isEqualTo(FoodMatch.Close(oat))
+        assertThat(viewModel.accepted().single().brand).isNull()
+
+        viewModel.useYourFood(0)
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.foodId).isNull()
+        assertThat(row.item.worth).isInstanceOf(Worth.Estimated::class.java)
+        val toLog = viewModel.accepted().single()
+        assertThat(toLog.item.name).isEqualTo("Oat drink")
+        assertThat(toLog.brand).isEqualTo("Acme Oats")
+
+        val attached = LoggedFoods(foods).attach(viewModel.accepted())
+        assertThat(foods.current).hasSize(1)
+        assertThat(attached.item.foodId).isEqualTo(oat.id)
+        assertThat(foods.current.single().facts.per100g).isEqualTo(oat.facts.per100g)
+        assertThat(foods.current.single().facts.perUnit!!.unitName).isEqualTo("glass")
+    }
+
+    /** Taken back to the estimate, a close match is the model's item again, brand and all. */
+    @Test
+    fun `a close match taken and then given back carries no brand`() = runTest {
+        val foods = FakeFoodRepository(listOf(hisOatDrink()))
+        val viewModel = proposedViewModelOf(
+            aProposedItem(
+                name = "Oat",
+                amount = 250.0,
+                unit = "g",
+                rate = Rate(Nutrients(45.0, 1.0, 6.5, 1.5), Per.HUNDRED),
+            ),
+            foods = foods,
+        )
+
+        viewModel.useYourFood(0)
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).rows[0].onYourFood).isTrue()
+        viewModel.useEstimate(0)
+
+        val toLog = viewModel.accepted().single()
+        assertThat(toLog.item.name).isEqualTo("Oat")
+        assertThat(toLog.brand).isNull()
     }
 
     /** D16: matching happens on the phone, after the reply — nothing is read while it is asked. */
@@ -850,6 +935,21 @@ class ProposalViewModelTest {
     private fun aGreekYoghurt() = Food(
         name = "Greek yoghurt",
         facts = FoodFacts(per100g = PerHundredGrams(Nutrients(97.0, 9.0, 4.0, 5.0), typed)),
+    )
+
+    /** Invented: a branded oat drink he knows per 100 g only, typed — never per glass. */
+    private fun hisOatDrink() = Food(
+        name = "Oat drink",
+        brand = "Acme Oats",
+        facts = FoodFacts(per100g = PerHundredGrams(Nutrients(45.0, 1.0, 6.5, 1.5), typed)),
+    )
+
+    /** The model's glass of it, per glass. */
+    private fun aGlassOfOatDrink() = aProposedItem(
+        name = "Oat drink",
+        amount = 1.0,
+        unit = "glass",
+        rate = Rate(Nutrients(120.0, 3.0, 16.0, 5.0), Per.ONE),
     )
 
     /** Counts every time the foods on offer are read. */

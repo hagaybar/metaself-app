@@ -8,6 +8,7 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.GramsPerUnit
 import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import org.junit.jupiter.api.Test
@@ -223,6 +224,85 @@ class ItemToLogTest {
         val counted = ItemToLog("Pita", "", "2", "pita", Worth.YourFood(pita, CountedAs.UNITS), pita.id)
 
         assertThat(counted.rateLine).isEqualTo(Rate(Nutrients(250.0, 8.0, 50.0, 1.0), Per.ONE))
+    }
+
+    // --- What a row teaches its food (D53 §3) --------------------------------------------------
+
+    /** The worth itself, not one worked back from the rounded row. */
+    @Test
+    fun `a per-100 g estimate teaches its per-100 g, with how sure it was`() {
+        val facts = burger("150").teaches()!!
+
+        assertThat(facts.per100g).isEqualTo(
+            PerHundredGrams(
+                burgerRate.nutrients,
+                Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, setAtMillis = 0),
+            ),
+        )
+        assertThat(facts.perUnit).isNull()
+        assertThat(facts.gramsPerUnit).isNull()
+    }
+
+    /** Per 100 ml is per one ml divided by a hundred: nothing converts millilitres to grams. */
+    @Test
+    fun `a per-100 ml worth teaches what one ml is worth`() {
+        val juice = burger("330").copy(
+            name = "Orange juice",
+            unit = "ml",
+            worth = Worth.Estimated(Rate(Nutrients(45.0, 0.7, 10.4, 0.2), Per.HUNDRED), Confidence.HIGH),
+        )
+
+        val facts = juice.teaches()!!
+
+        assertThat(facts.per100g).isNull()
+        val perUnit = facts.perUnit!!
+        assertThat(perUnit.unitName).isEqualTo("ml")
+        assertThat(perUnit.nutrients.kcal).isWithin(1e-9).of(0.45)
+        assertThat(perUnit.nutrients.proteinG).isWithin(1e-9).of(0.007)
+        assertThat(perUnit.nutrients.carbsG).isWithin(1e-9).of(0.104)
+        assertThat(perUnit.nutrients.fatG).isWithin(1e-9).of(0.002)
+        assertThat(perUnit.provenance)
+            .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.HIGH, setAtMillis = 0))
+    }
+
+    @Test
+    fun `a per-one worth teaches what one of its piece is worth`() {
+        val facts = bun("2").teaches()!!
+
+        assertThat(facts.per100g).isNull()
+        assertThat(facts.perUnit).isEqualTo(
+            PerUnit(
+                "bun",
+                Nutrients(150.0, 5.0, 28.0, 2.0),
+                Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, setAtMillis = 0),
+            ),
+        )
+    }
+
+    @Test
+    fun `a worth he typed teaches as his, with no confidence`() {
+        val typedRate = Rate(Nutrients(240.5, 18.0, 0.0, 20.0), Per.HUNDRED)
+
+        val facts = burger().withTypedRate(typedRate).teaches()!!
+
+        assertThat(facts.per100g).isEqualTo(PerHundredGrams(typedRate.nutrients, typed()))
+    }
+
+    /** A food he already has is changed in My foods, not by logging it (D45's rule). */
+    @Test
+    fun `his own food's row teaches nothing`() {
+        val pita = pita()
+        val his = ItemToLog("Pita", "", "1", "pita", Worth.YourFood(pita, CountedAs.UNITS), pita.id)
+
+        assertThat(his.teaches()).isNull()
+        assertThat(his.withTypedRate(Rate(Nutrients(240.0, 8.0, 50.0, 1.0), Per.ONE)).teaches())
+            .isNull()
+    }
+
+    /** Nothing to teach while the row cannot be logged: there is no row. */
+    @Test
+    fun `a row that cannot be logged teaches nothing`() {
+        assertThat(burger("").teaches()).isNull()
     }
 
     private fun pita() = Food(

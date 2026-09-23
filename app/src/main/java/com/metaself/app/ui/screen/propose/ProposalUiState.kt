@@ -1,14 +1,17 @@
 package com.metaself.app.ui.screen.propose
 
+import com.metaself.app.data.food.ToLog
 import com.metaself.app.domain.ai.ProposedItem
 import com.metaself.app.domain.amount.BelievableAmount
 import com.metaself.app.domain.amount.ItemToLog
 import com.metaself.app.domain.amount.Per
 import com.metaself.app.domain.amount.Rate
 import com.metaself.app.domain.amount.Worth
+import com.metaself.app.domain.amount.teaches
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.food.CountedIn
 import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.FoodMatch
 import com.metaself.app.domain.food.FoodMatching
 import com.metaself.app.domain.food.LoggedFrom
@@ -70,6 +73,35 @@ data class ProposalRow(
                 FoodMatch.None -> null
             }
         }
+
+    /**
+     * The brand the row is saved under, or null for none.
+     *
+     * A branded food is only ever a close match — identity is name and brand, and the model names
+     * no brand (§4). Taken, it is his answer that the item is that food; when the food cannot cost
+     * the amount the row stays the estimate under the food's name (§5), unattached, and is found
+     * again by name and brand when it is saved. Without the brand it would land on — or make — an
+     * unbranded food of the same name beside his. So the brand goes with the row whenever the row
+     * is on the estimate under that food's name, exactly as an unbranded exact match's row lands
+     * on his food by name and teaches it the estimate. Under the model's own name it carries none.
+     */
+    val brand: String?
+        get() {
+            if (onYourFood) return null
+            val food = (match as? FoodMatch.Exact)?.food ?: return null
+            val sameName = runCatching {
+                FoodKeys.nameKey(item.name) == FoodKeys.nameKey(food.name)
+            }.getOrDefault(false)
+            if (!sameName || FoodKeys.brandKey(food.brand) == FoodKeys.NO_BRAND_KEY) return null
+            return food.brand
+        }
+
+    /**
+     * What saving hands over for this row, or null while it cannot be logged: the row, the worth its
+     * food is to be taught (D53 §3), and [brand].
+     */
+    fun toLog(): ToLog? =
+        item.toFoodItem()?.let { ToLog(it, taught = item.teaches(), brand = brand) }
 
     /** What *Use the estimate* would log, for its label — null while that is not yet a number. */
     val estimateKcal: Int? get() = usingEstimate().numbers?.kcal

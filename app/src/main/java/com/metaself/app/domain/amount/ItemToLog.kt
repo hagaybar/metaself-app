@@ -3,9 +3,13 @@ package com.metaself.app.domain.amount
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Logging
 import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import com.metaself.app.domain.portion.Portions
 
@@ -115,3 +119,35 @@ data class ItemToLog(
  * to the row and not to each figure (D53 §3, D44's cost). The food it is attached to, if any, stays.
  */
 fun ItemToLog.withTypedRate(rate: Rate): ItemToLog = copy(worth = Worth.Typed(rate))
+
+/**
+ * What the food this row lands on is offered, in place of the facts worked back from the rounded
+ * row (D53 §3) — the worth itself, as a scan offers the packet's own per-100 g (D38).
+ *
+ * Per 100 g is the food's per-100 g; per one piece is what one of that piece is worth; per 100 ml is
+ * what one ml is worth, the worth divided by a hundred — the shapes `DerivedFoods` makes from a row,
+ * without the rounding. An estimate is offered as one, with the model's confidence; a worth he typed
+ * as his. Offered, never imposed: the guarded statements still keep a figure he typed or read off a
+ * packet from being replaced by a guess.
+ *
+ * Null for a row on his own food — its figures, or his typing over them — which teaches it nothing:
+ * a food he has is changed in *My foods*, not by logging it (D45's rule). Null too while the row
+ * cannot be logged.
+ */
+fun ItemToLog.teaches(): FoodFacts? {
+    if (foodId != null || numbers == null) return null
+    val (rate, provenance) = when (val worth = worth) {
+        is Worth.Estimated ->
+            worth.rate to Provenance(Source.AI_ESTIMATE, worth.confidence, setAtMillis = 0)
+        is Worth.Typed -> worth.rate to Provenance(Source.TYPED, null, setAtMillis = 0)
+        is Worth.YourFood -> return null
+    }
+    if (rate.per == Per.HUNDRED && Portions.isGrams(unit)) {
+        return FoodFacts(per100g = PerHundredGrams(rate.nutrients, provenance))
+    }
+    // The unit spelled as the conversion spells a row's, so the food is counted in the same "bun"
+    // whichever way it learned it.
+    val unitName = runCatching { FoodKeys.displayName(unit) }.getOrNull() ?: return null
+    val perOne = rate.nutrients * (1.0 / rate.per.divisor)
+    return FoodFacts(perUnit = PerUnit(unitName, perOne, provenance))
+}

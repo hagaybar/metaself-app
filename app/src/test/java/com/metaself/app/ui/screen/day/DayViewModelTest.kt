@@ -15,6 +15,7 @@ import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
+import com.metaself.app.data.food.ToLog
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
@@ -3275,7 +3276,7 @@ class DayViewModelTest {
             listOf(
                 describedRow("Milk", kcal = 60, amount = 120.0, unit = "ml").copy(foodId = 1),
                 describedRow("Espresso", kcal = 2, amount = 1.0, unit = "cup").copy(foodId = 2),
-            ),
+            ).map(::ToLog),
         )
         advanceUntilIdle()
 
@@ -3319,7 +3320,7 @@ class DayViewModelTest {
             listOf(
                 describedRow("Cappuccino", kcal = 60, amount = 0.0, unit = "cup", portion = "amount not stated")
                     .copy(foodId = 1),
-            ),
+            ).map(::ToLog),
         )
         advanceUntilIdle()
 
@@ -3374,6 +3375,28 @@ class DayViewModelTest {
         // Logged once, when the offer was taken — and not again by either attempt at a name.
         assertThat(meals.logged).hasSize(1)
         assertThat(ready(model).meals.flatMap { it.items }).hasSize(2)
+    }
+
+    /**
+     * A described item's food learns the worth it was described with, not a figure worked back
+     * from the rounded row (D53 §3). Invented: 717.4 kcal per 100 g, 7 g logged as 50 kcal, which
+     * works back to 714.29.
+     */
+    @Test
+    fun `a described meal teaches each food what it was handed`() = runTest {
+        val foods = FakeFoodRepository()
+        val model = watched(viewModel(mealRepository = FakeMealRepository(), foods = foods))
+        val worth = Nutrients(717.4, 0.9, 0.1, 81.1)
+        val row = describedRow("Butter", kcal = 50, amount = 7.0, unit = "g", proteinG = 0, carbsG = 0, fatG = 6)
+        val taught = FoodFacts(
+            per100g = PerHundredGrams(worth, Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, setAtMillis = 0)),
+        )
+
+        model.logMeal(listOf(ToLog(row, taught = taught)))
+        advanceUntilIdle()
+
+        assertThat(foods.current.single().facts.per100g!!.nutrients).isEqualTo(worth)
+        assertThat(ready(model).meals.single().items.single().kcal).isEqualTo(50)
     }
 
     /** Today's behaviour, pinned: declining the offer logs the items and starts nothing. */
@@ -3492,10 +3515,10 @@ class DayViewModelTest {
     )
 
     /** The same two rows [aSaladWorthOfRows] holds, as the model would have just answered them. */
-    private fun aDescribedSalad(): List<FoodItem> = listOf(
+    private fun aDescribedSalad(): List<ToLog> = listOf(
         describedRow("Cucumber", kcal = 16, amount = 100.0, unit = "g"),
         describedRow("Olive oil", kcal = 119, amount = 1.0, unit = "spoon", proteinG = 0, carbsG = 0, fatG = 13),
-    )
+    ).map(::ToLog)
 
     /** Two things logged separately on the same day, so "All" has to reach across both. */
     private fun aDayOfThree(): Meal = aMeal(
@@ -3758,8 +3781,8 @@ class DayViewModelTest {
         val problems = RecordingProblemLog()
         val model = watched(viewModel(mealRepository = failing, problems = problems))
 
-        model.logMeal(listOf(anItem(name = "Eggs"), anItem(name = "Toast")))
-        model.logMealAndChoose(listOf(anItem(name = "Eggs"), anItem(name = "Toast")))
+        model.logMeal(listOf(anItem(name = "Eggs"), anItem(name = "Toast")).map(::ToLog))
+        model.logMealAndChoose(listOf(anItem(name = "Eggs"), anItem(name = "Toast")).map(::ToLog))
         model.logSavedMeal(LoggedMeal(items = listOf(anItem(name = "Eggs")), savedMealId = 1, adjusted = false))
         model.logScanned(anItem(name = "Crackers"), aPacket())
         advanceUntilIdle()
