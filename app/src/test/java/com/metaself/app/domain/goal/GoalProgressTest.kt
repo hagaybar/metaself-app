@@ -9,22 +9,21 @@ import org.junit.jupiter.api.Test
 class GoalProgressTest {
 
     @Test
-    fun `how far there is to go, and how long at the chosen rate`() {
+    fun `how far there is to go`() {
         val progress = GoalProgress.of(
             goal = Goal.lose(kgPerWeek = 0.5, targetKg = 70.0),
             trend = trendOf(82.0, 77.2),
         )!!
 
-        // Nothing here is a measurement: 82 -> 70 is an invented ladder. 77.2 - 70 = 7.2 to go, at
-        // 0.5 a week = 14.4 weeks, and 82 - 77.2 = 4.8 done.
+        // Nothing here is a measurement: 82 -> 70 is an invented ladder. 77.2 - 70 = 7.2 to go,
+        // and 82 - 77.2 = 4.8 done.
         assertThat(progress.toGoKg).isWithin(1e-9).of(7.2)
-        assertThat(progress.weeksToGo).isWithin(1e-9).of(14.4)
         assertThat(progress.doneKg).isWithin(1e-9).of(4.8)
         assertThat(progress.arrived).isFalse()
     }
 
     @Test
-    fun `reaching the target leaves nothing to go and no projection`() {
+    fun `reaching the target leaves nothing to go`() {
         val progress = GoalProgress.of(
             goal = Goal.lose(kgPerWeek = 0.5, targetKg = 70.0),
             trend = trendOf(82.0, 70.0),
@@ -32,7 +31,6 @@ class GoalProgressTest {
 
         assertThat(progress.arrived).isTrue()
         assertThat(progress.toGoKg).isEqualTo(0.0)
-        assertThat(progress.weeksToGo).isNull()
     }
 
     /** Overshooting is arriving, not a negative distance. */
@@ -54,11 +52,10 @@ class GoalProgressTest {
             trend = trendOf(62.0, 63.0),
         )!!
 
-        // 75 - 63 = 12 to go, at 0.25 a week = 48 weeks. A worked number that is not recomputed
-        // with the value it derives from is the defect this project has shipped twice.
+        // 75 - 63 = 12 to go, and 63 - 62 = 1 done. A worked number that is not recomputed with
+        // the value it derives from is the defect this project has shipped twice.
         assertThat(progress.toGoKg).isWithin(1e-9).of(12.0)
         assertThat(progress.doneKg).isWithin(1e-9).of(1.0)
-        assertThat(progress.weeksToGo).isWithin(1e-9).of(48.0)
     }
 
     /** Going the wrong way is not negative progress. The app has no opinion about it (D22). */
@@ -82,22 +79,6 @@ class GoalProgressTest {
     @Test
     fun `nothing to say with no readings at all`() {
         assertThat(GoalProgress.of(Goal.lose(0.5, 70.0), emptyList())).isNull()
-    }
-
-    /** A destination with no speed is a place, not a plan. It gets a distance and no date. */
-    @Test
-    fun `a target with no rate gets no projection`() {
-        val progress = GoalProgress.of(
-            goal = Goal(
-                direction = com.metaself.app.domain.profile.GoalDirection.LOSE,
-                kgPerWeek = 0.0,
-                targetKg = 70.0,
-            ),
-            trend = trendOf(82.0, 80.0),
-        )!!
-
-        assertThat(progress.toGoKg).isWithin(1e-9).of(10.0)
-        assertThat(progress.weeksToGo).isNull()
     }
 
     private fun trendOf(vararg trendKg: Double): List<TrendPoint> =

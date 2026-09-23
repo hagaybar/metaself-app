@@ -5,11 +5,13 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Today
+import com.metaself.app.domain.profile.Goal
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.weight.WeightReading
 import com.metaself.app.domain.weight.aFortnight
+import com.metaself.app.domain.weight.aMonth
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.Dispatchers
@@ -65,6 +67,24 @@ class WeightViewModelTest {
         val state = viewModel.state.first { it.trend.isNotEmpty() }
 
         assertThat(state.trend).hasSize(14)
+    }
+
+    /** D47: the forecast is built where the progress is, from today's date and a month of trend. */
+    @Test
+    fun `a goal weight and a month of readings produce both finish lines`() = runTest {
+        val viewModel = WeightViewModel(
+            FakeWeightRepository(aMonth()),
+            FakeProfileRepository(aProfile(goal = Goal.lose(0.5, targetKg = 75.0))),
+            today,
+            ProblemLog.NONE,
+        )
+
+        val forecast = viewModel.state.first { it.forecast != null }.forecast!!
+
+        assertThat(forecast.chosenKgPerWeek).isWithin(1e-9).of(0.5)
+        assertThat(forecast.chosenWeeks).isNotNull()
+        assertThat(forecast.measured!!.spanDays).isEqualTo(28)
+        assertThat(forecast.measuredWeeks).isNotNull()
     }
 
     @Test

@@ -1,11 +1,15 @@
 package com.metaself.app.ui.screen.weight
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.goal.GoalForecast
 import com.metaself.app.domain.goal.GoalProgress
 import com.metaself.app.domain.profile.Goal
+import com.metaself.app.domain.weight.MeasuredRate
+import com.metaself.app.domain.weight.WeightReading
 import com.metaself.app.domain.weight.WeightTrend
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.weight.aFortnight
+import com.metaself.app.domain.weight.aMonth
 import com.metaself.app.domain.weight.aReading
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
@@ -179,19 +183,31 @@ class WeightScreenRenderTest {
 
     @Test
     fun `it says how far there is to go and how long that would take`() {
-        val readings = aFortnight()
-        val trend = WeightTrend.of(readings)
-        val texts = draw(
-            WeightUiState(
-                readings = readings,
-                trend = trend,
-                progress = GoalProgress.of(Goal.lose(0.5, targetKg = 75.0), trend),
-            ),
-        )
+        val texts = draw(stateWith(aMonth()))
 
         assertThat(texts.any { it.contains("kg to go, to 75 kg") }).isTrue()
         // The rate must be in the same sentence as the weeks: it is a division, not a promise.
-        assertThat(texts.any { it.contains("weeks at 0.5 kg a week") }).isTrue()
+        assertThat(texts.any { it.contains("0.5 kg a week you're aiming for") }).isTrue()
+    }
+
+    /** D47: the rate he is actually managing, beside the one he chose. */
+    @Test
+    fun `it says the rate the trend has actually been moving at`() {
+        val texts = draw(stateWith(aMonth()))
+
+        assertThat(texts.any { it.startsWith("Over the last 28 days") }).isTrue()
+    }
+
+    /**
+     * A fortnight has no reading near the start of the 28-day window, so no rate is measured.
+     * Nothing is shown in place of the measured line — not a dash, which would invite him to wonder
+     * what is broken.
+     */
+    @Test
+    fun `too little history says nothing about a measured rate`() {
+        val texts = draw(stateWith(aFortnight()))
+
+        assertThat(texts.any { it.startsWith("Over the last") }).isFalse()
     }
 
     /**
@@ -357,6 +373,25 @@ class WeightScreenRenderTest {
             onOpenChart = onOpenChart,
             onChangeGoal = onChangeGoal,
             onBack = {},
+        )
+    }
+
+    private fun stateWith(readings: List<WeightReading>): WeightUiState {
+        val trend = WeightTrend.of(readings)
+        val goal = Goal.lose(0.5, targetKg = 75.0)
+        val progress = GoalProgress.of(goal, trend)
+        return WeightUiState(
+            readings = readings,
+            trend = trend,
+            progress = progress,
+            forecast = progress?.let {
+                GoalForecast.of(
+                    goal = goal,
+                    progress = it,
+                    measured = MeasuredRate.of(trend, TEST_EPOCH_DAY),
+                    todayEpochDay = TEST_EPOCH_DAY,
+                )
+            },
         )
     }
 
