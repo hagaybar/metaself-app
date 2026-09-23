@@ -194,6 +194,7 @@
         <item quantity="other">%1$d items in the answer couldn\'t be used: %2$s</item>
     </plurals>
     <string name="propose_blocked">Say how much %1$s was to save this.</string>
+    <string name="propose_blocked_worth">Say what %1$s is worth to save this.</string>
     <string name="propose_change_worth">Change</string>
     <string name="propose_worth_done">Done</string>
     <string name="propose_from_your_foods">From your foods</string>

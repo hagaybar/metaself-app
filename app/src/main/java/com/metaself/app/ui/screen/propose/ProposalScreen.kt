@@ -252,8 +252,15 @@ fun ProposalScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
                     blocked?.let { row ->
+                        // Worded by what holds it: a refused worth box, or an amount. "Say how
+                        // much" over a row whose amount is fine sends him to the wrong box.
+                        val why = if (row.editingWorth?.refused == true) {
+                            R.string.propose_blocked_worth
+                        } else {
+                            R.string.propose_blocked
+                        }
                         Text(
-                            text = stringResource(R.string.propose_blocked, row.item.name),
+                            text = stringResource(why, row.item.name),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                         )

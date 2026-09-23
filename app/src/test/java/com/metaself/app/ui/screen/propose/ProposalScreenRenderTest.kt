@@ -43,9 +43,9 @@ class ProposalScreenRenderTest {
     fun `the amount is a box holding the model's amount, with its unit beside it`() {
         val texts = draw(proposed(aProposedItem()))
 
-        assertThat(texts).contains("200")
         assertThat(texts).contains("g")
-        assertThat(texts).containsNoneOf("Less", "As described", "More")
+        // In a text field, not drawn as a line: the amount is typed, not chosen from proportions.
+        assertThat(render.fieldTexts()).contains("200")
     }
 
     @Test
@@ -166,6 +166,26 @@ class ProposalScreenRenderTest {
         assertThat(texts).contains("per 100 g: 240 kcal · P 18 · C 0 · F 20")
         assertThat(texts).contains("480 kcal · P 36 · C 0 · F 40")
         assertThat(texts).doesNotContain("Estimated — moderate confidence")
+    }
+
+    /**
+     * A row held back by a refused worth box names the worth, not the amount: "say how much" over a
+     * row whose amount is fine sends him to the wrong box.
+     */
+    @Test
+    fun `a row held back by its worth says so, not how much`() {
+        val burger = aProposedItem()
+        val item = burger.toItemToLog()
+        val boxes = WorthBoxes.of(item)!!.with(WorthFigure.FAT, "")
+        val state = ProposalUiState.Proposed(
+            rows = listOf(ProposalRow(burger, item, editingWorth = boxes)),
+            note = null,
+        )
+
+        val texts = draw(state)
+
+        assertThat(texts).contains("Say what Beef burger is worth to save this.")
+        assertThat(texts).doesNotContain("Say how much Beef burger was to save this.")
     }
 
     @Test

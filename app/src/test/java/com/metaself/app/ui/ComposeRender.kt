@@ -218,6 +218,15 @@ class ComposeRender {
 
     private var lastNodes: List<SemanticsNode> = emptyList()
 
+    /**
+     * What every text field in the last render holds, and nothing else — a box's contents told
+     * apart from a label or a line that reads the same, which [texts] cannot do.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun fieldTexts(): List<String> =
+        lastNodes.mapNotNull { it.config.getOrNull(SemanticsProperties.EditableText)?.text }
+
     fun dispose() {
         controller?.pause()?.stop()?.destroy()
         controller = null

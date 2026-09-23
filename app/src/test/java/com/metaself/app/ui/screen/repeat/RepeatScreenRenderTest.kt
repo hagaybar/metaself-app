@@ -493,9 +493,10 @@ class RepeatScreenRenderTest {
             ),
         )
 
-        assertThat(texts).containsNoneOf("Less", "As it was", "More")
-        // The boxes: 100 (g of cucumber) and 1 (spoon of oil), each with its unit beside it.
-        assertThat(texts).containsAtLeast("100", "g", "1", "spoon")
+        // The boxes: 100 (g of cucumber) and 1 (spoon of oil), in text fields, each with its unit
+        // beside it — typed, not chosen from proportions.
+        assertThat(render.fieldTexts()).containsAtLeast("100", "1").inOrder()
+        assertThat(texts).containsAtLeast("g", "spoon")
         // − and + for the counted part only.
         assertThat(texts.count { it == "+" }).isEqualTo(1)
         assertThat(texts.count { it == "−" }).isEqualTo(1)

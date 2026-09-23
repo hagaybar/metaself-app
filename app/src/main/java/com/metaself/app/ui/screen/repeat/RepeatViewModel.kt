@@ -213,7 +213,6 @@ class RepeatViewModel @Inject constructor(
         _adjusting.value = null
     }
 
-    /** Change how much of one of them there is, this once. */
     /**
      * How much of one of them there is, this once, as typed (D53 §6).
      *
