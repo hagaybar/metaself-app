@@ -65,18 +65,6 @@ class PortionsTest {
     }
 
     @Test
-    fun `grams are scaled and slices are counted`() {
-        assertThat(Portions.controlFor(280.0, "g")).isEqualTo(PortionControl.Scale)
-        assertThat(Portions.controlFor(2.0, "slice")).isEqualTo(PortionControl.Count(2))
-    }
-
-    @Test
-    fun `an amount that was never recorded gets no control at all`() {
-        assertThat(Portions.controlFor(0.0, "")).isEqualTo(PortionControl.None)
-        assertThat(Portions.controlFor(0.0, "slice")).isEqualTo(PortionControl.None)
-    }
-
-    @Test
     fun `whole numbers lose their decimal point`() {
         assertThat(Portions.words(2.0, "slice")).isEqualTo("2 slice")
         assertThat(Portions.words(1.5, "dish")).isEqualTo("1.5 dish")

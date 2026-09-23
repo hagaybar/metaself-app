@@ -1,6 +1,11 @@
 package com.metaself.app.data.ai
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 
 class EstimatePromptTest {
@@ -79,7 +84,8 @@ class EstimatePromptTest {
      *
      * For example, a cappuccino can come back as espresso and milk, in millilitres, and
      * keeping it would mean making a meal of the two and typing a weight for the milk. A drink is one thing
-     * and is counted as one. What it contains is still said — the size in the note (D5).
+     * and is counted as one. What it contains is still said — the size in the item's detail (D5, as
+     * D53 amended it).
      */
     @Test
     fun `a drink is one item, counted in servings, and milk in cereal is still an ingredient`() {
@@ -107,6 +113,73 @@ class EstimatePromptTest {
         assertThat(body.lowercase()).contains("same language")
     }
 
+    // --- The reply's shape: worth and amount apart (D53 §2) --------------------------------------
+
+    @Test
+    fun `every item field is required`() {
+        val item = itemSchema()
+
+        val required = item["required"]!!.jsonArray.map { it.jsonPrimitive.content }
+        val properties = item["properties"]!!.jsonObject.keys
+        assertThat(required).containsExactly(
+            "name", "detail", "amount", "unit", "figures_per",
+            "kcal", "protein_g", "carbs_g", "fat_g", "confidence",
+        )
+        assertThat(properties).containsExactlyElementsIn(required)
+        assertThat(item["additionalProperties"]!!.jsonPrimitive.content).isEqualTo("false")
+    }
+
+    @Test
+    fun `figures_per is 100 or 1`() {
+        val figuresPer = itemSchema()["properties"]!!.jsonObject["figures_per"]!!.jsonObject
+
+        assertThat(figuresPer["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
+            .containsExactly("100", "1")
+    }
+
+    /** A worth keeps decimals — 0.5 g of fat in 100 g is a figure, not a rounding error (D53 §1). */
+    @Test
+    fun `the worth is a number, not an integer`() {
+        val properties = itemSchema()["properties"]!!.jsonObject
+
+        listOf("kcal", "protein_g", "carbs_g", "fat_g", "amount").forEach { field ->
+            assertThat(properties[field]!!.jsonObject["type"]!!.jsonPrimitive.content)
+                .isEqualTo("number")
+        }
+    }
+
+    /**
+     * "A bun" is 1 bun at per-bun figures, never grams the model made up (D53 §2, amending D5). The
+     * sentence is asserted as written, so rewording it is a decision and not an accident.
+     */
+    @Test
+    fun `the instructions forbid inventing a weight for an unstated amount`() {
+        val body = EstimatePrompt.requestBody(model = "a-model", description = "a bun")
+
+        assertThat(body).contains("Never convert an amount that was stated.")
+        assertThat(body).contains("Never make up grams or millilitres for an amount that was not")
+        assertThat(body).contains("never the total")
+        assertThat(body).contains("in the singular")
+    }
+
+    /**
+     * D16, from the other side: the only inputs the request can be built from are the model's name,
+     * his words, his added sentence and the app's own retry list. The assignment below compiles only
+     * while that is the signature, and the count shows there is no second way in.
+     */
+    @Test
+    fun `the request is built from the words alone`() {
+        val build: (String, String, String?, List<String>) -> String = EstimatePrompt::requestBody
+
+        val ways = EstimatePrompt::class.java.declaredMethods
+            .filter { it.name == "requestBody" }
+        assertThat(ways).hasSize(1)
+        assertThat(ways.single().parameterTypes.toList()).containsExactly(
+            String::class.java, String::class.java, String::class.java, List::class.java,
+        ).inOrder()
+        assertThat(build("a-model", "soup", null, emptyList())).contains("soup")
+    }
+
     @Test
     fun `NOTHING about the person using the app is sent`() {
         // Decision D16, as a test rather than a sentiment. It would be easy and tempting to send
@@ -129,5 +202,14 @@ class EstimatePromptTest {
             val asAWord = Regex("\\b" + Regex.escape(forbidden) + "\\b")
             assertThat(asAWord.containsMatchIn(body)).isFalse()
         }
+    }
+
+    private fun itemSchema(): JsonObject {
+        val body = Json.parseToJsonElement(
+            EstimatePrompt.requestBody(model = "a-model", description = "anything"),
+        ).jsonObject
+        val schema = body["response_format"]!!.jsonObject["json_schema"]!!.jsonObject["schema"]!!
+        return schema.jsonObject["properties"]!!.jsonObject["items"]!!.jsonObject["items"]!!
+            .jsonObject
     }
 }

@@ -1,19 +1,32 @@
 package com.metaself.app.ui.screen.propose
 
 import com.metaself.app.domain.ai.ProposedItem
+import com.metaself.app.domain.amount.ItemToLog
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.ui.ActionRefused
 
 /**
- * One row of a proposal: what the model said, and what it has become since.
+ * One row of a proposal: what the model said, and the item being logged from it (D53 §1).
  *
- * [asProposed] is kept so that scaling always works from the model's own figures. Scaling a scaled
- * item compounds rounding errors, and pressing "as described" would never quite get back.
+ * [estimate] is kept beside [item] until he saves, so that nothing done to the row loses the model's
+ * answer. [item] is its own worth times its own amount; there is no scaling, and so no original to
+ * scale from.
  */
 data class ProposalRow(
-    val asProposed: ProposedItem,
-    val current: ProposedItem,
-)
+    val estimate: ProposedItem,
+    val item: ItemToLog,
+) {
+    /**
+     * The row whose source the screen's origin line reads (D7a), or null.
+     *
+     * The row itself while it can be logged. While the amount box is blank or refused there is no
+     * row, but the worth still has a source and the line still has something true to say — so it
+     * is read at an amount of one, which changes the figures and never the source (D53 §3: the
+     * amount has no source).
+     */
+    val sourceRow: FoodItem?
+        get() = item.toFoodItem() ?: item.copy(amountText = "1").toFoodItem()
+}
 
 /** What the describe-a-meal screen is showing. */
 sealed interface ProposalUiState {
@@ -37,7 +50,15 @@ sealed interface ProposalUiState {
         val rows: List<ProposalRow>,
         val note: String?,
     ) : ProposalUiState {
-        val totalKcal: Int get() = rows.sumOf { it.current.kcal }
+        /** What the rows that can be logged add up to; a row with no usable amount adds nothing. */
+        val totalKcal: Int get() = rows.sumOf { it.item.numbers?.kcal ?: 0 }
+
+        /**
+         * The first row that cannot be logged as it stands, or null when all of them can. Saving is
+         * off while there is one, and the screen names it (D53 §6).
+         */
+        val blockedBy: Int?
+            get() = rows.indexOfFirst { it.item.numbers == null }.takeIf { it >= 0 }
     }
 }
 

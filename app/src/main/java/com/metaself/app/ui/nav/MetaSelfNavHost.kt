@@ -708,8 +708,8 @@ fun MetaSelfNavHost(
                 state = proposeState,
                 description = proposeViewModel.description,
                 onDescribe = proposeViewModel::describe,
-                onScale = proposeViewModel::scale,
-                onCount = proposeViewModel::setCount,
+                onSetAmount = proposeViewModel::setAmount,
+                onStep = proposeViewModel::step,
                 onRemove = proposeViewModel::remove,
                 onTellItMore = proposeViewModel::tellItMore,
                 onSave = {

@@ -58,8 +58,9 @@ object Portions {
     private val NUMBER_THEN_WORD = Regex("""(\d+(?:\.\d+)?)\s*([\p{L}"']+)""")
 
     /**
-     * The proportions offered for something measured rather than counted, shared by the model's
-     * proposals and by meals repeated from the record so that the two cannot offer different ones.
+     * The proportions offered for something measured rather than counted, on the repeat screen's
+     * one-day adjuster. The model's proposal took a typed amount in their place (D53 §6); the
+     * adjuster follows it in the same decision's next step.
      */
     const val LESS = 0.75
     const val AS_IT_WAS = 1.0
@@ -92,13 +93,6 @@ object Portions {
      * can be multiplied by. Like [isGrams], narrower than [isMass] and needing no factor.
      */
     fun isMillilitres(unit: String): Boolean = unit.trim().lowercase() in MILLILITRE_SPELLINGS
-
-    /** What to offer for this portion: a scale, a count, or nothing. */
-    fun controlFor(amount: Double, unit: String): PortionControl = when {
-        !canScale(amount, unit) -> PortionControl.None
-        isMass(unit) -> PortionControl.Scale
-        else -> PortionControl.Count(amount.roundToInt().coerceAtLeast(1))
-    }
 
     fun words(amount: Double, unit: String): String = "${format(amount)} $unit"
 

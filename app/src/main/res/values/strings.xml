@@ -150,6 +150,11 @@
         <item quantity="one">%1$s portion</item>
         <item quantity="other">%1$s portions</item>
     </plurals>
+    <!-- The app's own "portion" on its own, beside an amount box that holds the number (D37, D53). -->
+    <plurals name="portions_unit">
+        <item quantity="one">portion</item>
+        <item quantity="other">portions</item>
+    </plurals>
 
     <string name="weight_title">Weight</string>
     <string name="weight_add">Log a weight</string>
@@ -175,11 +180,17 @@
     <string name="propose_ask">Work it out</string>
     <string name="propose_waiting">Asking the model…</string>
     <string name="propose_less">Less</string>
-    <string name="propose_as_described">As described</string>
     <string name="propose_more">More</string>
     <string name="propose_count_fewer">−</string>
     <string name="propose_count_more">+</string>
     <string name="propose_remove">Remove</string>
+    <!-- D53 §6: the amount box on each proposed row, the line saying what the item is worth (per
+         100 g, per 100 ml, or per one named piece, followed by ": 250 kcal · P 18 · …"), and the
+         sentence above Save naming the row that cannot be logged yet. -->
+    <string name="propose_amount_label">How much</string>
+    <string name="propose_per_100">per 100 %1$s</string>
+    <string name="propose_per_one">per %1$s</string>
+    <string name="propose_blocked">Say how much %1$s was to save this.</string>
     <string name="propose_total">%1$s kcal in total</string>
     <string name="propose_save">Save this meal</string>
     <string name="propose_keep_as_meal">Save, and keep these as a meal</string>

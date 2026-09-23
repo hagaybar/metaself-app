@@ -5,9 +5,11 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
-import com.metaself.app.domain.ai.PortionScale
+import com.metaself.app.domain.ai.ProposedItem
+import com.metaself.app.domain.ai.aBun
 import com.metaself.app.domain.ai.aProposal
 import com.metaself.app.domain.ai.aProposedItem
+import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
 import com.metaself.app.ui.ActionRefused
@@ -44,54 +46,139 @@ class ProposalViewModelTest {
 
         val proposed = viewModel.state.value as ProposalUiState.Proposed
         assertThat(proposed.rows).hasSize(2)
-        assertThat(proposed.totalKcal).isEqualTo(685)
+        // The burger's 250 per 100 g at 200 g, and one bun at 150 (D53 §1).
+        assertThat(proposed.totalKcal).isEqualTo(650)
     }
 
+    // --- The typed amount (D53 §1, §6) -----------------------------------------------------------
+
     @Test
-    fun `scaling one row leaves the others alone`() = runTest {
+    fun `typing an amount changes that row's total and nothing else`() = runTest {
         val viewModel = proposedViewModel()
 
-        viewModel.scale(0, PortionScale.MORE)
+        viewModel.setAmount(0, "150")
 
         val proposed = viewModel.state.value as ProposalUiState.Proposed
-        assertThat(proposed.rows[0].current.kcal).isEqualTo(608)
-        assertThat(proposed.rows[1].current.kcal).isEqualTo(280)
+        val burger = proposed.rows[0].item.numbers!!
+        assertThat(listOf(burger.kcal, burger.proteinG, burger.carbsG, burger.fatG))
+            .containsExactly(375, 27, 0, 30).inOrder()
+        assertThat(proposed.rows[1].item.numbers!!.kcal).isEqualTo(150)
+        assertThat(proposed.totalKcal).isEqualTo(525)
+    }
+
+    /** No scaling of a scaled item: the worth is the worth until he types over it. */
+    @Test
+    fun `the worth survives any amount`() = runTest {
+        val viewModel = proposedViewModel()
+        val before = (viewModel.state.value as ProposalUiState.Proposed).rows[0].item.worth
+
+        viewModel.setAmount(0, "150")
+        viewModel.setAmount(0, "")
+        viewModel.setAmount(0, "300")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.worth).isEqualTo(before)
+        assertThat(row.item.numbers!!.kcal).isEqualTo(750)
     }
 
     @Test
-    fun `scaling always works from what the model said, never from an already scaled row`() =
-        runTest {
-            val viewModel = proposedViewModel()
+    fun `a blank amount blocks saving and names the row`() = runTest {
+        val viewModel = proposedViewModel()
 
-            viewModel.scale(0, PortionScale.MORE)
-            viewModel.scale(0, PortionScale.AS_DESCRIBED)
-
-            val proposed = viewModel.state.value as ProposalUiState.Proposed
-            assertThat(proposed.rows[0].current).isEqualTo(proposed.rows[0].asProposed)
-        }
-
-    @Test
-    fun `a count sets how many there were`() = runTest {
-        val pizza = aProposedItem(
-            name = "Pizza",
-            portionAmount = 1.0,
-            portionUnit = "slice",
-            kcal = 285,
-            proteinG = 12,
-            carbsG = 36,
-            fatG = 10,
-        )
-        val viewModel = ProposalViewModel(
-            FakeEstimator(EstimateResult.Proposed(aProposal(items = listOf(pizza)))),
-            ProblemLog.NONE,
-        )
-        viewModel.describe("pizza")
-        advanceUntilIdle()
-
-        viewModel.setCount(0, 3)
+        viewModel.setAmount(0, "")
 
         val proposed = viewModel.state.value as ProposalUiState.Proposed
-        assertThat(proposed.rows[0].current.kcal).isEqualTo(855)
+        assertThat(proposed.blockedBy).isEqualTo(0)
+        assertThat(viewModel.accepted()).isEmpty()
+    }
+
+    /** The model's 6000 g arrives kept, and the box refuses it as if he had typed it (D53 §2). */
+    @Test
+    fun `an amount past the ceiling blocks saving until it is changed`() = runTest {
+        val viewModel = proposedViewModelOf(aProposedItem(amount = 6000.0))
+
+        val proposed = viewModel.state.value as ProposalUiState.Proposed
+        assertThat(proposed.rows[0].item.amountTooMuch).isTrue()
+        assertThat(proposed.blockedBy).isEqualTo(0)
+        assertThat(viewModel.accepted()).isEmpty()
+
+        viewModel.setAmount(0, "200")
+        assertThat(viewModel.accepted()).hasSize(1)
+    }
+
+    @Test
+    fun `plus and minus step a counted row by one and never below one`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.step(1, -1)
+        assertThat(amountOf(viewModel, 1)).isEqualTo("1")
+
+        viewModel.step(1, +1)
+        assertThat(amountOf(viewModel, 1)).isEqualTo("2")
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).rows[1].item.numbers!!.kcal)
+            .isEqualTo(300)
+    }
+
+    /** A typed half is his, and kept: − does nothing when a step would go below one (D53 §6). */
+    @Test
+    fun `a typed half is kept, and stepping from it keeps the half`() = runTest {
+        val viewModel = proposedViewModel()
+        viewModel.setAmount(1, "0.5")
+
+        viewModel.step(1, -1)
+        assertThat(amountOf(viewModel, 1)).isEqualTo("0.5")
+
+        viewModel.step(1, +1)
+        assertThat(amountOf(viewModel, 1)).isEqualTo("1.5")
+    }
+
+    @Test
+    fun `plus and minus do nothing to grams`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.step(0, +1)
+        viewModel.step(0, -1)
+
+        assertThat(amountOf(viewModel, 0)).isEqualTo("200")
+    }
+
+    @Test
+    fun `plus and minus do nothing to millilitres`() = runTest {
+        val viewModel =
+            proposedViewModelOf(aProposedItem(name = "Orange juice", amount = 330.0, unit = "ml"))
+
+        viewModel.step(0, +1)
+
+        assertThat(amountOf(viewModel, 0)).isEqualTo("330")
+    }
+
+    /** An estimate times his amount is still an estimate (D53 §3). */
+    @Test
+    fun `accepted rows are estimates with the model's confidence at the typed amount`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.setAmount(0, "150")
+        val accepted = viewModel.accepted()
+
+        assertThat(accepted).hasSize(2)
+        assertThat(accepted.all { it.source == Source.AI_ESTIMATE }).isTrue()
+        assertThat(accepted[0].confidence).isEqualTo(Confidence.MEDIUM)
+        assertThat(accepted[0].kcal).isEqualTo(375)
+        assertThat(accepted[0].portion).isEqualTo("150 g")
+        assertThat(accepted[0].portionAmount).isEqualTo(150.0)
+        assertThat(accepted[1].portion).isEqualTo("1 bun (sesame, toasted)")
+        assertThat(accepted.all { it.foodId == null }).isTrue()
+    }
+
+    @Test
+    fun `each row keeps the model's answer beside it`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.setAmount(0, "150")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.estimate).isEqualTo(aProposedItem())
+        assertThat(row.item.worth).isInstanceOf(Worth.Estimated::class.java)
     }
 
     @Test
@@ -103,20 +190,6 @@ class ProposalViewModelTest {
 
         viewModel.remove(0)
         assertThat(viewModel.state.value).isInstanceOf(ProposalUiState.Describing::class.java)
-    }
-
-    @Test
-    fun `what is accepted is an AI estimate with its confidence intact`() = runTest {
-        val viewModel = proposedViewModel()
-
-        viewModel.scale(0, PortionScale.MORE)
-        val accepted = viewModel.accepted()
-
-        assertThat(accepted).hasSize(2)
-        assertThat(accepted.all { it.source == Source.AI_ESTIMATE }).isTrue()
-        assertThat(accepted[0].confidence).isEqualTo(Confidence.MEDIUM)
-        assertThat(accepted[0].kcal).isEqualTo(608)
-        assertThat(accepted[0].portion).isEqualTo("420 g")
     }
 
     @Test
@@ -350,13 +423,20 @@ class ProposalViewModelTest {
         assertThat(problems.recorded.single().kind).isEqualTo("refused")
     }
 
-    private fun proposedViewModel(): ProposalViewModel {
-        val viewModel =
-            ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())), ProblemLog.NONE)
-        viewModel.describe("risotto with mozzarella")
+    private fun proposedViewModel(): ProposalViewModel = proposedViewModelOf(aProposedItem(), aBun())
+
+    private fun proposedViewModelOf(vararg items: ProposedItem): ProposalViewModel {
+        val viewModel = ProposalViewModel(
+            FakeEstimator(EstimateResult.Proposed(aProposal(items = items.toList()))),
+            ProblemLog.NONE,
+        )
+        viewModel.describe("a burger in a bun")
         dispatcher.scheduler.advanceUntilIdle()
         return viewModel
     }
+
+    private fun amountOf(viewModel: ProposalViewModel, index: Int): String =
+        (viewModel.state.value as ProposalUiState.Proposed).rows[index].item.amountText
 
     private class FakeEstimator(private val result: EstimateResult) : MealEstimator {
         var calls = 0

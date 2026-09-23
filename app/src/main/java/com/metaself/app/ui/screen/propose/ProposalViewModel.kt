@@ -5,8 +5,8 @@ import androidx.lifecycle.ViewModel
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
-import com.metaself.app.domain.ai.PortionScale
 import com.metaself.app.domain.day.FoodItem
+import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.propose.ProposalWording
@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.math.BigDecimal
 import javax.inject.Inject
 
 /**
@@ -61,8 +62,8 @@ class ProposalViewModel @Inject constructor(
     /**
      * Ask again with a sentence added.
      *
-     * This is what handles what scaling cannot: the same bowl cooked richer. One extra call, only
-     * when the owner decides the first answer was not close enough.
+     * This is what handles what a typed amount cannot: the same bowl cooked richer. One extra call,
+     * only when the owner decides the first answer was not close enough. It replaces every row.
      */
     fun tellItMore(extra: String) {
         if (description.isBlank() || extra.isBlank()) return
@@ -79,7 +80,7 @@ class ProposalViewModel @Inject constructor(
             _state.value = ProposalUiState.Waiting
             _state.value = when (val result = estimator.estimate(text, moreDetail)) {
                 is EstimateResult.Proposed -> ProposalUiState.Proposed(
-                    rows = result.proposal.items.map { ProposalRow(it, it) },
+                    rows = result.proposal.items.map { ProposalRow(it, it.toItemToLog()) },
                     note = result.proposal.note,
                 )
 
@@ -91,13 +92,32 @@ class ProposalViewModel @Inject constructor(
         }
     }
 
-    fun scale(index: Int, scale: PortionScale) {
-        updateRow(index) { row -> row.copy(current = scale.applyTo(row.asProposed)) }
+    /**
+     * How much of it there was, as typed (D53 §1). Only the amount changes: the worth stays what it
+     * was, and the total follows.
+     */
+    fun setAmount(index: Int, text: String) {
+        updateRow(index) { row -> row.copy(item = row.item.copy(amountText = text)) }
     }
 
-    fun setCount(index: Int, howMany: Int) {
+    /**
+     * − and + on a counted row: one piece more or fewer (D53 §6).
+     *
+     * Only for a piece — a measured unit (grams, millilitres and the rest `Portions.isMass` names)
+     * has only its box. Never below one: a step that would go there does nothing, so a typed 0.5 is
+     * kept rather than rounded, and nought of something is an item to remove, not a count. A box
+     * that holds no number steps from nothing, so + gives 1. The arithmetic is decimal, so 0.1 and
+     * one make 1.1 and not 1.1000000000000001.
+     */
+    fun step(index: Int, by: Int) {
         updateRow(index) { row ->
-            row.copy(current = PortionScale.count(howMany, row.asProposed))
+            val item = row.item
+            if (Portions.isMass(item.unit)) return@updateRow row
+            val now = item.amountText.trim().replace(',', '.').ifEmpty { "0" }
+                .toBigDecimalOrNull() ?: return@updateRow row
+            val next = now + by.toBigDecimal()
+            if (next < BigDecimal.ONE) return@updateRow row
+            row.copy(item = item.copy(amountText = next.stripTrailingZeros().toPlainString()))
         }
     }
 
@@ -112,10 +132,15 @@ class ProposalViewModel @Inject constructor(
         }
     }
 
-    /** What would be logged if the owner accepted it now. */
-    fun accepted(): List<FoodItem> =
-        (_state.value as? ProposalUiState.Proposed)?.rows?.map { it.current.toFoodItem() }
-            ?: emptyList()
+    /**
+     * What would be logged if the owner accepted it now — nothing at all while any row cannot be
+     * logged, so that saving never quietly leaves one of the rows behind (D53 §6).
+     */
+    fun accepted(): List<FoodItem> {
+        val proposed = _state.value as? ProposalUiState.Proposed ?: return emptyList()
+        if (proposed.blockedBy != null) return emptyList()
+        return proposed.rows.mapNotNull { it.item.toFoodItem() }
+    }
 
     /**
      * He is going to settings to add the key the last answer said was missing (public issue #11).

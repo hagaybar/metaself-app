@@ -224,13 +224,13 @@ class OpenAiMealEstimatorTest {
 
     private companion object {
         const val STEW_WITHOUT_AMOUNT = """{"note":"","items":[
-            {"name":"Stew","amount":0,"unit":"g","kcal":400,"protein_g":20,"carbs_g":30,
-             "fat_g":15,"confidence":"LOW"}]}"""
+            {"name":"Stew","detail":"","amount":0,"unit":"g","figures_per":"100","kcal":130,
+             "protein_g":7,"carbs_g":10,"fat_g":5,"confidence":"LOW"}]}"""
 
         const val TWO_ITEMS = """{"note":"","items":[
-            {"name":"Risotto","amount":280,"unit":"g","kcal":405,"protein_g":9,"carbs_g":57,
-             "fat_g":16,"confidence":"MEDIUM"},
-            {"name":"Mozzarella","amount":100,"unit":"ball","kcal":280,"protein_g":18,
-             "carbs_g":1,"fat_g":20,"confidence":"HIGH"}]}"""
+            {"name":"Beef burger","detail":"","amount":200,"unit":"g","figures_per":"100",
+             "kcal":250,"protein_g":18,"carbs_g":0,"fat_g":20,"confidence":"MEDIUM"},
+            {"name":"Hamburger bun","detail":"","amount":1,"unit":"bun","figures_per":"1",
+             "kcal":150,"protein_g":5,"carbs_g":28,"fat_g":2,"confidence":"HIGH"}]}"""
     }
 }

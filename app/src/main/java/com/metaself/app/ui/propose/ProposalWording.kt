@@ -1,6 +1,9 @@
 package com.metaself.app.ui.propose
 
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.amount.Rate
+import com.metaself.app.domain.food.LoggedFrom
+import com.metaself.app.domain.portion.Portions
 
 /**
  * What the app says when the model could not help.
@@ -36,4 +39,18 @@ object ProposalWording {
         is EstimateResult.Proposed ->
             error("a proposal is not a failure")
     }
+
+    /**
+     * What an item is worth, as a person would type it: "250 kcal · P 18 · C 0 · F 20" — whole
+     * when whole, one decimal otherwise (D53 §6). The basis ("per 100 g: ") is the screen's, from
+     * its resources.
+     */
+    fun worthFigures(rate: Rate): String = with(rate.nutrients) {
+        "${Portions.format(kcal)} kcal · P ${Portions.format(proteinG)} · " +
+            "C ${Portions.format(carbsG)} · F ${Portions.format(fatG)}"
+    }
+
+    /** What a row will log, in the whole numbers that go on the day. */
+    fun rowFigures(numbers: LoggedFrom.Numbers): String =
+        "${numbers.kcal} kcal · P ${numbers.proteinG} · C ${numbers.carbsG} · F ${numbers.fatG}"
 }
