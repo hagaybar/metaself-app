@@ -55,6 +55,8 @@ import com.metaself.app.R
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.metaself.app.ui.theme.Feel
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.day.DayPart
@@ -1193,13 +1195,26 @@ private fun LoggedMeal(
     // some: a tick drawn for a meal with one row ticked out of five would be claiming four rows the
     // choice does not hold.
     val wholeMealChosen = meal.items.all { it.id in chosen }
+    // A firm press when holding takes the meal in, a light tick when a tap does (#16): the hand
+    // knows the choice changed before the eye finds the box.
+    val haptics = LocalHapticFeedback.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = { if (choosing) onChooseMeal(meal) else onToggle() },
-                    onLongClick = { onChooseMeal(meal) },
+                    onClick = {
+                        if (choosing) {
+                            haptics.performHapticFeedback(Feel.Tick)
+                            onChooseMeal(meal)
+                        } else {
+                            onToggle()
+                        }
+                    },
+                    onLongClick = {
+                        haptics.performHapticFeedback(Feel.Thump)
+                        onChooseMeal(meal)
+                    },
                 )
                 .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -1320,13 +1335,26 @@ private fun LoggedItem(
     onBeginChoosing: () -> Unit = {},
     onToggleChosen: () -> Unit = {},
 ) {
+    // A firm press when holding starts choosing, a light tick when a tap ticks or unticks (#16).
+    // An ordinary tap opens the row and is felt as nothing of its own.
+    val haptics = LocalHapticFeedback.current
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick = { if (choosing) onToggleChosen() else onEdit(item) },
-                    onLongClick = onBeginChoosing,
+                    onClick = {
+                        if (choosing) {
+                            haptics.performHapticFeedback(Feel.Tick)
+                            onToggleChosen()
+                        } else {
+                            onEdit(item)
+                        }
+                    },
+                    onLongClick = {
+                        haptics.performHapticFeedback(Feel.Thump)
+                        onBeginChoosing()
+                    },
                 )
                 .padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,

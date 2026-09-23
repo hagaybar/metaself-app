@@ -3,6 +3,8 @@ package com.metaself.app.ui.screen.foods
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.ui.platform.LocalHapticFeedback
+import com.metaself.app.ui.theme.Feel
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
@@ -449,12 +451,25 @@ private fun FoodRow(
     onBeginChoosing: () -> Unit,
     onToggleChosen: () -> Unit,
 ) {
+    // A firm press when holding starts choosing, a light tick when a tap ticks or unticks (#16).
+    // An ordinary tap opens the food and is felt as nothing of its own.
+    val haptics = LocalHapticFeedback.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = { if (choosing) onToggleChosen() else onOpen() },
-                onLongClick = onBeginChoosing,
+                onClick = {
+                    if (choosing) {
+                        haptics.performHapticFeedback(Feel.Tick)
+                        onToggleChosen()
+                    } else {
+                        onOpen()
+                    }
+                },
+                onLongClick = {
+                    haptics.performHapticFeedback(Feel.Thump)
+                    onBeginChoosing()
+                },
             )
             .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
