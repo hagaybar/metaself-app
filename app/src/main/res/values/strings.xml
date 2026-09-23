@@ -178,6 +178,7 @@
     <string name="propose_tell_more_field">Anything it got wrong?</string>
     <string name="propose_tell_more_send">Ask again</string>
     <string name="propose_manual">Type the numbers myself</string>
+    <string name="propose_add_key">Add a key in settings</string>
     <string name="propose_describe_meal">Describe a meal</string>
     <string name="repeat_title">Add something</string>
     <string name="repeat_none">Nothing to repeat yet. Anything you log will appear here.</string>

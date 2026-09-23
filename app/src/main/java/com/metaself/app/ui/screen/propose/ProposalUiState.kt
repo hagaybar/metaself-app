@@ -17,8 +17,16 @@ data class ProposalRow(
 /** What the describe-a-meal screen is showing. */
 sealed interface ProposalUiState {
 
-    /** Waiting for words. Also where a failure leaves the owner, with his words still in the box. */
-    data class Describing(val failure: String? = null) : ProposalUiState
+    /**
+     * Waiting for words. Also where a failure leaves the owner, with his words still in the box.
+     *
+     * [needsKey] is the one failure fixed somewhere else in the app, so the screen offers the way
+     * there beside it (issue #11).
+     */
+    data class Describing(
+        val failure: String? = null,
+        val needsKey: Boolean = false,
+    ) : ProposalUiState
 
     data object Waiting : ProposalUiState
 

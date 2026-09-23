@@ -84,6 +84,12 @@ class DestinationRouteTest {
         assertThat(Destination.Foods.editing(7L)).isEqualTo("foods?food=7")
     }
 
+    /** "Add a key in settings" opens settings at the key, by the route the host registers. */
+    @Test
+    fun `settings can be opened at the key`() {
+        assertThat(Destination.Settings.atKey).isEqualTo("settings?at=key")
+    }
+
     /** The "Build a meal" button carries nothing, and must still land on the same destination. */
     @Test
     fun `a new meal with nothing chosen is the plain route`() {

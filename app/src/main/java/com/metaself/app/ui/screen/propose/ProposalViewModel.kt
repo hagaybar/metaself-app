@@ -71,7 +71,10 @@ class ProposalViewModel @Inject constructor(
                     note = result.proposal.note,
                 )
 
-                else -> ProposalUiState.Describing(ProposalWording.failure(result))
+                else -> ProposalUiState.Describing(
+                    failure = ProposalWording.failure(result),
+                    needsKey = result is EstimateResult.NoKey,
+                )
             }
         }
     }
@@ -101,6 +104,18 @@ class ProposalViewModel @Inject constructor(
     fun accepted(): List<FoodItem> =
         (_state.value as? ProposalUiState.Proposed)?.rows?.map { it.current.toFoodItem() }
             ?: emptyList()
+
+    /**
+     * He is going to settings to add the key the last answer said was missing (issue #11).
+     *
+     * The complaint is taken down now rather than on his return, because nothing here can tell that
+     * he saved one; left up, it would contradict settings the moment he had. The words stay — in
+     * [description], and in the field, which keeps whatever he typed since — so coming back is one
+     * press of "Work it out", and without a key that press simply says so again.
+     */
+    fun leaveToAddKey() {
+        _state.value = ProposalUiState.Describing()
+    }
 
     fun startOver() {
         description = ""

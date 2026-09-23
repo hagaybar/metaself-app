@@ -76,7 +76,10 @@ sealed class Destination(val route: String) {
             if (name.isBlank()) route else "entry/add?name=" + Uri.encode(name)
     }
     data object Weight : Destination("weight")
-    data object Settings : Destination("settings")
+    data object Settings : Destination("settings") {
+        /** Scrolled to the key: where the describe screen's "Add a key in settings" goes. */
+        val atKey: String = "settings?at=key"
+    }
     data object Describe : Destination("meal/describe") {
         /** Carrying the words already typed into the search, so a miss costs a tap, not a retype. */
         fun withWords(text: String): String =
@@ -280,7 +283,18 @@ fun MetaSelfNavHost(
             }
         }
 
-        composable(Destination.Settings.route) {
+        // Registered with where to open as an optional argument and still reachable by the bare
+        // route the menu uses, exactly as the food manager is.
+        composable(
+            route = Destination.Settings.route + "?at={at}",
+            arguments = listOf(
+                navArgument("at") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+        ) { entry ->
             val clipboard = LocalClipboardManager.current
             val settingsViewModel: SettingsViewModel = hiltViewModel()
             val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
@@ -380,6 +394,7 @@ fun MetaSelfNavHost(
                 },
                 onClearProblems = settingsViewModel::clearProblems,
                 onBack = { navController.popBackStack() },
+                openAtKey = entry.arguments?.getString("at") == "key",
             )
         }
 
@@ -703,6 +718,12 @@ fun MetaSelfNavHost(
                     navController.navigate(
                         Destination.AddEntry.withName(proposeViewModel.description),
                     )
+                },
+                // Forward, not back: the describe screen stays on the stack underneath settings,
+                // its view model with it, so Back from settings lands on his words (issue #11).
+                onAddKey = {
+                    proposeViewModel.leaveToAddKey()
+                    navController.navigate(Destination.Settings.atKey)
                 },
                 onCancel = { navController.popBackStack() },
             )
