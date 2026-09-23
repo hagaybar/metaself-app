@@ -29,6 +29,9 @@ class RepeatScreenRenderTest {
     /** The food "Give this a portion" was pressed for, or null if it never was. */
     private var portionFor: Long? = null
 
+    /** The tab asked for, or null if none was. */
+    private var shownTab: RepeatTab? = null
+
     @After
     fun tearDown() = render.dispose()
 
@@ -129,6 +132,37 @@ class RepeatScreenRenderTest {
 
         assertThat(texts.any { it.contains("Nothing you have logged matches") }).isTrue()
         assertThat(texts.any { it.startsWith("Describe") }).isFalse()
+    }
+
+    /**
+     * A miss here while the other list holds the match: the screen already knows, so it says where
+     * and takes him there — rather than leaving the owner to guess that the other tab is worth a look.
+     */
+    @Test
+    fun `a miss on the meals tab offers the foods that matched`() {
+        draw(RepeatUiState(tab = RepeatTab.MEALS, query = "hummus", foods = someFoods()))
+
+        render.click("Found in your foods")
+
+        assertThat(shownTab).isEqualTo(RepeatTab.FOODS)
+    }
+
+    @Test
+    fun `a miss on the foods tab offers the meals that matched`() {
+        val meal = SavedMeal(id = 1, name = "Salad", components = emptyList())
+        draw(RepeatUiState(tab = RepeatTab.FOODS, query = "salad", meals = listOf(meal)))
+
+        render.click("Found in your meals")
+
+        assertThat(shownTab).isEqualTo(RepeatTab.MEALS)
+    }
+
+    /** Nothing to point at when neither list matched: describing is the offer there. */
+    @Test
+    fun `a miss on both lists points at neither`() {
+        val texts = draw(RepeatUiState(tab = RepeatTab.MEALS, query = "fish"))
+
+        assertThat(texts.any { it.startsWith("Found in your") }).isFalse()
     }
 
     /** A meal he built, listed by its own name and by what he put in it. */
@@ -662,7 +696,7 @@ class RepeatScreenRenderTest {
             onSetAmount = {},
             onCancelChoosing = {},
             onLogChosen = {},
-            onShowTab = {},
+            onShowTab = { tab -> shownTab = tab },
             onSearch = {},
             onBeginAdjusting = {},
             onSetComponentAmount = onSetComponentAmount,

@@ -160,11 +160,25 @@ fun RepeatScreen(
                 style = MaterialTheme.typography.bodyMedium,
             )
             // The sentence above is about the list in front and stays per-tab. The offer is not:
-            // if the other tab holds the match it is one tap above, and offering to describe it
-            // here would manufacture exactly the duplicate this screen exists to prevent.
+            // if the other tab holds the match it is one tap away, and offering to describe it
+            // here would manufacture exactly the duplicate this screen exists to prevent. So the
+            // offer is the other tab itself, named — both lists are already filtered by these words.
             //
             // A Button rather than a TextButton, because it is the only thing to do on a screen
             // that has just said it has nothing.
+            state.matchesOnOtherTab?.let { other ->
+                Button(onClick = { onShowTab(other) }, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        stringResource(
+                            if (other == RepeatTab.FOODS) {
+                                R.string.repeat_found_in_foods
+                            } else {
+                                R.string.repeat_found_in_meals
+                            },
+                        ),
+                    )
+                }
+            }
             if (state.nothingMatchedEither) {
                 Button(
                     onClick = { onDescribe(state.query.trim()) },

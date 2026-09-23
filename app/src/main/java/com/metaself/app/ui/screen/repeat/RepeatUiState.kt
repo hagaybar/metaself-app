@@ -132,6 +132,19 @@ data class RepeatUiState(
         get() = query.isNotBlank() && foods.isEmpty() && meals.isEmpty()
 
     /**
+     * The other list, when the search missed the one in front and the other holds a match; null
+     * otherwise. Both lists are already filtered by the same words, so this is known without looking
+     * again — and saying nothing about it left the owner to guess that the other tab was worth a look.
+     */
+    val matchesOnOtherTab: RepeatTab?
+        get() = when {
+            !searchedAndFoundNothing -> null
+            tab == RepeatTab.MEALS && foods.isNotEmpty() -> RepeatTab.FOODS
+            tab == RepeatTab.FOODS && meals.isNotEmpty() -> RepeatTab.MEALS
+            else -> null
+        }
+
+    /**
      * True when the list in front is empty with nothing searched for, and the other list is not —
      * so [nothingEverLogged] is false and [searchedAndFoundNothing] is false, and the screen would
      * otherwise draw tabs and a search box over an empty space with nothing offered.
