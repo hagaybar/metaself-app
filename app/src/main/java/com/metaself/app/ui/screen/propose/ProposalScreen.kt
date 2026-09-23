@@ -129,9 +129,10 @@ fun ProposalScreen(
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                state.failure?.let { failure ->
+                val failure = state.failure ?: state.refused?.let { stringResource(it.sentence) }
+                failure?.let { sentence ->
                     Text(
-                        text = failure,
+                        text = sentence,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.error,
                     )

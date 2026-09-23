@@ -2,6 +2,7 @@ package com.metaself.app.ui.screen.propose
 
 import com.metaself.app.domain.ai.ProposedItem
 import com.metaself.app.domain.day.FoodItem
+import com.metaself.app.ui.ActionRefused
 
 /**
  * One row of a proposal: what the model said, and what it has become since.
@@ -26,6 +27,8 @@ sealed interface ProposalUiState {
     data class Describing(
         val failure: String? = null,
         val needsKey: Boolean = false,
+        /** Asking threw rather than answering. Drawn where [failure] is. */
+        val refused: ActionRefused? = null,
     ) : ProposalUiState
 
     data object Waiting : ProposalUiState

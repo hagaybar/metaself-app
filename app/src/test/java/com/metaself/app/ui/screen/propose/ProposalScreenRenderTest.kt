@@ -5,6 +5,7 @@ import com.metaself.app.domain.ai.PortionScale
 import com.metaself.app.domain.ai.ProposedItem
 import com.metaself.app.domain.ai.aProposedItem
 import com.metaself.app.domain.day.Confidence
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -125,6 +126,17 @@ class ProposalScreenRenderTest {
 
         assertThat(texts).doesNotContain(KEEP_AS_MEAL)
         assertThat(texts).doesNotContain("Save this meal")
+    }
+
+    /** Asking that threw is said where any other failure to answer is. */
+    @Test
+    fun `an ask that threw says nothing was changed`() {
+        val texts = draw(ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED))
+
+        assertThat(texts).contains(
+            "That didn't work, and nothing was changed. " +
+                "What went wrong is under Settings → Recent problems.",
+        )
     }
 
     private fun anEstimate(

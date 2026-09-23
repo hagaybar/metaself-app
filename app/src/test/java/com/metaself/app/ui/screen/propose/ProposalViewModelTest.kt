@@ -2,6 +2,7 @@ package com.metaself.app.ui.screen.propose
 
 import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.ai.PortionScale
@@ -9,6 +10,8 @@ import com.metaself.app.domain.ai.aProposal
 import com.metaself.app.domain.ai.aProposedItem
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -33,7 +36,8 @@ class ProposalViewModelTest {
 
     @Test
     fun `a described meal becomes rows, one per component`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())))
+        val viewModel =
+            ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())), ProblemLog.NONE)
 
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
@@ -79,6 +83,7 @@ class ProposalViewModelTest {
         )
         val viewModel = ProposalViewModel(
             FakeEstimator(EstimateResult.Proposed(aProposal(items = listOf(pizza)))),
+            ProblemLog.NONE,
         )
         viewModel.describe("pizza")
         advanceUntilIdle()
@@ -116,7 +121,8 @@ class ProposalViewModelTest {
 
     @Test
     fun `a failure keeps the owner's words and says what went wrong`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.Unreachable))
+        val viewModel =
+            ProposalViewModel(FakeEstimator(EstimateResult.Unreachable), ProblemLog.NONE)
 
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
@@ -132,7 +138,11 @@ class ProposalViewModelTest {
      */
     @Test
     fun `a reply that would not give amounts says which, and how to give them`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.AmountMissing(listOf("Stew"))))
+        val viewModel =
+            ProposalViewModel(
+                FakeEstimator(EstimateResult.AmountMissing(listOf("Stew"))),
+                ProblemLog.NONE,
+            )
 
         viewModel.describe("stew")
         advanceUntilIdle()
@@ -145,7 +155,7 @@ class ProposalViewModelTest {
 
     @Test
     fun `no key says so, and does not pretend the network failed`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey))
+        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey), ProblemLog.NONE)
 
         viewModel.describe("risotto")
         advanceUntilIdle()
@@ -159,7 +169,7 @@ class ProposalViewModelTest {
      */
     @Test
     fun `no key offers the way to the key, and keeps the words`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey))
+        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey), ProblemLog.NONE)
 
         viewModel.describe("risotto")
         advanceUntilIdle()
@@ -170,7 +180,8 @@ class ProposalViewModelTest {
 
     @Test
     fun `a failure that is not the key offers no way to it`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.Unreachable))
+        val viewModel =
+            ProposalViewModel(FakeEstimator(EstimateResult.Unreachable), ProblemLog.NONE)
 
         viewModel.describe("risotto")
         advanceUntilIdle()
@@ -184,7 +195,7 @@ class ProposalViewModelTest {
      */
     @Test
     fun `leaving to add the key clears the complaint and keeps the words`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey))
+        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.NoKey), ProblemLog.NONE)
         viewModel.describe("risotto")
         advanceUntilIdle()
 
@@ -197,7 +208,7 @@ class ProposalViewModelTest {
     @Test
     fun `telling it more asks again with both the original and the addition`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
-        val viewModel = ProposalViewModel(estimator)
+        val viewModel = ProposalViewModel(estimator, ProblemLog.NONE)
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
 
@@ -212,7 +223,7 @@ class ProposalViewModelTest {
     fun `an empty description asks nothing at all`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
 
-        ProposalViewModel(estimator).describe("   ")
+        ProposalViewModel(estimator, ProblemLog.NONE).describe("   ")
         advanceUntilIdle()
 
         assertThat(estimator.calls).isEqualTo(0)
@@ -222,6 +233,7 @@ class ProposalViewModelTest {
     fun `words carried in from the search start the description already filled`() = runTest {
         val viewModel = ProposalViewModel(
             FakeEstimator(EstimateResult.Proposed(aProposal())),
+            ProblemLog.NONE,
             SavedStateHandle(mapOf("text" to "shakshuka")),
         )
 
@@ -237,7 +249,11 @@ class ProposalViewModelTest {
     fun `carried words do not ask the model by themselves`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
 
-        ProposalViewModel(estimator, SavedStateHandle(mapOf("text" to "shakshuka")))
+        ProposalViewModel(
+            estimator,
+            ProblemLog.NONE,
+            SavedStateHandle(mapOf("text" to "shakshuka")),
+        )
         advanceUntilIdle()
 
         assertThat(estimator.calls).isEqualTo(0)
@@ -248,7 +264,7 @@ class ProposalViewModelTest {
     fun `no carried words leaves the description empty`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
 
-        val viewModel = ProposalViewModel(estimator, SavedStateHandle())
+        val viewModel = ProposalViewModel(estimator, ProblemLog.NONE, SavedStateHandle())
         advanceUntilIdle()
 
         assertThat(viewModel.description).isEqualTo("")
@@ -260,6 +276,7 @@ class ProposalViewModelTest {
     fun `starting over clears words that were carried in`() = runTest {
         val viewModel = ProposalViewModel(
             FakeEstimator(EstimateResult.Proposed(aProposal())),
+            ProblemLog.NONE,
             SavedStateHandle(mapOf("text" to "shakshuka")),
         )
 
@@ -279,7 +296,8 @@ class ProposalViewModelTest {
      */
     @Test
     fun `starting over leaves nothing that could be accepted again`() = runTest {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())))
+        val viewModel =
+            ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())), ProblemLog.NONE)
         viewModel.describe("risotto with mozzarella")
         advanceUntilIdle()
         assertThat(viewModel.accepted()).isNotEmpty()
@@ -293,7 +311,12 @@ class ProposalViewModelTest {
     @Test
     fun `telling it more works from words that were carried in`() = runTest {
         val estimator = FakeEstimator(EstimateResult.Proposed(aProposal()))
-        val viewModel = ProposalViewModel(estimator, SavedStateHandle(mapOf("text" to "shakshuka")))
+        val viewModel =
+            ProposalViewModel(
+                estimator,
+                ProblemLog.NONE,
+                SavedStateHandle(mapOf("text" to "shakshuka")),
+            )
 
         viewModel.describe("shakshuka")
         advanceUntilIdle()
@@ -304,8 +327,32 @@ class ProposalViewModelTest {
         assertThat(estimator.lastDetail).isEqualTo("with two eggs")
     }
 
+    /**
+     * The estimator reports its own failures as results, so this is the case it did not foresee. The
+     * owner is left where any failure leaves him — describing, his words kept — and it is written
+     * down. An exception that escaped would fail this on its own, because `runTest` reports it.
+     */
+    @Test
+    fun `an estimator that throws leaves his words and says nothing was changed`() = runTest {
+        val throwing = object : MealEstimator {
+            override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
+                throw IllegalStateException("unexpected reply")
+        }
+        val problems = RecordingProblemLog()
+        val viewModel = ProposalViewModel(throwing, problems)
+
+        viewModel.describe("risotto")
+        advanceUntilIdle()
+
+        val state = viewModel.state.value as ProposalUiState.Describing
+        assertThat(state.refused).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(viewModel.description).isEqualTo("risotto")
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+    }
+
     private fun proposedViewModel(): ProposalViewModel {
-        val viewModel = ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())))
+        val viewModel =
+            ProposalViewModel(FakeEstimator(EstimateResult.Proposed(aProposal())), ProblemLog.NONE)
         viewModel.describe("risotto with mozzarella")
         dispatcher.scheduler.advanceUntilIdle()
         return viewModel

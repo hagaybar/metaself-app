@@ -2,17 +2,18 @@ package com.metaself.app.ui.screen.propose
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.ai.PortionScale
 import com.metaself.app.domain.day.FoodItem
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.guarded
 import com.metaself.app.ui.propose.ProposalWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -20,10 +21,16 @@ import javax.inject.Inject
  *
  * One call to the model per press. No conversation: the rows ARE the clarification, and they cost
  * nothing and require no reply. "Tell it more" is the exception, and it is the owner's to press.
+ *
+ * **Nothing here takes the app down.** The estimator reports its own failures as results; anything
+ * it throws instead is caught by [guarded], written to the problem log, and leaves the owner where
+ * any other failure does — describing, with his words kept. Asking stores nothing, so the sentence
+ * says nothing was changed.
  */
 @HiltViewModel
 class ProposalViewModel @Inject constructor(
     private val estimator: MealEstimator,
+    private val problems: ProblemLog,
     savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -63,7 +70,12 @@ class ProposalViewModel @Inject constructor(
     }
 
     private fun ask(text: String, moreDetail: String?) {
-        viewModelScope.launch {
+        guarded(
+            problems,
+            onRefused = {
+                _state.value = ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED)
+            },
+        ) {
             _state.value = ProposalUiState.Waiting
             _state.value = when (val result = estimator.estimate(text, moreDetail)) {
                 is EstimateResult.Proposed -> ProposalUiState.Proposed(
