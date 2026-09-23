@@ -327,6 +327,14 @@ private fun AddSomethingHere(
             repeatViewModel.adjusted()?.let(dayViewModel::logSavedMeal)
             goBack()
         },
+        onBeginAddingToMeal = repeatViewModel::beginAddingToMeal,
+        onSearchToAdd = repeatViewModel::searchToAdd,
+        onStopAddingToMeal = repeatViewModel::stopAddingToMeal,
+        onPickToAdd = repeatViewModel::pickToAdd,
+        onCountAddedAs = repeatViewModel::countAddedAs,
+        onSetAddedAmount = repeatViewModel::setAddedAmount,
+        onDropPicked = repeatViewModel::dropPicked,
+        onPutItIn = repeatViewModel::putItIn,
         onBack = goBack,
     )
 }

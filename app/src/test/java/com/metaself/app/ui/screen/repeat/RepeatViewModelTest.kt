@@ -38,8 +38,7 @@ import org.junit.jupiter.api.Test
 /**
  * Changing how much of a past meal is being logged again.
  *
- * The case this pins: a row logged as two portions, repeated the next day, with no way to make it
- * one.
+ * Including the case of a row logged as two portions, which must be able to become one.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RepeatViewModelTest {
@@ -94,19 +93,296 @@ class RepeatViewModelTest {
         assertThat(meals.current.single().components.first().amount).isEqualTo(100.0)
     }
 
-    /** A one-day adjustment may ADD, not only remove and rescale. */
+    /**
+     * A one-day adjustment may ADD, not only remove and rescale — and what is added reaches the
+     * day's record with its own numbers, and marks the day's row as adjusted.
+     */
     @Test
-    fun `something not in the meal at all can be added for one day`() = runTest(dispatcher) {
-        val bread = aFood(name = "Bread", facts = FoodFacts(per100g = aPer100g(250.0))).copy(id = 9)
-        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad())))
+    fun `something not in the meal at all can be added for one day, and reaches the record`() =
+        runTest(dispatcher) {
+            val meals = FakeSavedMealRepository(listOf(salad()))
+            val viewModel = watched(pantry(), meals)
+
+            viewModel.beginAdjusting(0)
+            viewModel.beginAddingToMeal()
+            viewModel.searchToAdd("bread")
+            advanceUntilIdle()
+            viewModel.pickToAdd(BREAD)
+            viewModel.setAddedAmount("60")
+            advanceUntilIdle()
+            viewModel.putItIn()
+            advanceUntilIdle()
+
+            val adjusting = viewModel.state.value.adjusting!!
+            assertThat(adjusting.rows.map { it.food.name })
+                .containsExactly("Cucumber", "Olive oil", "Bread").inOrder()
+            // The step closes once it has put the food in.
+            assertThat(adjusting.finding).isNull()
+            assertThat(adjusting.adding).isNull()
+            // 16 + 119 + 60 g of bread at 250 kcal per 100 g, which is 150.
+            assertThat(adjusting.totalKcal).isEqualTo(285)
+
+            val logged = viewModel.adjusted()!!
+            assertThat(logged.adjusted).isTrue()
+            assertThat(logged.savedMealId).isEqualTo(1)
+            val bread = logged.items.last()
+            assertThat(bread.name).isEqualTo("Bread")
+            assertThat(bread.kcal).isEqualTo(150)
+            assertThat(bread.portionAmount).isEqualTo(60.0)
+            assertThat(bread.portionUnit).isEqualTo("g")
+            assertThat(bread.foodId).isEqualTo(BREAD)
+            // And the meal itself is untouched: tomorrow's salad has no bread in it.
+            assertThat(meals.current.single().components.map { it.food.name })
+                .containsExactly("Cucumber", "Olive oil")
+        }
+
+    /**
+     * The screen's search closes whatever is open, on purpose. The panel's own search must not, or
+     * typing the name of the thing to add would throw away the adjustment it was to be added to.
+     */
+    @Test
+    fun `the panel's own search keeps the adjustment open`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
 
         viewModel.beginAdjusting(0)
-        advanceUntilIdle()
-        viewModel.addToAdjustment(bread, amount = 60.0, countedAs = CountedAs.GRAMS)
+        viewModel.setComponentAmount(10, 200.0)
+        viewModel.beginAddingToMeal()
+        viewModel.searchToAdd("tom")
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.adjusting!!.rows.map { it.food.name })
-            .contains("Bread")
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.rows.first().amount).isEqualTo(200.0)
+        assertThat(adjusting.finding).isEqualTo("tom")
+        assertThat(adjusting.offered.map { it.name }).containsExactly("Tomato")
+    }
+
+    /**
+     * A meal holds a food once (D41). The panel's search does not offer one the adjustment already
+     * holds — it names it instead, as the builder does, rather than letting a tap do nothing.
+     */
+    @Test
+    fun `a food the meal already holds is named, not offered`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+
+        viewModel.beginAdjusting(0)
+        viewModel.beginAddingToMeal()
+        viewModel.searchToAdd("cucumber")
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.offered).isEmpty()
+        assertThat(adjusting.alreadyIn.map { it.name }).containsExactly("Cucumber")
+    }
+
+    /** With nothing typed, everything not already in it is offered, and nothing is named. */
+    @Test
+    fun `with nothing typed every food not already in it is offered`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+
+        viewModel.beginAdjusting(0)
+        viewModel.beginAddingToMeal()
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.offered.map { it.name })
+            .containsExactly("Bread", "Tomato", "Rice", "Bread roll")
+        assertThat(adjusting.alreadyIn).isEmpty()
+    }
+
+    /** A food removed for today can be put back, and is offered again for that reason. */
+    @Test
+    fun `a food removed for today is offered again`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+
+        viewModel.beginAdjusting(0)
+        viewModel.removeComponent(10)
+        viewModel.beginAddingToMeal()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.adjusting!!.offered.map { it.name }).contains("Cucumber")
+    }
+
+    /**
+     * Two added, one removed, a third added: each row keeps an identity of its own. Derived from
+     * the row count, the third took the second's, and removing or rescaling one then acted on both.
+     */
+    @Test
+    fun `rows added after a removal never share an identity`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+        advanceUntilIdle()
+
+        viewModel.addToAdjustment(food(BREAD), amount = 60.0, countedAs = CountedAs.GRAMS)
+        viewModel.addToAdjustment(food(TOMATO), amount = 100.0, countedAs = CountedAs.GRAMS)
+        advanceUntilIdle()
+        val bread = viewModel.state.value.adjusting!!.rows.single { it.food.id == BREAD }
+        viewModel.removeComponent(bread.id)
+        viewModel.addToAdjustment(food(RICE), amount = 150.0, countedAs = CountedAs.GRAMS)
+        advanceUntilIdle()
+
+        val rows = viewModel.state.value.adjusting!!.rows
+        assertThat(rows.map { it.id }).containsNoDuplicates()
+
+        val tomato = rows.single { it.food.id == TOMATO }
+        viewModel.setComponentAmount(tomato.id, 200.0)
+        viewModel.removeComponent(rows.single { it.food.id == RICE }.id)
+        advanceUntilIdle()
+
+        val after = viewModel.state.value.adjusting!!.rows
+        assertThat(after.map { it.food.name }).containsExactly("Cucumber", "Olive oil", "Tomato")
+            .inOrder()
+        assertThat(after.single { it.food.id == TOMATO }.amount).isEqualTo(200.0)
+    }
+
+    /**
+     * Something added goes on the record last, where the panel draws it. Its place was derived from
+     * the row count, so after removals it could sort between two things added earlier.
+     */
+    @Test
+    fun `something added after a removal goes on the record last`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+        advanceUntilIdle()
+
+        viewModel.addToAdjustment(food(BREAD), amount = 60.0, countedAs = CountedAs.GRAMS)
+        viewModel.addToAdjustment(food(TOMATO), amount = 100.0, countedAs = CountedAs.GRAMS)
+        viewModel.removeComponent(10)
+        viewModel.removeComponent(11)
+        viewModel.addToAdjustment(food(RICE), amount = 150.0, countedAs = CountedAs.GRAMS)
+        advanceUntilIdle()
+
+        assertThat(viewModel.adjusted()!!.items.map { it.name })
+            .containsExactly("Bread", "Tomato", "Rice").inOrder()
+    }
+
+    /** The builder appends at one past the highest place, so a meal's own places can have gaps. */
+    @Test
+    fun `something added to a meal with gaps in its order still goes on last`() =
+        runTest(dispatcher) {
+            val gappy = salad().let { meal ->
+                meal.copy(components = meal.components.mapIndexed { at, part -> part.copy(position = at * 5) })
+            }
+            val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(gappy)))
+            viewModel.beginAdjusting(0)
+            advanceUntilIdle()
+
+            viewModel.addToAdjustment(food(BREAD), amount = 60.0, countedAs = CountedAs.GRAMS)
+            advanceUntilIdle()
+
+            assertThat(viewModel.adjusted()!!.items.map { it.name })
+                .containsExactly("Cucumber", "Olive oil", "Bread").inOrder()
+        }
+
+    /** Picking a food asks how much, with nothing filled in, counted the way the food knows best. */
+    @Test
+    fun `picking a food to add asks how much, and nothing is filled in`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+        viewModel.beginAddingToMeal()
+        advanceUntilIdle()
+
+        viewModel.pickToAdd(BREAD)
+        advanceUntilIdle()
+
+        val adding = viewModel.state.value.adjusting!!.adding!!
+        assertThat(adding.food.name).isEqualTo("Bread")
+        assertThat(adding.countedAs).isEqualTo(CountedAs.GRAMS)
+        assertThat(adding.amount).isEmpty()
+        assertThat(adding.canLog).isFalse()
+
+        // Nothing goes in until an amount makes sense.
+        viewModel.putItIn()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.adjusting!!.rows).hasSize(2)
+        assertThat(viewModel.state.value.adjusting!!.adding).isNotNull()
+    }
+
+    /** A food known only by the unit is counted, and goes in in its own unit. */
+    @Test
+    fun `a food counted in units goes in in its own unit`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+        viewModel.beginAddingToMeal()
+        advanceUntilIdle()
+
+        viewModel.pickToAdd(ROLL)
+        viewModel.setAddedAmount("2")
+        viewModel.putItIn()
+        advanceUntilIdle()
+
+        val roll = viewModel.adjusted()!!.items.last()
+        assertThat(roll.portionUnit).isEqualTo("roll")
+        assertThat(roll.kcal).isEqualTo(300)
+    }
+
+    /** "Not this one" goes back to the search with the words still typed; "Not now" leaves it. */
+    @Test
+    fun `backing out of the step changes nothing about the adjustment`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+        viewModel.beginAddingToMeal()
+        viewModel.searchToAdd("bre")
+        advanceUntilIdle()
+        viewModel.pickToAdd(BREAD)
+        viewModel.setAddedAmount("60")
+
+        viewModel.dropPicked()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.adjusting!!.adding).isNull()
+        assertThat(viewModel.state.value.adjusting!!.finding).isEqualTo("bre")
+
+        viewModel.stopAddingToMeal()
+        advanceUntilIdle()
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.finding).isNull()
+        assertThat(adjusting.rows.map { it.food.name }).containsExactly("Cucumber", "Olive oil")
+        assertThat(viewModel.adjusted()!!.adjusted).isFalse()
+    }
+
+    /** As on the foods tab: a portion given in the editor reaches the question already open. */
+    @Test
+    fun `a portion given in the editor reaches the food being added`() = runTest(dispatcher) {
+        val foods = pantry()
+        val viewModel = watched(foods, FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+        viewModel.beginAddingToMeal()
+        advanceUntilIdle()
+        viewModel.pickToAdd(TOMATO)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.adjusting!!.adding!!.cannotCount).isNotNull()
+
+        foods.correct(TOMATO, FoodFacts(per100g = aPer100g(18.0), perUnit = aPerUnit("tomato", 22.0)))
+        advanceUntilIdle()
+        viewModel.countAddedAs(CountedAs.UNITS)
+        viewModel.setAddedAmount("1")
+        viewModel.putItIn()
+        advanceUntilIdle()
+
+        val tomato = viewModel.adjusted()!!.items.last()
+        assertThat(tomato.portionUnit).isEqualTo("tomato")
+        assertThat(tomato.kcal).isEqualTo(22)
+    }
+
+    /** A food deleted in the editor while it was being added is not put in. */
+    @Test
+    fun `a food deleted in the editor closes the question about adding it`() = runTest(dispatcher) {
+        val foods = pantry()
+        val viewModel = watched(foods, FakeSavedMealRepository(listOf(salad())))
+        viewModel.beginAdjusting(0)
+        viewModel.beginAddingToMeal()
+        advanceUntilIdle()
+        viewModel.pickToAdd(BREAD)
+        viewModel.setAddedAmount("60")
+        advanceUntilIdle()
+
+        foods.delete(BREAD)
+        advanceUntilIdle()
+        viewModel.putItIn()
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.adding).isNull()
+        assertThat(adjusting.rows.map { it.food.name }).containsExactly("Cucumber", "Olive oil")
     }
 
     @Test
@@ -549,6 +825,24 @@ class RepeatViewModelTest {
     }
 
     /** A salad he built: two foods, counted the way each of them knows. */
+    /**
+     * His foods, with the salad's two first so their ids match the salad's parts: the fake numbers
+     * foods 1, 2, 3… in the order given. Every figure is invented and chosen to keep sums round.
+     */
+    private fun pantry() = FakeFoodRepository(
+        listOf(
+            aFood("Cucumber", FoodFacts(per100g = aPer100g(16.0))),
+            aFood("Olive oil", FoodFacts(perUnit = aPerUnit("spoon", 119.0))),
+            aFood("Bread", FoodFacts(per100g = aPer100g(250.0))),
+            aFood("Tomato", FoodFacts(per100g = aPer100g(18.0))),
+            aFood("Rice", FoodFacts(per100g = aPer100g(130.0))),
+            aFood("Bread roll", FoodFacts(perUnit = aPerUnit("roll", 150.0))),
+        ),
+    )
+
+    /** A food from [pantry] by its id, for the tests that add directly. */
+    private fun food(id: Long): Food = pantry().current.single { it.id == id }
+
     private fun salad(): SavedMeal {
         val cucumber = aFood("Cucumber", FoodFacts(per100g = aPer100g(16.0))).copy(id = 1)
         val oil = aFood("Olive oil", FoodFacts(perUnit = aPerUnit("spoon", 119.0))).copy(id = 2)
@@ -560,5 +854,12 @@ class RepeatViewModelTest {
                 MealComponent(11, oil, 1.0, CountedAs.UNITS, position = 1),
             ),
         )
+    }
+
+    private companion object {
+        const val BREAD = 3L
+        const val TOMATO = 4L
+        const val RICE = 5L
+        const val ROLL = 6L
     }
 }

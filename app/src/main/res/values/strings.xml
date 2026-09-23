@@ -200,6 +200,8 @@
     <string name="repeat_as_it_was">As it was</string>
     <string name="repeat_adjust_log">Log it</string>
     <string name="repeat_adjust_cancel">Leave it alone</string>
+    <!-- Leaves the one-day adjuster's "Put something in" step without adding anything (issue #10). -->
+    <string name="repeat_adjust_add_stop">Not now</string>
 
     <!-- The foods manager: renaming, correcting, deleting, hiding, and joining two duplicates. -->
 

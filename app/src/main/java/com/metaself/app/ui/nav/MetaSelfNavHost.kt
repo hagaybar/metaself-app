@@ -517,6 +517,16 @@ fun MetaSelfNavHost(
                     repeatViewModel.adjusted()?.let(dayViewModel::logSavedMeal)
                     navController.popBackStack()
                 },
+                // The adjuster's own search and amount step. None of these writes anything: what
+                // is put in joins today's rows, and reaches the record only through Log it above.
+                onBeginAddingToMeal = repeatViewModel::beginAddingToMeal,
+                onSearchToAdd = repeatViewModel::searchToAdd,
+                onStopAddingToMeal = repeatViewModel::stopAddingToMeal,
+                onPickToAdd = repeatViewModel::pickToAdd,
+                onCountAddedAs = repeatViewModel::countAddedAs,
+                onSetAddedAmount = repeatViewModel::setAddedAmount,
+                onDropPicked = repeatViewModel::dropPicked,
+                onPutItIn = repeatViewModel::putItIn,
                 onBack = { navController.popBackStack() },
             )
         }

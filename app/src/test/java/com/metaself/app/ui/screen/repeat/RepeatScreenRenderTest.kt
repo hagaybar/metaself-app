@@ -32,6 +32,15 @@ class RepeatScreenRenderTest {
     /** The tab asked for, or null if none was. */
     private var shownTab: RepeatTab? = null
 
+    /** Whether the adjuster's "Put something in" was pressed. */
+    private var beganAdding = false
+
+    /** The food picked from the adjuster's own search, or null if none was. */
+    private var pickedToAdd: Long? = null
+
+    /** Whether the adjuster's "Put it in" was pressed. */
+    private var putIn = false
+
     @After
     fun tearDown() = render.dispose()
 
@@ -236,6 +245,100 @@ class RepeatScreenRenderTest {
 
         assertThat(texts.any { it.contains("The meal itself stays as you built it") }).isTrue()
         assertThat(texts).contains("Log it")
+    }
+
+    // --- Putting something in, for today only (issue #10) --------------------------------------
+
+    /** The adjuster could shrink and drop but never add; the way to add is now on it. */
+    @Test
+    fun `the adjuster offers to put something in`() {
+        val salad = salad()
+        draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(asDefined = salad, rows = salad.components),
+            ),
+        )
+
+        render.click("Put something in")
+
+        assertThat(beganAdding).isTrue()
+    }
+
+    /**
+     * Its own search, with his foods under it, and a food the meal already holds named rather than
+     * offered. Log it steps aside while the step is open, so a food half-added is not left behind.
+     */
+    @Test
+    fun `putting something in has its own search and names what the meal already holds`() {
+        val salad = salad()
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(
+                    asDefined = salad,
+                    rows = salad.components,
+                    finding = "c",
+                    offered = listOf(slicedBread),
+                    alreadyIn = listOf(weighedCucumber),
+                ),
+            ),
+        )
+
+        assertThat(texts).contains("Search your foods")
+        assertThat(texts).contains("c")
+        assertThat(texts).contains("Cucumber is already in this meal.")
+        assertThat(texts).contains("Bread")
+        assertThat(texts).contains("Not now")
+        assertThat(texts).doesNotContain("Log it")
+        assertThat(texts).doesNotContain("Leave it alone")
+
+        render.click("Bread")
+        assertThat(pickedToAdd).isEqualTo(slicedBread.id)
+    }
+
+    @Test
+    fun `a search in the adjuster that finds nothing says so`() {
+        val salad = salad()
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(asDefined = salad, rows = salad.components, finding = "tahini"),
+            ),
+        )
+
+        assertThat(texts).contains("Nothing matches “tahini”.")
+    }
+
+    /** The foods tab's own question, with the calories before it goes in, and its own buttons. */
+    @Test
+    fun `a food picked to put in asks how much, and puts it in`() {
+        val salad = salad()
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(
+                    asDefined = salad,
+                    rows = salad.components,
+                    finding = "",
+                    adding = Choosing(index = -1, food = slicedBread, countedAs = CountedAs.UNITS, amount = "2"),
+                ),
+            ),
+        )
+
+        assertThat(texts).contains("How much")
+        // Two slices at 80 kcal each.
+        assertThat(texts).contains("160 kcal")
+        assertThat(texts).contains("Not this one")
+        assertThat(texts).doesNotContain("Log it")
+        assertThat(render.isEnabled("Put it in")).isTrue()
+
+        render.click("Put it in")
+        assertThat(putIn).isTrue()
     }
 
     /** A half-built meal is offered like a finished one, and says what it is. */
@@ -726,6 +829,14 @@ class RepeatScreenRenderTest {
             onRemoveComponent = {},
             onCancelAdjusting = {},
             onLogAdjusted = {},
+            onBeginAddingToMeal = { beganAdding = true },
+            onSearchToAdd = {},
+            onStopAddingToMeal = {},
+            onPickToAdd = { foodId -> pickedToAdd = foodId },
+            onCountAddedAs = {},
+            onSetAddedAmount = {},
+            onDropPicked = {},
+            onPutItIn = { putIn = true },
             onBack = {},
         )
     }

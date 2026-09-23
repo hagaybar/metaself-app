@@ -23,10 +23,24 @@ import com.metaself.app.domain.food.SavedMeal
  *   answered against the definition AT THIS MOMENT. The definition may be edited afterwards, so
  *   comparing a past day against a later one would be comparing it against something that did not
  *   exist yet.
+ * @property finding what is typed into the panel's own search for something to put in, or null when
+ *   that step is closed. The panel's own because the screen's search closes whatever is open, and
+ *   would throw this adjustment away (issue #10).
+ * @property adding the food picked from that search, and how much of it — the same question the
+ *   foods tab asks. Its index means nothing here and is -1.
+ * @property offered his foods the search finds, less those already in [rows]: a meal holds a food
+ *   once (D41). Filled in by the view model, as the builder's candidates are.
+ * @property alreadyIn foods the search finds that [rows] already hold — named rather than offered,
+ *   so a search that finds one does not look like one that found nothing. Empty while nothing is
+ *   typed, or the sentence would list the whole meal.
  */
 data class Adjusting(
     val asDefined: SavedMeal,
     val rows: List<MealComponent>,
+    val finding: String? = null,
+    val adding: Choosing? = null,
+    val offered: List<Food> = emptyList(),
+    val alreadyIn: List<Food> = emptyList(),
 ) {
     val totalKcal: Int
         get() = rows.sumOf { (it.worth as? LoggedFrom.Numbers)?.kcal ?: 0 }
