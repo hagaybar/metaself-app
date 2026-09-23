@@ -98,8 +98,8 @@ fun RepeatScreen(
         // and landing on the meals already past their top, losing his place in both at once.
         scrollKey = state.tab,
         // Chrome, not content: the strip and the box that serves it stay put while the list moves.
-        // The foods manager was given this and it was never carried back here — the screen he
-        // crosses three times a day was the one still scrolling its own search out of reach.
+        // The foods manager was given this and it was never carried back here — the screen every
+        // log passes through was the one still scrolling its own search out of reach.
         belowBar = {
             // Nothing logged yet means no tabs and no search: a search box over nothing is noise,
             // and the branch below draws a front door instead.

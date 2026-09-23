@@ -189,7 +189,7 @@ private fun DayPagerOn(
                 )
                 // Looking after the food list and the meals is a job of its own, done well after
                 // the meal that produced the duplicate — so it belongs here rather than only behind
-                // the button whose purpose is the thing done three times a day.
+                // the button whose purpose is the thing the app is for.
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.manager_open)) },
                     onClick = {
