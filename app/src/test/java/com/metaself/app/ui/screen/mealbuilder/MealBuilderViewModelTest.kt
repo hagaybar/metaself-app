@@ -899,6 +899,37 @@ class MealBuilderViewModelTest {
         assertThat(meals.current.single().components.single { it.id == 900L }.amount).isEqualTo(150.0)
     }
 
+    /**
+     * The box holds the part's own number exactly (D30): a quarter spoon is "0.25", not the "0.3"
+     * the day's one-decimal words would make of it — pressed without a change, that would save 0.3.
+     * And a smaller one is not shown as "0.0", which no box accepts.
+     */
+    @Test
+    fun `a part's own amount opens exactly, and Change it untouched keeps it`() = runTest(dispatcher) {
+        val meals = withSaladHolding(
+            MealComponent(id = 900, food = cucumber, amount = 100.0, countedAs = CountedAs.GRAMS, position = 0),
+            MealComponent(id = 901, food = oil, amount = 0.25, countedAs = CountedAs.UNITS, position = 1),
+        )
+        val viewModel = opened(carrying(mealId = 1), meals)
+
+        viewModel.beginChanging(901)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.adding!!.amount).isEqualTo("0.25")
+        viewModel.confirmAdding()
+        advanceUntilIdle()
+        assertThat(meals.current.single().components.single { it.id == 901L }.amount).isEqualTo(0.25)
+
+        viewModel.beginChanging(901)
+        viewModel.setAmount("0.04")
+        viewModel.confirmAdding()
+        advanceUntilIdle()
+        viewModel.beginChanging(901)
+        advanceUntilIdle()
+        val adding = viewModel.state.value.adding!!
+        assertThat(adding.amount).isEqualTo("0.04")
+        assertThat(adding.canAdd).isTrue()
+    }
+
     /** D41's sentence now leads somewhere: the food named as already in opens its part. */
     @Test
     fun `a food already in the meal, found by the search, opens that part`() = runTest(dispatcher) {

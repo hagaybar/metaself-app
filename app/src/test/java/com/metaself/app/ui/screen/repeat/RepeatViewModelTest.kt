@@ -108,6 +108,32 @@ class RepeatViewModelTest {
         assertThat(adjusting.blockedBy).isNull()
     }
 
+    /**
+     * Exactly the meal's number: a quarter spoon is "0.25", not "0.3" — which would read as his and
+     * make an untouched day look adjusted — and a twenty-fifth is not "0.0", which blocks logging.
+     */
+    @Test
+    fun `a part's own amount opens exactly as the meal has it`() = runTest(dispatcher) {
+        val meal = salad().let { salad ->
+            salad.copy(
+                components = listOf(
+                    salad.components[0].copy(amount = 0.04),
+                    salad.components[1].copy(amount = 0.25),
+                ),
+            )
+        }
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(meal)))
+
+        viewModel.beginAdjusting(0)
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.rows.map { adjusting.amountText(it) })
+            .containsExactly("0.04", "0.25").inOrder()
+        assertThat(adjusting.blockedBy).isNull()
+        assertThat(viewModel.adjusted()!!.adjusted).isFalse()
+    }
+
     @Test
     fun `typing an amount changes that part for today and the meal not at all`() = runTest(dispatcher) {
         val meals = FakeSavedMealRepository(listOf(salad()))

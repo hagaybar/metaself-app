@@ -4,7 +4,7 @@ import com.metaself.app.domain.amount.ItemToLog
 import com.metaself.app.domain.amount.Rate
 import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.Confidence
-import java.math.BigDecimal
+import com.metaself.app.domain.portion.Portions
 
 /**
  * One thing the model thinks was on the plate: what it is worth, and how much of it there was, apart
@@ -37,7 +37,7 @@ data class ProposedItem(
     fun toItemToLog(): ItemToLog = ItemToLog(
         name = name,
         detail = detail,
-        amountText = BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString(),
+        amountText = Portions.inBox(amount),
         unit = unit,
         worth = Worth.Estimated(rate, confidence),
         foodId = null,

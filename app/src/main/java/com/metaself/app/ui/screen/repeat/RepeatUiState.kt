@@ -51,7 +51,7 @@ data class Adjusting(
      * amount the meal has for it, his own stored number (D30), never a default.
      */
     fun amountText(component: MealComponent): String =
-        typed[component.id] ?: Portions.format(component.amount)
+        typed[component.id] ?: Portions.inBox(component.amount)
 
     /** True only for a number past the part's ceiling (D42), which its box says out loud. */
     fun amountTooMuch(component: MealComponent): Boolean =

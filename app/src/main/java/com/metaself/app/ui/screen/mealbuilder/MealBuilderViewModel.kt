@@ -208,7 +208,7 @@ class MealBuilderViewModel @Inject constructor(
         _adding.value = Adding(
             food = part.food,
             countedAs = part.countedAs,
-            amount = Portions.format(part.amount),
+            amount = Portions.inBox(part.amount),
             changing = part.id,
         )
     }

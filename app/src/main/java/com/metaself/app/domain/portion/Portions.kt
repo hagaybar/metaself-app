@@ -1,5 +1,6 @@
 package com.metaself.app.domain.portion
 
+import java.math.BigDecimal
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -86,6 +87,15 @@ object Portions {
     fun isMillilitres(unit: String): Boolean = unit.trim().lowercase() in MILLILITRE_SPELLINGS
 
     fun words(amount: Double, unit: String): String = "${format(amount)} $unit"
+
+    /**
+     * An amount as it goes into a box he may save without touching: exactly the number, "0.25" and
+     * never the "0.3" [format] makes of it — a number put in a box he then saves is taken as his, and
+     * must be the one that was said (D30, D53 §6). No exponent, and zero written by hand, for the
+     * reason `ProductForm` gives: how a zero BigDecimal strips its zeros has differed between Javas.
+     */
+    fun inBox(amount: Double): String =
+        if (amount == 0.0) "0" else BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString()
 
     fun format(amount: Double): String =
         if (amount % 1.0 == 0.0) {
