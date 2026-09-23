@@ -14,6 +14,7 @@ import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.screen.foods.FoodsUiState
@@ -43,6 +44,35 @@ class ManagerScreenRenderTest {
 
     @After
     fun tearDown() = render.dispose()
+
+    /** An action that threw is said where refusals are, with the same way to take it down. */
+    @Test
+    fun `a food action that failed says so in the refusal slot`() {
+        val texts = draw(
+            tab = ManagerTab.FOODS,
+            foods = FoodsUiState(foods = listOf(hummus), failed = ActionRefused.NOTHING_CHANGED),
+        )
+
+        assertThat(texts).contains(
+            "That didn't work, and nothing was changed. " +
+                "What went wrong is under Settings → Recent problems.",
+        )
+        assertThat(texts).contains("All right")
+    }
+
+    /** A list that could not be read is not a list with nothing in it. */
+    @Test
+    fun `a meals list that could not be read says so, not that none is built`() {
+        val texts = draw(
+            tab = ManagerTab.MEALS,
+            meals = MealsUiState(failed = ActionRefused.COULD_NOT_OPEN),
+        )
+
+        assertThat(texts).contains(
+            "That couldn't be opened. What went wrong is under Settings → Recent problems.",
+        )
+        assertThat(texts.none { it.startsWith("Nothing built yet") }).isTrue()
+    }
 
     @Test
     fun `both lists are named and one is in front`() {

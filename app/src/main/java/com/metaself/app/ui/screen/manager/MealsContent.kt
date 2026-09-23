@@ -9,6 +9,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -35,7 +36,19 @@ fun MealsContent(
     state: MealsUiState,
     onBuildMeal: () -> Unit,
     onEditMeal: (Long) -> Unit,
+    onDismissFailure: () -> Unit = {},
 ) {
+    state.failed?.let { failed ->
+        Text(
+            text = stringResource(failed.sentence),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.error,
+        )
+        TextButton(onClick = onDismissFailure) {
+            Text(stringResource(R.string.action_refused_dismiss))
+        }
+    }
+
     if (state.nothingBuiltYet) {
         // An empty list is not a dead end to be escaped: it is the one place where building a meal
         // is the obvious thing to do, so the offer stands where the list would have been.

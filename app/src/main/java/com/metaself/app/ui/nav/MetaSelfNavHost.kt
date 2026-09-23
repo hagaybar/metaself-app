@@ -652,6 +652,7 @@ fun MetaSelfNavHost(
                 meals = mealsState,
                 onBuildMeal = { navController.navigate(Destination.BuildMeal.of(0)) },
                 onEditMeal = { mealId -> navController.navigate(Destination.BuildMeal.of(mealId)) },
+                onDismissMealsFailure = mealsViewModel::dismissFailure,
                 onBack = { navController.popBackStack() },
             )
         }

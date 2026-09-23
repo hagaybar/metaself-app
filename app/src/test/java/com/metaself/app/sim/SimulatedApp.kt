@@ -342,7 +342,7 @@ private fun ManagerHere(
     val managerViewModel = remember { ManagerViewModel() }
     val foodsViewModel =
         remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, savedState) }
-    val mealsViewModel = remember { MealsViewModel(world.savedMeals) }
+    val mealsViewModel = remember { MealsViewModel(world.savedMeals, ProblemLog.NONE) }
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()
     val foodsState by foodsViewModel.state.collectAsStateWithLifecycle()
