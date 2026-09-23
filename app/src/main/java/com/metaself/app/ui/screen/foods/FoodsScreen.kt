@@ -400,6 +400,15 @@ private fun Chosen(
                 Text(stringResource(R.string.foods_clear_choosing))
             }
         }
+        // At one, the hint about holding has been acted on and is gone, and nothing can be done with
+        // one food alone — so without this the screen has no next step on it (#12).
+        if (state.chosen.size == 1) {
+            Text(
+                text = stringResource(R.string.foods_tap_to_add),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+        }
         if (state.canMakeAMeal) {
             Button(onClick = onMakeMeal, modifier = Modifier.fillMaxWidth()) {
                 Text(

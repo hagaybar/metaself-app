@@ -559,6 +559,19 @@ class FoodsScreenRenderTest {
         assertThat(texts.any { it.contains("Hold a food to start choosing") }).isTrue()
     }
 
+    /**
+     * With one food ticked, the bar says how to tick more (#12). The hint about holding is gone by
+     * then, and nothing can be done with one food alone, so without this the screen has no next
+     * step on it at all.
+     */
+    @Test
+    fun `with one food chosen the bar says how to add more, and with two it does not`() {
+        assertThat(draw(FoodsUiState(foods = threeFoods(), chosen = setOf(1L))))
+            .contains("Tap another food to add it.")
+        assertThat(draw(FoodsUiState(foods = threeFoods(), chosen = setOf(1L, 2L))))
+            .doesNotContain("Tap another food to add it.")
+    }
+
     @Test
     fun `choosing can be abandoned from the screen`() {
         val texts = draw(FoodsUiState(foods = threeFoods(), chosen = setOf(1L)))
