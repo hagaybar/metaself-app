@@ -75,7 +75,39 @@ class WeightScreenRenderTest {
 
     @Test
     fun `each reading can be deleted`() {
-        assertThat(drawFortnight()).contains("Delete")
+        var deleted: Long? = null
+        val readings = aFortnight()
+        val texts = draw(
+            WeightUiState(readings = readings, trend = WeightTrend.of(readings)),
+            onDelete = { deleted = it },
+        )
+
+        assertThat(texts).contains("Delete reading, Yesterday")
+
+        render.clickDescribed("Delete reading, Yesterday")
+
+        assertThat(deleted).isEqualTo(TEST_EPOCH_DAY - 1)
+    }
+
+    /**
+     * A reading's two actions are icons, and each names the day it acts on (#14, public issue #3).
+     *
+     * They were "Edit" and "Delete" spelled out on every row, fourteen identical pairs on a
+     * fortnight, and nothing reading the screen could tell one day's Delete from another's — on the
+     * one screen where the wrong one moves the trend, the projection and the daily target at once.
+     */
+    @Test
+    fun `a reading's actions name its day, and no bare word is drawn`() {
+        val texts = drawFortnight()
+
+        assertThat(texts).containsAtLeast(
+            "Edit reading, Today",
+            "Delete reading, Today",
+            "Edit reading, Yesterday",
+            "Delete reading, Yesterday",
+        )
+        assertThat(texts).doesNotContain("Edit")
+        assertThat(texts).doesNotContain("Delete")
     }
 
     @Test
@@ -112,7 +144,16 @@ class WeightScreenRenderTest {
 
     @Test
     fun `each reading can be corrected`() {
-        assertThat(drawFortnight()).contains("Edit")
+        var edited: WeightReading? = null
+        val readings = aFortnight()
+        draw(
+            WeightUiState(readings = readings, trend = WeightTrend.of(readings)),
+            onEdit = { edited = it },
+        )
+
+        render.clickDescribed("Edit reading, Today")
+
+        assertThat(edited?.epochDay).isEqualTo(TEST_EPOCH_DAY)
     }
 
     @Test
@@ -361,14 +402,16 @@ class WeightScreenRenderTest {
         onRange: (ChartRange) -> Unit = {},
         onOpenChart: () -> Unit = {},
         onChangeGoal: () -> Unit = {},
+        onEdit: (WeightReading) -> Unit = {},
+        onDelete: (Long) -> Unit = {},
     ): List<String> = render.texts {
         WeightScreen(
             state = state,
             todayEpochDay = TEST_EPOCH_DAY,
             justLogged = null,
             onAdd = {},
-            onEdit = {},
-            onDelete = {},
+            onEdit = onEdit,
+            onDelete = onDelete,
             onRange = onRange,
             onOpenChart = onOpenChart,
             onChangeGoal = onChangeGoal,
