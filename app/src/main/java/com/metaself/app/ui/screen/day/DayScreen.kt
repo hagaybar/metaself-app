@@ -38,7 +38,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedContentTransitionScope
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.Alignment
@@ -55,8 +67,13 @@ import com.metaself.app.R
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.metaself.app.ui.theme.Feel
+import com.metaself.app.ui.theme.LocalMoves
+import com.metaself.app.ui.theme.Motion
+import com.metaself.app.ui.theme.givesUnderPress
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.day.DayPart
@@ -146,7 +163,9 @@ fun DayScreenContent(
     // two above are, and because the screen it opens is the next step: until it exists, a row is
     // still a real control and still says what it holds — it simply has nowhere to go yet.
     onOpenPart: (DayPart) -> Unit = {},
-) {
+) = CompositionLocalProvider(LocalMoves provides Motion.moves(state.isToday, LocalMoves.current)) {
+    // Today moves, the past is still (public issue #16): everything drawn for a past day is still,
+    // whatever the system allows, and today moves only if the system allows motion at all.
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.Section),
@@ -360,12 +379,19 @@ private fun DayAnswer(state: DayUiState.Ready) {
             // the slot the page reserves for its one answer reads as a figure that failed to load
             // rather than as a day with no record (D4).
             amount?.let { figure ->
-                Text(
-                    text = figure,
-                    style = MaterialTheme.typography.displayLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                    maxLines = 1,
-                )
+                // On today a new figure rolls in from below as the old one leaves upward (#16),
+                // rather than one number being swapped for another. Only whole figures are ever
+                // drawn — never a count through the values between — because each of those would
+                // be a number the day never had (D4). Still on a past day and with animations off.
+                if (LocalMoves.current) {
+                    AnimatedContent(
+                        targetState = figure,
+                        transitionSpec = { rollUp() },
+                        label = "day figure",
+                    ) { shown -> DayFigure(shown) }
+                } else {
+                    DayFigure(figure)
+                }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -403,6 +429,34 @@ private fun DayAnswer(state: DayUiState.Ready) {
     }
 }
 
+/** The day's one number, in the display face. */
+@Composable
+private fun DayFigure(figure: String) {
+    Text(
+        text = figure,
+        style = MaterialTheme.typography.displayLarge,
+        color = MaterialTheme.colorScheme.onBackground,
+        maxLines = 1,
+    )
+}
+
+/**
+ * The new figure up from below, the old one up and away, both fading, over [Motion.SETTLE_MILLIS]
+ * with Material's standard easing and no overshoot. Clipped to the figure's own line, so the roll
+ * happens inside it rather than over the words above and below.
+ */
+private fun AnimatedContentTransitionScope<String>.rollUp(): ContentTransform {
+    val slide = tween<IntOffset>(durationMillis = Motion.SETTLE_MILLIS, easing = Motion.Easing)
+    val fade = tween<Float>(durationMillis = Motion.SETTLE_MILLIS, easing = Motion.Easing)
+    return (slideInVertically(slide) { height -> height } + fadeIn(fade))
+        .togetherWith(slideOutVertically(slide) { height -> -height } + fadeOut(fade))
+        .using(
+            SizeTransform(clip = true) { _, _ ->
+                tween(durationMillis = Motion.SETTLE_MILLIS, easing = Motion.Easing)
+            },
+        )
+}
+
 /**
  * One of the three other ways to log: describing a meal, the barcode, or typing the numbers (#69).
  *
@@ -430,9 +484,14 @@ private fun DayAnswer(state: DayUiState.Ready) {
  */
 @Composable
 private fun WayIn(label: String, onClick: () -> Unit) {
+    // Gives under the finger on today, as the day's rows do (#16).
+    val press = remember { MutableInteractionSource() }
     OutlinedButton(
         onClick = onClick,
-        modifier = Modifier.heightIn(min = 48.dp),
+        modifier = Modifier
+            .heightIn(min = 48.dp)
+            .givesUnderPress(press),
+        interactionSource = press,
         colors = ButtonDefaults.outlinedButtonColors(
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
@@ -997,11 +1056,19 @@ private fun DayPartRow(part: DayPart, onOpen: () -> Unit) {
     val size = DayPartWording.size(part.meals)
     val said = stringResource(R.string.day_part_description, heading, what, total)
 
+    // The row gives a little under the finger on today (#16); the ripple answers on any day.
+    val press = remember { MutableInteractionSource() }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(role = Role.Button, onClick = onOpen)
+                .givesUnderPress(press)
+                .clickable(
+                    interactionSource = press,
+                    indication = LocalIndication.current,
+                    role = Role.Button,
+                    onClick = onOpen,
+                )
                 // The usual 48 of touch. A row of three short lines already clears it; the floor is
                 // here for the row that does not — one logging, with a name of one word.
                 .heightIn(min = 48.dp)
@@ -1198,11 +1265,15 @@ private fun LoggedMeal(
     // A firm press when holding takes the meal in, a light tick when a tap does (#16): the hand
     // knows the choice changed before the eye finds the box.
     val haptics = LocalHapticFeedback.current
+    val press = remember { MutableInteractionSource() }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .givesUnderPress(press)
                 .combinedClickable(
+                    interactionSource = press,
+                    indication = LocalIndication.current,
                     onClick = {
                         if (choosing) {
                             haptics.performHapticFeedback(Feel.Tick)
@@ -1338,11 +1409,16 @@ private fun LoggedItem(
     // A firm press when holding starts choosing, a light tick when a tap ticks or unticks (#16).
     // An ordinary tap opens the row and is felt as nothing of its own.
     val haptics = LocalHapticFeedback.current
+    // The row gives a little under the finger on today's record (#16); still on a past day's.
+    val press = remember { MutableInteractionSource() }
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .givesUnderPress(press)
                 .combinedClickable(
+                    interactionSource = press,
+                    indication = LocalIndication.current,
                     onClick = {
                         if (choosing) {
                             haptics.performHapticFeedback(Feel.Tick)

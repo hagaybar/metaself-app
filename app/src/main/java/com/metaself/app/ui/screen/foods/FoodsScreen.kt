@@ -5,6 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.platform.LocalHapticFeedback
 import com.metaself.app.ui.theme.Feel
+import com.metaself.app.ui.theme.givesUnderPress
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Arrangement
@@ -454,10 +457,15 @@ private fun FoodRow(
     // A firm press when holding starts choosing, a light tick when a tap ticks or unticks (#16).
     // An ordinary tap opens the food and is felt as nothing of its own.
     val haptics = LocalHapticFeedback.current
+    // The row gives a little under the finger (#16), unless animations are removed.
+    val press = remember { MutableInteractionSource() }
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .givesUnderPress(press)
             .combinedClickable(
+                interactionSource = press,
+                indication = LocalIndication.current,
                 onClick = {
                     if (choosing) {
                         haptics.performHapticFeedback(Feel.Tick)
