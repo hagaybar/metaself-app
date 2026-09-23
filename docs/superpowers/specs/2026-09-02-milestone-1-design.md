@@ -614,6 +614,18 @@ question or refusal appears where he can see it.**
   its duplicate, and picking one moves it to the question: two visible jumps, each to where the next
   answer is. Keep it changes nothing; Not now joins nothing, and on the ticked-two route it also
   ends choosing, letting go of the ticks. No schema change.
+- **AMENDED 2026-09-23, issue #19: what a join carries across.** The question says the food that
+  stays keeps its name and its numbers, and that promise now governs the figures: **every group it
+  holds stays, whatever the ranking would say** — a label on the absorbed food does not replace a
+  figure he typed on the one that stays. Only a group it lacks (per 100 g, per one) is filled from
+  the absorbed food, before that food is deleted and in the same transaction, with its provenance
+  unchanged: source, confidence and the date it came to be believed. **What one weighs travels only
+  to the same "one"**: it is carried when the food that stays takes the absorbed food's per-one
+  group, or already counts in a unit of the same name (case and spacing aside; a food naming no unit
+  counts in portions); otherwise it is left behind, because one bar's weight set against one slice
+  is a measurement nobody made (D4). Nothing is averaged or worked out. Where both hold a group, the
+  absorbed food's goes with it, unannounced — the question already said whose numbers stay. No
+  schema change, no new wording.
 
 **D37 — ADDED 2026-09-19, issue #15, extended by issue #27; the recommended option, taken under the
 owner's standing instruction of 2026-09-19 to choose the recommended option. Where a sentence on
