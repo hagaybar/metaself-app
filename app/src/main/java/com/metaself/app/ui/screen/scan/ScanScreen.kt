@@ -74,13 +74,15 @@ fun ScanScreen(
         onBack = onBack,
     ) {
         failed?.let { refused ->
-            Text(
-                text = stringResource(refused.sentence),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = onDismissFailure) {
-                Text(stringResource(R.string.action_refused_dismiss))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = stringResource(refused.sentence),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onDismissFailure) {
+                    Text(stringResource(R.string.action_refused_dismiss))
+                }
             }
         }
 
@@ -89,16 +91,18 @@ fun ScanScreen(
                 var typedBarcode by remember { mutableStateOf("") }
 
                 if (hasCamera) {
-                    BarcodeCamera(
-                        onBarcode = onBarcode,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(3f / 4f),
-                    )
-                    Text(
-                        text = stringResource(R.string.scan_aim),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                        BarcodeCamera(
+                            onBarcode = onBarcode,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(3f / 4f),
+                        )
+                        Text(
+                            text = stringResource(R.string.scan_aim),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
                 } else {
                     Text(
                         text = stringResource(R.string.scan_no_camera),
@@ -112,24 +116,26 @@ fun ScanScreen(
                 // read at all. Typing the digits is the way through that, and it is also how the
                 // owner can reach the not-found screen on purpose without pointing a camera at
                 // anything.
-                Text(
-                    text = stringResource(R.string.scan_type_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MetaSelfInk.two,
-                )
-                OutlinedTextField(
-                    value = typedBarcode,
-                    onValueChange = { typed -> typedBarcode = typed.filter(Char::isDigit) },
-                    label = { Text(stringResource(R.string.scan_type_label)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    onClick = { onBarcode(typedBarcode) },
-                    enabled = typedBarcode.length >= MIN_BARCODE_DIGITS,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.scan_type_look_up)) }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Text(
+                        text = stringResource(R.string.scan_type_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MetaSelfInk.two,
+                    )
+                    OutlinedTextField(
+                        value = typedBarcode,
+                        onValueChange = { typed -> typedBarcode = typed.filter(Char::isDigit) },
+                        label = { Text(stringResource(R.string.scan_type_label)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(
+                        onClick = { onBarcode(typedBarcode) },
+                        enabled = typedBarcode.length >= MIN_BARCODE_DIGITS,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.scan_type_look_up)) }
+                }
 
                 TextButton(onClick = onDescribeInstead, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.scan_describe_instead))
@@ -151,60 +157,69 @@ fun ScanScreen(
             }
 
             is ScanUiState.Found -> {
-                Text(text = state.product.label, style = MaterialTheme.typography.titleLarge)
+                // D48's grouping: what the packet is, what it is worth and where that came from are
+                // one thing; the amount and what it comes to are another.
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Text(text = state.product.label, style = MaterialTheme.typography.titleLarge)
 
-                Text(
-                    text = ScanWording.per100g(state.product),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                    Text(
+                        text = ScanWording.per100g(state.product),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
 
-                // D4: the record says where its numbers came from, and so does the screen.
-                Text(
-                    text = ScanWording.origin(state.fromThisPhone),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                OutlinedTextField(
-                    value = state.grams,
-                    onValueChange = onSetGrams,
-                    label = { Text(stringResource(R.string.scan_grams)) },
-                    isError = state.gramsTooMuch,
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                // Only a number past the ceiling is named (D42); a blank or a zero leaves Log it off.
-                // The same line the other amount boxes draw, so the wording cannot drift from theirs.
-                AmountTooMuch(
-                    tooMuch = state.gramsTooMuch,
-                    most = state.most,
-                    countedAs = CountedAs.GRAMS,
-                )
-
-                // The arithmetic in front of him, because he is agreeing to a number (D9).
-                ScanWording.forAmount(state.product, state.gramsOrNull)?.let { total ->
-                    Text(text = total, style = MaterialTheme.typography.titleMedium)
+                    // D4: the record says where its numbers came from, and so does the screen.
+                    Text(
+                        text = ScanWording.origin(state.fromThisPhone),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
-                Button(
-                    onClick = onSave,
-                    enabled = state.gramsOrNull != null,
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.scan_save)) }
-
-                // Log it pressed and nothing logged: the screen stays and says why (issue #32).
-                state.nothingLogged?.let { why ->
-                    Text(
-                        text = stringResource(
-                            when (why) {
-                                NothingLogged.AMOUNT -> R.string.scan_nothing_logged_amount
-                                NothingLogged.PACKET -> R.string.scan_nothing_logged_packet
-                            },
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    OutlinedTextField(
+                        value = state.grams,
+                        onValueChange = onSetGrams,
+                        label = { Text(stringResource(R.string.scan_grams)) },
+                        isError = state.gramsTooMuch,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
                     )
+                    // Only a number past the ceiling is named (D42); a blank or a zero leaves Log it
+                    // off. The same line the other amount boxes draw, so the wording cannot drift
+                    // from theirs.
+                    AmountTooMuch(
+                        tooMuch = state.gramsTooMuch,
+                        most = state.most,
+                        countedAs = CountedAs.GRAMS,
+                    )
+
+                    // The arithmetic in front of him, because he is agreeing to a number (D9).
+                    ScanWording.forAmount(state.product, state.gramsOrNull)?.let { total ->
+                        Text(text = total, style = MaterialTheme.typography.titleMedium)
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Button(
+                        onClick = onSave,
+                        enabled = state.gramsOrNull != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.scan_save)) }
+
+                    // Log it pressed and nothing logged: the screen stays and says why (issue #32).
+                    state.nothingLogged?.let { why ->
+                        Text(
+                            text = stringResource(
+                                when (why) {
+                                    NothingLogged.AMOUNT -> R.string.scan_nothing_logged_amount
+                                    NothingLogged.PACKET -> R.string.scan_nothing_logged_packet
+                                },
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
 
                 TextButton(onClick = onScanAgain, modifier = Modifier.fillMaxWidth()) {
@@ -241,88 +256,92 @@ fun ScanScreen(
             }
 
             is ScanUiState.Adding -> {
-                Text(
-                    text = stringResource(R.string.scan_add_title),
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                // First, before the label rules: it is why he is on this form rather than the found
-                // screen, and which box needs him (D40).
-                // The sentence already says what to copy from the packet. The blank form's "copy
-                // these from the package itself" would say it again above boxes the database has
-                // already filled, telling him to copy what is there — so it is one or the other.
-                if (state.databaseLacks.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
                     Text(
-                        text = databaseLacks(state.databaseLacks),
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = stringResource(R.string.scan_add_title),
+                        style = MaterialTheme.typography.titleMedium,
                     )
-                } else {
+                    // First, before the label rules: it is why he is on this form rather than the found
+                    // screen, and which box needs him (D40).
+                    // The sentence already says what to copy from the packet. The blank form's "copy
+                    // these from the package itself" would say it again above boxes the database has
+                    // already filled, telling him to copy what is there — so it is one or the other.
+                    if (state.databaseLacks.isNotEmpty()) {
+                        Text(
+                            text = databaseLacks(state.databaseLacks),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    } else {
+                        Text(
+                            text = ContributeWording.ONLY_THE_LABEL,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MetaSelfInk.two,
+                        )
+                    }
+                    // A label's figures are stored as printed on the packet's record, 0.7 g included;
+                    // said before the first box so they are not rounded by hand to match Type the
+                    // numbers' rule. Its own sentence, not the food forms' "on this food": what is
+                    // typed here is kept on the packet's record, and reaches a food only when the
+                    // packet is logged (D38).
                     Text(
-                        text = ContributeWording.ONLY_THE_LABEL,
+                        text = stringResource(R.string.scan_label_figures_kept),
                         style = MaterialTheme.typography.bodySmall,
                         color = MetaSelfInk.two,
                     )
                 }
-                // A label's figures are stored as printed on the packet's record, 0.7 g included;
-                // said before the first box so they are not rounded by hand to match Type the
-                // numbers' rule. Its own sentence, not the food forms' "on this food": what is
-                // typed here is kept on the packet's record, and reaches a food only when the
-                // packet is logged (D38).
-                Text(
-                    text = stringResource(R.string.scan_label_figures_kept),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MetaSelfInk.two,
-                )
 
                 val errors = if (state.showErrors) state.form.errors() else emptyMap()
 
-                LabelField(
-                    label = stringResource(R.string.scan_add_name),
-                    value = state.form.name,
-                    error = errors[ProductField.NAME],
-                    number = false,
-                ) { onSetForm(state.form.copy(name = it)) }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    LabelField(
+                        label = stringResource(R.string.scan_add_name),
+                        value = state.form.name,
+                        error = errors[ProductField.NAME],
+                        number = false,
+                    ) { onSetForm(state.form.copy(name = it)) }
 
-                LabelField(
-                    label = stringResource(R.string.scan_add_brand),
-                    value = state.form.brand,
-                    error = null,
-                    number = false,
-                ) { onSetForm(state.form.copy(brand = it)) }
+                    LabelField(
+                        label = stringResource(R.string.scan_add_brand),
+                        value = state.form.brand,
+                        error = null,
+                        number = false,
+                    ) { onSetForm(state.form.copy(brand = it)) }
 
-                LabelField(
-                    label = stringResource(R.string.scan_add_kcal),
-                    value = state.form.kcalPer100g,
-                    error = errors[ProductField.KCAL],
-                    number = true,
-                ) { onSetForm(state.form.copy(kcalPer100g = it)) }
+                    LabelField(
+                        label = stringResource(R.string.scan_add_kcal),
+                        value = state.form.kcalPer100g,
+                        error = errors[ProductField.KCAL],
+                        number = true,
+                    ) { onSetForm(state.form.copy(kcalPer100g = it)) }
 
-                LabelField(
-                    label = stringResource(R.string.scan_add_protein),
-                    value = state.form.proteinPer100g,
-                    error = errors[ProductField.PROTEIN],
-                    number = true,
-                ) { onSetForm(state.form.copy(proteinPer100g = it)) }
+                    LabelField(
+                        label = stringResource(R.string.scan_add_protein),
+                        value = state.form.proteinPer100g,
+                        error = errors[ProductField.PROTEIN],
+                        number = true,
+                    ) { onSetForm(state.form.copy(proteinPer100g = it)) }
 
-                LabelField(
-                    label = stringResource(R.string.scan_add_carbs),
-                    value = state.form.carbsPer100g,
-                    error = errors[ProductField.CARBS],
-                    number = true,
-                ) { onSetForm(state.form.copy(carbsPer100g = it)) }
+                    LabelField(
+                        label = stringResource(R.string.scan_add_carbs),
+                        value = state.form.carbsPer100g,
+                        error = errors[ProductField.CARBS],
+                        number = true,
+                    ) { onSetForm(state.form.copy(carbsPer100g = it)) }
 
-                LabelField(
-                    label = stringResource(R.string.scan_add_fat),
-                    value = state.form.fatPer100g,
-                    error = errors[ProductField.FAT],
-                    number = true,
-                ) { onSetForm(state.form.copy(fatPer100g = it)) }
+                    LabelField(
+                        label = stringResource(R.string.scan_add_fat),
+                        value = state.form.fatPer100g,
+                        error = errors[ProductField.FAT],
+                        number = true,
+                    ) { onSetForm(state.form.copy(fatPer100g = it)) }
 
-                LabelField(
-                    label = stringResource(R.string.scan_add_serving),
-                    value = state.form.servingSizeG,
-                    error = errors[ProductField.SERVING],
-                    number = true,
-                ) { onSetForm(state.form.copy(servingSizeG = it)) }
+                    LabelField(
+                        label = stringResource(R.string.scan_add_serving),
+                        value = state.form.servingSizeG,
+                        error = errors[ProductField.SERVING],
+                        number = true,
+                    ) { onSetForm(state.form.copy(servingSizeG = it)) }
+                }
 
                 Button(onClick = onSaveTyped, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.scan_add_save))
@@ -330,24 +349,28 @@ fun ScanScreen(
             }
 
             is ScanUiState.NotFound -> {
-                Text(
-                    text = ScanWording.notFound(state.couldNotAsk),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-                Text(
-                    text = state.barcode,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Text(
+                        text = ScanWording.notFound(state.couldNotAsk),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = state.barcode,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
 
-                Button(onClick = onAddByHand, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.scan_add_it))
-                }
-                TextButton(onClick = onDescribeInstead, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.scan_describe_instead))
-                }
-                TextButton(onClick = onScanAgain, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.scan_again))
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    Button(onClick = onAddByHand, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.scan_add_it))
+                    }
+                    TextButton(onClick = onDescribeInstead, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.scan_describe_instead))
+                    }
+                    TextButton(onClick = onScanAgain, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.scan_again))
+                    }
                 }
             }
         }
@@ -362,7 +385,10 @@ private fun LabelField(
     number: Boolean,
     onValueChange: (String) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+    ) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
