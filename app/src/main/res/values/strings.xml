@@ -241,6 +241,8 @@
     <string name="builder_rename">Rename it</string>
     <string name="builder_rename_retitles">Every day you have eaten this will show the new name. No calorie count changes.</string>
     <string name="builder_delete">Delete this meal</string>
+    <string name="builder_change_it">Change it</string>
+    <string name="builder_change_how_much">Change how much %1$s</string>
     <string name="builder_up">Up</string>
     <string name="builder_down">Down</string>
     <string name="builder_cannot_cost">This food no longer knows what it is counted in here.</string>

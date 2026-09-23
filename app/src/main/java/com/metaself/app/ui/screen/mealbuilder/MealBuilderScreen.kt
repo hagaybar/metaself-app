@@ -75,6 +75,8 @@ fun MealBuilderScreen(
     onDropPending: (Long) -> Unit,
     onRemove: (Long) -> Unit,
     onMove: (Long, Int) -> Unit,
+    onChangePart: (Long) -> Unit,
+    onChangeFood: (Long) -> Unit,
     onBeginCreatingFood: () -> Unit,
     onCreateFood: (FoodForm) -> Unit,
     onCancelCreatingFood: () -> Unit,
@@ -204,6 +206,7 @@ fun MealBuilderScreen(
                     meal.components.forEach { component ->
                         InMeal(
                             component = component,
+                            onChange = { onChangePart(component.id) },
                             onRemove = { onRemove(component.id) },
                             onUp = { onMove(component.id, -1) },
                             onDown = { onMove(component.id, 1) },
@@ -262,6 +265,13 @@ fun MealBuilderScreen(
                     ),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                // And a way to its part, so "take it out and put it back" is never the only way to
+                // change how much of it there is (D53 §7, #4).
+                state.alreadyIn.forEach { food ->
+                    TextButton(onClick = { onChangeFood(food.id) }) {
+                        Text(stringResource(R.string.builder_change_how_much, named(food)))
+                    }
+                }
             }
             // Never "in this meal": a food with no amount is not in it (D37).
             if (state.alreadyWaiting.isNotEmpty()) {
@@ -359,10 +369,16 @@ private fun BrandLine(food: Food) {
     }
 }
 
-/** One food already in the meal, with how much of it and where it sits in his order. */
+/**
+ * One food already in the meal, with how much of it and where it sits in his order.
+ *
+ * Its name and amount are one tap that opens the panel for changing how much of it there is
+ * (D53 §7, #4); Up, Down and Remove stay on the row, outside that tap.
+ */
 @Composable
 private fun InMeal(
     component: MealComponent,
+    onChange: () -> Unit,
     onRemove: () -> Unit,
     onUp: () -> Unit,
     onDown: () -> Unit,
@@ -373,13 +389,20 @@ private fun InMeal(
             .padding(vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
     ) {
-        Text(text = component.food.name, style = MaterialTheme.typography.bodyLarge)
-        BrandLine(component.food)
-        Text(
-            text = describe(component, portionWords(component)),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onChange),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+        ) {
+            Text(text = component.food.name, style = MaterialTheme.typography.bodyLarge)
+            BrandLine(component.food)
+            Text(
+                text = describe(component, portionWords(component)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
         // The food no longer knows the thing this counts it in. Said rather than shown as a
         // smaller total that looks right.
         if (component.cannotBeCosted) {
@@ -413,7 +436,7 @@ private fun InMeal(
  * **It goes in when he says so, and not before.** A row that joined the meal the instant what was
  * typed could be costed joined it at the first digit — "100" is typed as "1", then "10", then "100"
  * — which put one gram of cucumber in the salad, took this box off the screen mid-word, and left him
- * nothing to correct with, since a component's amount cannot be edited. So the same "Put it in" this
+ * nothing to correct with, since a part's amount could not then be changed. So the same "Put it in" this
  * screen already uses, enabled on the same terms, with the running total under the box while he
  * types.
  */
@@ -544,7 +567,12 @@ private fun HowMuchOfIt(
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             Button(onClick = onConfirm, enabled = adding.canAdd) {
-                Text(stringResource(R.string.builder_put_it_in))
+                // A part already in is changed in place, not put in a second time (#4).
+                Text(
+                    stringResource(
+                        if (adding.changing != null) R.string.builder_change_it else R.string.builder_put_it_in,
+                    ),
+                )
             }
             TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
         }

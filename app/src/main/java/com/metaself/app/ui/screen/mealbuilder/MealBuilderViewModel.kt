@@ -13,6 +13,7 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.domain.food.ReplacedFacts
+import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.food.MealWording
 import com.metaself.app.ui.food.RetaughtBecause
@@ -197,6 +198,30 @@ class MealBuilderViewModel @Inject constructor(
         _adding.value = Adding(food = food, countedAs = defaultFor(food))
     }
 
+    /**
+     * Tap a part already in the meal: the same panel, holding that part's own amount and way of
+     * counting (D53 §7, #4) — his stored numbers, not a default (D30). *Change it* writes through
+     * [confirmAdding], which changes the part in place.
+     */
+    fun beginChanging(componentId: Long) {
+        val part = _meal.value?.components?.firstOrNull { it.id == componentId } ?: return
+        _adding.value = Adding(
+            food = part.food,
+            countedAs = part.countedAs,
+            amount = Portions.format(part.amount),
+            changing = part.id,
+        )
+    }
+
+    /**
+     * A food the search found already in the meal (D41): named, not offered — and the name now
+     * opens its part, so taking it out and putting it back is never the only way to change it.
+     */
+    fun beginChangingFood(foodId: Long) {
+        val part = _meal.value?.components?.firstOrNull { it.food.id == foodId } ?: return
+        beginChanging(part.id)
+    }
+
     fun countAs(countedAs: CountedAs) {
         _adding.value = _adding.value?.copy(countedAs = countedAs)
     }
@@ -209,8 +234,11 @@ class MealBuilderViewModel @Inject constructor(
         _adding.value = null
     }
 
+    /** Put it in — or, for a part already there, change it in place: `put` does either (#4). */
     fun confirmAdding() {
-        val adding = _adding.value ?: return
+        // Only on the terms the button is enabled on: an amount this food can be costed at, counted
+        // a way it knows. The screen's button already says so; this is where it is enforced.
+        val adding = _adding.value?.takeIf { it.canAdd } ?: return
         val amount = adding.amountOrNull ?: return
         val id = _mealId.value.takeIf { it != 0L } ?: return
         writeThenReload(
@@ -227,8 +255,8 @@ class MealBuilderViewModel @Inject constructor(
      * **Typing alone never puts anything in the meal.** The box is filled a character at a time, so
      * "100" arrives as "1", then "10", then "100" — and a row that went in the instant what was
      * typed could be costed would have gone in at one gram, taken its own box off the screen, and
-     * left the "00" nowhere to land, with no way back: a component's amount cannot be edited once it
-     * is in. So the row stays, showing what the amount so far comes to, until [confirmPending].
+     * left the "00" nowhere to land — at the time with no way back, since a part's amount could not be
+     * changed until D53 §7. So the row stays, showing what the amount so far comes to, until [confirmPending].
      */
     fun setPendingAmount(foodId: Long, text: String) {
         changePending(foodId) { it.copy(amount = text) }

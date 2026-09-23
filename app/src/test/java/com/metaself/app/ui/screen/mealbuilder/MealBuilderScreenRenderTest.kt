@@ -615,7 +615,58 @@ class MealBuilderScreenRenderTest {
         assertThat(texts).contains("All right")
     }
 
+    // --- A part already in the meal gets its amount changed (D53 §7, #4) ------------------------
+
+    @Test
+    fun `tapping a part's row opens it to change its amount`() {
+        draw(MealBuilderUiState(meal = salad()))
+
+        render.click("Cucumber")
+
+        assertThat(changedPart).isEqualTo(10L)
+    }
+
+    /** Up, Down and Remove stay on the row, and are not the row's tap. */
+    @Test
+    fun `the part's own buttons are still its own`() {
+        val texts = draw(MealBuilderUiState(meal = salad()))
+
+        assertThat(texts).containsAtLeast("Up", "Down", "Remove")
+        render.click("Remove")
+        assertThat(changedPart).isNull()
+    }
+
+    @Test
+    fun `the panel for a part already in says change it, not put it in`() {
+        val texts = draw(
+            MealBuilderUiState(
+                meal = salad(),
+                adding = Adding(food = cucumber, countedAs = CountedAs.GRAMS, amount = "100", changing = 10),
+            ),
+        )
+
+        assertThat(texts).contains("Change it")
+        assertThat(texts).doesNotContain("Put it in")
+        assertThat(texts).contains("100")
+    }
+
+    /** D41's sentence names the food, and now leads to its part. */
+    @Test
+    fun `a food named as already in can be opened from the sentence`() {
+        val texts = draw(
+            MealBuilderUiState(meal = salad(), query = "cucum", alreadyIn = listOf(cucumber)),
+        )
+
+        assertThat(texts).contains("Cucumber is already in this meal.")
+        render.click("Change how much Cucumber")
+        assertThat(changedFood).isEqualTo(cucumber.id)
+    }
+
     private fun draw(state: MealBuilderUiState): List<String> = render.texts { drawing(state) }
+
+    /** The part whose row was tapped, and the food whose name in the already-in sentence was. */
+    private var changedPart: Long? = null
+    private var changedFood: Long? = null
 
     @androidx.compose.runtime.Composable
     private fun drawing(state: MealBuilderUiState) {
@@ -636,6 +687,8 @@ class MealBuilderScreenRenderTest {
             onDropPending = {},
             onRemove = {},
             onMove = { _, _ -> },
+            onChangePart = { changedPart = it },
+            onChangeFood = { changedFood = it },
             onBeginCreatingFood = {},
             onCreateFood = {},
             onCancelCreatingFood = {},

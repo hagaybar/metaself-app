@@ -93,7 +93,7 @@ class MealBuilderViewModelTest {
      *
      * The defect this guards against: a food already put into the meal came back as an empty waiting
      * row after that rebuild. Confirming it would have written over an amount he had already entered,
-     * in a builder that offers no way to edit a component's amount afterwards. So what the meal
+     * in a builder that then offered no way to change a part's amount. So what the meal
      * already holds is never offered again, here for the same reason it is never offered in the
      * search results.
      */
@@ -135,7 +135,7 @@ class MealBuilderViewModelTest {
      * The defect this guards against: the field is typed into one character at a time, so a row that
      * went in the instant what was typed could be costed went in at "1" — one gram of cucumber — and
      * took its own field off the screen, leaving the "00" with nowhere to land and no way back,
-     * because a component's amount cannot be edited once it is in.
+     * because a part's amount could not then be changed once it was in.
      *
      * So the row stays put while he types, showing what the amount so far comes to, and joins the
      * meal only when he says so.
@@ -807,6 +807,142 @@ class MealBuilderViewModelTest {
             if (writes) refuse() else inner.reorder(mealId, componentIdsInOrder)
 
         override suspend fun delete(mealId: Long) = if (writes) refuse() else inner.delete(mealId)
+    }
+
+    // --- A part already in the meal gets its amount changed (D53 §7, #4) ------------------------
+
+    /** Knows what 100 g of it are worth. Only here as the third part, after the oil. */
+    private val tomato = aFood("Tomato", FoodFacts(per100g = aPer100g(18.0))).copy(id = 4)
+
+    private fun withThreeParts() = FakeSavedMealRepository(
+        listOf(
+            SavedMeal(
+                name = "Vegetable salad",
+                components = listOf(
+                    MealComponent(id = 900, food = cucumber, amount = 100.0, countedAs = CountedAs.GRAMS, position = 0),
+                    MealComponent(id = 901, food = oil, amount = 2.0, countedAs = CountedAs.UNITS, position = 1),
+                    MealComponent(id = 902, food = tomato, amount = 80.0, countedAs = CountedAs.GRAMS, position = 2),
+                ),
+            ),
+        ),
+    ).knowsAbout(cucumber, oil, tomato)
+
+    @Test
+    fun `tapping a part opens its own amount and way of counting`() = runTest(dispatcher) {
+        val viewModel = opened(carrying(mealId = 1), withThreeParts())
+
+        viewModel.beginChanging(901)
+        advanceUntilIdle()
+
+        val adding = viewModel.state.value.adding!!
+        assertThat(adding.food).isEqualTo(oil)
+        assertThat(adding.countedAs).isEqualTo(CountedAs.UNITS)
+        assertThat(adding.amount).isEqualTo("2")
+        assertThat(adding.changing).isEqualTo(901L)
+        // 2 spoons at 119 each, before anything is typed.
+        assertThat(adding.preview!!.kcal).isEqualTo(238)
+    }
+
+    @Test
+    fun `changing it keeps the part where it was`() = runTest(dispatcher) {
+        val meals = withThreeParts()
+        val viewModel = opened(carrying(mealId = 1), meals)
+
+        viewModel.beginChanging(901)
+        viewModel.setAmount("3")
+        viewModel.confirmAdding()
+        advanceUntilIdle()
+
+        val parts = meals.current.single().components
+        assertThat(parts.map { it.food.name }).containsExactly("Cucumber", "Olive oil", "Tomato").inOrder()
+        assertThat(parts.single { it.food.id == oil.id }.amount).isEqualTo(3.0)
+        assertThat(parts.map { it.id }).containsExactly(900L, 901L, 902L).inOrder()
+        assertThat(viewModel.state.value.adding).isNull()
+    }
+
+    @Test
+    fun `leaving the panel changes nothing`() = runTest(dispatcher) {
+        val meals = withThreeParts()
+        val viewModel = opened(carrying(mealId = 1), meals)
+
+        viewModel.beginChanging(901)
+        viewModel.setAmount("3")
+        viewModel.cancelAdding()
+        advanceUntilIdle()
+
+        assertThat(meals.current.single().components.single { it.id == 901L }.amount).isEqualTo(2.0)
+    }
+
+    /** Grams or whole ones, as for a food being put in: only the ways the food knows. */
+    @Test
+    fun `a part can be switched to grams only if its food can be weighed`() = runTest(dispatcher) {
+        val meals = withThreeParts()
+        val viewModel = opened(carrying(mealId = 1), meals)
+
+        viewModel.beginChanging(901)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.adding!!.cannotWeigh).isNotNull()
+        viewModel.countAs(CountedAs.GRAMS)
+        viewModel.setAmount("30")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.adding!!.canAdd).isFalse()
+        viewModel.confirmAdding()
+        advanceUntilIdle()
+        assertThat(meals.current.single().components.single { it.id == 901L }.amount).isEqualTo(2.0)
+
+        viewModel.cancelAdding()
+        viewModel.beginChanging(900)
+        viewModel.countAs(CountedAs.GRAMS)
+        viewModel.setAmount("150")
+        viewModel.confirmAdding()
+        advanceUntilIdle()
+        assertThat(meals.current.single().components.single { it.id == 900L }.amount).isEqualTo(150.0)
+    }
+
+    /** D41's sentence now leads somewhere: the food named as already in opens its part. */
+    @Test
+    fun `a food already in the meal, found by the search, opens that part`() = runTest(dispatcher) {
+        val viewModel = opened(carrying(mealId = 1), withThreeParts())
+
+        viewModel.search("cucum")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.alreadyIn.map { it.id }).containsExactly(cucumber.id)
+
+        viewModel.beginChangingFood(cucumber.id)
+        advanceUntilIdle()
+
+        val adding = viewModel.state.value.adding!!
+        assertThat(adding.changing).isEqualTo(900L)
+        assertThat(adding.amount).isEqualTo("100")
+        assertThat(adding.countedAs).isEqualTo(CountedAs.GRAMS)
+    }
+
+    @Test
+    fun `the panel's box follows the same ceiling`() = runTest(dispatcher) {
+        val meals = withThreeParts()
+        val viewModel = opened(carrying(mealId = 1), meals)
+
+        viewModel.beginChanging(901)
+        viewModel.setAmount("101")
+        advanceUntilIdle()
+
+        val adding = viewModel.state.value.adding!!
+        assertThat(adding.amountTooMuch).isTrue()
+        assertThat(adding.canAdd).isFalse()
+        viewModel.confirmAdding()
+        advanceUntilIdle()
+        assertThat(meals.current.single().components.single { it.id == 901L }.amount).isEqualTo(2.0)
+    }
+
+    /** A food picked from the search to put in is not changing anything. */
+    @Test
+    fun `a food being put in is not a part being changed`() = runTest(dispatcher) {
+        val viewModel = opened(carrying(mealId = 1), withSalad())
+
+        viewModel.beginAdding(cucumber.id)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.adding!!.changing).isNull()
     }
 
     private fun withSalad() =
