@@ -201,9 +201,11 @@ class RoomFoodRepository @Inject constructor(
                 ?: stored.names.minByOrNull { it.addedAtMillis }
             val oldKey = shown?.brandKey ?: FoodKeys.brandKey(stored.food.brand)
 
-            dao.setBrand(foodId, display, moment)
             // Saving the form sets the brand every time, changed or not. Unchanged, no name moves.
-            if (brandKey == oldKey) return@withTransaction EditResult.Done
+            if (brandKey == oldKey) {
+                dao.setBrand(foodId, display, moment)
+                return@withTransaction EditResult.Done
+            }
 
             // Only the names under the food's own brand move. A name a join brought in keeps the
             // brand it came with, because that is what lets the next log of the absorbed food find
@@ -218,6 +220,9 @@ class RoomFoodRepository @Inject constructor(
                     )
                 }
             }
+            // Written only once nothing refuses: a refusal returned from inside the transaction
+            // still commits whatever was written before it.
+            dao.setBrand(foodId, display, moment)
             // A joined name already under the new brand is the same identity the moving name is
             // about to take, so it goes rather than collide. Nothing points at a name row.
             moving.forEach { name -> dao.dropJoinedName(foodId, name.nameKey, brandKey) }

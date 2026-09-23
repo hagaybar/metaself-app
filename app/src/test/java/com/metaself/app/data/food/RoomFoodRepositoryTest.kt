@@ -420,6 +420,16 @@ class RoomFoodRepositoryTest {
     }
 
     @Test
+    fun `a refused brand change leaves the brand as it was`() = runTest {
+        val plain = repository.findOrCreate("Yoghurt", facts = FoodFacts(per100g = per100g())).food
+        repository.findOrCreate("Yoghurt", brand = "Dairyco", facts = FoodFacts(per100g = per100g()))
+
+        repository.setBrand(plain.id, "Dairyco")
+
+        assertThat(repository.byId(plain.id)!!.brand).isEqualTo(FoodKeys.NO_BRAND)
+    }
+
+    @Test
     fun `clearing a brand returns the food to the brand that means none`() = runTest {
         val food = repository.findOrCreate("Yoghurt", brand = "Dairyco", facts = FoodFacts(per100g = per100g())).food
 
