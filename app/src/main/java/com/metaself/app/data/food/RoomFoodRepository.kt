@@ -6,6 +6,11 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
+import com.metaself.app.domain.food.GramsPerUnit
+import com.metaself.app.domain.food.JoinedFacts
+import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -123,8 +128,22 @@ class RoomFoodRepository @Inject constructor(
      * This is what lets a scan win the argument about what 100 grams are worth while having no say
      * at all about what one bar weighs.
      */
-    private suspend fun offerEvery(foodId: Long, facts: FoodFacts, now: Long) {
-        facts.per100g?.let { fact ->
+    private suspend fun offerEvery(foodId: Long, facts: FoodFacts, now: Long) =
+        offerEach(foodId, facts.per100g, facts.perUnit, facts.gramsPerUnit) { now }
+
+    /**
+     * The three guarded statements, each group on its own, stamped by [setAt]: the moment of the
+     * write for everything the owner or a scan offers, and the figure's own date for a join, which
+     * carries a figure across rather than learning it anew.
+     */
+    private suspend fun offerEach(
+        foodId: Long,
+        per100g: PerHundredGrams?,
+        perUnit: PerUnit?,
+        gramsPerUnit: GramsPerUnit?,
+        setAt: (Provenance) -> Long,
+    ) {
+        per100g?.let { fact ->
             dao.writePer100g(
                 id = foodId,
                 kcal = fact.nutrients.kcal,
@@ -134,10 +153,10 @@ class RoomFoodRepository @Inject constructor(
                 source = fact.provenance.source.name,
                 rank = fact.provenance.rank,
                 confidence = fact.provenance.confidence?.name,
-                nowMillis = now,
+                nowMillis = setAt(fact.provenance),
             )
         }
-        facts.perUnit?.let { fact ->
+        perUnit?.let { fact ->
             dao.writePerUnit(
                 id = foodId,
                 unitName = fact.unitName,
@@ -148,17 +167,17 @@ class RoomFoodRepository @Inject constructor(
                 source = fact.provenance.source.name,
                 rank = fact.provenance.rank,
                 confidence = fact.provenance.confidence?.name,
-                nowMillis = now,
+                nowMillis = setAt(fact.provenance),
             )
         }
-        facts.gramsPerUnit?.let { fact ->
+        gramsPerUnit?.let { fact ->
             dao.writeGramsPerUnit(
                 id = foodId,
                 grams = fact.grams,
                 source = fact.provenance.source.name,
                 rank = fact.provenance.rank,
                 confidence = fact.provenance.confidence?.name,
-                nowMillis = now,
+                nowMillis = setAt(fact.provenance),
             )
         }
     }
@@ -346,6 +365,10 @@ class RoomFoodRepository @Inject constructor(
                 return@withTransaction EditResult.Refused(EditRefused.MealsHoldingBoth(both))
             }
 
+            // Read before the names move: a food with no name left reads back as nothing
+            // (`toDomain` needs one to show), so after `moveNames` the absorbed food is already gone.
+            val absorbed = dao.byId(loserId)?.toDomain()?.facts
+
             // The history moves across. Not one logged row's numbers, name, portion, source or
             // confidence is touched: merging is about identity, not about rewriting the past.
             dao.movePastRows(winnerId, loserId)
@@ -353,8 +376,24 @@ class RoomFoodRepository @Inject constructor(
             // And this is the step that makes it worth having: the loser's name becomes an alias,
             // so the next log under that name finds the one food.
             dao.moveNames(winnerId, loserId)
+            // What only the absorbed food knew, before it is deleted (issue #19). The winner keeps
+            // every figure it holds — the join question promises it keeps its numbers — so only a
+            // group it lacks is filled; which ones is decided by `JoinedFacts`.
+            absorbed?.let {
+                fillBlanks(winnerId, JoinedFacts.fill(dao.byId(winnerId)?.toDomain()?.facts, it))
+            }
             dao.deleteFood(loserId)
+            // After the fills, which stamp the row with the absorbed figures' own dates.
             dao.touch(winnerId, now())
             EditResult.Done
         }
+
+    /**
+     * The absorbed food's groups, through the same guarded statements as every other write, and
+     * with their provenance unchanged — the moment each came to be believed included. Offered only
+     * where the winner has nothing, so the guard's `>=` never meets a figure of the winner's; each
+     * blank is learned through its `IS NULL` arm.
+     */
+    private suspend fun fillBlanks(foodId: Long, filling: JoinedFacts.Filling) =
+        offerEach(foodId, filling.per100g, filling.perUnit, filling.gramsPerUnit) { it.setAtMillis }
 }

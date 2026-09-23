@@ -12,6 +12,8 @@ import com.metaself.app.data.backup.BackupCodec
 import com.metaself.app.data.backup.BackupFiles
 import com.metaself.app.data.backup.BackupFolder
 import com.metaself.app.data.backup.BackupRepository
+import com.metaself.app.data.backup.SettingsSnapshot
+import com.metaself.app.data.day.DatabaseTransaction
 import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.drive.DriveAccess
@@ -252,11 +254,11 @@ class SettingsViewModelTest {
     }
 
     /**
-     * A restore is many writes, not one transaction, and the first of them deletes: one that throws
-     * may have stopped anywhere, and must not say nothing changed.
+     * A restore is all or nothing: one that throws rolled the database back and put the settings
+     * back, so it says nothing was changed.
      */
     @Test
-    fun `a restore that throws says it may have partly happened and gives the buttons back`() = runTest {
+    fun `a restore that throws says nothing was changed and gives the buttons back`() = runTest {
         val files = Files(contents = BackupCodec.encode(backups(Daos()).export(0)))
         val viewModel = viewModel(files = files, daos = Daos(failing = setOf("deleteAllMeals")))
         watch(viewModel)
@@ -268,9 +270,30 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.failed)
-            .isEqualTo(SettingsRefusal(SettingsPart.BACKUP, ActionRefused.MAYBE_PARTIAL))
+            .isEqualTo(SettingsRefusal(SettingsPart.BACKUP, ActionRefused.NOTHING_CHANGED))
         assertThat(viewModel.state.value.busy).isFalse()
         assertThat(viewModel.state.value.pendingRestore).isNull()
+    }
+
+    /** Only when the settings could not be put back either may part of it have happened. */
+    @Test
+    fun `a restore whose settings could not be put back says it may have partly happened`() = runTest {
+        val files = Files(contents = BackupCodec.encode(backups(Daos()).export(0)))
+        val viewModel = viewModel(
+            files = files,
+            daos = Daos(failing = setOf("deleteAllMeals")),
+            snapshot = { { throw IllegalStateException("disk full") } },
+        )
+        watch(viewModel)
+        viewModel.offerRestoreFrom(Uri.parse("content://invented/file"))
+        advanceUntilIdle()
+
+        viewModel.confirmRestore()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.failed)
+            .isEqualTo(SettingsRefusal(SettingsPart.BACKUP, ActionRefused.MAYBE_PARTIAL))
+        assertThat(viewModel.state.value.busy).isFalse()
     }
 
     @Test
@@ -312,7 +335,11 @@ class SettingsViewModelTest {
         backgroundScope.launch { viewModel.state.collect {} }
     }
 
-    private fun backups(daos: Daos, profiles: ProfileRepository = FakeProfileRepository(aProfile())) =
+    private fun backups(
+        daos: Daos,
+        profiles: ProfileRepository = FakeProfileRepository(aProfile()),
+        snapshot: SettingsSnapshot = SettingsSnapshot { {} },
+    ) =
         BackupRepository(
             meals = daos.meals,
             weights = daos.weights,
@@ -322,6 +349,10 @@ class SettingsViewModelTest {
             ai = Ai(),
             foods = FakeFoodRepository(),
             savedMeals = FakeSavedMealRepository(),
+            transaction = object : DatabaseTransaction {
+                override suspend fun run(block: suspend () -> Unit) = block()
+            },
+            snapshot = snapshot,
         )
 
     private fun viewModel(
@@ -335,8 +366,9 @@ class SettingsViewModelTest {
         profiles: ProfileRepository = FakeProfileRepository(aProfile()),
         steps: StepSource = Steps(),
         daos: Daos = Daos(),
+        snapshot: SettingsSnapshot = SettingsSnapshot { {} },
     ): SettingsViewModel {
-        val backups = backups(daos, profiles)
+        val backups = backups(daos, profiles, snapshot)
         val folder = BackupFolder(context, problems)
         val drive = DriveBackup(backups, DriveAccess(context, problems), problems)
         return SettingsViewModel(

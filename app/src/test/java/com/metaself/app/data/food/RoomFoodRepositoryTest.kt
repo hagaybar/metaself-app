@@ -606,6 +606,147 @@ class RoomFoodRepositoryTest {
         assertThat(repository.observeAll().first()).hasSize(1)
     }
 
+    // --- What a join carries across (issue #19) -----------------------------------------------------
+    //
+    // The winner keeps every figure it holds; a group it lacks is filled from the absorbed food with
+    // that group's provenance unchanged, date included. Which groups is `JoinedFactsTest`'s subject;
+    // these check the guarded statements carry it out inside the merge's transaction.
+
+    /**
+     * Two foods made at one moment and joined at a later one, so a copied date is visibly not the
+     * join's. Returns what the winner knew before the join and what it knows after.
+     */
+    private suspend fun join(stays: FoodFacts, absorbed: FoodFacts): Pair<FoodFacts, FoodFacts> {
+        moment = 1_000L
+        val winner = repository.findOrCreate("Yoghurt", facts = stays).food
+        val loser = repository.findOrCreate("יוגורט", facts = absorbed).food
+        moment = 9_000L
+        assertThat(repository.merge(winnerId = winner.id, loserId = loser.id)).isEqualTo(EditResult.Done)
+        assertThat(repository.byId(loser.id)).isNull()
+        return winner.facts to repository.byId(winner.id)!!.facts
+    }
+
+    @Test
+    fun `joining keeps a per-100 g figure only the absorbed food knew, with where it came from`() =
+        runTest {
+            val (_, merged) = join(
+                stays = FoodFacts(perUnit = perUnit()),
+                absorbed = FoodFacts(per100g = per100g(kcal = 120.0)),
+            )
+
+            assertThat(merged.per100g!!.nutrients.kcal).isWithin(0.001).of(120.0)
+            assertThat(merged.per100g!!.provenance)
+                .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, setAtMillis = 1_000L))
+        }
+
+    @Test
+    fun `joining keeps a per-one figure only the absorbed food knew, with its unit`() = runTest {
+        val (_, merged) = join(
+            stays = FoodFacts(per100g = per100g()),
+            absorbed = FoodFacts(perUnit = perUnit(unitName = "slice", source = Source.LABEL)),
+        )
+
+        assertThat(merged.perUnit!!.unitName).isEqualTo("slice")
+        assertThat(merged.perUnit!!.nutrients.kcal).isWithin(0.001).of(190.0)
+        assertThat(merged.perUnit!!.provenance)
+            .isEqualTo(Provenance(Source.LABEL, null, setAtMillis = 1_000L))
+    }
+
+    @Test
+    fun `joining carries a weight along with the per-one figure it was measured against`() = runTest {
+        val (_, merged) = join(
+            stays = FoodFacts(per100g = per100g()),
+            absorbed = FoodFacts(perUnit = perUnit(unitName = "bar"), gramsPerUnit = weighs(45.0)),
+        )
+
+        assertThat(merged.perUnit!!.unitName).isEqualTo("bar")
+        assertThat(merged.gramsPerUnit!!.grams).isWithin(0.001).of(45.0)
+        assertThat(merged.gramsPerUnit!!.provenance)
+            .isEqualTo(Provenance(Source.TYPED, null, setAtMillis = 1_000L))
+    }
+
+    @Test
+    fun `joining carries a weight when both foods count in the same unit`() = runTest {
+        val (_, merged) = join(
+            stays = FoodFacts(perUnit = perUnit(unitName = "Bar", kcal = 200.0)),
+            absorbed = FoodFacts(perUnit = perUnit(unitName = "bar"), gramsPerUnit = weighs(45.0)),
+        )
+
+        assertThat(merged.perUnit!!.unitName).isEqualTo("Bar")
+        assertThat(merged.perUnit!!.nutrients.kcal).isWithin(0.001).of(200.0)
+        assertThat(merged.gramsPerUnit!!.grams).isWithin(0.001).of(45.0)
+    }
+
+    /** One bar's weight set against one slice would be a measurement nobody made (D4). */
+    @Test
+    fun `joining leaves a weight behind when the food that stays counts in another unit`() = runTest {
+        val (_, merged) = join(
+            stays = FoodFacts(perUnit = perUnit(unitName = "slice")),
+            absorbed = FoodFacts(perUnit = perUnit(unitName = "bar"), gramsPerUnit = weighs(45.0)),
+        )
+
+        assertThat(merged.perUnit!!.unitName).isEqualTo("slice")
+        assertThat(merged.gramsPerUnit).isNull()
+    }
+
+    /**
+     * The join question says the food that stays keeps its numbers, so none is replaced — not by a
+     * label above it, an equal source beside it, or an estimate below it.
+     */
+    @Test
+    fun `joining leaves every figure the food that stays holds exactly as it was`() = runTest {
+        val (before, after) = join(
+            stays = FoodFacts(
+                per100g = per100g(kcal = 60.0),
+                perUnit = perUnit(unitName = "bar", kcal = 200.0),
+                gramsPerUnit = weighs(30.0),
+            ),
+            absorbed = FoodFacts(
+                per100g = per100g(kcal = 422.0, source = Source.LABEL, confidence = null),
+                perUnit = perUnit(unitName = "bar", kcal = 190.0),
+                gramsPerUnit = weighs(45.0, source = Source.LABEL),
+            ),
+        )
+
+        assertThat(after).isEqualTo(before)
+    }
+
+    /** A refused join commits nothing: both foods, their names and their figures stand. */
+    @Test
+    fun `a join refused for a meal holding both leaves both foods untouched`() = runTest {
+        val winner = repository.findOrCreate("Yoghurt", facts = FoodFacts(perUnit = perUnit())).food
+        val loser = repository.findOrCreate(
+            "יוגורט",
+            facts = FoodFacts(per100g = per100g(), gramsPerUnit = weighs()),
+        ).food
+        val meals = database.savedMealDao()
+        val mealId = meals.insertMeal(
+            SavedMealEntity(
+                name = "Breakfast",
+                nameKey = "breakfast",
+                createdAtMillis = moment,
+                updatedAtMillis = moment,
+            ),
+        )
+        listOf(winner.id, loser.id).forEachIndexed { at, foodId ->
+            meals.insertComponent(
+                SavedMealComponentEntity(
+                    savedMealId = mealId,
+                    foodId = foodId,
+                    position = at,
+                    amount = 1.0,
+                    countedAs = "UNITS",
+                ),
+            )
+        }
+
+        assertThat(repository.merge(winnerId = winner.id, loserId = loser.id))
+            .isEqualTo(EditResult.Refused(EditRefused.MealsHoldingBoth(listOf("Breakfast"))))
+
+        assertThat(repository.byId(winner.id)).isEqualTo(winner)
+        assertThat(repository.byId(loser.id)).isEqualTo(loser)
+    }
+
     // --- The list, and its order -----------------------------------------------------------------------
 
     /**

@@ -11,6 +11,7 @@ import com.metaself.app.data.backup.BackupFolder
 import com.metaself.app.data.backup.BackupOutcome
 import com.metaself.app.data.backup.BackupFiles
 import com.metaself.app.data.backup.BackupRepository
+import com.metaself.app.data.backup.NothingRestored
 import com.metaself.app.data.backup.RestoreResult
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.drive.DriveBackup
@@ -612,15 +613,25 @@ class SettingsViewModel internal constructor(
     /**
      * Replace what is here with the file.
      *
-     * **Not one transaction.** [BackupRepository.restore] deletes the meals and the weights, then
-     * writes the foods, the meals, the weights and the settings one statement at a time, some of them
-     * in other stores altogether. One that throws may have stopped anywhere in that — after the
-     * deletes included — so it says it may have only partly happened. The file is untouched, and
-     * restoring it again replaces whatever was left.
+     * **All or nothing.** [BackupRepository.restore] throws [NothingRestored] only when the phone is
+     * as it was — the database rolled back and the settings put back — so that, and only that, says
+     * nothing was changed. Anything else it throws (the settings could not be put back, or the alarm
+     * could not be set after everything was stored) says it may have partly happened. The file is
+     * untouched either way, and restoring it again replaces whatever is there.
      */
     fun confirmRestore() {
         val pending = pendingRestore.value ?: return
-        act(SettingsPart.BACKUP, ActionRefused.MAYBE_PARTIAL, onRefused = { busy.value = false }) {
+        act(
+            SettingsPart.BACKUP,
+            how = { failure ->
+                if (failure is NothingRestored) {
+                    ActionRefused.NOTHING_CHANGED
+                } else {
+                    ActionRefused.MAYBE_PARTIAL
+                }
+            },
+            onRefused = { busy.value = false },
+        ) {
             busy.value = true
             pendingRestore.value = null
             val result = backups.restore(pending.backup)
@@ -704,12 +715,20 @@ class SettingsViewModel internal constructor(
         how: ActionRefused,
         onRefused: () -> Unit = {},
         block: suspend CoroutineScope.() -> Unit,
+    ) = act(part, { how }, onRefused, block)
+
+    /** The same, for an action whose sentence depends on what it threw. */
+    private fun act(
+        part: SettingsPart,
+        how: (Throwable) -> ActionRefused,
+        onRefused: () -> Unit = {},
+        block: suspend CoroutineScope.() -> Unit,
     ) {
         failed.value = null
-        guarded(problems, onRefused = {
+        guarded(problems, onRefused = { failure ->
             onRefused()
             problemLines.value = readProblems()
-            failed.value = SettingsRefusal(part, how)
+            failed.value = SettingsRefusal(part, how(failure))
         }, block = block)
     }
 
