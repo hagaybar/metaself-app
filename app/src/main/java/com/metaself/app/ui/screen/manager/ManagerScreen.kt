@@ -57,7 +57,7 @@ fun ManagerScreen(
     meals: MealsUiState,
     onBuildMeal: () -> Unit,
     onEditMeal: (Long) -> Unit,
-    onDismissMealsFailure: () -> Unit = {},
+    onDismissMealsFailure: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {

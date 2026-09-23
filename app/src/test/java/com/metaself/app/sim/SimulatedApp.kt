@@ -383,6 +383,7 @@ private fun ManagerHere(
         meals = mealsState,
         onBuildMeal = { stack.add(Where.BuildingMeal(mealId = 0)) },
         onEditMeal = { mealId -> stack.add(Where.BuildingMeal(mealId = mealId)) },
+        onDismissMealsFailure = mealsViewModel::dismissFailure,
         onBack = goBack,
     )
 }

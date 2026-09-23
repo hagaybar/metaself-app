@@ -252,6 +252,7 @@ class ManagerScreenRenderTest {
             meals = meals,
             onBuildMeal = { builderStarted = true },
             onEditMeal = { openedMealId = it },
+            onDismissMealsFailure = {},
             onBack = {},
         )
     }
