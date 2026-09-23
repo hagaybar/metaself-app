@@ -71,6 +71,23 @@ class ProposalViewModelTest {
         assertThat(proposed.totalKcal).isEqualTo(650)
     }
 
+    @Test
+    fun `items the answer held but could not be used are carried to the screen`() = runTest {
+        val proposal = aProposal().copy(dropped = listOf("Sauce"))
+        val viewModel =
+            ProposalViewModel(
+                FakeEstimator(EstimateResult.Proposed(proposal)),
+                ProblemLog.NONE,
+                FakeFoodRepository(),
+            )
+
+        viewModel.describe("a burger in a bun, with sauce")
+        advanceUntilIdle()
+
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).dropped)
+            .containsExactly("Sauce")
+    }
+
     // --- The typed amount (D53 §1, §6) -----------------------------------------------------------
 
     @Test

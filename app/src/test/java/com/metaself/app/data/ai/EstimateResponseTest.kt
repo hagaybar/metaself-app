@@ -134,6 +134,31 @@ class EstimateResponseTest {
         assertThat(items.map { it.name }).containsExactly("Pie")
     }
 
+    /** A dropped item is named on the proposal, so the row that is not there can be noticed. */
+    @Test
+    fun `the names of dropped items travel with the proposal`() {
+        val result = EstimateResponse.parse(
+            replyWith(
+                items(
+                    item(name = "Burger", kcal = "1200") + "," + item(name = "Rice") + "," +
+                        item(name = "Sauce", fat = "-3"),
+                ),
+            ),
+        )
+
+        val proposal = (result as EstimateResult.Proposed).proposal
+        assertThat(proposal.items.map { it.name }).containsExactly("Rice")
+        assertThat(proposal.dropped).containsExactly("Burger", "Sauce").inOrder()
+    }
+
+    @Test
+    fun `nothing dropped names nothing`() {
+        val proposal = (EstimateResponse.parse(replyWith(BURGER_AND_BUN)) as EstimateResult.Proposed)
+            .proposal
+
+        assertThat(proposal.dropped).isEmpty()
+    }
+
     @Test
     fun `per 100 ml is a worth per 100 of the millilitre`() {
         val juice = proposed(item(name = "Orange juice", unit = "ml", amount = "330")).single()

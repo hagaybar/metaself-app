@@ -112,6 +112,21 @@ class ProposalScreenRenderTest {
         assertThat(texts).doesNotContain("At most 5000 g at a time.")
     }
 
+    /** A row that is not there is said above the rows, or it is never noticed (D53 §2). */
+    @Test
+    fun `items dropped from the answer are named above the rows`() {
+        val one = proposed(aProposedItem()).copy(dropped = listOf("Sauce"))
+        assertThat(draw(one)).contains("1 item in the answer couldn't be used: Sauce")
+
+        val two = proposed(aProposedItem()).copy(dropped = listOf("Sauce", "Pickles"))
+        assertThat(draw(two)).contains("2 items in the answer couldn't be used: Sauce, Pickles")
+    }
+
+    @Test
+    fun `nothing dropped says nothing`() {
+        assertThat(draw(proposed(aProposedItem())).joinToString()).doesNotContain("couldn't be used")
+    }
+
     // --- The worth, typed over (D53 §1, §3, §6) --------------------------------------------------
 
     @Test

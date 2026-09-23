@@ -90,6 +90,7 @@ class ProposalViewModel @Inject constructor(
                     ProposalUiState.Proposed(
                         rows = result.proposal.items.map { ProposalRow.of(it, offered) },
                         note = result.proposal.note,
+                        dropped = result.proposal.dropped,
                     )
                 }
 

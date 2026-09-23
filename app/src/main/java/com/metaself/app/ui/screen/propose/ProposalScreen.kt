@@ -24,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -190,6 +191,21 @@ fun ProposalScreen(
             }
 
             is ProposalUiState.Proposed -> {
+                // An item the answer held and this app could not use is said, not silently
+                // missing: a row that is not there is the omission a list exists to show.
+                if (state.dropped.isNotEmpty()) {
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.propose_dropped,
+                            state.dropped.size,
+                            state.dropped.size,
+                            state.dropped.joinToString(", "),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 // The rows are one list, a related step apart, not a section each.
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
                     state.rows.forEachIndexed { index, row ->

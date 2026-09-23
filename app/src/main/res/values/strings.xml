@@ -188,6 +188,11 @@
     <string name="propose_amount_label">How much</string>
     <string name="propose_per_100">per 100 %1$s</string>
     <string name="propose_per_one">per %1$s</string>
+    <!-- Above the rows: items in the model's answer that were dropped as unusable, by name (D53 §2). -->
+    <plurals name="propose_dropped">
+        <item quantity="one">%1$d item in the answer couldn\'t be used: %2$s</item>
+        <item quantity="other">%1$d items in the answer couldn\'t be used: %2$s</item>
+    </plurals>
     <string name="propose_blocked">Say how much %1$s was to save this.</string>
     <string name="propose_change_worth">Change</string>
     <string name="propose_worth_done">Done</string>

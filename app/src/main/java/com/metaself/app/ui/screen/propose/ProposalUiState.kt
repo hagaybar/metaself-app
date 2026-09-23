@@ -279,6 +279,8 @@ sealed interface ProposalUiState {
     data class Proposed(
         val rows: List<ProposalRow>,
         val note: String?,
+        /** Names of items the answer held that could not be used, said above the rows. */
+        val dropped: List<String> = emptyList(),
     ) : ProposalUiState {
         /** What the rows that can be logged add up to; a row with no usable amount adds nothing. */
         val totalKcal: Int get() = rows.sumOf { it.numbers?.kcal ?: 0 }

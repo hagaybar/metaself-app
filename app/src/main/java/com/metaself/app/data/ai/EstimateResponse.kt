@@ -11,6 +11,7 @@ import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.portion.Portions
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -28,7 +29,8 @@ import kotlinx.serialization.json.jsonPrimitive
  * clamped to 0, which was a number nobody stated — and for a row that worth would make, at the amount
  * stated, past what a whole item typed by hand may be. If dropping leaves nothing at all, the whole reply
  * is unreadable — which is also what a reply containing a single lumped total amounts to, and it is
- * refused for the same reason.
+ * refused for the same reason. What was dropped is named on the proposal ([MealProposal.dropped]),
+ * so the missing row is said rather than left to be noticed.
  */
 object EstimateResponse {
 
@@ -41,7 +43,11 @@ object EstimateResponse {
             .jsonPrimitive.content
 
         val payload = json.parseToJsonElement(content).jsonObject
-        val items = payload["items"]!!.jsonArray.mapNotNull { it.jsonObject.toItem() }
+        val read = payload["items"]!!.jsonArray.map { it.jsonObject to it.jsonObject.toItem() }
+        val items = read.mapNotNull { it.second }
+        val dropped = read.filter { it.second == null }.mapNotNull { (item, _) ->
+            item["name"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        }
 
         // D34: every item comes with an amount, or the reply is one that did not give them.
         // Logged anyway, an item naming a unit and no amount could not join a meal (issue #23).
@@ -56,6 +62,7 @@ object EstimateResponse {
                 MealProposal(
                     items = items,
                     note = payload["note"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },
+                    dropped = dropped,
                 ),
             )
         }

@@ -56,6 +56,13 @@ data class ProposedItem(
 data class MealProposal(
     val items: List<ProposedItem>,
     val note: String?,
+    /**
+     * The names of items the answer held but that could not be used — a figure missing or past its
+     * ceiling, a basis that is none (D53 §2). Said on the screen, because a row that is simply not
+     * there is the omission this list-not-a-total exists to make visible. An item dropped with no
+     * name has nothing to be called and is not in it.
+     */
+    val dropped: List<String> = emptyList(),
 ) {
     init {
         require(items.isNotEmpty()) { "a proposal cannot be empty" }
