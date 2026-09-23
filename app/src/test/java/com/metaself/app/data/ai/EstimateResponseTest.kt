@@ -102,6 +102,38 @@ class EstimateResponseTest {
         assertThat(items.map { it.name }).containsExactly("Rice")
     }
 
+    /**
+     * The reverse: per one gram or one millilitre is not a basis either (D53 §2 — figures are per 100
+     * for grams and millilitres). Believed, 250 kcal "per 1 g" is within the per-one ceiling and makes
+     * 200 g a 50,000-kcal row, whose worth would then be taught to a food.
+     */
+    @Test
+    fun `a per-one worth of grams or millilitres drops the item`() {
+        val items = proposed(
+            item(name = "Burger", figuresPer = "1") + "," +
+                item(name = "Juice", unit = "ml", amount = "330", figuresPer = "1") + "," +
+                item(name = "Rice"),
+        )
+
+        assertThat(items.map { it.name }).containsExactly("Rice")
+    }
+
+    /**
+     * No row arrives worth more than a whole item typed by hand may be (D42's 10,000 kcal and
+     * 1000 g of a macro): 3000 kcal a piece is a believable worth, but four of them is not a
+     * believable row. Three are.
+     */
+    @Test
+    fun `an item whose row would be past a whole item's ceiling is dropped`() {
+        val items = proposed(
+            item(name = "Tray", unit = "tray", figuresPer = "1", amount = "4", kcal = "3000") + "," +
+                item(name = "Tub", unit = "tub", figuresPer = "1", amount = "3", protein = "400") + "," +
+                item(name = "Pie", unit = "pie", figuresPer = "1", amount = "3", kcal = "3000"),
+        )
+
+        assertThat(items.map { it.name }).containsExactly("Pie")
+    }
+
     @Test
     fun `per 100 ml is a worth per 100 of the millilitre`() {
         val juice = proposed(item(name = "Orange juice", unit = "ml", amount = "330")).single()
