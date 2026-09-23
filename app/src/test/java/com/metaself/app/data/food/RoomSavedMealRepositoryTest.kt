@@ -106,6 +106,50 @@ class RoomSavedMealRepositoryTest {
         assertThat(meals.create("vegetable  salad")).isInstanceOf(MealResult.NameTaken::class.java)
     }
 
+    // --- Made in one change --------------------------------------------------------------------------
+
+    @Test
+    fun `a meal made with its parts in one change keeps them`() = runTest {
+        val cucumber = cucumber()
+
+        val made = meals.createThen("Vegetable salad") { id ->
+            meals.put(id, cucumber.id, 100.0, CountedAs.GRAMS)
+        }
+
+        val meal = meals.byId((made as MealResult.Built).mealId)!!
+        assertThat(meal.components.map { it.food.id }).containsExactly(cucumber.id)
+    }
+
+    /** The whole point of the one change: a failure part-way leaves no meal and no parts behind. */
+    @Test
+    fun `a failure after the meal is made takes the meal back out`() = runTest {
+        val cucumber = cucumber()
+
+        val thrown = runCatching {
+            meals.createThen("Vegetable salad") { id ->
+                meals.put(id, cucumber.id, 100.0, CountedAs.GRAMS)
+                throw IllegalStateException("disk full")
+            }
+        }.exceptionOrNull()
+
+        assertThat(thrown).hasMessageThat().isEqualTo("disk full")
+        assertThat(meals.observeOffered().first()).isEmpty()
+        // The name is free again, which it would not be if the meal had stayed.
+        assertThat(meals.create("Vegetable salad")).isInstanceOf(MealResult.Built::class.java)
+    }
+
+    @Test
+    fun `a name already taken runs nothing and makes nothing`() = runTest {
+        aSalad()
+        var ran = false
+
+        val made = meals.createThen("vegetable salad") { ran = true }
+
+        assertThat(made).isInstanceOf(MealResult.NameTaken::class.java)
+        assertThat(ran).isFalse()
+        assertThat(meals.observeOffered().first()).hasSize(1)
+    }
+
     @Test
     fun `foods go in with amounts and come back in the order he arranged them`() = runTest {
         val id = aSalad()

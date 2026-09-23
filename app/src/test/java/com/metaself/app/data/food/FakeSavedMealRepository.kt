@@ -40,6 +40,20 @@ class FakeSavedMealRepository(initial: List<SavedMeal> = emptyList()) : SavedMea
         return MealResult.Built(made.id)
     }
 
+    /**
+     * Not one transaction — this fake has none. It runs the same steps in the same order, so a
+     * caller's own behaviour can be tested here; that a failure in [then] leaves no meal behind is
+     * the real repository's promise, and `RoomSavedMealRepositoryTest` checks it in CI.
+     */
+    override suspend fun createThen(
+        name: String,
+        then: suspend (mealId: Long) -> Unit,
+    ): MealResult {
+        val made = create(name)
+        if (made is MealResult.Built) then(made.mealId)
+        return made
+    }
+
     override suspend fun rename(mealId: Long, name: String): MealResult {
         val nameKey = FoodKeys.nameKey(name)
         meals.value.firstOrNull { it.id != mealId && FoodKeys.nameKey(it.name) == nameKey }?.let {

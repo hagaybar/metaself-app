@@ -36,6 +36,16 @@ interface SavedMealRepository {
     /** Start one. It has no parts yet, which is a meal he has not finished rather than an error. */
     suspend fun create(name: String): MealResult
 
+    /**
+     * Start one and, in the same transaction, do [then] with its id — ONE change, not several.
+     *
+     * For making a meal out of rows already logged: the meal, its parts and the rows repointed at it
+     * are several writes, and a failure between them used to leave a meal with some of its parts and
+     * none of its rows. Anything [then] throws undoes the meal as well. A name already taken is
+     * answered before anything is written, so [then] is not run and nothing is left to undo.
+     */
+    suspend fun createThen(name: String, then: suspend (mealId: Long) -> Unit): MealResult
+
     suspend fun rename(mealId: Long, name: String): MealResult
 
     /**
@@ -83,6 +93,21 @@ class RoomSavedMealRepository @Inject constructor(
             ),
         )
         MealResult.Built(id)
+    }
+
+    /**
+     * Relies on [withTransaction] being reentrant, as `RoomFoodRepository.saveForm` does: [create]'s
+     * transaction and every write [then] makes — through this repository or another over the same
+     * database — join this one. A refusal is RETURNED only before anything is written; a failure
+     * after that is thrown, which is what rolls the whole of it back.
+     */
+    override suspend fun createThen(
+        name: String,
+        then: suspend (mealId: Long) -> Unit,
+    ): MealResult = database.withTransaction {
+        val made = create(name)
+        if (made is MealResult.Built) then(made.mealId)
+        made
     }
 
     override suspend fun rename(mealId: Long, name: String): MealResult =
