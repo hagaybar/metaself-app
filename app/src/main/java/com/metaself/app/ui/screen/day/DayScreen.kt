@@ -25,7 +25,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -1300,8 +1305,8 @@ private fun LoggedMeal(
  *
  * **What a plain tap means is what Edit means: it opens the row to be corrected**
  * (public issue #12). The row lit up under a tap and then did nothing, which reads as a broken
- * screen; correcting is what the record is for (D50), so that is the tap's answer. Edit stays, for
- * whoever looks for a word, not a row.
+ * screen; correcting is what the record is for (D50), so that is the tap's answer. The pencil stays,
+ * for whoever looks for a control, not a row.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -1358,23 +1363,24 @@ private fun LoggedItem(
                 )
             }
 
-            TextButton(
-                onClick = { onEdit(item) },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.day_edit),
-                    style = MaterialTheme.typography.labelMedium,
+            // Two icons, not two words (#14). The words cost the row more width than its figures
+            // got. Each says aloud which row it acts on — "Delete Yoghurt", not "Delete" — so that
+            // two rows' bins are two different controls to anything reading the screen (public
+            // issue #3). Both on the caption step: neither is an error, and red is kept for the two
+            // things that are (D48). An IconButton is a 48 dp target whatever its icon's size.
+            val name = DayTotalsWording.itemName(item)
+            IconButton(onClick = { onEdit(item) }) {
+                Icon(
+                    imageVector = Icons.Outlined.Edit,
+                    contentDescription = stringResource(R.string.day_edit_item, name),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-
-            TextButton(
-                onClick = { onDelete(item) },
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.today_delete),
-                    style = MaterialTheme.typography.labelMedium,
+            IconButton(onClick = { onDelete(item) }) {
+                Icon(
+                    imageVector = Icons.Outlined.Delete,
+                    contentDescription = stringResource(R.string.day_delete_item, name),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }

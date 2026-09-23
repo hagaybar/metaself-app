@@ -108,6 +108,24 @@ class ComposeRender {
     }
 
     /**
+     * Presses the control whose spoken name is exactly [description].
+     *
+     * For a control that has no words on it, only a name for a screen reader — an icon button. Kept
+     * apart from [click] rather than folded into it: [click] matches a prefix of VISIBLE text, and
+     * letting it also match descriptions would let "Delete" silently find a bin icon named "Delete
+     * Hummus" instead of the button a test meant. Exact, for the same reason.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun clickDescribed(description: String) {
+        val node = lastNodes.firstOrNull { node ->
+            description in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+        } ?: error("no node whose spoken name is \"$description\"")
+        node.config.getOrNull(SemanticsActions.OnClick)?.action?.invoke()
+            ?: error("the node named \"$description\" has nothing to click")
+    }
+
+    /**
      * True when the node matching [firstPrefix] is drawn before the one matching [secondPrefix].
      *
      * Order, unlike [rowPitchDp]'s distance, is signed — which is the only thing that can say a
