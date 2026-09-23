@@ -973,6 +973,28 @@ class FoodsViewModelTest {
         assertThat(state.foods.map { it.name }).containsExactly("Rice")
     }
 
+    /**
+     * The route's food is acted on once. Recreated after the system ended the process, with the same
+     * saved state, the manager must not reopen an editor he closed and search down to it again.
+     */
+    @Test
+    fun `recreated after the process ended, the editor opened for one food is not opened again`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice")))
+            val saved = SavedStateHandle(mapOf("food" to "2"))
+            val first = FoodsViewModel(foods, Now { 1_000 }, saved)
+            backgroundScope.launch { first.state.collect { } }
+            advanceUntilIdle()
+            assertThat(first.state.value.editing?.foodId).isEqualTo(2L)
+
+            val recreated = FoodsViewModel(foods, Now { 1_000 }, saved)
+            backgroundScope.launch { recreated.state.collect { } }
+            advanceUntilIdle()
+
+            assertThat(recreated.state.value.editing).isNull()
+            assertThat(recreated.state.value.query).isEmpty()
+        }
+
     /** A food that has gone by the time the manager opens leaves the manager as it always opens. */
     @Test
     fun `opened for a food that is not there, nothing is open`() = runTest(dispatcher) {

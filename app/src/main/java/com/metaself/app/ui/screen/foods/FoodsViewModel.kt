@@ -88,7 +88,13 @@ class FoodsViewModel @Inject constructor(
         // opened, and the list searched down to it, so the editor is on screen rather than below
         // however many foods come before it. Read before the first frame for the reason the meal
         // builder reads its chosen foods then. A food that has gone meanwhile opens nothing.
-        savedState.get<String>("food")?.toLongOrNull()?.let { foodId ->
+        //
+        // Once only: the route's arguments outlive the process, so without the mark a manager
+        // recreated after the system ended the app would reopen an editor he had closed.
+        val openFor = savedState.get<String>("food")?.toLongOrNull()
+            ?.takeUnless { savedState.get<Boolean>(FOOD_OPENED) == true }
+        savedState[FOOD_OPENED] = true
+        openFor?.let { foodId ->
             viewModelScope.launch {
                 val food = foods.byId(foodId) ?: return@launch
                 _looking.value = _looking.value.copy(query = food.name)
@@ -430,5 +436,8 @@ class FoodsViewModel @Inject constructor(
 
     private companion object {
         const val STOP_TIMEOUT_MS = 5_000L
+
+        /** Saved once the route's food has been acted on, so a recreation does not act on it again. */
+        const val FOOD_OPENED = "foodOpened"
     }
 }
