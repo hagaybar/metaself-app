@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.repeat
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -19,6 +20,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -35,6 +37,8 @@ import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.food.HowItIsCounted
+import com.metaself.app.ui.food.named
+import com.metaself.app.ui.food.namesTogether
 import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
@@ -87,6 +91,16 @@ fun RepeatScreen(
     onRemoveComponent: (Long) -> Unit,
     onCancelAdjusting: () -> Unit,
     onLogAdjusted: () -> Unit,
+    /** The adjuster's own search for something to put in: open it, type in it, leave it. */
+    onBeginAddingToMeal: () -> Unit,
+    onSearchToAdd: (String) -> Unit,
+    onStopAddingToMeal: () -> Unit,
+    /** Pick a food it found, then say how much, then put it in or go back to the search. */
+    onPickToAdd: (foodId: Long) -> Unit,
+    onCountAddedAs: (CountedAs) -> Unit,
+    onSetAddedAmount: (String) -> Unit,
+    onDropPicked: () -> Unit,
+    onPutItIn: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -299,6 +313,17 @@ fun RepeatScreen(
                         onRemove = onRemoveComponent,
                         onCancel = onCancelAdjusting,
                         onLog = onLogAdjusted,
+                        adding = AddingToIt(
+                            onBegin = onBeginAddingToMeal,
+                            onSearch = onSearchToAdd,
+                            onStop = onStopAddingToMeal,
+                            onPick = onPickToAdd,
+                            onCountAs = onCountAddedAs,
+                            onSetAmount = onSetAddedAmount,
+                            onGivePortion = onGivePortion,
+                            onDrop = onDropPicked,
+                            onPutItIn = onPutItIn,
+                        ),
                     )
                 }
                 HorizontalDivider()
@@ -388,6 +413,11 @@ private fun BuiltMeal(
  * salad still has oil in it and one cucumber's worth. The app will never offer to update the meal
  * because he has dropped the oil four times running: if the meal is to change, he changes it, on
  * the builder.
+ *
+ * **It can add as well as take away** (issue #10): "Put something in" opens a search of its own
+ * under the rows. While that step is open, Log it and Leave it alone step aside — the step has its
+ * own way out, and a food with an amount typed but not yet put in must not be left behind by a
+ * press of the larger button below it.
  */
 @Composable
 private fun Adjuster(
@@ -396,6 +426,7 @@ private fun Adjuster(
     onRemove: (Long) -> Unit,
     onCancel: () -> Unit,
     onLog: () -> Unit,
+    adding: AddingToIt,
 ) {
     Column(
         modifier = Modifier
@@ -439,6 +470,14 @@ private fun Adjuster(
             }
         }
 
+        if (adjusting.finding == null) {
+            TextButton(onClick = adding.onBegin) {
+                Text(stringResource(R.string.builder_add_something))
+            }
+        } else {
+            PutSomethingIn(adjusting = adjusting, adding = adding)
+        }
+
         Text(
             text = stringResource(
                 R.string.repeat_kcal,
@@ -447,11 +486,96 @@ private fun Adjuster(
             style = MaterialTheme.typography.titleMedium,
         )
 
-        Button(onClick = onLog, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.repeat_adjust_log))
+        if (adjusting.finding == null) {
+            Button(onClick = onLog, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.repeat_adjust_log))
+            }
+            TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.repeat_adjust_cancel))
+            }
         }
-        TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.repeat_adjust_cancel))
+    }
+}
+
+/** What the adjuster's add step can ask for — one value, so the adjuster's own list stays readable. */
+private class AddingToIt(
+    val onBegin: () -> Unit,
+    val onSearch: (String) -> Unit,
+    val onStop: () -> Unit,
+    val onPick: (Long) -> Unit,
+    val onCountAs: (CountedAs) -> Unit,
+    val onSetAmount: (String) -> Unit,
+    val onGivePortion: (Long) -> Unit,
+    val onDrop: () -> Unit,
+    val onPutItIn: () -> Unit,
+)
+
+/**
+ * Something that is not in the meal, for today only: find it, then say how much.
+ *
+ * The search is the adjuster's own. The screen's closes whatever is open, which here would throw
+ * away the adjustment being built. What it finds is drawn as the foods tab draws his foods, and a
+ * food the meal already holds is named rather than offered (D41), in the builder's words — a meal
+ * holds a food once, and a tap that did nothing would say nothing.
+ *
+ * Picking one asks how much with the foods tab's own question, empty until he types (D4), and
+ * "Put it in" adds it to today's rows. Nothing is written anywhere until the meal is logged.
+ */
+@Composable
+private fun PutSomethingIn(adjusting: Adjusting, adding: AddingToIt) {
+    val picked = adjusting.adding
+    if (picked != null) {
+        HowMuch(
+            choosing = picked,
+            onCountAs = adding.onCountAs,
+            onSetAmount = adding.onSetAmount,
+            onGivePortion = { adding.onGivePortion(picked.food.id) },
+            onCancel = adding.onDrop,
+            onLog = adding.onPutItIn,
+            cancelLabel = R.string.builder_drop_pending,
+            confirmLabel = R.string.builder_put_it_in,
+        )
+        return
+    }
+
+    val finding = adjusting.finding.orEmpty()
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        Text(
+            text = stringResource(R.string.builder_add_something),
+            style = MaterialTheme.typography.titleSmall,
+        )
+        OutlinedTextField(
+            value = finding,
+            onValueChange = adding.onSearch,
+            label = { Text(stringResource(R.string.foods_search)) },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        // Above the list, not below it: the list may be every food he has.
+        TextButton(onClick = adding.onStop) {
+            Text(stringResource(R.string.repeat_adjust_add_stop))
+        }
+        if (adjusting.alreadyIn.isNotEmpty()) {
+            Text(
+                text = pluralStringResource(
+                    R.plurals.builder_already_in,
+                    adjusting.alreadyIn.size,
+                    namesTogether(adjusting.alreadyIn.map { named(it) }),
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (finding.isNotBlank() && adjusting.offered.isEmpty() && adjusting.alreadyIn.isEmpty()) {
+            Text(
+                text = stringResource(R.string.foods_no_match, finding.trim()),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+            adjusting.offered.forEach { food ->
+                OwnFood(food = food, onPick = { adding.onPick(food.id) })
+                HorizontalDivider()
+            }
         }
     }
 }
@@ -537,6 +661,9 @@ private fun OwnFood(food: Food, onPick: () -> Unit) {
  *
  * The calorie count updates as he types, so he sees what is about to land on the record before it
  * lands rather than afterwards.
+ *
+ * Asked in two places: logging one of his foods, and putting one into a meal for today only, where
+ * its buttons say "Not this one" and "Put it in" instead.
  */
 @Composable
 private fun HowMuch(
@@ -546,6 +673,8 @@ private fun HowMuch(
     onGivePortion: () -> Unit,
     onCancel: () -> Unit,
     onLog: () -> Unit,
+    @StringRes cancelLabel: Int = R.string.repeat_adjust_cancel,
+    @StringRes confirmLabel: Int = R.string.repeat_adjust_log,
 ) {
     Column(
         modifier = Modifier
@@ -595,10 +724,10 @@ private fun HowMuch(
             horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
         ) {
             TextButton(onClick = onCancel) {
-                Text(stringResource(R.string.repeat_adjust_cancel))
+                Text(stringResource(cancelLabel))
             }
             Button(onClick = onLog, enabled = choosing.canLog) {
-                Text(stringResource(R.string.repeat_adjust_log))
+                Text(stringResource(confirmLabel))
             }
         }
     }

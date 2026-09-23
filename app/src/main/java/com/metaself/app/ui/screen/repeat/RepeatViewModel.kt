@@ -60,6 +60,9 @@ class RepeatViewModel @Inject constructor(
     val state: StateFlow<RepeatUiState> = combine(
         foods.observeOffered().onEach { offered ->
             _choosing.update { open -> open?.let { refreshed(it, offered) } }
+            _adjusting.update { open ->
+                open?.adding?.let { open.copy(adding = refreshed(it, offered)) } ?: open
+            }
         },
         savedMeals.observeOffered(),
         _adjusting,
@@ -72,7 +75,7 @@ class RepeatViewModel @Inject constructor(
             query = looking.query,
             foods = foods,
             meals = ownMeals.filter { it.name.contains(looking.query.trim(), ignoreCase = true) },
-            adjusting = adjusting,
+            adjusting = adjusting?.let { offering(it, ownFoods) },
             choosing = choosing?.let { current(it, foods) },
         )
     }.stateIn(
@@ -108,6 +111,19 @@ class RepeatViewModel @Inject constructor(
      */
     private fun current(choosing: Choosing, foods: List<Food>): Choosing =
         choosing.copy(index = foods.indexOfFirst { it.id == choosing.food.id })
+
+    /**
+     * The adjustment with what its own search finds filled in: his foods matching it, less those
+     * it already holds, which are named instead (D41) — the builder's rule, for the same reason.
+     */
+    private fun offering(adjusting: Adjusting, ownFoods: List<Food>): Adjusting {
+        val finding = adjusting.finding ?: return adjusting
+        val held = adjusting.rows.map { it.food }
+        return adjusting.copy(
+            offered = FoodSearch.matching(ownFoods, finding).filterNot { food -> held.any { it.id == food.id } },
+            alreadyIn = if (finding.isBlank()) emptyList() else FoodSearch.matching(held, finding),
+        )
+    }
 
     fun showTab(tab: RepeatTab) {
         _looking.value = _looking.value.copy(tab = tab)
@@ -218,27 +234,93 @@ class RepeatViewModel @Inject constructor(
     }
 
     /**
-     * Add something that is not in the meal at all, this once.
+     * Start looking for something to put in it, this once.
+     *
+     * The panel's own search, not the screen's: the screen's closes whatever is open, and typing
+     * the name of the bread would throw away the salad it was to go with (issue #10).
+     */
+    fun beginAddingToMeal() {
+        _adjusting.update { it?.copy(finding = "", adding = null) }
+    }
+
+    fun searchToAdd(query: String) {
+        _adjusting.update { it?.copy(finding = query) }
+    }
+
+    /** Leave the step without putting anything in. The adjustment is as it was. */
+    fun stopAddingToMeal() {
+        _adjusting.update { it?.copy(finding = null, adding = null) }
+    }
+
+    /**
+     * Pick one of the foods the panel's search offers, and start deciding how much of it — opened
+     * on the same way of counting the foods tab would open it on.
+     */
+    fun pickToAdd(foodId: Long) {
+        val food = state.value.adjusting?.offered?.firstOrNull { it.id == foodId } ?: return
+        val countedAs = if (food.facts.canBeWeighed) CountedAs.GRAMS else CountedAs.UNITS
+        _adjusting.update { it?.copy(adding = Choosing(index = -1, food = food, countedAs = countedAs)) }
+    }
+
+    fun countAddedAs(countedAs: CountedAs) {
+        // The amount is kept, as it is on the foods tab: 2 typed as grams almost always means two.
+        _adjusting.update { open -> open?.copy(adding = open.adding?.copy(countedAs = countedAs)) }
+    }
+
+    fun setAddedAmount(amount: String) {
+        _adjusting.update { open -> open?.copy(adding = open.adding?.copy(amount = amount)) }
+    }
+
+    /** Not this one: back to the search, with the words still typed. */
+    fun dropPicked() {
+        _adjusting.update { it?.copy(adding = null) }
+    }
+
+    /**
+     * Put the food picked into today's meal, in the amount typed, and close the step.
+     *
+     * Nothing goes in until the amount makes sense and the food can be costed that way — the same
+     * terms on which the foods tab's Log it is enabled. Nothing is written anywhere either: the row
+     * joins the adjustment, and reaches the record only when he logs it.
+     */
+    fun putItIn() {
+        val adding = _adjusting.value?.adding ?: return
+        if (adding.preview == null) return
+        val amount = adding.amountOrNull ?: return
+        if (addToAdjustment(adding.food, amount, adding.countedAs)) stopAddingToMeal()
+    }
+
+    /**
+     * Add something that is not in the meal at all, this once. True when it went in.
      *
      * The adjustment may ADD as well as remove and rescale — a piece of bread with the salad is a
      * thing that happens, and an adjuster that could only take away would send him back to describing
      * it from scratch.
+     *
+     * A food it already holds is refused: a meal holds a food once (D41). The panel's search never
+     * offers one, and names it instead, so this is a backstop rather than the way he is told.
      */
-    fun addToAdjustment(food: Food, amount: Double, countedAs: CountedAs) {
-        val current = _adjusting.value ?: return
-        if (amount <= 0.0) return
-        if (current.rows.any { it.food.id == food.id }) return
+    fun addToAdjustment(food: Food, amount: Double, countedAs: CountedAs): Boolean {
+        val current = _adjusting.value ?: return false
+        if (amount <= 0.0) return false
+        if (current.rows.any { it.food.id == food.id }) return false
         _adjusting.value = current.copy(
             rows = current.rows + MealComponent(
-                // A negative id, so it cannot collide with a real component of the meal and so that
-                // nothing downstream can mistake it for part of the definition.
-                id = -(current.rows.size + 1L),
+                // Negative, so it cannot collide with a real component of the meal and so that
+                // nothing downstream can mistake it for part of the definition — and one below the
+                // lowest in use, never derived from the count: after a removal the count hands out
+                // an id a row still holds, and remove or rescale then acts on both (issue #10).
+                id = minOf(0L, current.rows.minOfOrNull { it.id } ?: 0L) - 1,
                 food = food,
                 amount = amount,
                 countedAs = countedAs,
-                position = current.rows.size,
+                // Last on the record, where the panel draws it. The record is ordered by position,
+                // and a count can fall below a position still in use after a removal, or below the
+                // meal's own when the builder left gaps in them (issue #10).
+                position = (current.rows.maxOfOrNull { it.position } ?: -1) + 1,
             ),
         )
+        return true
     }
 
     /**
