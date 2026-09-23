@@ -110,7 +110,11 @@ object GoalWording {
         "You have reached ${kg(targetKg)} kg. " +
             "Your goal is now to hold it, and your daily target is $newDailyKcal kcal."
 
-    private fun kg(value: Double): String =
+    /** "Goal 72 kg": the label on the weight chart's dashed line (public issue #15). */
+    fun goalLine(targetKg: Double): String = "Goal ${kg(targetKg)} kg"
+
+    /** A kilogram figure as every goal sentence prints it: whole when whole, else one decimal. */
+    internal fun kg(value: Double): String =
         if (value % 1.0 == 0.0) {
             value.roundToInt().toString()
         } else {

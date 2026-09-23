@@ -298,8 +298,8 @@ class WeightChartTest {
 
         // This is the point of dropping it: the readings get the height back. A goal that merely
         // stopped being DRAWN while still stretching the axis would fix nothing.
-        assertThat(withFarGoal.topLabel).isEqualTo(withNoGoal.topLabel)
-        assertThat(withFarGoal.bottomLabel).isEqualTo(withNoGoal.bottomLabel)
+        assertThat(withFarGoal.heaviestKg).isEqualTo(withNoGoal.heaviestKg)
+        assertThat(withFarGoal.lightestKg).isEqualTo(withNoGoal.lightestKg)
     }
 
     @Test
@@ -363,8 +363,7 @@ class WeightChartTest {
         // The year covers 6 kg; its last month covers about 1, so the month's axis closes in — and
         // stops at the two-kilogram floor rather than going on closing.
         assertThat(month.axisSpanKg()).isLessThan(all.axisSpanKg())
-        // The labels are rounded to a tenth, so the floor is checked with a tenth of slack.
-        assertThat(month.axisSpanKg()).isAtLeast(ChartGeometry.MIN_SPAN_KG - 0.1)
+        assertThat(month.axisSpanKg()).isWithin(1e-9).of(ChartGeometry.MIN_SPAN_KG)
     }
 
     // ---- The eight that were here before, unchanged except for the two new arguments ----
@@ -419,9 +418,9 @@ class WeightChartTest {
     }
 
     @Test
-    fun `the axis labels say what the chart covers`() {
+    fun `the axis covers what the readings need`() {
         // A fortnight spanning 80.0 down to 78.7 is 1.3 kg, which is less than the minimum span, so
-        // the axis widens to two kilograms centred on the data: 80.4 down to 78.4.
+        // the axis widens to two kilograms centred on the data: 80.35 down to 78.35.
         val geometry = ChartGeometry.of(
             trend = WeightTrend.of(aFortnight(startKg = 80.0, dailyChangeKg = -0.1)),
             widthPx = 1000f,
@@ -430,8 +429,8 @@ class WeightChartTest {
             todayEpochDay = TEST_EPOCH_DAY,
         )!!
 
-        assertThat(geometry.topLabel).isEqualTo("80.4 kg")
-        assertThat(geometry.bottomLabel).isEqualTo("78.4 kg")
+        assertThat(geometry.heaviestKg).isWithin(1e-9).of(80.35)
+        assertThat(geometry.lightestKg).isWithin(1e-9).of(78.35)
     }
 
     @Test
@@ -511,7 +510,6 @@ class WeightChartTest {
         aReading(epochDay = TEST_EPOCH_DAY, kg = 80.0),
     )
 
-    /** What the two kilogram labels say the axis covers, read back out of the labels. */
-    private fun ChartGeometry.axisSpanKg(): Double =
-        topLabel.removeSuffix(" kg").toDouble() - bottomLabel.removeSuffix(" kg").toDouble()
+    /** How many kilograms the vertical axis covers. */
+    private fun ChartGeometry.axisSpanKg(): Double = heaviestKg - lightestKg
 }

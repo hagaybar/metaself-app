@@ -14,6 +14,13 @@ import org.junit.jupiter.api.Test
  */
 class GoalWordingTest {
 
+    /** The dashed line on the weight chart is labelled with the goal, in the same figures (#15). */
+    @Test
+    fun `the goal line is labelled as the goal, in whole kilos when it is whole`() {
+        assertThat(GoalWording.goalLine(72.0)).isEqualTo("Goal 72 kg")
+        assertThat(GoalWording.goalLine(72.5)).isEqualTo("Goal 72.5 kg")
+    }
+
     @Test
     fun `it says how far, and to what`() {
         assertThat(GoalWording.toGo(progress(80.0)))
