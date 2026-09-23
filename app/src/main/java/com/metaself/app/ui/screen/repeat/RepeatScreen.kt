@@ -155,8 +155,17 @@ fun RepeatScreen(
         )
 
         if (state.searchedAndFoundNothing) {
+            // "Nothing you have logged" is only true when neither list matches. With the match one
+            // tab away, the sentence names the list in front, so it does not contradict the offer.
             Text(
-                text = stringResource(R.string.repeat_no_match, state.query.trim()),
+                text = stringResource(
+                    when (state.matchesOnOtherTab) {
+                        null -> R.string.repeat_no_match
+                        RepeatTab.FOODS -> R.string.repeat_no_match_in_meals
+                        else -> R.string.repeat_no_match_in_foods
+                    },
+                    state.query.trim(),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
             )
             // The sentence above is about the list in front and stays per-tab. The offer is not:

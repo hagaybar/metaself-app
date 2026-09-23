@@ -192,6 +192,8 @@
     <string name="repeat_tab_meals">My meals</string>
     <string name="repeat_search">Search what you have eaten</string>
     <string name="repeat_no_match">Nothing you have logged matches “%1$s”.</string>
+    <string name="repeat_no_match_in_foods">None of your foods matches “%1$s”.</string>
+    <string name="repeat_no_match_in_meals">None of your meals matches “%1$s”.</string>
     <string name="repeat_found_in_foods">Found in your foods — show them</string>
     <string name="repeat_found_in_meals">Found in your meals — show them</string>
     <string name="repeat_adjust">Adjust</string>

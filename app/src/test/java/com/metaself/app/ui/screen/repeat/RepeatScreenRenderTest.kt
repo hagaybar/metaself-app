@@ -130,7 +130,8 @@ class RepeatScreenRenderTest {
             ),
         )
 
-        assertThat(texts.any { it.contains("Nothing you have logged matches") }).isTrue()
+        assertThat(texts).contains("None of your meals matches “hummus”.")
+        assertThat(texts.any { it.contains("Nothing you have logged matches") }).isFalse()
         assertThat(texts.any { it.startsWith("Describe") }).isFalse()
     }
 
