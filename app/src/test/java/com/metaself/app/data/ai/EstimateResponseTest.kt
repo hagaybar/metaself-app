@@ -225,6 +225,25 @@ class EstimateResponseTest {
         assertThat(result).isEqualTo(EstimateResult.AmountMissing(listOf("Stew")))
     }
 
+    /**
+     * "NaN", "Infinity" or 1e999 is not an amount: it goes as a missing one does (D34), rather than
+     * reaching a row whose box cannot be written — building one throws.
+     */
+    @Test
+    fun `an amount that is not a finite number is a missing amount`() {
+        val result = EstimateResponse.parse(
+            replyWith(
+                items(
+                    item(name = "Rice") + "," + item(name = "Stew", amount = "\"NaN\"") + "," +
+                        item(name = "Soup", amount = "\"Infinity\"") + "," +
+                        item(name = "Bread", amount = "1e999"),
+                ),
+            ),
+        )
+
+        assertThat(result).isEqualTo(EstimateResult.AmountMissing(listOf("Stew", "Soup", "Bread")))
+    }
+
     @Test
     fun `confidence is carried through`() {
         val items = proposed(BURGER_AND_BUN)

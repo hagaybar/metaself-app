@@ -81,7 +81,10 @@ object EstimateResponse {
     private fun JsonObject.toItem(): ProposedItem? {
         val name = this["name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() } ?: return null
         val detail = this["detail"]?.jsonPrimitive?.content ?: return null
-        val amount = this["amount"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: 0.0
+        // Only a finite number is an amount. "NaN", "Infinity" or 1e999 goes as none does — D34's
+        // question — rather than into a row whose amount box cannot be written (it would throw).
+        val amount = this["amount"]?.jsonPrimitive?.content?.toDoubleOrNull()
+            ?.takeIf { it.isFinite() } ?: 0.0
         val unit = this["unit"]?.jsonPrimitive?.content?.trim().orEmpty()
 
         val per = when (this["figures_per"]?.jsonPrimitive?.content) {
