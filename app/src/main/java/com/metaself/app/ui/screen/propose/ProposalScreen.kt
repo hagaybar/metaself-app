@@ -121,39 +121,45 @@ fun ProposalScreen(
     ) {
         when (state) {
             is ProposalUiState.Describing -> {
-                OutlinedTextField(
-                    value = typed,
-                    onValueChange = { typed = it },
-                    label = { Text(stringResource(R.string.propose_field)) },
-                    supportingText = { Text(stringResource(R.string.propose_hint)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                val failure = state.failure ?: state.refused?.let { stringResource(it.sentence) }
-                failure?.let { sentence ->
-                    Text(
-                        text = sentence,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
+                // D48's grouping: the description, anything said about it, and the way to fix that
+                // are one block; the two ways on are another.
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    OutlinedTextField(
+                        value = typed,
+                        onValueChange = { typed = it },
+                        label = { Text(stringResource(R.string.propose_field)) },
+                        supportingText = { Text(stringResource(R.string.propose_hint)) },
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                }
 
-                // Said AND offered: the sentence above names settings, and this is the way there,
-                // straight to the key (public issue #11).
-                if (state.needsKey) {
-                    OutlinedButton(onClick = onAddKey, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.propose_add_key))
+                    val failure = state.failure ?: state.refused?.let { stringResource(it.sentence) }
+                    failure?.let { sentence ->
+                        Text(
+                            text = sentence,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
+                    // Said AND offered: the sentence above names settings, and this is the way there,
+                    // straight to the key (public issue #11).
+                    if (state.needsKey) {
+                        OutlinedButton(onClick = onAddKey, modifier = Modifier.fillMaxWidth()) {
+                            Text(stringResource(R.string.propose_add_key))
+                        }
                     }
                 }
 
-                Button(
-                    onClick = { onDescribe(typed) },
-                    enabled = typed.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) { Text(stringResource(R.string.propose_ask)) }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    Button(
+                        onClick = { onDescribe(typed) },
+                        enabled = typed.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(stringResource(R.string.propose_ask)) }
 
-                TextButton(onClick = onTypeItMyself, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.propose_manual))
+                    TextButton(onClick = onTypeItMyself, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.propose_manual))
+                    }
                 }
             }
 
@@ -172,84 +178,93 @@ fun ProposalScreen(
             }
 
             is ProposalUiState.Proposed -> {
-                state.rows.forEachIndexed { index, row ->
-                    ProposedRow(
-                        row = row,
-                        onScale = { scale -> onScale(index, scale) },
-                        onCount = { howMany -> onCount(index, howMany) },
-                        onRemove = { onRemove(index) },
-                    )
+                // The rows are one list, a related step apart, not a section each.
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    state.rows.forEachIndexed { index, row ->
+                        ProposedRow(
+                            row = row,
+                            onScale = { scale -> onScale(index, scale) },
+                            onCount = { howMany -> onCount(index, howMany) },
+                            onRemove = { onRemove(index) },
+                        )
+                    }
                 }
 
-                Text(
-                    text = stringResource(
-                        R.string.propose_total,
-                        String.format(Locale.US, "%,d", state.totalKcal),
-                    ),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-
-                state.note?.let { note ->
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
                     Text(
-                        text = note,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = stringResource(
+                            R.string.propose_total,
+                            String.format(Locale.US, "%,d", state.totalKcal),
+                        ),
+                        style = MaterialTheme.typography.titleLarge,
                     )
+
+                    state.note?.let { note ->
+                        Text(
+                            text = note,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
 
                 // The offer was taken and the day has not answered yet: the answer stays on screen
                 // until the rows are written, so a second tap in that moment would log it twice.
                 val keepInFlight = taken && keeping == null && refusal == null
 
-                Button(
-                    onClick = onSave,
-                    enabled = !keepInFlight,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(stringResource(R.string.propose_save))
-                }
-
-                // A meal of one is a food already, and there is a way of keeping one of those. The
-                // rule is read off the rows being drawn, so removing a row until one is left takes
-                // the offer away with it.
-                if (state.rows.size > 1) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
                     Button(
-                        onClick = {
-                            taken = true
-                            onKeepAsMeal()
-                        },
+                        onClick = onSave,
                         enabled = !keepInFlight,
                         modifier = Modifier.fillMaxWidth(),
-                    ) { Text(stringResource(R.string.propose_keep_as_meal)) }
-                }
+                    ) {
+                        Text(stringResource(R.string.propose_save))
+                    }
 
-                // The offer was taken and the write threw, so the sheet the sentence normally sits
-                // in never opened. Said here instead, beside the answer that is still there to try
-                // again — the answer is let go of only once the rows are on the day.
-                if (taken && keeping == null && refusal != null) {
-                    Text(
-                        text = refusal,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                    // A meal of one is a food already, and there is a way of keeping one of those. The
+                    // rule is read off the rows being drawn, so removing a row until one is left takes
+                    // the offer away with it.
+                    if (state.rows.size > 1) {
+                        Button(
+                            onClick = {
+                                taken = true
+                                onKeepAsMeal()
+                            },
+                            enabled = !keepInFlight,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(stringResource(R.string.propose_keep_as_meal)) }
+                    }
+
+                    // The offer was taken and the write threw, so the sheet the sentence normally sits
+                    // in never opened. Said here instead, beside the answer that is still there to try
+                    // again — the answer is let go of only once the rows are on the day.
+                    if (taken && keeping == null && refusal != null) {
+                        Text(
+                            text = refusal,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
 
                 HorizontalDivider()
 
                 // The one case scaling cannot fix: the same bowl, cooked richer.
-                OutlinedTextField(
-                    value = extra,
-                    onValueChange = { extra = it },
-                    label = { Text(stringResource(R.string.propose_tell_more_field)) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    onClick = {
-                        onTellItMore(extra)
-                        extra = ""
-                    },
-                    enabled = extra.isNotBlank(),
-                ) { Text(stringResource(R.string.propose_tell_more_send)) }
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    OutlinedTextField(
+                        value = extra,
+                        onValueChange = { extra = it },
+                        label = { Text(stringResource(R.string.propose_tell_more_field)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    TextButton(
+                        onClick = {
+                            onTellItMore(extra)
+                            extra = ""
+                        },
+                        enabled = extra.isNotBlank(),
+                    ) { Text(stringResource(R.string.propose_tell_more_send)) }
+                }
             }
         }
     }
