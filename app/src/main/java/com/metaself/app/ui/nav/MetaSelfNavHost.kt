@@ -165,15 +165,6 @@ fun MetaSelfNavHost(
 ) {
     val navController = rememberNavController()
 
-    /**
-     * What the last weight save did, shown when the editor returns.
-     *
-     * Held here rather than in the view model because it is a fact about what just happened on
-     * screen, not about what is stored — and because it has to survive the editor being popped,
-     * which a state inside the editor cannot.
-     */
-    var justLogged: String? by remember { mutableStateOf(null) }
-
     NavHost(navController = navController, startDestination = Destination.start.route) {
 
         composable(Destination.Today.route) {
@@ -204,16 +195,17 @@ fun MetaSelfNavHost(
             val weightState by weightViewModel.state.collectAsStateWithLifecycle()
             val canUndoWeight by weightViewModel.canUndo.collectAsStateWithLifecycle()
             val weightFailed by weightViewModel.failed.collectAsStateWithLifecycle()
+            val justLogged by weightViewModel.justLogged.collectAsStateWithLifecycle()
             WeightScreen(
                 state = weightState,
                 todayEpochDay = weightViewModel.todayEpochDay,
                 justLogged = justLogged,
                 onAdd = {
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     navController.navigate(Destination.LogWeight.route)
                 },
                 onEdit = { reading ->
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     navController.navigate(Destination.EditWeight.of(reading.epochDay))
                 },
                 onDelete = weightViewModel::delete,
@@ -226,11 +218,11 @@ fun MetaSelfNavHost(
                 // The editor is the root's, like the profile (see `Destination`); the root keeps
                 // this screen where it is underneath, so closing the editor comes back here.
                 onChangeGoal = {
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     onEditGoal()
                 },
                 onBack = {
-                    justLogged = null
+                    weightViewModel.forgetJustLogged()
                     navController.popBackStack()
                 },
             )
@@ -257,9 +249,12 @@ fun MetaSelfNavHost(
                 isEdit = false,
                 existingDays = weightState.readings.map { it.epochDay }.toSet(),
                 onSave = { reading ->
-                    weightViewModel.log(reading.kg, reading.epochDay)
-                    justLogged =
-                        confirmation(loggedTemplate, reading, weightViewModel.todayEpochDay)
+                    weightViewModel.log(
+                        kg = reading.kg,
+                        epochDay = reading.epochDay,
+                        confirmation =
+                            confirmation(loggedTemplate, reading, weightViewModel.todayEpochDay),
+                    )
                     navController.popBackStack()
                 },
                 onCancel = { navController.popBackStack() },
@@ -285,9 +280,15 @@ fun MetaSelfNavHost(
                     isEdit = true,
                     existingDays = emptySet(),
                     onSave = { reading ->
-                        weightViewModel.log(reading.kg, reading.epochDay)
-                        justLogged =
-                            confirmation(changedTemplate, reading, weightViewModel.todayEpochDay)
+                        weightViewModel.log(
+                            kg = reading.kg,
+                            epochDay = reading.epochDay,
+                            confirmation = confirmation(
+                                changedTemplate,
+                                reading,
+                                weightViewModel.todayEpochDay,
+                            ),
+                        )
                         navController.popBackStack()
                     },
                     onCancel = { navController.popBackStack() },

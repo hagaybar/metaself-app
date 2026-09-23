@@ -71,13 +71,24 @@ class WeightViewModel @Inject constructor(
      *
      * An implausible number is refused silently here because the form has already said so — this is
      * the second line of defence, not the message.
+     *
+     * [confirmation] is what the screen says on return — "Logged 80.5 kg for Today." It is put up at
+     * once, because the editor closes before the write finishes, and taken down if the write
+     * throws: otherwise dismissing the failure would uncover it, claiming a weight that was never
+     * stored.
      */
-    fun log(kg: Double, epochDay: Long = todayEpochDay) {
+    fun log(kg: Double, epochDay: Long = todayEpochDay, confirmation: String? = null) {
         val reading = runCatching {
             WeightReading(epochDay = epochDay, kg = kg)
         }.getOrNull() ?: return
 
-        act { weights.log(reading) }
+        _justLogged.value = confirmation
+        act(onRefused = { _justLogged.value = null }) { weights.log(reading) }
+    }
+
+    /** He has moved on from the screen the confirmation was about; take it down. */
+    fun forgetJustLogged() {
+        _justLogged.value = null
     }
 
     /**
@@ -165,6 +176,17 @@ class WeightViewModel @Inject constructor(
 
     /** Whether anything deleted here can still be put back — what the Undo line is drawn from. */
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
+
+    private val _justLogged = MutableStateFlow<String?>(null)
+
+    /**
+     * The confirmation of the last log, shown when the editor comes back — until he leaves the
+     * screen, or the write turns out to have failed.
+     *
+     * Held here rather than on screen because it has to survive the editor being popped, and
+     * because only this side knows when the write it announces has failed.
+     */
+    val justLogged: StateFlow<String?> = _justLogged.asStateFlow()
 
     private val _failed = MutableStateFlow<ActionRefused?>(null)
 

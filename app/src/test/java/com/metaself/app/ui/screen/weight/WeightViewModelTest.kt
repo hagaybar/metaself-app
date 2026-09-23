@@ -386,6 +386,44 @@ class WeightViewModelTest {
         assertThat(viewModel.failed.value).isNull()
     }
 
+    /**
+     * The editor has already closed by the time the write fails, so the confirmation it asked for
+     * must go with the failure — or dismissing the failure uncovers "Logged" for a weight never
+     * stored.
+     */
+    @Test
+    fun `a log that throws takes its confirmation away, so dismissing the failure does not uncover it`() =
+        runTest {
+            val store = FakeWeightRepository(failing = true)
+            val viewModel =
+                WeightViewModel(store, FakeProfileRepository(aProfile()), today, RecordingProblemLog())
+
+            viewModel.log(kg = 80.5, confirmation = "Logged 80.5 kg for Today.")
+            advanceUntilIdle()
+
+            assertThat(viewModel.failed.value).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            assertThat(viewModel.justLogged.value).isNull()
+            viewModel.dismissFailure()
+            assertThat(viewModel.justLogged.value).isNull()
+        }
+
+    @Test
+    fun `a log that is stored keeps its confirmation until it is let go of`() = runTest {
+        val viewModel = WeightViewModel(
+            FakeWeightRepository(),
+            FakeProfileRepository(aProfile()),
+            today,
+            RecordingProblemLog(),
+        )
+
+        viewModel.log(kg = 80.5, confirmation = "Logged 80.5 kg for Today.")
+        advanceUntilIdle()
+        assertThat(viewModel.justLogged.value).isEqualTo("Logged 80.5 kg for Today.")
+
+        viewModel.forgetJustLogged()
+        assertThat(viewModel.justLogged.value).isNull()
+    }
+
     private class FakeWeightRepository(
         initial: List<WeightReading> = emptyList(),
         /** While true, every write throws, as storage that is full or broken would. */
