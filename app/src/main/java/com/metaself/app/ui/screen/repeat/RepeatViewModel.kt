@@ -16,8 +16,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 /**
@@ -57,7 +58,9 @@ class RepeatViewModel @Inject constructor(
      * until meals built by hand exist to replace it.
      */
     val state: StateFlow<RepeatUiState> = combine(
-        foods.observeOffered(),
+        foods.observeOffered().onEach { offered ->
+            _choosing.update { open -> open?.let { refreshed(it, offered) } }
+        },
         savedMeals.observeOffered(),
         _adjusting,
         _choosing,
@@ -84,13 +87,21 @@ class RepeatViewModel @Inject constructor(
      * "Give this a portion" leaves this screen for the food's editor with the question still open,
      * and he comes back to it. The foods are observed, so the list already shows the new portion; a
      * question still holding the food as picked would keep counting switched off beside a row that
-     * says it can be counted. Its row is found again by id, because a rename can move it. A food no
-     * longer on the list leaves the question as it was.
+     * says it can be counted — and, worse, would log from the old figures while the preview drew the
+     * new ones. So the food is replaced in the question itself, where [countAs], [setAmount] and
+     * [chosen] read it, not only in the copy the screen draws. Found by id, because a rename can
+     * move it.
      */
+    private fun refreshed(choosing: Choosing, offered: List<Food>): Choosing? {
+        val food = offered.firstOrNull { it.id == choosing.food.id } ?: return choosing
+        return choosing.copy(food = food)
+    }
+
+    /** The question with the row it sits at in the list as filtered now. */
     private fun current(choosing: Choosing, foods: List<Food>): Choosing {
         val index = foods.indexOfFirst { it.id == choosing.food.id }
         if (index < 0) return choosing
-        return choosing.copy(index = index, food = foods[index])
+        return choosing.copy(index = index)
     }
 
     fun showTab(tab: RepeatTab) {

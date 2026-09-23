@@ -254,7 +254,37 @@ class RepeatViewModelTest {
         assertThat(choosing?.food?.facts?.perUnit?.unitName).isEqualTo("bowl")
         // Still on the way of counting it opened on: nothing he chose moves under him.
         assertThat(choosing?.countedAs).isEqualTo(CountedAs.GRAMS)
+
+        // And the portion is what gets logged, not only what gets drawn: choosing the count, typing
+        // 1 and pressing Log it must log one bowl, not return nothing and log nothing at all.
+        viewModel.countAs(CountedAs.UNITS)
+        viewModel.setAmount("1")
+        advanceUntilIdle()
+        val logged = viewModel.chosen()
+        assertThat(logged).isNotNull()
+        assertThat(logged!!.portionUnit).isEqualTo("bowl")
+        assertThat(logged.kcal).isEqualTo(200)
     }
+
+    /** Corrected figures per 100 g are the ones logged, not the ones the question was opened on. */
+    @Test
+    fun `figures corrected in the editor are the ones logged from the question already open`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(
+                listOf(aFood(name = "Rice", facts = FoodFacts(per100g = aPer100g(kcal = 100.0)))),
+            )
+            val viewModel = watched(foods)
+            viewModel.beginChoosing(0)
+            advanceUntilIdle()
+
+            foods.correct(1, FoodFacts(per100g = aPer100g(kcal = 150.0)))
+            advanceUntilIdle()
+            viewModel.setAmount("100")
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.choosing?.preview?.kcal).isEqualTo(150)
+            assertThat(viewModel.chosen()!!.kcal).isEqualTo(150)
+        }
 
     @Test
     fun `nothing is logged until an amount makes sense`() = runTest(dispatcher) {
