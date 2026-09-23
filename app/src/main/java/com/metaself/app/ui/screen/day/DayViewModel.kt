@@ -1457,9 +1457,9 @@ class DayViewModel @Inject constructor(
             // A rename teaches the food it renames onto exactly as logging does — D44's own route
             // — so it speaks exactly as logging does (D45), and replaces whatever the last action
             // said. A correction that KEEPS the name teaches no food and is not a logging action,
-            // so it leaves the last sentence alone: fixing the grams on one row is the commonest
-            // thing he does after logging, and clearing here would wipe the notice unread —
-            // exactly the silence issue #13 exists to close.
+            // so it leaves the last sentence alone: fixing the grams on a row just logged is an
+            // ordinary next step, and clearing here would wipe the notice unread — exactly the
+            // silence issue #13 exists to close.
             val attached = if (sameFood) null else loggedFoods.attach(his.copy(foodId = null))
             if (attached != null) {
                 _foodRetaught.value =
