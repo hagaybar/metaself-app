@@ -6,7 +6,9 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.WeightRepository
+import com.metaself.app.domain.goal.GoalForecast
 import com.metaself.app.domain.goal.GoalProgress
+import com.metaself.app.domain.weight.MeasuredRate
 import com.metaself.app.domain.weight.WeightReading
 import com.metaself.app.domain.weight.WeightTrend
 import com.metaself.app.ui.ActionRefused
@@ -46,10 +48,22 @@ class WeightViewModel @Inject constructor(
         profiles.weightChartRange,
     ) { readings, profile, storedRange ->
         val trend = WeightTrend.of(readings)
+        val goal = profile?.goal
+        val progress = goal?.let { GoalProgress.of(it, trend) }
         WeightUiState(
             readings = readings,
             trend = trend,
-            progress = profile?.goal?.let { GoalProgress.of(it, trend) },
+            progress = progress,
+            forecast = if (goal != null && progress != null) {
+                GoalForecast.of(
+                    goal = goal,
+                    progress = progress,
+                    measured = MeasuredRate.of(trend, todayEpochDay),
+                    todayEpochDay = todayEpochDay,
+                )
+            } else {
+                null
+            },
             range = ChartRange.named(storedRange),
         )
     }

@@ -140,9 +140,19 @@ fun WeightScreen(
             Text(text = toGo, style = MaterialTheme.typography.titleMedium)
         }
 
-        GoalWording.projection(state.progress)?.let { projection ->
+        GoalWording.projection(state.forecast)?.let { projection ->
             Text(
                 text = projection,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // The rate he is ACTUALLY managing, directly under the one he chose, so the two are read
+        // together (D47). Same style as the projection above it: neither outranks the other.
+        GoalWording.measured(state.forecast)?.let { measured ->
+            Text(
+                text = measured,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

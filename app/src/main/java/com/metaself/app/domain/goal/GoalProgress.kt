@@ -5,7 +5,7 @@ import com.metaself.app.domain.profile.GoalDirection
 import com.metaself.app.domain.weight.TrendPoint
 
 /**
- * How far there is to go, and how long that would take at the rate the owner chose.
+ * How far there is to go.
  *
  * Every figure here comes from the smoothed trend and never from a single reading. A weight taken
  * one morning crosses a threshold and uncrosses it the next; decision D11 already settled that the
@@ -15,10 +15,9 @@ import com.metaself.app.domain.weight.TrendPoint
  * @property startKg the trend at the first reading there is. It is honest about what it means —
  *   since tracking began, not since the goal was set — because the app has never recorded when a
  *   goal was set and inventing a date would be worse than the imprecision.
- * @property weeksToGo the division, and nothing more. It assumes the chosen rate continues exactly,
- *   which it will not. Whatever displays it must say the rate it assumed in the same breath; a bare
- *   number of weeks reads as a promise, and decision D4's rule about estimates applies at least as
- *   strongly to the future as to the contents of a plate.
+ *
+ * Distance only. Every projection lives in [GoalForecast], which is the one place a division by a
+ * rate happens — two sources for one number is how they come to disagree.
  */
 data class GoalProgress(
     val targetKg: Double,
@@ -28,7 +27,6 @@ data class GoalProgress(
     val toGoKg: Double,
     val doneKg: Double,
     val arrived: Boolean,
-    val weeksToGo: Double?,
 ) {
     companion object {
 
@@ -65,9 +63,6 @@ data class GoalProgress(
                 toGoKg = toGo,
                 doneKg = done,
                 arrived = arrived,
-                // No rate, no division. A goal with a destination and no speed has no arrival date
-                // and must not be given one.
-                weeksToGo = if (arrived || goal.kgPerWeek <= 0.0) null else toGo / goal.kgPerWeek,
             )
         }
     }
