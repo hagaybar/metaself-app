@@ -26,6 +26,10 @@ import com.metaself.app.data.backup.AutomaticBackup
 import com.metaself.app.data.backup.BackupFiles
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.backup.ContentResolverBackupFiles
+import com.metaself.app.data.backup.DataStoreSettingsSnapshot
+import com.metaself.app.data.backup.SettingsSnapshot
+import com.metaself.app.data.day.DatabaseTransaction
+import com.metaself.app.data.day.RoomDatabaseTransaction
 import com.metaself.app.data.product.ProductDao
 import com.metaself.app.data.profile.DataStoreProfileRepository
 import com.metaself.app.data.reminder.AlarmReminderScheduler
@@ -116,6 +120,19 @@ object DataModule {
     fun provideBackupFiles(
         files: ContentResolverBackupFiles,
     ): BackupFiles = files
+
+    @Provides
+    @Singleton
+    fun provideDatabaseTransaction(
+        transaction: RoomDatabaseTransaction,
+    ): DatabaseTransaction = transaction
+
+    /** Over the one DataStore above, which is what makes one snapshot cover every setting. */
+    @Provides
+    @Singleton
+    fun provideSettingsSnapshot(
+        snapshot: DataStoreSettingsSnapshot,
+    ): SettingsSnapshot = snapshot
 
     @Provides
     @Singleton

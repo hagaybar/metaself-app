@@ -21,8 +21,8 @@ happened").
 meals (`create`, `put`), meals, items and weights one statement or one small transaction at a time,
 then seven DataStore edits (profile, revision, revision-seen, arrival, milestones, AI model and
 ceiling, reminder), then sets the alarm. Anything thrown after the deletes leaves a partial record.
-Some throws are not even failures of storage: `TargetRevision`, `GoalArrival`, `Reminder` and the
-milestone keys are built from the file only when their write is reached, after the wipe.
+Some throws are not even failures of storage: a food alias that normalises to nothing throws in
+`BackupFoods.everyKeyOf`, uncaught, after the wipe.
 
 **The trap.** `restoreFoods` and `restoreSavedMeals` wrap `findOrCreate` and `create` in
 `runCatching`. Each opens its own `withTransaction`. Inside an outer transaction that is a nested
@@ -90,8 +90,9 @@ were put back. An alarm that fails to be set after the commit, or a failed put-b
 - A throw from `findOrCreate` or `create` that is not one of the name refusals above no longer skips
   that one food or meal and carries on: it rolls the whole restore back. Anything that throws there
   now is a storage failure, and carrying on past one is what made restores partial.
-- A revision, arrival, reminder or milestone the domain refuses now refuses the restore before the
-  wipe, instead of throwing after it.
+- A food alias no key can be made of now refuses the restore before anything is written, instead of
+  throwing after the wipe. (The revision, arrival, reminder and milestones are built in the prepare
+  phase too, but their constructors do not refuse anything today.)
 
 ## Seams
 
@@ -109,8 +110,8 @@ were put back. An alarm that fails to be set after the commit, or a failed put-b
 3. `BackupRepository` restructure + `DatabaseTransaction`, test first:
    - JUnit 5 with fakes (`BackupRestoreOrderTest`): the settings writes happen inside the
      transaction and after every database write; a settings write that throws → put-back taken,
-     `NothingRestored`; a put-back that throws → not `NothingRestored`; a revision/reminder the
-     domain refuses → `NothingRestored` and no DAO touched; alarm set only after the commit; a saved
+     `NothingRestored`; a put-back that throws → not `NothingRestored`; a food alias no key can be
+     made of → `NothingRestored` and nothing touched; alarm set only after the commit; a saved
      meal named `"!!!"` is never handed to `create`.
    - Robolectric in `BackupRoundTripTest` (CI only; skips here): with a real database, a restore
      whose DataStore write throws, and one whose database write throws midway (a saved-meal `put`
