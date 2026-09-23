@@ -13,6 +13,11 @@ import com.metaself.app.data.food.RoomFoodRepository
 import com.metaself.app.data.food.RoomSavedMealRepository
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.profile.FakeProfileRepository
+import com.metaself.app.data.profile.ProfileRepository
+import com.metaself.app.domain.backup.BackupArrival
+import com.metaself.app.domain.backup.BackupPerUnit
+import com.metaself.app.domain.backup.BackupWeight
+import com.metaself.app.domain.goal.GoalArrival
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
 import com.metaself.app.domain.reminder.Reminder
@@ -36,6 +41,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import java.time.LocalDateTime
 import com.metaself.app.data.day.MetaSelfDatabase
+import com.metaself.app.data.day.RoomDatabaseTransaction
 import com.metaself.app.data.day.toEntities
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.day.Confidence
@@ -468,15 +474,168 @@ class BackupRoundTripTest {
         assertThat(feast.components.single().amount).isEqualTo(1e6)
     }
 
-    private fun repository(): BackupRepository = BackupRepository(
+    // --- All or nothing (public issue #32) --------------------------------------------------------
+
+    /**
+     * A restore that fails at its very last write — the settings, which are written inside the
+     * transaction after every database write — leaves the record exactly as it was, and the settings
+     * are put back.
+     */
+    @Test
+    fun `a restore whose settings write fails leaves the record exactly as it was`() = runTest {
+        aRecord()
+        val before = record()
+        val putBack = mutableListOf<String>()
+        val repository = repository(
+            profiles = object : ProfileRepository by FakeProfileRepository(null) {
+                override suspend fun saveArrival(arrival: GoalArrival): Unit =
+                    throw IllegalStateException("disk full")
+            },
+            snapshot = { { putBack += "put back" } },
+        )
+
+        val thrown = runCatching { repository.restore(aFileReplacingIt()) }.exceptionOrNull()
+
+        assertThat(thrown).isInstanceOf(NothingRestored::class.java)
+        assertThat(putBack).containsExactly("put back")
+        assertThat(record()).isEqualTo(before)
+    }
+
+    /** Midway: after the wipe, after a food and a built meal were created, before any meal. */
+    @Test
+    fun `a restore whose database write fails midway leaves the record exactly as it was`() = runTest {
+        aRecord()
+        val before = record()
+        val repository = repository(
+            savedMeals = object : SavedMealRepository by savedMeals() {
+                override suspend fun put(
+                    mealId: Long,
+                    foodId: Long,
+                    amount: Double,
+                    countedAs: CountedAs,
+                ): Unit = throw IllegalStateException("disk full")
+            },
+        )
+
+        val thrown = runCatching { repository.restore(aFileReplacingIt()) }.exceptionOrNull()
+
+        assertThat(thrown).isInstanceOf(NothingRestored::class.java)
+        assertThat(record()).isEqualTo(before)
+    }
+
+    /**
+     * The two refusals a restore always skipped — a food and a built meal whose names leave nothing
+     * to key on — are decided before the transaction. Were either still thrown and caught inside
+     * it, SQLite would roll the whole restore back on closing and this would find nothing restored.
+     */
+    @Test
+    fun `a food and a built meal named nothing a key can be made of are skipped, and the rest is restored`() =
+        runTest {
+            val file = aFileReplacingIt().let { file ->
+                file.copy(
+                    foods = file.foods + file.foods.single().copy(key = "|na", name = "!!!"),
+                    savedMeals = file.savedMeals + BackupSavedMeal(name = "?!"),
+                )
+            }
+
+            repository().restore(file)
+
+            assertThat(foods().observeAll().first().map { it.name }).containsExactly("Bread")
+            assertThat(savedMeals().observeOffered().first().map { it.name }).containsExactly("Supper")
+            assertThat(db.mealDao().allMeals().single().items.single().name).isEqualTo("Bread")
+            assertThat(db.weightDao().all().map { it.kg }).containsExactly(79.0)
+        }
+
+    /** What is here before a failed restore: a logged meal, a weight, a food and a built meal. */
+    private suspend fun aRecord() {
+        val yoghurt = aYoghurt()
+        val mealId = (savedMeals().create("Lunch") as MealResult.Built).mealId
+        savedMeals().put(mealId, yoghurt.id, 150.0, CountedAs.GRAMS)
+        insert(
+            Meal(
+                epochDay = 20_699,
+                loggedAtMillis = 1_000,
+                items = listOf(
+                    FoodItem(
+                        name = "Yoghurt",
+                        kcal = 108,
+                        proteinG = 6,
+                        carbsG = 9,
+                        fatG = 3,
+                        source = Source.TYPED,
+                        foodId = yoghurt.id,
+                    ),
+                ),
+                savedMealId = mealId,
+            ),
+        )
+        db.weightDao().upsert(WeightEntity(epochDay = 20_699, kg = 80.0))
+    }
+
+    /** Everything a restore replaces or merges into, read back whole, ids and stamps included. */
+    private suspend fun record(): List<Any> = listOf(
+        db.mealDao().allMeals(),
+        db.weightDao().all(),
+        foods().observeAll().first(),
+        savedMeals().observeOffered().first(),
+    )
+
+    /** A file sharing nothing with [aRecord], and touching every store, the settings included. */
+    private fun aFileReplacingIt() = Backup(
+        foods = listOf(
+            BackupFood(
+                key = "bread|na",
+                name = "Bread",
+                brand = "NA",
+                perUnit = BackupPerUnit("slice", 80.0, 3.0, 15.0, 1.0, source = "TYPED"),
+            ),
+        ),
+        savedMeals = listOf(
+            BackupSavedMeal(
+                name = "Supper",
+                components = listOf(BackupMealComponent("bread|na", 2.0, "UNITS")),
+            ),
+        ),
+        meals = listOf(
+            BackupMeal(
+                epochDay = 20_700,
+                loggedAtMillis = 2_000,
+                items = listOf(
+                    BackupItem(
+                        name = "Bread",
+                        portion = "2 slice",
+                        portionAmount = 2.0,
+                        portionUnit = "slice",
+                        kcal = 160,
+                        proteinG = 6,
+                        carbsG = 30,
+                        fatG = 2,
+                        source = "TYPED",
+                        food = "bread|na",
+                    ),
+                ),
+                savedMeal = "Supper",
+            ),
+        ),
+        weights = listOf(BackupWeight(20_700, 79.0)),
+        arrival = BackupArrival(75.0, 20_700),
+    )
+
+    private fun repository(
+        profiles: ProfileRepository = FakeProfileRepository(null),
+        savedMeals: SavedMealRepository = savedMeals(),
+        snapshot: SettingsSnapshot = SettingsSnapshot { {} },
+    ): BackupRepository = BackupRepository(
         meals = db.mealDao(),
         weights = db.weightDao(),
-        profiles = FakeProfileRepository(null),
+        profiles = profiles,
         reminders = NoReminders(),
         scheduler = NoScheduler(),
         ai = NoAiSettings(),
         foods = foods(),
-        savedMeals = savedMeals(),
+        savedMeals = savedMeals,
+        transaction = RoomDatabaseTransaction(db),
+        snapshot = snapshot,
     )
 
     private suspend fun insert(meal: Meal) {
