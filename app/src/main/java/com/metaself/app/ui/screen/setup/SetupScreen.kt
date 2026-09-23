@@ -71,45 +71,49 @@ fun SetupScreen(
             style = MaterialTheme.typography.bodyMedium,
         )
 
-        NumberField(
-            label = stringResource(R.string.setup_height),
-            value = state.heightCm,
-            error = errors[SetupField.HEIGHT],
-            decimal = false,
-            onValueChange = { onChange(state.copy(heightCm = it)) },
-        )
-
-        NumberField(
-            label = stringResource(R.string.setup_birth_year),
-            value = state.birthYear,
-            error = errors[SetupField.BIRTH_YEAR],
-            decimal = false,
-            onValueChange = { onChange(state.copy(birthYear = it)) },
-        )
-
-        ChoiceRow(
-            label = stringResource(R.string.setup_sex),
-            error = errors[SetupField.SEX],
-        ) {
-            FilterChip(
-                selected = state.sex == Sex.MALE,
-                onClick = { onChange(state.copy(sex = Sex.MALE)) },
-                label = { Text(stringResource(R.string.setup_sex_male)) },
+        // D48's grouping: the frame puts a section's gap between its children, so the body's
+        // four facts are one child, spaced as things that belong together.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            NumberField(
+                label = stringResource(R.string.setup_height),
+                value = state.heightCm,
+                error = errors[SetupField.HEIGHT],
+                decimal = false,
+                onValueChange = { onChange(state.copy(heightCm = it)) },
             )
-            FilterChip(
-                selected = state.sex == Sex.FEMALE,
-                onClick = { onChange(state.copy(sex = Sex.FEMALE)) },
-                label = { Text(stringResource(R.string.setup_sex_female)) },
+
+            NumberField(
+                label = stringResource(R.string.setup_birth_year),
+                value = state.birthYear,
+                error = errors[SetupField.BIRTH_YEAR],
+                decimal = false,
+                onValueChange = { onChange(state.copy(birthYear = it)) },
+            )
+
+            ChoiceRow(
+                label = stringResource(R.string.setup_sex),
+                error = errors[SetupField.SEX],
+            ) {
+                FilterChip(
+                    selected = state.sex == Sex.MALE,
+                    onClick = { onChange(state.copy(sex = Sex.MALE)) },
+                    label = { Text(stringResource(R.string.setup_sex_male)) },
+                )
+                FilterChip(
+                    selected = state.sex == Sex.FEMALE,
+                    onClick = { onChange(state.copy(sex = Sex.FEMALE)) },
+                    label = { Text(stringResource(R.string.setup_sex_female)) },
+                )
+            }
+
+            NumberField(
+                label = stringResource(R.string.setup_weight),
+                value = state.weightKg,
+                error = errors[SetupField.WEIGHT],
+                decimal = true,
+                onValueChange = { onChange(state.copy(weightKg = it)) },
             )
         }
-
-        NumberField(
-            label = stringResource(R.string.setup_weight),
-            value = state.weightKg,
-            error = errors[SetupField.WEIGHT],
-            decimal = true,
-            onValueChange = { onChange(state.copy(weightKg = it)) },
-        )
 
         ChoiceRow(
             label = stringResource(R.string.setup_activity),
@@ -124,75 +128,83 @@ fun SetupScreen(
             }
         }
 
-        ChoiceRow(
-            label = stringResource(R.string.setup_goal),
-            error = errors[SetupField.DIRECTION],
-        ) {
-            GoalDirection.entries.forEach { direction ->
-                FilterChip(
-                    selected = state.direction == direction,
-                    onClick = {
-                        onChange(
-                            state.copy(
-                                direction = direction,
-                                kgPerWeek = if (direction == GoalDirection.HOLD) {
-                                    null
-                                } else {
-                                    state.kgPerWeek
-                                },
-                                // Holding weight is not going anywhere, so a destination left
-                                // behind by switching away from "lose" must go with it.
-                                targetKg = if (direction == GoalDirection.HOLD) {
-                                    ""
-                                } else {
-                                    state.targetKg
-                                },
-                            ),
-                        )
-                    },
-                    label = { Text(stringResource(goalLabel(direction))) },
-                )
-            }
-        }
-
-        if (state.direction != null && state.direction != GoalDirection.HOLD) {
+        // The goal: which way, how fast, and where to — one block.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             ChoiceRow(
-                label = stringResource(R.string.setup_rate),
-                error = errors[SetupField.RATE],
+                label = stringResource(R.string.setup_goal),
+                error = errors[SetupField.DIRECTION],
             ) {
-                Goal.OFFERED_RATES_KG_PER_WEEK.forEach { rate ->
+                GoalDirection.entries.forEach { direction ->
                     FilterChip(
-                        selected = state.kgPerWeek == rate,
-                        onClick = { onChange(state.copy(kgPerWeek = rate)) },
-                        label = { Text("$rate kg") },
+                        selected = state.direction == direction,
+                        onClick = {
+                            onChange(
+                                state.copy(
+                                    direction = direction,
+                                    kgPerWeek = if (direction == GoalDirection.HOLD) {
+                                        null
+                                    } else {
+                                        state.kgPerWeek
+                                    },
+                                    // Holding weight is not going anywhere, so a destination left
+                                    // behind by switching away from "lose" must go with it.
+                                    targetKg = if (direction == GoalDirection.HOLD) {
+                                        ""
+                                    } else {
+                                        state.targetKg
+                                    },
+                                ),
+                            )
+                        },
+                        label = { Text(stringResource(goalLabel(direction))) },
                     )
                 }
             }
 
-            // Optional. A rate with no destination is still a goal, and was the only kind this app
-            // had until now — so the field says so rather than looking like something unfinished.
-            NumberField(
-                label = stringResource(R.string.setup_target),
-                value = state.targetKg,
-                error = errors[SetupField.TARGET],
-                decimal = true,
-                onValueChange = { onChange(state.copy(targetKg = it)) },
-            )
-            Text(
-                text = stringResource(R.string.setup_target_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
+            if (state.direction != null && state.direction != GoalDirection.HOLD) {
+                ChoiceRow(
+                    label = stringResource(R.string.setup_rate),
+                    error = errors[SetupField.RATE],
+                ) {
+                    Goal.OFFERED_RATES_KG_PER_WEEK.forEach { rate ->
+                        FilterChip(
+                            selected = state.kgPerWeek == rate,
+                            onClick = { onChange(state.copy(kgPerWeek = rate)) },
+                            label = { Text("$rate kg") },
+                        )
+                    }
+                }
+
+                // Optional. A rate with no destination is still a goal, and was the only kind this
+                // app had until now — so the field says so rather than looking like something
+                // unfinished.
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    NumberField(
+                        label = stringResource(R.string.setup_target),
+                        value = state.targetKg,
+                        error = errors[SetupField.TARGET],
+                        decimal = true,
+                        onValueChange = { onChange(state.copy(targetKg = it)) },
+                    )
+                    Text(
+                        text = stringResource(R.string.setup_target_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MetaSelfInk.two,
+                    )
+                }
+            }
         }
 
         failed?.let {
-            Text(
-                text = stringResource(it.sentence),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            TextButton(onClick = onDismissFailure) {
-                Text(stringResource(R.string.action_refused_dismiss))
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    text = stringResource(it.sentence),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = onDismissFailure) {
+                    Text(stringResource(R.string.action_refused_dismiss))
+                }
             }
         }
 
@@ -210,7 +222,10 @@ private fun NumberField(
     decimal: Boolean,
     onValueChange: (String) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+    ) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
@@ -239,7 +254,10 @@ private fun ChoiceRow(
     error: String?,
     content: @Composable () -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+    ) {
         Text(text = label, style = MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) { content() }
         if (error != null) {
