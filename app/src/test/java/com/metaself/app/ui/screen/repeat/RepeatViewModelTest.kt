@@ -286,6 +286,85 @@ class RepeatViewModelTest {
             assertThat(viewModel.chosen()!!.kcal).isEqualTo(150)
         }
 
+    /**
+     * A food gone from the list while its question was open — deleted, hidden or joined into another
+     * in the editor — closes the question. Logging it would write a row about a food that is gone.
+     */
+    @Test
+    fun `a food deleted in the editor closes the question open about it`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Rice"), aFood(name = "Oats")))
+        val viewModel = watched(foods)
+        viewModel.beginChoosing(viewModel.state.value.foods.indexOfFirst { it.name == "Rice" })
+        viewModel.setAmount("100")
+        advanceUntilIdle()
+
+        foods.delete(1)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.choosing).isNull()
+        assertThat(viewModel.chosen()).isNull()
+    }
+
+    @Test
+    fun `a food hidden in the editor closes the question open about it`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Rice")))
+        val viewModel = watched(foods)
+        viewModel.beginChoosing(0)
+        viewModel.setAmount("100")
+        advanceUntilIdle()
+
+        foods.hide(1)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.choosing).isNull()
+        assertThat(viewModel.chosen()).isNull()
+    }
+
+    @Test
+    fun `a food joined into another in the editor closes the question open about it`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(aFood(name = "Rice"), aFood(name = "White rice")))
+            val viewModel = watched(foods)
+            viewModel.beginChoosing(viewModel.state.value.foods.indexOfFirst { it.name == "Rice" })
+            viewModel.setAmount("100")
+            advanceUntilIdle()
+
+            foods.merge(winnerId = 2, loserId = 1)
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.choosing).isNull()
+            assertThat(viewModel.chosen()).isNull()
+        }
+
+    /**
+     * Renamed in the editor so the words still in the search no longer find it: the food is still
+     * his, so the question stays open — but it is no longer at any row of the list, and must not
+     * claim a row's place that now belongs to a different food.
+     */
+    @Test
+    fun `a food renamed out of the search keeps its question, at no row of the list`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(
+                listOf(aFood(name = "Rice", updatedAtMillis = 2), aFood(name = "Rice cake", updatedAtMillis = 1)),
+            )
+            val viewModel = watched(foods)
+            viewModel.search("rice")
+            advanceUntilIdle()
+            viewModel.beginChoosing(viewModel.state.value.foods.indexOfFirst { it.name == "Rice" })
+            viewModel.setAmount("100")
+            advanceUntilIdle()
+
+            foods.rename(1, "Porridge")
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.foods.map { it.name }).containsExactly("Rice cake")
+            assertThat(state.choosing).isNotNull()
+            assertThat(state.choosing!!.food.name).isEqualTo("Porridge")
+            assertThat(state.choosing!!.index).isEqualTo(-1)
+            assertThat(viewModel.chosen()!!.foodId).isEqualTo(1)
+        }
+
     @Test
     fun `nothing is logged until an amount makes sense`() = runTest(dispatcher) {
         val viewModel = watched(foods = listOf(aFood()))

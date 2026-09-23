@@ -241,6 +241,19 @@ fun RepeatScreen(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
+                // A question whose food the search no longer finds — renamed in the editor — is
+                // still about his food, so it stays open, above the rows rather than in one.
+                state.choosing?.takeIf { it.index < 0 }?.let { choosing ->
+                    HowMuch(
+                        choosing = choosing,
+                        onCountAs = onCountAs,
+                        onSetAmount = onSetAmount,
+                        onGivePortion = { onGivePortion(choosing.food.id) },
+                        onCancel = onCancelChoosing,
+                        onLog = onLogChosen,
+                    )
+                    HorizontalDivider()
+                }
                 state.foods.forEachIndexed { index, food ->
                     val choosing = state.choosing?.takeIf { it.index == index }
 

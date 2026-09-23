@@ -487,6 +487,28 @@ class RepeatScreenRenderTest {
     }
 
     /**
+     * A food renamed in the editor so the search no longer finds it keeps its question open, at no
+     * row of the list. It is drawn above the list, and every row the search does find is drawn as
+     * itself — never replaced by a question about a different food.
+     */
+    @Test
+    fun `a question about a food the search no longer finds is drawn above the list, not in a row`() {
+        val porridge = aFood(name = "Porridge")
+        val texts = draw(
+            RepeatUiState(
+                query = "rice",
+                foods = listOf(aFood(name = "Rice cake")),
+                choosing = Choosing(index = -1, food = porridge, countedAs = CountedAs.GRAMS),
+            ),
+        )
+
+        assertThat(texts).contains("How much")
+        assertThat(texts).contains("Porridge")
+        assertThat(texts).contains("Rice cake")
+        assertThat(render.isDrawnBefore("Porridge", "Rice cake")).isTrue()
+    }
+
+    /**
      * **Nothing is guessed, and the owner is told so where the field would be.** A way of counting
      * the food does not support is shown with its reason rather than quietly missing, because a
      * field that is simply absent looks like a fault in the app.
