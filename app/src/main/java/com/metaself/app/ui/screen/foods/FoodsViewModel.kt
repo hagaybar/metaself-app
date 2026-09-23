@@ -87,20 +87,26 @@ class FoodsViewModel @Inject constructor(
         return FoodSearch.matching(filtered, looking.query)
     }
 
+    /**
+     * Searching, and the two filters below, close an open food but leave a join alone, for the
+     * reason [clearChoosing] gives about what is chosen: while a join waits for its duplicate, the
+     * search is how he finds it, and Show hidden is the only way to reach a hidden one. Looking that
+     * ended the join would cancel the one act that cannot be undone, silently, the moment it was used.
+     */
     fun search(query: String) {
         _looking.value = _looking.value.copy(query = query)
-        closeEditor()
+        stopEditing()
     }
 
     /** The foods the conversion could say least about, so he can go through them in one sitting. */
     fun showOnlyPortions(only: Boolean) {
         _looking.value = _looking.value.copy(onlyPortions = only)
-        closeEditor()
+        stopEditing()
     }
 
     fun showHidden(show: Boolean) {
         _looking.value = _looking.value.copy(showHidden = show)
-        closeEditor()
+        stopEditing()
     }
 
     fun edit(foodId: Long) {
@@ -268,8 +274,8 @@ class FoodsViewModel @Inject constructor(
      * words, and [confirmJoining] answers for both ways in (D36).
      *
      * **A pick whose read lands after he has backed out is dropped.** The picked food is looked up
-     * first; if meanwhile he pressed Not now, searched, held a row or opened a food, the join he was
-     * in has ended, and writing the pair now would bring back a question he had walked away from.
+     * first; if meanwhile he pressed Not now, held a row or opened a food, the join he was in has
+     * ended, and writing the pair now would bring back a question he had walked away from.
      * Only the same join, still waiting for its pick, takes it.
      */
     fun mergeInto(loserId: Long) {
@@ -381,9 +387,14 @@ class FoodsViewModel @Inject constructor(
     }
 
     private fun closeEditor() {
+        stopEditing()
+        _merging.value = null
+    }
+
+    /** Close an open food and any question about deleting it, and nothing else. */
+    private fun stopEditing() {
         _editing.value = null
         _deleting.value = null
-        _merging.value = null
     }
 
     /** The four things that are not about looking, as one value, because `combine` takes five. */

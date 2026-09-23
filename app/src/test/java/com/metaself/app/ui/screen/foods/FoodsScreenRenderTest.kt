@@ -307,6 +307,29 @@ class FoodsScreenRenderTest {
     }
 
     /**
+     * Picking which food a duplicate is, is the one decision on this screen that cannot be undone,
+     * and the brand and the numbers are what tell two duplicates apart. So each row he is picking
+     * from shows everything an ordinary row does — the one staying as well as the ones he may pick.
+     */
+    @Test
+    fun `while picking the duplicate every row still shows its brand and what it knows`() {
+        val yoghurt = aFood(name = "Yoghurt", facts = FoodFacts(per100g = aPer100g(kcal = 60.0)))
+            .copy(id = 1, brand = "Dairyco")
+        val other = aFood(name = "Yoghurt 3%", facts = FoodFacts(per100g = aPer100g(kcal = 90.0)))
+            .copy(id = 2, brand = "Milkworks")
+
+        val texts = draw(
+            FoodsUiState(foods = listOf(yoghurt, other), merging = Merging(keeping = yoghurt)),
+        )
+
+        assertThat(texts).contains("Dairyco")
+        assertThat(texts).contains("60 kcal per 100 g")
+        assertThat(texts).contains("Milkworks")
+        assertThat(texts).contains("90 kcal per 100 g")
+        assertThat(texts).contains("This is the one that stays")
+    }
+
+    /**
      * Joining the two he ticked is a different question from joining one to a food not yet picked:
      * both are settled, so the screen names both, says which survives, and asks — and the list stops
      * being a picker, because with the pair already known a stray tap on a row could only join the

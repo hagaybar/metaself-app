@@ -489,13 +489,13 @@ class FoodsViewModelTest {
             assertThat(viewModel.state.value.merging).isNull()
             assertThat(foods.current).hasSize(2)
         }
-        // (e) ...or searched, which also ends the join.
+        // (e) ...or opened a food, which also ends the join. (Searching does not: see below.)
         run {
             val foods = FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood(name = "יוגורט")))
             val viewModel = watched(foods)
             viewModel.beginMerging(1)
             viewModel.mergeInto(2)
-            viewModel.search("x")
+            viewModel.edit(2)
             advanceUntilIdle()
 
             assertThat(viewModel.state.value.merging).isNull()
@@ -599,6 +599,72 @@ class FoodsViewModelTest {
             assertThat(viewModel.state.value.refusal).contains("Vegetable salad")
             assertThat(viewModel.state.value.merging?.losing?.name).isEqualTo("יוגורט")
         }
+
+    /**
+     * Looking is not backing out. On a list of any length the search is how he finds the duplicate,
+     * and a search that ended the join would make the one flow that cannot be undone cancel itself,
+     * silently, the moment it was used — the same reasoning that keeps what is chosen through a
+     * search.
+     */
+    @Test
+    fun `searching or filtering while picking the duplicate keeps the join`() = runTest(dispatcher) {
+        val ways: List<Pair<String, (FoodsViewModel) -> Unit>> = listOf(
+            "searching" to { it.search("יוגורט") },
+            "showing hidden foods" to { it.showHidden(true) },
+            "narrowing to the foods that only know a portion" to { it.showOnlyPortions(true) },
+        )
+        ways.forEach { (way, look) ->
+            val foods = FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood(name = "יוגורט")))
+            val viewModel = watched(foods)
+            viewModel.beginMerging(1)
+            advanceUntilIdle()
+
+            look(viewModel)
+            advanceUntilIdle()
+
+            assertWithMessage(way).that(viewModel.state.value.merging?.keeping?.name)
+                .isEqualTo("Yoghurt")
+            assertWithMessage(way).that(viewModel.state.value.merging?.losing).isNull()
+        }
+    }
+
+    /** The search that found the duplicate is not the end of the join: picking it still asks. */
+    @Test
+    fun `the duplicate found by searching can be picked`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(
+            listOf(aFood(name = "Yoghurt"), aFood(name = "Tahini"), aFood(name = "יוגורט")),
+        )
+        val viewModel = watched(foods)
+        viewModel.beginMerging(1)
+        advanceUntilIdle()
+
+        viewModel.search("יוגורט")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.foods.map { it.name }).containsExactly("יוגורט")
+        viewModel.mergeInto(3)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.merging?.keeping?.name).isEqualTo("Yoghurt")
+        assertThat(viewModel.state.value.merging?.losing?.name).isEqualTo("יוגורט")
+        assertThat(foods.current).hasSize(3)
+    }
+
+    /** A hidden duplicate is still a duplicate, and Show hidden is the only way to reach it. */
+    @Test
+    fun `a hidden duplicate can be picked once hidden foods are shown`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(aFood(name = "Yoghurt"), aFood(name = "יוגורט")))
+        foods.hide(2)
+        val viewModel = watched(foods)
+        viewModel.beginMerging(1)
+        advanceUntilIdle()
+
+        viewModel.showHidden(true)
+        advanceUntilIdle()
+        viewModel.mergeInto(2)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.merging?.losing?.name).isEqualTo("יוגורט")
+    }
 
     @Test
     fun `merging a food into itself does nothing`() = runTest(dispatcher) {
