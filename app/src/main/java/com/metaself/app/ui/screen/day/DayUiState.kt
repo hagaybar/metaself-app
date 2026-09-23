@@ -2,6 +2,8 @@ package com.metaself.app.ui.screen.day
 
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.movement.MovementToday
+import com.metaself.app.domain.streak.Consistency
+import com.metaself.app.domain.streak.ConsistencyFigure
 import com.metaself.app.domain.streak.Streak
 import com.metaself.app.domain.window.DayVerdict
 import com.metaself.app.domain.day.Remaining
@@ -107,6 +109,17 @@ sealed interface DayUiState {
         /** How consistently he has been logging, counted from the record (D13). */
         val streak: Streak = Streak(0, 0, 0),
         /**
+         * Whether today itself holds something, so the run in [streak] ends today rather than
+         * yesterday. A run counted back from yesterday still stands, but its milestone was
+         * yesterday's (D52).
+         */
+        val loggedToday: Boolean = false,
+        /**
+         * The weekly congratulation fired today, dismissed or not. It has said the milestone, so the
+         * figure does not say it again (D52).
+         */
+        val weeklyCongratulationToday: Boolean = false,
+        /**
          * Which rows on the day are ticked, on the way to becoming a meal (design §3.5).
          *
          * Item ids, not meal ids: rows logged at different moments can be pulled together, so the
@@ -134,6 +147,20 @@ sealed interface DayUiState {
          * still ticked.
          */
         val choosing: Boolean get() = chosen.isNotEmpty()
+
+        /**
+         * The one consistency figure the day shows, or null (D52).
+         *
+         * Derived rather than stored, for [choosing]'s reason: a second field could disagree with
+         * the [streak] it is chosen from. The milestone belongs to today's page only — on a past
+         * day's page the same run is still printed, plainly, because it was not reached there.
+         */
+        val consistency: ConsistencyFigure?
+            get() = Consistency.of(
+                streak = streak,
+                runEndsToday = isToday && loggedToday,
+                milestoneAlreadySaid = weeklyCongratulationToday,
+            )
 
         /**
          * Nothing at all was written down on this day.

@@ -44,4 +44,18 @@ class StreakWordingTest {
         assertThat(StreakWording.lifetime(nothing)).isNull()
         assertThat(StreakWording.recent(nothing)).isNull()
     }
+
+    /** D52: the day's one figure, which names its unit because it stands alone. */
+    @Test
+    fun `the day's figure is the run or the month, in words`() {
+        assertThat(StreakWording.day(ConsistencyFigure.Run(days = 12, milestone = false)))
+            .isEqualTo("12 days in a row")
+        assertThat(StreakWording.day(ConsistencyFigure.Recent(days = 22)))
+            .isEqualTo("22 of the last 30 days")
+    }
+
+    @Test
+    fun `a milestone's words are the run's words without the figure`() {
+        assertThat(StreakWording.runWords(30)).isEqualTo("days in a row")
+    }
 }

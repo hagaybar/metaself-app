@@ -537,19 +537,20 @@ class DayScreenRenderTest {
                 "logged changes, and you can open the row to see the parts."
     }
 
+    /** D52: one figure on the day, not three. The other two are on the record screen. */
     @Test
-    fun `the run and the counts are on the day screen`() {
+    fun `the day carries the run and only the run`() {
         val texts = draw(
             meals = emptyList(),
             streak = Streak(currentDays = 12, lifetimeDays = 45, daysInLast30 = 22),
         )
 
-        assertThat(texts.any { it.contains("12 days in a row") }).isTrue()
-        assertThat(texts.any { it.contains("45 days logged") }).isTrue()
-        assertThat(texts.any { it.contains("22 of the last 30") }).isTrue()
+        assertThat(texts).contains("12 days in a row")
+        assertThat(texts.any { it.contains("days logged") }).isFalse()
+        assertThat(texts.any { it.contains("of the last 30") }).isFalse()
     }
 
-    /** D14: the past never nags, so a run that has ended is simply not mentioned. */
+    /** D14: a run that has ended is simply not mentioned; the month speaks instead (D52). */
     @Test
     fun `a run that has ended is not printed as a zero`() {
         val texts = draw(
@@ -558,15 +559,60 @@ class DayScreenRenderTest {
         )
 
         assertThat(texts.any { it.contains("in a row") }).isFalse()
-        assertThat(texts.any { it.contains("45 days logged") }).isTrue()
+        assertThat(texts).contains("3 of the last 30 days")
+        assertThat(texts.any { it.contains("days logged") }).isFalse()
     }
 
     @Test
     fun `before anything is logged the counts say nothing at all`() {
         val texts = draw(meals = emptyList())
 
+        assertThat(texts.any { it.contains("in a row") }).isFalse()
         assertThat(texts.any { it.contains("days logged") }).isFalse()
         assertThat(texts.any { it.contains("of the last 30") }).isFalse()
+    }
+
+    /** "0 of the last 30 days" is the same reproach as "0 days in a row" (D52). */
+    @Test
+    fun `a quiet month prints no figure at all`() {
+        val texts = draw(
+            meals = emptyList(),
+            streak = Streak(currentDays = 0, lifetimeDays = 45, daysInLast30 = 0),
+        )
+
+        assertThat(texts.any { it.contains("of the last 30") }).isFalse()
+        assertThat(texts.any { it.contains("in a row") }).isFalse()
+    }
+
+    /**
+     * A milestone reached today is set as one: the figure on its own, in the display face, and its
+     * words beside it (D52). Only the text is assertable here — the size and the teal are not.
+     */
+    @Test
+    fun `a milestone reached today sets its figure apart from its words`() {
+        val texts = draw(
+            meals = emptyList(),
+            streak = Streak(currentDays = 30, lifetimeDays = 45, daysInLast30 = 30),
+            loggedToday = true,
+        )
+
+        assertThat(texts).contains("30")
+        assertThat(texts).contains("days in a row")
+        assertThat(texts).doesNotContain("30 days in a row")
+    }
+
+    /** The weekly congratulation said it; the figure does not say it again (D52). */
+    @Test
+    fun `a milestone the congratulation already said is plain`() {
+        val texts = draw(
+            meals = emptyList(),
+            streak = Streak(currentDays = 7, lifetimeDays = 45, daysInLast30 = 20),
+            loggedToday = true,
+            weeklyCongratulationToday = true,
+        )
+
+        assertThat(texts).contains("7 days in a row")
+        assertThat(texts).doesNotContain("days in a row")
     }
 
     /**
@@ -1479,6 +1525,8 @@ class DayScreenRenderTest {
         foodNotice: String? = null,
         onDismissFoodRetaught: () -> Unit = {},
         streak: Streak = Streak(0, 0, 0),
+        loggedToday: Boolean = false,
+        weeklyCongratulationToday: Boolean = false,
         movement: MovementToday? = null,
         windowOpenNow: Boolean? = null,
         verdict: DayVerdict? = null,
@@ -1506,6 +1554,8 @@ class DayScreenRenderTest {
                 targetChangeNotice = notice,
                 foodRetaughtNotice = foodNotice,
                 streak = streak,
+                loggedToday = loggedToday,
+                weeklyCongratulationToday = weeklyCongratulationToday,
                 movement = movement,
                 windowOpenNow = windowOpenNow,
                 verdict = verdict,

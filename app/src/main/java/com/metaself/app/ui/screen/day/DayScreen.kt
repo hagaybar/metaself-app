@@ -61,6 +61,7 @@ import com.metaself.app.ui.day.DayTotalsWording
 import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.day.StepBar
 import com.metaself.app.ui.day.StreakWording
+import com.metaself.app.domain.streak.ConsistencyFigure
 import com.metaself.app.domain.window.DayMeasured
 import com.metaself.app.domain.window.DayWindow
 import com.metaself.app.ui.day.MeasuredMark
@@ -499,7 +500,8 @@ private fun MarginNote(
  *
  * **Not one sentence changes**, and neither does what any of them counts: [WindowWording],
  * [StreakWording] and the two marks print exactly what they printed before. What changed is where
- * the block sits and how loudly it is set.
+ * the block sits and how loudly it is set. The one later exception is the streak, which since D52
+ * prints one figure instead of three, and sets a milestone as one.
  *
  * The counts are the app's smallest type; the sentences are not. `labelSmall` is 11 sp, semibold
  * and letterspaced — a face for a caption of three words, and a face that turns a sentence like
@@ -633,20 +635,47 @@ private fun Colophon(
         }
 
         // Counted from the record every time it is drawn, so a day filled in late repairs the run
-        // by itself (D13). Nothing is printed for a run that has ended: a zero here is a reproach
-        // dressed as a statistic, and the past does not nag (D14).
-        val counts = listOfNotNull(
-            StreakWording.run(state.streak),
-            StreakWording.lifetime(state.streak),
-            StreakWording.recent(state.streak),
-        )
-        if (counts.isNotEmpty()) {
-            Text(
-                text = counts.joinToString("  ·  "),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        // by itself (D13). ONE figure, chosen by the record (D52): the run while there is one worth
+        // naming, otherwise the month; nothing rather than a zero, because a zero here is a reproach
+        // dressed as a statistic and the past does not nag (D14). The other two counts are on the
+        // record screen, under "Your record".
+        state.consistency?.let { figure ->
+            if (figure is ConsistencyFigure.Run && figure.milestone) {
+                RunMilestone(days = figure.days)
+            } else {
+                Text(
+                    text = StreakWording.day(figure),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
+    }
+}
+
+/**
+ * A run reaching 7, 30, 100 or 365 days, on the day it does (D52).
+ *
+ * Set as an achievement rather than as small print: the figure in the display face at the scale's
+ * block-figure size, its words beside it in running text, both in the tertiary teal — the palette's
+ * one family that means nothing else on this page. Two pieces rather than one string, as every
+ * figure in the app is set beside its words. No emoji and nothing that moves.
+ */
+@Composable
+private fun RunMilestone(days: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        Text(
+            text = days.toString(),
+            modifier = Modifier.alignByBaseline(),
+            style = MaterialTheme.typography.headlineMedium,
+            color = MaterialTheme.colorScheme.tertiary,
+        )
+        Text(
+            text = StreakWording.runWords(days),
+            modifier = Modifier.alignByBaseline(),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.tertiary,
+        )
     }
 }
 

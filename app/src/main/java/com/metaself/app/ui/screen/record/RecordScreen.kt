@@ -37,6 +37,7 @@ import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.day.DayPartWording
 import com.metaself.app.ui.day.DayTotalsWording
 import com.metaself.app.ui.day.DayWording
+import com.metaself.app.ui.day.StreakWording
 import com.metaself.app.ui.screen.day.Chosen
 import com.metaself.app.ui.screen.day.DayMeals
 import com.metaself.app.ui.screen.day.EatenAtDialog
@@ -227,6 +228,8 @@ fun RecordScreen(
                         onChooseMeal = onChooseMeal,
                     )
                 }
+
+                YourRecord(state = state)
             }
 
             if (canUndo || state.choosing) {
@@ -343,6 +346,38 @@ private fun RecordHeader(state: RecordUiState) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/**
+ * How consistently he has been logging: all three counts, at the foot of the list (D52).
+ *
+ * The day prints one of these, chosen by the record; the other two moved here rather than being
+ * dropped. In [StreakWording]'s own words, each line keeping its own rule for saying nothing — so a
+ * run that has ended is absent here too (D14), and with nothing ever logged there is no section.
+ */
+@Composable
+private fun YourRecord(state: RecordUiState) {
+    val lines = listOfNotNull(
+        StreakWording.run(state.streak),
+        StreakWording.lifetime(state.streak),
+        StreakWording.recent(state.streak),
+    )
+    if (lines.isEmpty()) return
+
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        Text(
+            text = stringResource(R.string.record_your_record),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        lines.forEach { line ->
+            Text(
+                text = line,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MetaSelfInk.two,
+            )
         }
     }
 }

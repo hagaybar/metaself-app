@@ -43,6 +43,7 @@ import com.metaself.app.domain.movement.MovementToday
 import com.metaself.app.domain.movement.NormalDay
 import com.metaself.app.domain.milestone.Milestones
 import com.metaself.app.domain.encourage.Encouragements
+import com.metaself.app.domain.encourage.Occasion
 import com.metaself.app.ui.encourage.EncouragementWording
 import com.metaself.app.domain.streak.Streaks
 import com.metaself.app.domain.window.DayVerdict
@@ -132,6 +133,13 @@ class DayViewModel @Inject constructor(
      */
     private val _movement = MutableStateFlow<Movement?>(null)
     private val _encouragement = MutableStateFlow<String?>(null)
+
+    /**
+     * The day the weekly congratulation last fired, kept when it is dismissed so the consistency
+     * figure does not repeat its milestone that day (D52). Held in memory: only the day something
+     * was said is stored, not what.
+     */
+    private val _weeklySaidOn = MutableStateFlow<Long?>(null)
 
     /**
      * How the window has been going, counted once per open rather than on every emission.
@@ -467,6 +475,7 @@ class DayViewModel @Inject constructor(
             ) ?: return@quietly
 
             profiles.saveEncouragedDay(todayEpochDay)
+            if (occasion == Occasion.LOGGING_WEEK) _weeklySaidOn.value = todayEpochDay
             _encouragement.value = EncouragementWording.of(occasion, streak.currentDays)
         }
     }
@@ -823,6 +832,7 @@ class DayViewModel @Inject constructor(
         .combine(_movement) { inputs, movement -> inputs.copy(movement = movement) }
         .combine(profiles.windowRules) { inputs, rules -> inputs.copy(windows = rules) }
         .combine(_encouragement) { inputs, said -> inputs.copy(encouragement = said) }
+        .combine(_weeklySaidOn) { inputs, day -> inputs.copy(weeklySaidOn = day) }
         .combine(_windowTally) { inputs, tally -> inputs.copy(windowTally = tally) }
         .combine(_latestStretch) { inputs, latest -> inputs.copy(latestStretch = latest) }
         .combine(_moment) { inputs, moment -> inputs.copy(moment = moment) }
@@ -1010,6 +1020,8 @@ class DayViewModel @Inject constructor(
                             ?.takeIf { it.isTodayS(today().toEpochDay()) }
                             ?.let { GoalWording.celebration(it.targetKg, target.kcal) },
                         streak = Streaks.of(inputs.loggedDays, today().toEpochDay()),
+                        loggedToday = today().toEpochDay() in inputs.loggedDays,
+                        weeklyCongratulationToday = inputs.weeklySaidOn == today().toEpochDay(),
                         // Shown on the day it was reached and on no other (D14).
                         milestoneReached = MilestoneWording.today(
                             inputs.milestones
@@ -1061,6 +1073,7 @@ class DayViewModel @Inject constructor(
         val movement: Movement? = null,
         val windows: List<WindowRule> = emptyList(),
         val encouragement: String? = null,
+        val weeklySaidOn: Long? = null,
         val windowTally: Pair<Int, Int> = 0 to 0,
         val latestStretch: EatingStretch? = null,
         val moment: Long = 0L,
