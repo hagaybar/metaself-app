@@ -321,6 +321,7 @@ private fun AddSomethingHere(
         onSearch = repeatViewModel::search,
         onBeginAdjusting = repeatViewModel::beginAdjusting,
         onSetComponentAmount = repeatViewModel::setComponentAmount,
+        onStepComponent = repeatViewModel::stepComponent,
         onRemoveComponent = repeatViewModel::removeComponent,
         onCancelAdjusting = repeatViewModel::cancelAdjusting,
         onLogAdjusted = {
@@ -427,6 +428,8 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
         onDropPending = builderViewModel::dropPending,
         onRemove = builderViewModel::remove,
         onMove = builderViewModel::move,
+        onChangePart = builderViewModel::beginChanging,
+        onChangeFood = builderViewModel::beginChangingFood,
         onBeginCreatingFood = builderViewModel::beginCreatingFood,
         onCreateFood = builderViewModel::createFood,
         onCancelCreatingFood = builderViewModel::cancelCreatingFood,

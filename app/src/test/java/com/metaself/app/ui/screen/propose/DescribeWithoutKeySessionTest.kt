@@ -12,6 +12,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.ui.ComposeSession
@@ -79,14 +80,22 @@ class DescribeWithoutKeySessionTest {
         NavHost(navController = nav, startDestination = "describe") {
             composable("describe") {
                 // Scoped to this entry, exactly as `hiltViewModel()` scopes it in the app.
-                val viewModel = viewModel { ProposalViewModel(Answers(result), ProblemLog.NONE) }
+                val viewModel = viewModel {
+                    ProposalViewModel(Answers(result), ProblemLog.NONE, FakeFoodRepository())
+                }
                 val state by viewModel.state.collectAsStateWithLifecycle()
                 ProposalScreen(
                     state = state,
                     description = viewModel.description,
                     onDescribe = viewModel::describe,
-                    onScale = { _, _ -> },
-                    onCount = { _, _ -> },
+                    onSetAmount = { _, _ -> },
+                    onStep = { _, _ -> },
+                    onOpenWorth = {},
+                    onSetWorthBox = { _, _, _ -> },
+                    onCloseWorth = {},
+                    onUseYourFood = {},
+                    onUseEstimate = {},
+                    onCountInFoodUnit = {},
                     onRemove = {},
                     onTellItMore = {},
                     onSave = {},

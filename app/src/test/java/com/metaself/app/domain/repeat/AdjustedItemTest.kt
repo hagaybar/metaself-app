@@ -46,7 +46,7 @@ class AdjustedItemTest {
 
     @Test
     fun `half a dish`() {
-        val half = risotto.scaledBy(0.5)
+        val half = risotto.withAmount(140.0)
 
         assertThat(half.portion).isEqualTo("140 g")
         assertThat(half.kcal).isEqualTo(300)
@@ -55,7 +55,6 @@ class AdjustedItemTest {
     /** Scaling from the item as logged, every time, so "as logged" is exactly where it started. */
     @Test
     fun `going back arrives at the original and not near it`() {
-        assertThat(twoSlices.scaledBy(1.0)).isEqualTo(twoSlices)
         assertThat(twoSlices.withAmount(3.0).let { twoSlices.withAmount(2.0) }).isEqualTo(twoSlices)
     }
 
@@ -76,7 +75,6 @@ class AdjustedItemTest {
 
         assertThat(old.canBeAdjusted()).isFalse()
         assertThat(old.withAmount(1.0)).isEqualTo(old)
-        assertThat(old.scaledBy(0.5)).isEqualTo(old)
     }
 
     /** Adjusting changes the amount, never where the numbers came from (D4). */

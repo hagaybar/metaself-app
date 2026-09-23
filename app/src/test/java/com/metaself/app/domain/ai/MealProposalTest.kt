@@ -1,6 +1,7 @@
 package com.metaself.app.domain.ai
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
 import org.junit.jupiter.api.Test
@@ -22,21 +23,36 @@ class MealProposalTest {
         }
     }
 
+    /** 250 per 100 g at 200 g: 500 kcal · P 36 · C 0 · F 40, an estimate either way (D53 §3). */
     @Test
-    fun `the whole proposal adds up, so the owner can see the meal as well as its parts`() {
-        assertThat(aProposal().totalKcal).isEqualTo(685)
+    fun `an item to log starts as the estimate, at the model's amount`() {
+        val item = aProposedItem().toItemToLog()
+
+        assertThat(item.amountText).isEqualTo("200")
+        assertThat(item.unit).isEqualTo("g")
+        assertThat(item.worth)
+            .isEqualTo(Worth.Estimated(aProposedItem().rate, Confidence.MEDIUM))
+        assertThat(item.foodId).isNull()
+        val row = item.toFoodItem()!!
+        assertThat(listOf(row.kcal, row.proteinG, row.carbsG, row.fatG))
+            .containsExactly(500, 36, 0, 40).inOrder()
+        assertThat(row.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(row.confidence).isEqualTo(Confidence.MEDIUM)
     }
 
+    /** The detail goes into the row's portion words, beside the amount (D53, what does not change). */
     @Test
-    fun `an accepted item is an AI estimate, and keeps the confidence the model gave it`() {
-        val item = aProposedItem(confidence = Confidence.LOW).toFoodItem()
-
-        assertThat(item.source).isEqualTo(Source.AI_ESTIMATE)
-        assertThat(item.confidence).isEqualTo(Confidence.LOW)
+    fun `the detail is kept beside the amount`() {
+        assertThat(aBun().toItemToLog().toFoodItem()!!.portion).isEqualTo("1 bun (sesame, toasted)")
     }
 
+    /**
+     * The box holds the model's amount as it was stated: a quarter is not silently made 0.3 by
+     * the one-decimal formatting the day's words use.
+     */
     @Test
-    fun `an accepted item carries the assumed portion, because that is what makes it arguable`() {
-        assertThat(aProposedItem(portion = "~280 g").toFoodItem().portion).isEqualTo("~280 g")
+    fun `the model's amount goes into the box unrounded`() {
+        assertThat(aProposedItem(amount = 0.25, unit = "cup").toItemToLog().amountText)
+            .isEqualTo("0.25")
     }
 }

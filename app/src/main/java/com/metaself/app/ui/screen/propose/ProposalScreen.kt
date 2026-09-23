@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -23,16 +24,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.FoodItem
-import com.metaself.app.domain.portion.PortionControl
-import com.metaself.app.domain.ai.PortionScale
+import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.day.DayTotalsWording
+import com.metaself.app.ui.portion.AmountBox
+import com.metaself.app.ui.portion.unitWord
+import com.metaself.app.ui.propose.ProposalWording
 import com.metaself.app.ui.screen.day.MealNamingSheet
-import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.theme.Spacing
 import java.util.Locale
 
@@ -56,8 +63,14 @@ fun ProposalScreen(
     state: ProposalUiState,
     description: String,
     onDescribe: (String) -> Unit,
-    onScale: (Int, PortionScale) -> Unit,
-    onCount: (Int, Int) -> Unit,
+    onSetAmount: (Int, String) -> Unit,
+    onStep: (Int, Int) -> Unit,
+    onOpenWorth: (Int) -> Unit,
+    onSetWorthBox: (Int, WorthFigure, String) -> Unit,
+    onCloseWorth: (Int) -> Unit,
+    onUseYourFood: (Int) -> Unit,
+    onUseEstimate: (Int) -> Unit,
+    onCountInFoodUnit: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onTellItMore: (String) -> Unit,
     onSave: () -> Unit,
@@ -178,13 +191,34 @@ fun ProposalScreen(
             }
 
             is ProposalUiState.Proposed -> {
+                // An item the answer held and this app could not use is said, not silently
+                // missing: a row that is not there is the omission a list exists to show.
+                if (state.dropped.isNotEmpty()) {
+                    Text(
+                        text = pluralStringResource(
+                            R.plurals.propose_dropped,
+                            state.dropped.size,
+                            state.dropped.size,
+                            state.dropped.joinToString(", "),
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+
                 // The rows are one list, a related step apart, not a section each.
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
                     state.rows.forEachIndexed { index, row ->
                         ProposedRow(
                             row = row,
-                            onScale = { scale -> onScale(index, scale) },
-                            onCount = { howMany -> onCount(index, howMany) },
+                            onSetAmount = { text -> onSetAmount(index, text) },
+                            onStep = { by -> onStep(index, by) },
+                            onOpenWorth = { onOpenWorth(index) },
+                            onSetWorthBox = { figure, text -> onSetWorthBox(index, figure, text) },
+                            onCloseWorth = { onCloseWorth(index) },
+                            onUseYourFood = { onUseYourFood(index) },
+                            onUseEstimate = { onUseEstimate(index) },
+                            onCountInFoodUnit = { onCountInFoodUnit(index) },
                             onRemove = { onRemove(index) },
                         )
                     }
@@ -212,10 +246,29 @@ fun ProposalScreen(
                 // until the rows are written, so a second tap in that moment would log it twice.
                 val keepInFlight = taken && keeping == null && refusal == null
 
+                // A row that cannot be logged holds both ways of saving, and is named above them
+                // (D53 §6) — a Save that is simply off, with the reason three rows up, reads as broken.
+                val blocked = state.blockedBy?.let { state.rows[it] }
+
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    blocked?.let { row ->
+                        // Worded by what holds it: a refused worth box, or an amount. "Say how
+                        // much" over a row whose amount is fine sends him to the wrong box.
+                        val why = if (row.editingWorth?.refused == true) {
+                            R.string.propose_blocked_worth
+                        } else {
+                            R.string.propose_blocked
+                        }
+                        Text(
+                            text = stringResource(why, row.item.name),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
                     Button(
                         onClick = onSave,
-                        enabled = !keepInFlight,
+                        enabled = !keepInFlight && blocked == null,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(stringResource(R.string.propose_save))
@@ -230,7 +283,7 @@ fun ProposalScreen(
                                 taken = true
                                 onKeepAsMeal()
                             },
-                            enabled = !keepInFlight,
+                            enabled = !keepInFlight && blocked == null,
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text(stringResource(R.string.propose_keep_as_meal)) }
                     }
@@ -249,7 +302,7 @@ fun ProposalScreen(
 
                 HorizontalDivider()
 
-                // The one case scaling cannot fix: the same bowl, cooked richer.
+                // The one case a typed amount cannot fix: the same bowl, cooked richer.
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
                     OutlinedTextField(
                         value = extra,
@@ -286,35 +339,95 @@ fun ProposalScreen(
     }
 }
 
+/**
+ * One item: its name and detail, how much (typed), what it is worth, what that makes, where the
+ * figures came from, and Remove (D53 §6). The amount and the worth are separate lines because they
+ * are separate things; the total is the one derived from the other two.
+ */
 @Composable
 private fun ProposedRow(
     row: ProposalRow,
-    onScale: (PortionScale) -> Unit,
-    onCount: (Int) -> Unit,
+    onSetAmount: (String) -> Unit,
+    onStep: (Int) -> Unit,
+    onOpenWorth: () -> Unit,
+    onSetWorthBox: (WorthFigure, String) -> Unit,
+    onCloseWorth: () -> Unit,
+    onUseYourFood: () -> Unit,
+    onUseEstimate: () -> Unit,
+    onCountInFoodUnit: () -> Unit,
     onRemove: () -> Unit,
 ) {
-    val item = row.current
+    val item = row.item
+    // Only a piece is stepped; grams, millilitres and every other measured unit have only the box.
+    val counted = !Portions.isMass(item.unit)
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
     ) {
-        Text(
-            text = "${item.name} — ${item.kcal} kcal · P ${item.proteinG} · " +
-                "C ${item.carbsG} · F ${item.fatG}",
-            style = MaterialTheme.typography.bodyLarge,
+        Text(text = item.name, style = MaterialTheme.typography.bodyLarge)
+
+        // What the model said about it beyond its name — the size of piece it assumed, in words.
+        if (item.detail.isNotBlank()) {
+            Text(
+                text = item.detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // The unit is not edited on its own: a different unit needs a different worth (D53 §1).
+        // Only the app's own "portion" takes a plural (D37), and only grams are said as grams: a
+        // ceiling of millilitres or of pieces names no unit.
+        AmountBox(
+            text = item.amountText,
+            unitWords = unitWord(item.amountOrNull, item.unit),
+            counted = counted,
+            tooMuch = item.amountTooMuch,
+            most = item.most,
+            inGrams = Portions.isGrams(item.unit),
+            onText = onSetAmount,
+            onStep = onStep,
         )
 
-        // The model's own words, which go on the record as written; only the app's own
-        // "2 portion" is drawn in the plural (D37).
-        Text(
-            text = portionWords(item.portionAmount, item.portionUnit, item.portion),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        item.rateLine?.let { rate ->
+            val basis = when (rate.per) {
+                Per.HUNDRED -> stringResource(R.string.propose_per_100, item.unit)
+                Per.ONE -> stringResource(R.string.propose_per_one, item.unit)
+            }
+            Text(
+                text = "$basis: ${ProposalWording.worthFigures(rate)}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
-        // Decision D7: an estimate says how sure it was, and keeps saying it.
-        DayTotalsWording.origin(item.toFoodItem())?.let { origin ->
+        val boxes = row.editingWorth
+        if (boxes == null) {
+            if (item.rateLine != null) Small(stringResource(R.string.propose_change_worth), onOpenWorth)
+        } else {
+            WorthBoxesFields(boxes, item.unit, onSetWorthBox, onCloseWorth)
+        }
+
+        row.numbers?.let { numbers ->
+            Text(
+                text = ProposalWording.rowFigures(numbers),
+                style = MaterialTheme.typography.bodyLarge,
+            )
+        }
+
+        // Wording, not a source (D53 §3): above the origin line, never in its place, so a food whose
+        // figure is the label's still says so, and one whose figure is an estimate its confidence.
+        if (item.worth is Worth.YourFood) {
+            Text(
+                text = stringResource(R.string.propose_from_your_foods),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        // Decision D7: an estimate says how sure it was, and keeps saying it — whatever the amount.
+        row.sourceRow?.let { DayTotalsWording.origin(it) }?.let { origin ->
             Text(
                 text = origin,
                 style = MaterialTheme.typography.labelSmall,
@@ -322,33 +435,90 @@ private fun ProposedRow(
             )
         }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            when (PortionScale.controlFor(row.asProposed)) {
-                is PortionControl.Scale -> {
-                    Small(stringResource(R.string.propose_less)) { onScale(PortionScale.LESS) }
-                    Small(stringResource(R.string.propose_as_described)) {
-                        onScale(PortionScale.AS_DESCRIBED)
-                    }
-                    Small(stringResource(R.string.propose_more)) { onScale(PortionScale.MORE) }
-                }
+        YourFoodLine(row, onUseYourFood, onUseEstimate, onCountInFoodUnit)
 
-                is PortionControl.Count -> {
-                    val now = item.portionAmount.toInt().coerceAtLeast(1)
-                    Small(stringResource(R.string.propose_count_fewer)) { onCount(now - 1) }
-                    Text(text = "$now", style = MaterialTheme.typography.bodyLarge)
-                    Small(stringResource(R.string.propose_count_more)) { onCount(now + 1) }
-                }
-
-                is PortionControl.None -> Unit
-            }
-
-            Small(stringResource(R.string.propose_remove), onRemove)
-        }
+        Small(stringResource(R.string.propose_remove), onRemove)
 
         HorizontalDivider()
+    }
+}
+
+/**
+ * What his own foods say about this row, when they say anything (D53 §4, §5): the way back to the
+ * estimate while it is on his food; one question naming his food while it is not; or, for his food
+ * counted another way, the sentence saying so and the one honest switch.
+ */
+@Composable
+private fun YourFoodLine(
+    row: ProposalRow,
+    onUseYourFood: () -> Unit,
+    onUseEstimate: () -> Unit,
+    onCountInFoodUnit: () -> Unit,
+) {
+    if (row.onYourFood) {
+        val label = row.estimateKcal
+            ?.let { stringResource(R.string.propose_use_estimate_kcal, it.toString()) }
+            ?: stringResource(R.string.propose_use_estimate)
+        Small(label, onUseEstimate)
+        return
+    }
+    row.yourFoodOffered?.let { food ->
+        Small(stringResource(R.string.propose_use_your_food, food.name), onUseYourFood)
+        return
+    }
+    row.switchOffered?.let { (food, way) ->
+        // Grams in words; any other unit as the food names it, the app's own "portion" plural.
+        val words = when (way.countedAs) {
+            CountedAs.GRAMS -> stringResource(R.string.propose_grams)
+            CountedAs.UNITS -> unitWord(null, way.unit)
+        }
+        Text(
+            text = stringResource(R.string.propose_counted_in, food.name, words),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Small(stringResource(R.string.propose_count_it_in, words), onCountInFoodUnit)
+    }
+}
+
+/**
+ * The worth, typed over: four boxes with the food form's labels, and the food form's refusal with
+ * this row's basis and ceilings under them (D53 §6). Done closes them, except while one is refused.
+ */
+@Composable
+private fun WorthBoxesFields(
+    boxes: WorthBoxes,
+    unit: String,
+    onSetWorthBox: (WorthFigure, String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val labels = listOf(
+        R.string.foods_field_kcal,
+        R.string.foods_field_protein,
+        R.string.foods_field_carbs,
+        R.string.foods_field_fat,
+    )
+    WorthFigure.entries.forEach { figure ->
+        OutlinedTextField(
+            value = boxes.typed[figure.ordinal],
+            onValueChange = { onSetWorthBox(figure, it) },
+            label = { Text(stringResource(labels[figure.ordinal])) },
+            isError = boxes.refused,
+            singleLine = true,
+            // Decimal: the worth keeps decimals, as a food's figures do (D38).
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    if (boxes.refused) {
+        Text(
+            text = ProposalWording.worthRefused(boxes.per, unit),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    TextButton(onClick = onClose, enabled = !boxes.refused) {
+        Text(stringResource(R.string.propose_worth_done))
     }
 }
 

@@ -150,6 +150,11 @@
         <item quantity="one">%1$s portion</item>
         <item quantity="other">%1$s portions</item>
     </plurals>
+    <!-- The app's own "portion" on its own, beside an amount box that holds the number (D37, D53). -->
+    <plurals name="portions_unit">
+        <item quantity="one">portion</item>
+        <item quantity="other">portions</item>
+    </plurals>
 
     <string name="weight_title">Weight</string>
     <string name="weight_add">Log a weight</string>
@@ -174,12 +179,31 @@
     <string name="propose_hint">A sentence is enough: "chicken shawarma in a pita, hummus, side salad"</string>
     <string name="propose_ask">Work it out</string>
     <string name="propose_waiting">Asking the model…</string>
-    <string name="propose_less">Less</string>
-    <string name="propose_as_described">As described</string>
-    <string name="propose_more">More</string>
     <string name="propose_count_fewer">−</string>
     <string name="propose_count_more">+</string>
     <string name="propose_remove">Remove</string>
+    <!-- D53 §6: the amount box on each proposed row, the line saying what the item is worth (per
+         100 g, per 100 ml, or per one named piece, followed by ": 250 kcal · P 18 · …"), and the
+         sentence above Save naming the row that cannot be logged yet. -->
+    <string name="propose_amount_label">How much</string>
+    <string name="propose_per_100">per 100 %1$s</string>
+    <string name="propose_per_one">per %1$s</string>
+    <!-- Above the rows: items in the model's answer that were dropped as unusable, by name (D53 §2). -->
+    <plurals name="propose_dropped">
+        <item quantity="one">%1$d item in the answer couldn\'t be used: %2$s</item>
+        <item quantity="other">%1$d items in the answer couldn\'t be used: %2$s</item>
+    </plurals>
+    <string name="propose_blocked">Say how much %1$s was to save this.</string>
+    <string name="propose_blocked_worth">Say what %1$s is worth to save this.</string>
+    <string name="propose_change_worth">Change</string>
+    <string name="propose_worth_done">Done</string>
+    <string name="propose_from_your_foods">From your foods</string>
+    <string name="propose_use_estimate">Use the estimate</string>
+    <string name="propose_use_estimate_kcal">Use the estimate (%1$s kcal)</string>
+    <string name="propose_use_your_food">Use your %1$s?</string>
+    <string name="propose_counted_in">Your %1$s is counted in %2$s. Say how many %2$s to use its figures.</string>
+    <string name="propose_count_it_in">Count it in %1$s</string>
+    <string name="propose_grams">grams</string>
     <string name="propose_total">%1$s kcal in total</string>
     <string name="propose_save">Save this meal</string>
     <string name="propose_keep_as_meal">Save, and keep these as a meal</string>
@@ -202,7 +226,6 @@
     <string name="repeat_found_in_foods">Found in your foods — show them</string>
     <string name="repeat_found_in_meals">Found in your meals — show them</string>
     <string name="repeat_adjust">Adjust</string>
-    <string name="repeat_as_it_was">As it was</string>
     <string name="repeat_adjust_log">Log it</string>
     <string name="repeat_adjust_cancel">Leave it alone</string>
     <!-- Leaves the one-day adjuster's "Put something in" step without adding anything (issue #10). -->
@@ -224,6 +247,8 @@
     <string name="builder_rename">Rename it</string>
     <string name="builder_rename_retitles">Every day you have eaten this will show the new name. No calorie count changes.</string>
     <string name="builder_delete">Delete this meal</string>
+    <string name="builder_change_it">Change it</string>
+    <string name="builder_change_how_much">Change how much %1$s</string>
     <string name="builder_up">Up</string>
     <string name="builder_down">Down</string>
     <string name="builder_cannot_cost">This food no longer knows what it is counted in here.</string>

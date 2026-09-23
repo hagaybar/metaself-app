@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import java.math.BigDecimal
 import javax.inject.Inject
 
 /**
@@ -212,13 +213,45 @@ class RepeatViewModel @Inject constructor(
         _adjusting.value = null
     }
 
-    /** Change how much of one of them there is, this once. */
-    fun setComponentAmount(componentId: Long, amount: Double) {
+    /**
+     * How much of one of them there is, this once, as typed (D53 §6).
+     *
+     * The text is kept as typed, so "1." and "" are states the box can be in. The part's amount
+     * follows only when the text is an amount it can be logged at — above nothing and within its
+     * ceiling (D42); otherwise it keeps its last one and the adjustment is blocked
+     * ([Adjusting.blockedBy]) until he types one.
+     */
+    fun setComponentAmount(componentId: Long, text: String) {
         val current = _adjusting.value ?: return
-        if (amount <= 0.0) return
+        val component = current.rows.firstOrNull { it.id == componentId } ?: return
+        val amount = usableAmount(component, text)
         _adjusting.value = current.copy(
-            rows = current.rows.map { if (it.id == componentId) it.copy(amount = amount) else it },
+            typed = current.typed + (componentId to text),
+            rows = if (amount == null) {
+                current.rows
+            } else {
+                current.rows.map { if (it.id == componentId) it.copy(amount = amount) else it }
+            },
         )
+    }
+
+    /**
+     * − and + on a counted part: one of it more or fewer (D53 §6), as on the proposal screen.
+     *
+     * Only for a part counted in pieces; a weighed one has only its box. Never below one: a step
+     * that would go there does nothing, so a typed 0.5 is kept, and nought of something is a part to
+     * remove. A box that holds no number steps from nothing, so + gives 1. Decimal arithmetic, so
+     * 0.1 and one make 1.1.
+     */
+    fun stepComponent(componentId: Long, by: Int) {
+        val current = _adjusting.value ?: return
+        val component = current.rows.firstOrNull { it.id == componentId } ?: return
+        if (component.countedAs != CountedAs.UNITS) return
+        val now = current.amountText(component).trim().replace(',', '.').ifEmpty { "0" }
+            .toBigDecimalOrNull() ?: return
+        val next = now + by.toBigDecimal()
+        if (next < BigDecimal.ONE) return
+        setComponentAmount(componentId, next.stripTrailingZeros().toPlainString())
     }
 
     /**
@@ -333,6 +366,8 @@ class RepeatViewModel @Inject constructor(
      */
     fun adjusted(): LoggedMeal? {
         val current = _adjusting.value ?: return null
+        // A part whose box holds no usable amount is not logged at its last one behind his back.
+        if (current.blockedBy != null) return null
         val items = SavedMeals.toLoggableItems(current.asDefined.copy(components = current.rows))
         if (items.isEmpty()) return null
         _adjusting.value = null

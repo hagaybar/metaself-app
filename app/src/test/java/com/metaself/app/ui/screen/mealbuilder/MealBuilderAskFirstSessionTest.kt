@@ -111,6 +111,8 @@ class MealBuilderAskFirstSessionTest {
                 onDropPending = {},
                 onRemove = {},
                 onMove = { _, _ -> },
+                onChangePart = {},
+                onChangeFood = {},
                 onBeginCreatingFood = {},
                 onCreateFood = {},
                 onCancelCreatingFood = {},

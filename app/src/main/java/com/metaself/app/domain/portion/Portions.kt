@@ -1,5 +1,6 @@
 package com.metaself.app.domain.portion
 
+import java.math.BigDecimal
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -28,15 +29,25 @@ object Portions {
     private val GRAM_SPELLINGS = setOf("g", "gram", "grams", "גרם")
 
     /**
+     * The ways the millilitre is written, kept apart for the same reason as [GRAM_SPELLINGS]: a
+     * worth stated per 100 ml is multiplied by an amount in millilitres and by nothing else (D53
+     * §1). Grams and millilitres are never turned into each other here. Folded into [MASS_UNITS].
+     */
+    private val MILLILITRE_SPELLINGS = setOf(
+        "ml", "millilitre", "millilitres", "milliliter", "milliliters",
+        "מ\"ל", "מל",
+    )
+
+    /**
      * Units that are an amount of a substance rather than a number of things.
      *
      * Everything else is counted. Getting this list wrong in the countable direction is the safe
      * error: offering "2" for something measured in grams is odd but harmless, whereas offering
      * "1.5" for a pizza slice is the thing being fixed.
      */
-    private val MASS_UNITS = GRAM_SPELLINGS + setOf(
-        "kg", "ml", "l", "cl", "oz", "lb",
-        "מ\"ל", "ליטר", "קג",
+    private val MASS_UNITS = GRAM_SPELLINGS + MILLILITRE_SPELLINGS + setOf(
+        "kg", "l", "cl", "oz", "lb",
+        "ליטר", "קג",
     )
 
     /**
@@ -46,14 +57,6 @@ object Portions {
      * ball; the gram count is its working, not its portion.
      */
     private val NUMBER_THEN_WORD = Regex("""(\d+(?:\.\d+)?)\s*([\p{L}"']+)""")
-
-    /**
-     * The proportions offered for something measured rather than counted, shared by the model's
-     * proposals and by meals repeated from the record so that the two cannot offer different ones.
-     */
-    const val LESS = 0.75
-    const val AS_IT_WAS = 1.0
-    const val MORE = 1.5
 
     fun canScale(amount: Double, unit: String): Boolean = amount > 0.0 && unit.isNotBlank()
 
@@ -77,14 +80,22 @@ object Portions {
      */
     fun isGrams(unit: String): Boolean = unit.trim().lowercase() in GRAM_SPELLINGS
 
-    /** What to offer for this portion: a scale, a count, or nothing. */
-    fun controlFor(amount: Double, unit: String): PortionControl = when {
-        !canScale(amount, unit) -> PortionControl.None
-        isMass(unit) -> PortionControl.Scale
-        else -> PortionControl.Count(amount.roundToInt().coerceAtLeast(1))
-    }
+    /**
+     * Whether this unit IS the millilitre, however it was spelled — the one unit a per-100 ml worth
+     * can be multiplied by. Like [isGrams], narrower than [isMass] and needing no factor.
+     */
+    fun isMillilitres(unit: String): Boolean = unit.trim().lowercase() in MILLILITRE_SPELLINGS
 
     fun words(amount: Double, unit: String): String = "${format(amount)} $unit"
+
+    /**
+     * An amount as it goes into a box he may save without touching: exactly the number, "0.25" and
+     * never the "0.3" [format] makes of it — a number put in a box he then saves is taken as his, and
+     * must be the one that was said (D30, D53 §6). No exponent, and zero written by hand, for the
+     * reason `ProductForm` gives: how a zero BigDecimal strips its zeros has differed between Javas.
+     */
+    fun inBox(amount: Double): String =
+        if (amount == 0.0) "0" else BigDecimal.valueOf(amount).stripTrailingZeros().toPlainString()
 
     fun format(amount: Double): String =
         if (amount % 1.0 == 0.0) {

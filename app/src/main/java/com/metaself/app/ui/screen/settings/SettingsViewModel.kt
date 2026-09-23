@@ -681,9 +681,10 @@ class SettingsViewModel internal constructor(
             val result = estimator.estimate("one apple")
             problemLines.value = readProblems()
             testResult.value = when (result) {
+                // What the answer would log as it came, worth times amount (D53 §1).
                 is EstimateResult.Proposed -> "Connected. It answered with " +
                     "${result.proposal.items.size} item and " +
-                    "${result.proposal.totalKcal} kcal."
+                    "${result.proposal.items.sumOf { it.toItemToLog().numbers?.kcal ?: 0 }} kcal."
 
                 else -> ProposalWording.failure(result)
             }

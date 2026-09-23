@@ -453,30 +453,84 @@ class RepeatScreenRenderTest {
     }
 
     /**
-     * The same, reached by pressing More rather than by setting the amount: the test above would
-     * still pass if More stopped asking for the new amount, or asked for the wrong one. The screen
-     * holds no state of its own, so the amount More asks for is put back the way the view model
-     * puts it back, and the screen drawn again.
+     * The same, reached by pressing + rather than by setting the amount: the test above would still
+     * pass if + stopped asking for a step, or asked about the wrong part. The screen holds no state
+     * of its own, so the step is put back the way the view model puts it back, and drawn again.
      */
     @Test
-    fun `pressing More on one portion reads as part-portions`() {
+    fun `pressing plus on one portion reads as portions`() {
         val asDefined = stewNight(1.0)
         fun adjusted(rows: List<MealComponent>) = RepeatUiState(
             tab = RepeatTab.MEALS,
             meals = listOf(asDefined),
             adjusting = Adjusting(asDefined = asDefined, rows = rows),
         )
-        var asked: Pair<Long, Double>? = null
+        var asked: Pair<Long, Int>? = null
 
-        val before = draw(adjusted(asDefined.components)) { id, amount -> asked = id to amount }
+        val before = draw(adjusted(asDefined.components), onStepComponent = { id, by -> asked = id to by })
         assertThat(before).contains("Leftover stew — 1 portion · 300 kcal")
-        render.click("More")
+        render.click("+")
 
-        val (id, amount) = checkNotNull(asked) { "More asked for no new amount" }
+        val (id, by) = checkNotNull(asked) { "+ asked for no step" }
+        assertThat(by).isEqualTo(1)
         val after = draw(
-            adjusted(asDefined.components.map { if (it.id == id) it.copy(amount = amount) else it }),
+            adjusted(asDefined.components.map { if (it.id == id) it.copy(amount = it.amount + by) else it }),
         )
-        assertThat(after).contains("Leftover stew — 1.5 portions · 450 kcal")
+        assertThat(after).contains("Leftover stew — 2 portions · 600 kcal")
+    }
+
+    // --- Just for today takes a typed amount (D53 §6) --------------------------------------------
+
+    /** The three proportions are gone: each part is a box holding the meal's own number. */
+    @Test
+    fun `just for today offers a typed amount, not less, as it was or more`() {
+        val salad = salad()
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(asDefined = salad, rows = salad.components),
+            ),
+        )
+
+        // The boxes: 100 (g of cucumber) and 1 (spoon of oil), in text fields, each with its unit
+        // beside it — typed, not chosen from proportions.
+        assertThat(render.fieldTexts()).containsAtLeast("100", "1").inOrder()
+        assertThat(texts).containsAtLeast("g", "spoon")
+        // − and + for the counted part only.
+        assertThat(texts.count { it == "+" }).isEqualTo(1)
+        assertThat(texts.count { it == "−" }).isEqualTo(1)
+    }
+
+    /** A blank box leaves Log it off and names the part that needs an amount. */
+    @Test
+    fun `a part with no amount is named and nothing can be logged`() {
+        val salad = salad()
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(asDefined = salad, rows = salad.components, typed = mapOf(11L to "")),
+            ),
+        )
+
+        assertThat(texts).contains("Say how much Olive oil was to save this.")
+        assertThat(render.isEnabled("Log it")).isFalse()
+    }
+
+    @Test
+    fun `a part past the ceiling says so under its box`() {
+        val salad = salad()
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(asDefined = salad, rows = salad.components, typed = mapOf(11L to "101")),
+            ),
+        )
+
+        assertThat(texts).contains("At most 100 at a time.")
+        assertThat(render.isEnabled("Log it")).isFalse()
     }
 
     /** The meals tab is his own meals now, and offers the way to make one. */
@@ -807,7 +861,8 @@ class RepeatScreenRenderTest {
 
     private fun draw(
         state: RepeatUiState,
-        onSetComponentAmount: (Long, Double) -> Unit = { _, _ -> },
+        onSetComponentAmount: (Long, String) -> Unit = { _, _ -> },
+        onStepComponent: (Long, Int) -> Unit = { _, _ -> },
     ): List<String> = render.texts {
         RepeatScreen(
             state = state,
@@ -826,6 +881,7 @@ class RepeatScreenRenderTest {
             onSearch = {},
             onBeginAdjusting = {},
             onSetComponentAmount = onSetComponentAmount,
+            onStepComponent = onStepComponent,
             onRemoveComponent = {},
             onCancelAdjusting = {},
             onLogAdjusted = {},

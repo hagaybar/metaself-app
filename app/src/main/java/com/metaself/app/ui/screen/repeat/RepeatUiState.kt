@@ -10,6 +10,7 @@ import com.metaself.app.domain.food.Logging
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.food.SavedMeal
+import com.metaself.app.domain.portion.Portions
 
 /**
  * A meal the owner built, opened for one day only.
@@ -33,6 +34,8 @@ import com.metaself.app.domain.food.SavedMeal
  * @property alreadyIn foods the search finds that [rows] already hold — named rather than offered,
  *   so a search that finds one does not look like one that found nothing. Empty while nothing is
  *   typed, or the sentence would list the whole meal.
+ * @property typed the text in each part's amount box, by the part's id, once he has typed in it
+ *   (D53 §6). A part not in it shows its own amount ([amountText]).
  */
 data class Adjusting(
     val asDefined: SavedMeal,
@@ -41,7 +44,32 @@ data class Adjusting(
     val adding: Choosing? = null,
     val offered: List<Food> = emptyList(),
     val alreadyIn: List<Food> = emptyList(),
+    val typed: Map<Long, String> = emptyMap(),
 ) {
+    /**
+     * What a part's amount box holds (D53 §6): what he typed there, or — until he types — the
+     * amount the meal has for it, his own stored number (D30), never a default.
+     */
+    fun amountText(component: MealComponent): String =
+        typed[component.id] ?: Portions.inBox(component.amount)
+
+    /** True only for a number past the part's ceiling (D42), which its box says out loud. */
+    fun amountTooMuch(component: MealComponent): Boolean =
+        typedAmount(component)?.let {
+            BelievableAmount.isTooMuch(it, BelievableAmount.amountEaten(component.countedAs))
+        } == true
+
+    /**
+     * The first part whose box holds no usable amount — blank, zero, not a number, or past its
+     * ceiling — or null when every part can be logged. Nothing is logged while there is one, and the
+     * screen names it; the part keeps its last usable amount meanwhile, so the total does not jump.
+     */
+    val blockedBy: Long?
+        get() = rows.firstOrNull { usableAmount(it, amountText(it)) == null }?.id
+
+    private fun typedAmount(component: MealComponent): Double? =
+        amountText(component).trim().replace(',', '.').toDoubleOrNull()
+
     val totalKcal: Int
         get() = rows.sumOf { (it.worth as? LoggedFrom.Numbers)?.kcal ?: 0 }
 
@@ -50,6 +78,15 @@ data class Adjusting(
 
     val isEmpty: Boolean get() = rows.isEmpty()
 }
+
+/**
+ * [text] as an amount of [component], or null when it is not one: above nothing and within the
+ * ceiling for how the part is counted (D42) — 5000 g, or 100 of them.
+ */
+internal fun usableAmount(component: MealComponent, text: String): Double? =
+    text.trim().replace(',', '.').toDoubleOrNull()?.takeIf {
+        it > 0.0 && BelievableAmount.isBelievable(it, BelievableAmount.amountEaten(component.countedAs))
+    }
 
 /** Which of the two lists is in front. */
 enum class RepeatTab { FOODS, MEALS }

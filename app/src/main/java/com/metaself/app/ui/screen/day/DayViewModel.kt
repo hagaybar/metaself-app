@@ -10,6 +10,7 @@ import com.metaself.app.data.food.DetachedRows
 import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
+import com.metaself.app.data.food.ToLog
 import com.metaself.app.domain.food.MealFromDay
 import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.data.profile.ProfileRepository
@@ -1130,9 +1131,9 @@ class DayViewModel @Inject constructor(
      * One meal holding every item, not one meal per item: they were eaten together, and step 9's
      * repeat will re-log them together.
      */
-    fun logMeal(items: List<FoodItem>) {
+    fun logMeal(items: List<ToLog>) {
         if (items.isEmpty()) return
-        sayWhatWasLogged(items)
+        sayWhatWasLogged(items.map { it.item })
         logging { writeMeal(items) }
     }
 
@@ -1170,13 +1171,13 @@ class DayViewModel @Inject constructor(
      * accept screen lets go of its answer, which it must keep while a failure is on screen so there
      * is something to try again.
      */
-    fun logMealAndChoose(items: List<FoodItem>, onLogged: () -> Unit = {}) {
+    fun logMealAndChoose(items: List<ToLog>, onLogged: () -> Unit = {}) {
         if (items.isEmpty()) return
         // Synchronously, so that every frame between the tap and the write has an empty choice in
         // it: the sheet stays shut until the ids arrive, and it can never open over the old ones.
         _chosen.value = emptySet()
         _refusal.value = null
-        sayWhatWasLogged(items)
+        sayWhatWasLogged(items.map { it.item })
         logging {
             val ids = writeMeal(items)
             // Assigned, not added to: a row ticked on the day before he came here is not part of
@@ -1193,8 +1194,11 @@ class DayViewModel @Inject constructor(
      * are written, so a row points at its food from the moment it exists, and the notice about what
      * that logging taught a food is replaced whole (D45). The ids are the write's own answer, in the
      * order the rows were given, and only the route that goes on to name a meal reads them.
+     *
+     * Each row comes with what its food is to be taught, when that is not what the row itself
+     * implies: a described item's worth, unrounded, and the brand of the food he took it as (D53 §3).
      */
-    private suspend fun writeMeal(items: List<FoodItem>): List<Long> {
+    private suspend fun writeMeal(items: List<ToLog>): List<Long> {
         // Attached before it is written, so the row points at the food from the moment it
         // exists. Every way in reaches this line.
         val attached = loggedFoods.attach(items)

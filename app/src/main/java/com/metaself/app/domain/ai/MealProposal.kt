@@ -1,41 +1,46 @@
 package com.metaself.app.domain.ai
 
+import com.metaself.app.domain.amount.ItemToLog
+import com.metaself.app.domain.amount.Rate
+import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.Confidence
-import com.metaself.app.domain.day.FoodItem
-import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.portion.Portions
 
 /**
- * One thing the model thinks was on the plate.
+ * One thing the model thinks was on the plate: what it is worth, and how much of it there was, apart
+ * (D53 §1, §2).
  *
- * [portion] is the sentence the model gave — "1 ball, ~100 g" — and is what goes on the record,
- * because it is what makes the numbers arguable (D5). [portionAmount] and [portionUnit] are the
- * same thing as arithmetic, so that scaling can multiply it; they exist for the buttons and never
- * for display — with one exception: they also choose the plural of the app's own "portion", so
- * the model's "2 portion" reads "2 portions" while "2 portion" is what is saved (D37).
+ * [rate] is per 100 g, per 100 ml or per one [unit] — never the total. [amount] and [unit] are the
+ * amount he stated, or one natural piece when he stated none; the model is told never to make up
+ * grams for a piece. [detail] is everything else it said about the item ("sesame, toasted") and goes
+ * into the row's portion words beside the amount, where the assumption is arguable (D5 as amended).
+ * [confidence] is about the figures for one piece or 100 of the unit, the size of piece included.
+ *
+ * Kept beside the row it becomes until he saves, so that the estimate is never lost to anything
+ * done to the row.
  */
 data class ProposedItem(
     val name: String,
-    val portion: String,
-    val portionAmount: Double,
-    val portionUnit: String,
-    val kcal: Int,
-    val proteinG: Int,
-    val carbsG: Int,
-    val fatG: Int,
+    val detail: String,
+    val amount: Double,
+    val unit: String,
+    val rate: Rate,
     val confidence: Confidence,
 ) {
-    /** What this becomes if the owner accepts it. */
-    fun toFoodItem(): FoodItem = FoodItem(
+    /**
+     * The row this starts as: the model's worth at the model's amount, an estimate (D53 §3).
+     *
+     * The amount goes into the box as the model stated it — "0.25", not the "0.3" the day's
+     * one-decimal words would make of it — because a number put in a box he then saves is taken as
+     * his, and must be the one that was said.
+     */
+    fun toItemToLog(): ItemToLog = ItemToLog(
         name = name,
-        portion = portion,
-        portionAmount = portionAmount,
-        portionUnit = portionUnit,
-        kcal = kcal,
-        proteinG = proteinG,
-        carbsG = carbsG,
-        fatG = fatG,
-        source = Source.AI_ESTIMATE,
-        confidence = confidence,
+        detail = detail,
+        amountText = Portions.inBox(amount),
+        unit = unit,
+        worth = Worth.Estimated(rate, confidence),
+        foodId = null,
     )
 }
 
@@ -51,10 +56,15 @@ data class ProposedItem(
 data class MealProposal(
     val items: List<ProposedItem>,
     val note: String?,
+    /**
+     * The names of items the answer held but that could not be used — a figure missing or past its
+     * ceiling, a basis that is none (D53 §2). Said on the screen, because a row that is simply not
+     * there is the omission this list-not-a-total exists to make visible. An item dropped with no
+     * name has nothing to be called and is not in it.
+     */
+    val dropped: List<String> = emptyList(),
 ) {
     init {
         require(items.isNotEmpty()) { "a proposal cannot be empty" }
     }
-
-    val totalKcal: Int get() = items.sumOf { it.kcal }
 }

@@ -3,6 +3,7 @@ package com.metaself.app.data.food
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.DerivedFoods
+import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.FoodRetaught
 import com.metaself.app.domain.food.LoggedFoodRow
@@ -57,6 +58,13 @@ class LoggedFoods @Inject constructor(
         val retaught: List<FoodRetaught> get() = ReplacedFacts.collapse(rows)
     }
 
+    /** The rows of one meal, each with what its food is to be taught ([ToLog]). */
+    @JvmName("attachToLog")
+    suspend fun attach(rows: List<ToLog>): Attached {
+        val each = rows.map { attach(it.item, brand = it.brand, taught = it.taught) }
+        return Attached(each.flatMap { it.items }, each.flatMap { it.rows })
+    }
+
     suspend fun attach(items: List<FoodItem>): Attached {
         val each = items.map { attach(it) }
         return Attached(each.flatMap { it.items }, each.flatMap { it.rows })
@@ -66,7 +74,9 @@ class LoggedFoods @Inject constructor(
      * The row, with the food it is.
      *
      * [labelPer100g] is the packet's own figures, from a scan; when given, the food is offered them
-     * as its per-100 g instead of the figures worked back from the row. A scan that brings a
+     * as its per-100 g instead of the figures worked back from the row. [taught] is a described
+     * item's worth (D53 §3); when given, the food is offered it in place of everything worked back
+     * from the row, in the one offer, for the same reason. A scan that brings a
      * [barcode] but no such figures — its label is no quantity of food — teaches its food nothing:
      * see [attachUntaught].
      *
@@ -80,6 +90,7 @@ class LoggedFoods @Inject constructor(
         barcode: String? = null,
         brand: String? = null,
         labelPer100g: Nutrients? = null,
+        taught: FoodFacts? = null,
     ): Attached {
         // A row already attached keeps its food. A repeated meal arrives carrying rows that were
         // resolved when they were first logged, and resolving them again would be asking the same
@@ -114,7 +125,7 @@ class LoggedFoods @Inject constructor(
                             provenance = Provenance(Source.LABEL, confidence = null, setAtMillis = 0),
                         ),
                     )
-                } ?: derived.facts,
+                } ?: taught ?: derived.facts,
                 barcode = barcode,
             )
         }.getOrNull() ?: return Attached(listOf(item), emptyList())
@@ -188,3 +199,14 @@ class LoggedFoods @Inject constructor(
         loggedAtMillis = 0,
     )
 }
+
+/**
+ * A row about to be logged as part of a meal, with what its food is to be taught when that is not
+ * what the row itself implies.
+ *
+ * @property taught a described item's worth, unrounded ([LoggedFoods.attach]); null to teach from
+ *   the row, as every other way in does.
+ * @property brand the brand of the food the row was taken as, so it lands on that food rather than
+ *   an unbranded one of the same name (identity is name and brand); null for none.
+ */
+data class ToLog(val item: FoodItem, val taught: FoodFacts? = null, val brand: String? = null)

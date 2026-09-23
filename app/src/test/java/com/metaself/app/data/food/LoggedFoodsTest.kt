@@ -1,6 +1,11 @@
 package com.metaself.app.data.food
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.amount.ItemToLog
+import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.Rate
+import com.metaself.app.domain.amount.Worth
+import com.metaself.app.domain.amount.teaches
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Source
@@ -599,5 +604,109 @@ class LoggedFoodsTest {
         val per100g = foods.current.single().facts.per100g!!
         assertThat(per100g.provenance.source).isEqualTo(Source.TYPED)
         assertThat(per100g.nutrients).isEqualTo(Nutrients(380.0, 8.0, 80.0, 1.0))
+    }
+
+    // --- A described item teaches its food the worth itself (D53 §3) ------------------------------
+
+    /**
+     * Butter, invented to make the rounding visible: 717.4 kcal per 100 g, 7 g of it. The row is
+     * 717.4 × 0.07 = 50.218 → 50 kcal, and 50 worked back over 7 g is 714.29 per 100 g. The food
+     * must learn the 717.4 it was described with.
+     */
+    private val butterWorth = Rate(Nutrients(717.4, 0.9, 0.1, 81.1), Per.HUNDRED)
+
+    private fun butter(grams: String = "7") = ItemToLog(
+        name = "Butter",
+        detail = "",
+        amountText = grams,
+        unit = "g",
+        worth = Worth.Estimated(butterWorth, Confidence.MEDIUM),
+        foodId = null,
+    )
+
+    @Test
+    fun `a described item teaches its food the worth itself`() = runTest {
+        val foods = FakeFoodRepository()
+        val described = butter()
+        val row = described.toFoodItem()!!
+        assertThat(row.kcal).isEqualTo(50)
+
+        LoggedFoods(foods).attach(row, taught = described.teaches())
+
+        val per100g = foods.current.single().facts.per100g!!
+        assertThat(per100g.nutrients).isEqualTo(butterWorth.nutrients)
+        assertThat(per100g.provenance)
+            .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, setAtMillis = 0))
+        assertThat(foods.current.single().facts.perUnit).isNull()
+    }
+
+    /** A row carrying its food is his food's, or his typing over it: it teaches that food nothing. */
+    @Test
+    fun `a row carrying its food teaches it nothing, whatever it was handed`() = runTest {
+        val his = FoodFacts(per100g = typedPer100g(700.0))
+        val foods = FakeFoodRepository(listOf(aFood("Butter", his)))
+        val row = butter().toFoodItem()!!.copy(foodId = 1)
+
+        val attached = LoggedFoods(foods).attach(row, taught = butter().teaches())
+
+        assertThat(attached.item).isEqualTo(row)
+        assertThat(attached.retaught).isEmpty()
+        assertThat(foods.current.single().facts).isEqualTo(his)
+    }
+
+    /** The guarded statements still decide: a model's guess cannot replace a figure he typed. */
+    @Test
+    fun `an estimate still cannot replace a figure he typed`() = runTest {
+        val his = FoodFacts(per100g = typedPer100g(700.0))
+        val foods = FakeFoodRepository(listOf(aFood("Butter", his)))
+
+        val attached =
+            LoggedFoods(foods).attach(butter().toFoodItem()!!, taught = butter().teaches())
+
+        assertThat(foods.current.single().facts).isEqualTo(his)
+        assertThat(attached.retaught).isEmpty()
+        assertThat(attached.item.foodId).isEqualTo(1)
+    }
+
+    /**
+     * A row taken as one of his branded foods, but left on the estimate because that food cannot
+     * cost the amount, carries the food's brand — so it lands on that food, and no unbranded food of
+     * the same name is made beside it (identity is name and brand).
+     */
+    @Test
+    fun `a row handed a brand lands on the branded food and makes no second one`() = runTest {
+        val branded = aFood("Oat drink", FoodFacts(per100g = typedPer100g(45.0)))
+            .copy(brand = "Acme Oats")
+        val foods = FakeFoodRepository(listOf(branded))
+        val row = anItem(
+            name = "Oat drink", portionAmount = 1.0, portionUnit = "glass",
+            kcal = 120, proteinG = 1, carbsG = 16, fatG = 5,
+            source = Source.AI_ESTIMATE, confidence = Confidence.LOW,
+        )
+
+        val attached = LoggedFoods(foods).attach(listOf(ToLog(row, brand = "Acme Oats")))
+
+        assertThat(foods.current).hasSize(1)
+        assertThat(attached.item.foodId).isEqualTo(1)
+        // What one glass is worth is a new fact beside his per-100 g, which is left alone.
+        assertThat(foods.current.single().facts.per100g).isEqualTo(typedPer100g(45.0))
+        assertThat(foods.current.single().facts.perUnit!!.unitName).isEqualTo("glass")
+    }
+
+    @Test
+    fun `rows handed over for a meal each teach what they were handed`() = runTest {
+        val foods = FakeFoodRepository()
+        val described = butter()
+        val plain = typedRow("Cucumber", 18)
+
+        val attached = LoggedFoods(foods).attach(
+            listOf(ToLog(described.toFoodItem()!!, taught = described.teaches()), ToLog(plain)),
+        )
+
+        assertThat(attached.items.map { it.name }).containsExactly("Butter", "Cucumber").inOrder()
+        assertThat(foods.current.first { it.name == "Butter" }.facts.per100g!!.nutrients)
+            .isEqualTo(butterWorth.nutrients)
+        assertThat(foods.current.first { it.name == "Cucumber" }.facts.per100g!!.nutrients.kcal)
+            .isEqualTo(18.0)
     }
 }

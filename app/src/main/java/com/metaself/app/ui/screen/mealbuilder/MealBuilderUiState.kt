@@ -29,6 +29,13 @@ data class Adding(
      * a panel that is already transient would be a second dismiss for one thing.
      */
     val retaughtNotice: String? = null,
+    /**
+     * The part this panel is changing, when it was opened on a food already in the meal (D53 §7,
+     * #4); null for a food being put in. Only the button's words differ: both write through
+     * `SavedMealRepository.put`, which changes a food already there in place, so the part keeps its
+     * place in the list.
+     */
+    val changing: Long? = null,
 ) {
     /** The ceiling on how much of it, by how he is counting: 5000 g, or 100 of them (D42). */
     val most: Double get() = BelievableAmount.amountEaten(countedAs)

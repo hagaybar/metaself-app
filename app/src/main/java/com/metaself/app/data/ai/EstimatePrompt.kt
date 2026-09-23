@@ -19,6 +19,10 @@ import kotlinx.serialization.json.putJsonObject
  * was designed answered in ranges, volunteered fields nobody had asked for, and one gave a total
  * that silently omitted a third of the meal. A schema is what turns "please" into "this shape or
  * nothing".
+ *
+ * Since D53 the reply gives what each item is worth (per 100 g, per 100 ml or per one piece) and how
+ * much there was, apart, with every field required. An unstated amount is one natural piece, never
+ * grams the model made up. What is sent does not change: the words, and nothing else.
  */
 object EstimatePrompt {
 
@@ -40,15 +44,29 @@ object EstimatePrompt {
         - A drink is one item, however it is made: a cappuccino, a latte, tea with milk, a smoothie,
           a milkshake, juice, beer, a cocktail. Do not split it into its ingredients. Give it as a
           count of its usual serving — 1 cup, 1 glass, 1 bottle, 1 can — and if its size matters,
-          say the size you assumed in the note. Milk poured over cereal or cooked into a dish is an
-          ingredient of that food, not a drink.
-        - For each item, state how much of it you assumed, as a number greater than zero and a unit —
-          for example 280 and "g", or 1 and "ball". Always give your best estimate, even when you are
-          unsure, and lower the confidence instead. Never leave the amount at zero or the unit empty.
+          say the size you assumed in the detail. Milk poured over cereal or cooked into a dish is
+          an ingredient of that food, not a drink.
+        - The name is the plain name of the food, such as "Hamburger bun" or "Cappuccino". No size,
+          brand, cooking or quantity in it. Everything else worth saying about the item goes in the
+          detail, such as "sesame, toasted" or "large"; leave the detail empty if there is nothing.
+        - For each item, give how much there was as a number greater than zero and a unit. If a unit
+          was stated, use that unit and that number: "a 200 g burger" is 200 and "g", "330 ml of
+          juice" is 330 and "ml". If none was stated, use the natural piece of the thing: "a bun" is
+          1 and "bun", "two slices of pizza" is 2 and "slice", "a cappuccino" is 1 and "cup". Name a
+          piece in the singular.
+        - Never convert an amount that was stated.
+          Never make up grams or millilitres for an amount that was not stated, not even in the
+          detail. The detail may say the size of piece you assumed in words, such as "large",
+          never in grams.
+        - Always give your best estimate of the amount, even when you are unsure, and lower the
+          confidence instead. Never leave the amount at zero or the unit empty.
+        - The four figures are what the food is worth, not the total: per 100 of the unit when the
+          unit is grams or millilitres, with figures_per "100"; per one piece otherwise, with
+          figures_per "1". Figures are per 100 g, per 100 ml or per one piece, never the total.
         - Every figure is a single number. Never a range, and never two numbers joined by a dash.
           If you are unsure, give your best single figure and lower the confidence instead.
-        - Confidence is LOW, MEDIUM or HIGH, and describes how sure you are about the amount more
-          than about the food.
+        - Confidence is LOW, MEDIUM or HIGH, and describes how sure you are about the figures for
+          one piece or for 100 of the unit, including the size of piece you assumed.
         - Reply in the same language the description was written in, including the item names.
         - Add at most one short note about the biggest assumption you made. Leave it out if there
           isn't one.
@@ -128,17 +146,24 @@ object EstimatePrompt {
                     put("type", "object")
                     put("additionalProperties", false)
                     putJsonArray("required") {
-                        add("name"); add("amount"); add("unit"); add("kcal")
-                        add("protein_g"); add("carbs_g"); add("fat_g"); add("confidence")
+                        add("name"); add("detail"); add("amount"); add("unit"); add("figures_per")
+                        add("kcal"); add("protein_g"); add("carbs_g"); add("fat_g")
+                        add("confidence")
                     }
                     putJsonObject("properties") {
                         putJsonObject("name") { put("type", "string") }
+                        putJsonObject("detail") { put("type", "string") }
                         putJsonObject("amount") { put("type", "number") }
                         putJsonObject("unit") { put("type", "string") }
-                        putJsonObject("kcal") { put("type", "integer") }
-                        putJsonObject("protein_g") { put("type", "integer") }
-                        putJsonObject("carbs_g") { put("type", "integer") }
-                        putJsonObject("fat_g") { put("type", "integer") }
+                        putJsonObject("figures_per") {
+                            put("type", "string")
+                            putJsonArray("enum") { add("100"); add("1") }
+                        }
+                        // Numbers, not integers: a worth keeps its decimals (D53 §1).
+                        putJsonObject("kcal") { put("type", "number") }
+                        putJsonObject("protein_g") { put("type", "number") }
+                        putJsonObject("carbs_g") { put("type", "number") }
+                        putJsonObject("fat_g") { put("type", "number") }
                         putJsonObject("confidence") {
                             put("type", "string")
                             putJsonArray("enum") { add("LOW"); add("MEDIUM"); add("HIGH") }

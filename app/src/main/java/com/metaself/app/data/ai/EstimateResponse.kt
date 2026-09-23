@@ -3,14 +3,18 @@ package com.metaself.app.data.ai
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealProposal
 import com.metaself.app.domain.ai.ProposedItem
+import com.metaself.app.domain.amount.BelievableAmount
+import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.Rate
 import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.portion.Portions
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.util.Locale
-import kotlin.math.roundToInt
 
 /**
  * What comes back, read strictly.
@@ -20,9 +24,13 @@ import kotlin.math.roundToInt
  * show rather than an exception crossing the seam.
  *
  * **An item missing a number it needs is DROPPED, not defaulted to zero.** A zero-calorie item on
- * the record is a lie the owner has no way to catch; a missing row is something he can see. If
- * dropping leaves nothing at all, the whole reply is unreadable — which is also what a reply
- * containing a single lumped total amounts to, and it is refused for the same reason.
+ * the record is a lie the owner has no way to catch; a missing row is something he can see. The same
+ * goes for a figure that is negative or past D42's ceiling for its basis (D53 §2): it used to be
+ * clamped to 0, which was a number nobody stated — and for a row that worth would make, at the amount
+ * stated, past what a whole item typed by hand may be. If dropping leaves nothing at all, the whole reply
+ * is unreadable — which is also what a reply containing a single lumped total amounts to, and it is
+ * refused for the same reason. What was dropped is named on the proposal ([MealProposal.dropped]),
+ * so the missing row is said rather than left to be noticed.
  */
 object EstimateResponse {
 
@@ -35,11 +43,15 @@ object EstimateResponse {
             .jsonPrimitive.content
 
         val payload = json.parseToJsonElement(content).jsonObject
-        val items = payload["items"]!!.jsonArray.mapNotNull { it.jsonObject.toItem() }
+        val read = payload["items"]!!.jsonArray.map { it.jsonObject to it.jsonObject.toItem() }
+        val items = read.mapNotNull { it.second }
+        val dropped = read.filter { it.second == null }.mapNotNull { (item, _) ->
+            item["name"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        }
 
         // D34: every item comes with an amount, or the reply is one that did not give them.
         // Logged anyway, an item naming a unit and no amount could not join a meal (issue #23).
-        val withoutAmount = items.filter { it.portionAmount <= 0.0 || it.portionUnit.isBlank() }
+        val withoutAmount = items.filter { it.amount <= 0.0 || it.unit.isBlank() }
 
         if (items.isEmpty()) {
             EstimateResult.Unreadable("the reply held no items this app could use")
@@ -50,40 +62,95 @@ object EstimateResponse {
                 MealProposal(
                     items = items,
                     note = payload["note"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },
+                    dropped = dropped,
                 ),
             )
         }
     }.getOrElse { EstimateResult.Unreadable("the reply was not in the shape this app asked for") }
 
+    /**
+     * One item, or null when it is not in the shape asked for (D53 §2): a figure missing, not a
+     * number, negative or past D42's ceiling for its basis; a basis other than per 100 or per one,
+     * per 100 of something that is not grams or millilitres, or per one gram or millilitre; a name
+     * or a detail missing; a row, at the amount stated, past what a whole item may be.
+     *
+     * The amount is NOT judged here beyond being read and priced. None, zero or no unit is D34's
+     * question and is answered by the caller; one past the amount box's ceiling is kept, so the row
+     * arrives with its box refusing it, exactly as if he had typed it.
+     */
     private fun JsonObject.toItem(): ProposedItem? {
         val name = this["name"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() } ?: return null
-        val kcal = this["kcal"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
-        val protein = this["protein_g"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
-        val carbs = this["carbs_g"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
-        val fat = this["fat_g"]?.jsonPrimitive?.content?.toIntOrNull() ?: return null
+        val detail = this["detail"]?.jsonPrimitive?.content ?: return null
+        // Only a finite number is an amount. "NaN", "Infinity" or 1e999 goes as none does — D34's
+        // question — rather than into a row whose amount box cannot be written (it would throw).
+        val amount = this["amount"]?.jsonPrimitive?.content?.toDoubleOrNull()
+            ?.takeIf { it.isFinite() } ?: 0.0
+        val unit = this["unit"]?.jsonPrimitive?.content?.trim().orEmpty()
 
-        val amount = this["amount"]?.jsonPrimitive?.content?.toDoubleOrNull() ?: 0.0
-        val unit = this["unit"]?.jsonPrimitive?.content.orEmpty()
+        val per = when (this["figures_per"]?.jsonPrimitive?.content) {
+            "100" -> Per.HUNDRED
+            "1" -> Per.ONE
+            else -> return null
+        }
+        // Per 100 of a bun is not a basis; costing it would divide a count of buns by 100. Nor is
+        // per one gram or millilitre, the other way round: it would multiply a weight by a worth
+        // judged against a piece's ceiling — 250 kcal "per 1 g" is 50,000 kcal at 200 g.
+        val measured = Portions.isGrams(unit) || Portions.isMillilitres(unit)
+        if (per == Per.HUNDRED && unit.isNotEmpty() && !measured) return null
+        if (per == Per.ONE && measured) return null
+
+        val (kcalMost, macroMost) = when (per) {
+            Per.HUNDRED -> BelievableAmount.KCAL_PER_100G to BelievableAmount.MACRO_PER_100G
+            Per.ONE -> BelievableAmount.KCAL_PER_UNIT to BelievableAmount.MACRO_PER_UNIT
+        }
+        val kcal = figure("kcal", kcalMost) ?: return null
+        val protein = figure("protein_g", macroMost) ?: return null
+        val carbs = figure("carbs_g", macroMost) ?: return null
+        val fat = figure("fat_g", macroMost) ?: return null
+
+        val rate = Rate(Nutrients(kcal, protein, carbs, fat), per)
+        if (!believableRow(rate, amount, unit)) return null
 
         return ProposedItem(
-            name = name,
-            portion = portionWords(amount, unit),
-            portionAmount = amount,
-            portionUnit = unit,
-            kcal = maxOf(0, kcal),
-            proteinG = maxOf(0, protein),
-            carbsG = maxOf(0, carbs),
-            fatG = maxOf(0, fat),
+            name = name.trim(),
+            detail = detail.trim(),
+            amount = amount,
+            unit = unit,
+            rate = rate,
             confidence = confidenceOf(this["confidence"]?.jsonPrimitive?.content),
         )
     }
 
-    /** An amount the model could not put a number to says so, rather than pretending to a zero. */
-    private fun portionWords(amount: Double, unit: String): String = when {
-        amount <= 0.0 || unit.isBlank() -> "amount not stated"
-        amount % 1.0 == 0.0 -> "${amount.roundToInt()} $unit"
-        else -> String.format(Locale.US, "%.1f %s", amount, unit)
+    /**
+     * Whether the row this item arrives as is one a whole item typed by hand could be — D42's
+     * [BelievableAmount.ENTRY_KCAL] and [BelievableAmount.ENTRY_MACRO_G], the bounds *Type the
+     * numbers* has. A believable worth times a believable amount can still be past them (5000 kcal
+     * a piece, 100 pieces), and such a row is a misread basis, not a meal.
+     *
+     * Judged only at an amount the box would accept. None is D34's question; one past the box's
+     * ceiling arrives with its box refusing it and cannot be saved as it stands (D53 §2), so what
+     * it would total is never logged.
+     */
+    private fun believableRow(rate: Rate, amount: Double, unit: String): Boolean {
+        if (amount <= 0.0 || !BelievableAmount.isBelievable(amount, BelievableAmount.amountIn(unit))) {
+            return true
+        }
+        val row = rate.nutrients * (amount / rate.per.divisor)
+        val macro = BelievableAmount.ENTRY_MACRO_G.toDouble()
+        return BelievableAmount.isBelievable(row.kcal, BelievableAmount.ENTRY_KCAL.toDouble()) &&
+            listOf(row.proteinG, row.carbsG, row.fatG).all { BelievableAmount.isBelievable(it, macro) }
     }
+
+    /**
+     * A worth figure, or null when it is missing, not a number, negative, or past [most].
+     *
+     * Judged before a [Nutrients] is built, both because that type refuses a negative by throwing —
+     * which would take the whole reply with it rather than the one item — and because a [Rate] is
+     * not judged anywhere after this (D42).
+     */
+    private fun JsonObject.figure(field: String, most: Double): Double? =
+        this[field]?.jsonPrimitive?.content?.toDoubleOrNull()
+            ?.takeIf { BelievableAmount.isBelievable(it, most) }
 
     /**
      * Anything unrecognised is read as LOW.

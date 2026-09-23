@@ -66,3 +66,16 @@ fun portionWords(component: MealComponent): String {
     return PortionWording.inAppsOwnPortion(component.amount, unit)?.let { portionsCount(it) }
         ?: Portions.words(component.amount, unit)
 }
+
+/**
+ * A unit on its own, beside a box that holds the number: the app's own "portion" takes its plural
+ * from [amount] (D37), and any other unit is drawn exactly as written. A box holding no number yet
+ * reads in the plural, as "0 portions" would.
+ */
+@Composable
+fun unitWord(amount: Double?, unit: String): String =
+    if (PortionWording.inAppsOwnPortion(1.0, unit) != null) {
+        pluralStringResource(R.plurals.portions_unit, PortionWording.pluralQuantity(amount ?: 0.0))
+    } else {
+        unit
+    }

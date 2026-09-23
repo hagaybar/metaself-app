@@ -3,10 +3,11 @@ package com.metaself.app.ui.screen.propose
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.ToLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
-import com.metaself.app.domain.ai.PortionScale
-import com.metaself.app.domain.day.FoodItem
+import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.propose.ProposalWording
@@ -14,6 +15,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import java.math.BigDecimal
 import javax.inject.Inject
 
 /**
@@ -31,6 +34,7 @@ import javax.inject.Inject
 class ProposalViewModel @Inject constructor(
     private val estimator: MealEstimator,
     private val problems: ProblemLog,
+    private val foods: FoodRepository,
     savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -61,8 +65,8 @@ class ProposalViewModel @Inject constructor(
     /**
      * Ask again with a sentence added.
      *
-     * This is what handles what scaling cannot: the same bowl cooked richer. One extra call, only
-     * when the owner decides the first answer was not close enough.
+     * This is what handles what a typed amount cannot: the same bowl cooked richer. One extra call,
+     * only when the owner decides the first answer was not close enough. It replaces every row.
      */
     fun tellItMore(extra: String) {
         if (description.isBlank() || extra.isBlank()) return
@@ -78,10 +82,17 @@ class ProposalViewModel @Inject constructor(
         ) {
             _state.value = ProposalUiState.Waiting
             _state.value = when (val result = estimator.estimate(text, moreDetail)) {
-                is EstimateResult.Proposed -> ProposalUiState.Proposed(
-                    rows = result.proposal.items.map { ProposalRow(it, it) },
-                    note = result.proposal.note,
-                )
+                is EstimateResult.Proposed -> {
+                    // Only now, with the answer in: his foods are read on the phone, once, and
+                    // never go anywhere (D16, D53 §4). A food made while the answer is on screen is
+                    // not seen until he asks again.
+                    val offered = foods.observeOffered().first()
+                    ProposalUiState.Proposed(
+                        rows = result.proposal.items.map { ProposalRow.of(it, offered) },
+                        note = result.proposal.note,
+                        dropped = result.proposal.dropped,
+                    )
+                }
 
                 else -> ProposalUiState.Describing(
                     failure = ProposalWording.failure(result),
@@ -91,14 +102,84 @@ class ProposalViewModel @Inject constructor(
         }
     }
 
-    fun scale(index: Int, scale: PortionScale) {
-        updateRow(index) { row -> row.copy(current = scale.applyTo(row.asProposed)) }
+    /**
+     * How much of it there was, as typed (D53 §1). Only the amount changes: the worth stays what it
+     * was, and the total follows.
+     */
+    fun setAmount(index: Int, text: String) {
+        updateRow(index) { row -> row.copy(item = row.item.copy(amountText = text)) }
     }
 
-    fun setCount(index: Int, howMany: Int) {
+    /**
+     * − and + on a counted row: one piece more or fewer (D53 §6).
+     *
+     * Only for a piece — a measured unit (grams, millilitres and the rest `Portions.isMass` names)
+     * has only its box. Never below one: a step that would go there does nothing, so a typed 0.5 is
+     * kept rather than rounded, and nought of something is an item to remove, not a count. A box
+     * that holds no number steps from nothing, so + gives 1. The arithmetic is decimal, so 0.1 and
+     * one make 1.1 and not 1.1000000000000001.
+     */
+    fun step(index: Int, by: Int) {
         updateRow(index) { row ->
-            row.copy(current = PortionScale.count(howMany, row.asProposed))
+            val item = row.item
+            if (Portions.isMass(item.unit)) return@updateRow row
+            val now = item.amountText.trim().replace(',', '.').ifEmpty { "0" }
+                .toBigDecimalOrNull() ?: return@updateRow row
+            val next = now + by.toBigDecimal()
+            if (next < BigDecimal.ONE) return@updateRow row
+            row.copy(item = item.copy(amountText = next.stripTrailingZeros().toPlainString()))
         }
+    }
+
+    /** *Change* under the worth line: the four boxes open, holding the worth (D53 §6). */
+    fun openWorth(index: Int) {
+        updateRow(index) { row ->
+            if (row.editingWorth != null) return@updateRow row
+            WorthBoxes.of(row.item)?.let { row.copy(editingWorth = it) } ?: row
+        }
+    }
+
+    /**
+     * One worth box typed into (D53 §1, §3). Only the worth changes, never the amount. While the
+     * four make a worth the row takes it — his, once any figure differs from what the box opened
+     * with; while one is blank or refused the row keeps its last worth and cannot be logged.
+     * The food it is attached to, if any, stays: typing over his food's worth changes only this
+     * entry.
+     */
+    fun setWorthBox(index: Int, figure: WorthFigure, text: String) {
+        updateRow(index) { row ->
+            val boxes = row.editingWorth?.with(figure, text) ?: return@updateRow row
+            val worth = boxes.worth()
+            row.copy(
+                item = if (worth == null) row.item else row.item.copy(worth = worth),
+                editingWorth = boxes,
+            )
+        }
+    }
+
+    /**
+     * The boxes close on what was typed. Not while one is refused: closing would hide the one
+     * sentence saying why the row cannot be saved.
+     */
+    fun closeWorth(index: Int) {
+        updateRow(index) { row ->
+            if (row.editingWorth?.refused == true) row else row.copy(editingWorth = null)
+        }
+    }
+
+    /** *Use your …* — his own food in place of the estimate, on the terms of D53 §4 and §5. */
+    fun useYourFood(index: Int) {
+        updateRow(index) { it.usingYourFood() }
+    }
+
+    /** *Use the estimate* — the model's item again, with nothing lost either way (D53 §4). */
+    fun useEstimate(index: Int) {
+        updateRow(index) { it.usingEstimate() }
+    }
+
+    /** *Count it in …* — his food's own unit and worth, and an empty amount for him (D53 §5). */
+    fun countInFoodUnit(index: Int) {
+        updateRow(index) { it.countedInFoodUnit() }
     }
 
     /** Remove a row the model invented, or one the owner did not eat. */
@@ -112,10 +193,16 @@ class ProposalViewModel @Inject constructor(
         }
     }
 
-    /** What would be logged if the owner accepted it now. */
-    fun accepted(): List<FoodItem> =
-        (_state.value as? ProposalUiState.Proposed)?.rows?.map { it.current.toFoodItem() }
-            ?: emptyList()
+    /**
+     * What would be logged if the owner accepted it now — nothing at all while any row cannot be
+     * logged, so that saving never quietly leaves one of the rows behind (D53 §6). Each row comes
+     * with the worth its food is to learn, and the brand it is saved under (D53 §3, §4).
+     */
+    fun accepted(): List<ToLog> {
+        val proposed = _state.value as? ProposalUiState.Proposed ?: return emptyList()
+        if (proposed.blockedBy != null) return emptyList()
+        return proposed.rows.mapNotNull { it.toLog() }
+    }
 
     /**
      * He is going to settings to add the key the last answer said was missing (public issue #11).

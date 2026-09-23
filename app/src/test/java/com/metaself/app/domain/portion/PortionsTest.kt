@@ -65,18 +65,6 @@ class PortionsTest {
     }
 
     @Test
-    fun `grams are scaled and slices are counted`() {
-        assertThat(Portions.controlFor(280.0, "g")).isEqualTo(PortionControl.Scale)
-        assertThat(Portions.controlFor(2.0, "slice")).isEqualTo(PortionControl.Count(2))
-    }
-
-    @Test
-    fun `an amount that was never recorded gets no control at all`() {
-        assertThat(Portions.controlFor(0.0, "")).isEqualTo(PortionControl.None)
-        assertThat(Portions.controlFor(0.0, "slice")).isEqualTo(PortionControl.None)
-    }
-
-    @Test
     fun `whole numbers lose their decimal point`() {
         assertThat(Portions.words(2.0, "slice")).isEqualTo("2 slice")
         assertThat(Portions.words(1.5, "dish")).isEqualTo("1.5 dish")
@@ -105,6 +93,26 @@ class PortionsTest {
             assertThat(Portions.isMass(it)).isTrue()
             assertThat(Portions.isGrams(it)).isFalse()
         }
+    }
+
+    /** A per-100 ml worth is only ever multiplied by an amount in millilitres (D53 §1). */
+    @Test
+    fun `millilitres are recognised however spelled`() {
+        listOf(
+            "ml", "ML", " ml ", "millilitre", "millilitres", "milliliter", "milliliters",
+            "מ\"ל", "מל",
+        ).forEach {
+            assertThat(Portions.isMillilitres(it)).isTrue()
+            assertThat(Portions.isMass(it)).isTrue()
+        }
+    }
+
+    @Test
+    fun `millilitres are not grams`() {
+        assertThat(Portions.isGrams("ml")).isFalse()
+        assertThat(Portions.isMillilitres("g")).isFalse()
+        assertThat(Portions.isMillilitres("l")).isFalse()
+        assertThat(Portions.isMillilitres("slice")).isFalse()
     }
 
     @Test
