@@ -115,11 +115,20 @@ def offer_weight(q, db, food_id, g):
 
 
 def join(q, db, winner, loser, fills, now=9000):
-    """The merge's sequence, after the refusal is asked: move, fill, delete, touch."""
+    """The merge's sequence, after the refusal is asked: read, move, fill, delete, touch.
+
+    The absorbed food is read FIRST. The app reads a food through its names (`toDomain` returns
+    nothing for a food with no name), and `moveNames` leaves the loser with none — a read after it
+    finds nothing to fill from. Asserted here because this script once modelled the fills as given
+    and so passed while the app filled nothing.
+    """
     assert db.execute(q["mealsHoldingBoth"], dict(winner=winner, loser=loser)).fetchall() == []
+    names = "SELECT COUNT(*) FROM food_names WHERE foodId = ?"
+    assert db.execute(names, (loser,)).fetchone()[0] > 0, "the absorbed food must be read while named"
     db.execute(q["movePastRows"], dict(winner=winner, loser=loser))
     db.execute(q["moveMealComponents"], dict(winner=winner, loser=loser))
     db.execute(q["moveNames"], dict(winner=winner, loser=loser))
+    assert db.execute(names, (loser,)).fetchone()[0] == 0, "after moveNames the loser reads as nothing"
     written = [fill(q, db, winner) for fill in fills]
     db.execute(q["deleteFood"], dict(id=loser))
     db.execute(q["touch"], dict(id=winner, nowMillis=now))

@@ -348,6 +348,10 @@ class RoomFoodRepository @Inject constructor(
                 return@withTransaction EditResult.Refused(EditRefused.MealsHoldingBoth(both))
             }
 
+            // Read before the names move: a food with no name left reads back as nothing
+            // (`toDomain` needs one to show), so after `moveNames` the absorbed food is already gone.
+            val absorbed = dao.byId(loserId)?.toDomain()?.facts
+
             // The history moves across. Not one logged row's numbers, name, portion, source or
             // confidence is touched: merging is about identity, not about rewriting the past.
             dao.movePastRows(winnerId, loserId)
@@ -358,8 +362,8 @@ class RoomFoodRepository @Inject constructor(
             // What only the absorbed food knew, before it is deleted (issue #19). The winner keeps
             // every figure it holds — the join question promises it keeps its numbers — so only a
             // group it lacks is filled; which ones is decided by `JoinedFacts`.
-            dao.byId(loserId)?.toDomain()?.facts?.let { absorbed ->
-                fillBlanks(winnerId, JoinedFacts.fill(dao.byId(winnerId)?.toDomain()?.facts, absorbed))
+            absorbed?.let {
+                fillBlanks(winnerId, JoinedFacts.fill(dao.byId(winnerId)?.toDomain()?.facts, it))
             }
             dao.deleteFood(loserId)
             // After the fills, which stamp the row with the absorbed figures' own dates.
