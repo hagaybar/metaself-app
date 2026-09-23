@@ -64,6 +64,13 @@ interface FoodDao {
     @Query("SELECT * FROM foods WHERE id = :id")
     suspend fun byId(id: Long): FoodWithNames?
 
+    /**
+     * Every food's stored row, names left out, for the repair that judges its figures (issue #7).
+     * The row rather than the domain food, because reading one hides a group holding a negative.
+     */
+    @Query("SELECT * FROM foods")
+    suspend fun everyFood(): List<FoodEntity>
+
     /** The identity rule, asked as a question. Any name the food answers to will find it. */
     @Query("SELECT foodId FROM food_names WHERE nameKey = :nameKey AND brandKey = :brandKey")
     suspend fun foodIdNamed(nameKey: String, brandKey: String): Long?

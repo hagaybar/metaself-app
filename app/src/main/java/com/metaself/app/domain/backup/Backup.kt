@@ -132,10 +132,14 @@ data class BackupSavedMeal(
     val components: List<BackupMealComponent> = emptyList(),
 )
 
+/**
+ * @property amount 0 when the file holds null, which is how an amount that was not a finite number
+ *   is written (issue #7) — and a part of none is one a restore skips.
+ */
 @Serializable
 data class BackupMealComponent(
     val food: String,
-    val amount: Double,
+    val amount: Double = 0.0,
     @SerialName("counted_as") val countedAs: String,
 )
 

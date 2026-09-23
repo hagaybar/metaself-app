@@ -899,6 +899,17 @@ only for a number past it, and stay quiet on a blank, negative, zero or word, as
   numbers as they are, however large. A food or logged item already holding such a number keeps
   it until he next saves it through a form, which then refuses it until corrected — so a
   correction to anything else on it waits on that box too.
+  *Amended 2026-09-23, issue #7, the owner's choice of clearing over flagging:* **foods are now
+  repaired.** Each time the app opens, a food's number group — per 100 g, per one, or what one
+  weighs — holding a figure the food form would refuse is cleared, and nothing else: the food keeps
+  its other groups, a cleared box reads as not known (D4), and the food does not move in the list.
+  A food left knowing nothing is not deleted — its logged rows still point at it — but reads as no
+  food, so it leaves every list, and a saved meal counting it loses that part from view, until
+  logging it again under its name teaches it a figure. **Logged items are still not repaired**:
+  what a past day holds is the record, and keeps this rule. A backup restoring such a figure is
+  cleared at the next open. Exporting never fails on a figure that is not finite: a food's group
+  holding one is written as null, and any other such number — a logged item's or a meal part's
+  amount — as null, read back as no amount.
 - **Cost accepted.** Counting more than 100 of something (almonds one by one) is refused: weigh
   them. 5000 kg or 5000 l is a slipped-finger guard, not a believable portion. The per-100 g
   ceilings sit past the chemistry (pure fat is about 900 kcal, and 100 g of anything holds at most
@@ -912,7 +923,9 @@ only for a number past it, and stay quiet on a blank, negative, zero or word, as
   did before. Foods and logged rows saved with an infinite or absurd figure before this release are
   not repaired: such a food still previews as a 2,147,483,647-kcal row in Add something and the
   meal builder, and exporting a backup that holds an infinite figure is expected to fail
-  (unverified) — issue #34, not this one's. The daily limit on model calls
+  (unverified) — issue #34, not this one's. (Since issue #7, 2026-09-23: such a food's group is
+  cleared on opening the app, and exporting was verified to fail and no longer does — see *Typing
+  only* above. A logged row's saturated figure stays.) The daily limit on model calls
   in Settings is a number box with no ceiling here — a count of calls, not food; a negative still
   becomes 0, as before. A proposal's count (Fewer / More) is not typed and has no ceiling. A meal
   part saved with an infinite amount before this rule is not repaired. No schema change.

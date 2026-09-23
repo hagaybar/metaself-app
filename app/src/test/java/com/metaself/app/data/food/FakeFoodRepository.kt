@@ -217,6 +217,43 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         return EditResult.Done
     }
 
+    /**
+     * The real rule over each food's figures. A food left knowing nothing leaves the list, as the
+     * real one reads as no food; this fake cannot hold a food with no figures to bring back later.
+     */
+    override suspend fun clearImpossibleFigures(): Int {
+        var cleared = 0
+        foods.value = foods.value.mapNotNull { food ->
+            val groups = ImpossibleFigures.of(food.asStoredRow())
+            cleared += groups.size
+            val per100g = food.facts.per100g.takeUnless { ImpossibleFigures.Group.PER_100G in groups }
+            val perUnit = food.facts.perUnit.takeUnless { ImpossibleFigures.Group.PER_UNIT in groups }
+            val weight = food.facts.gramsPerUnit
+                .takeUnless { ImpossibleFigures.Group.GRAMS_PER_UNIT in groups }
+            when {
+                groups.isEmpty() -> food
+                per100g == null && perUnit == null -> null
+                else -> food.copy(facts = FoodFacts(per100g, perUnit, weight))
+            }
+        }
+        return cleared
+    }
+
+    private fun Food.asStoredRow() = FoodEntity(
+        id = id,
+        createdAtMillis = createdAtMillis,
+        updatedAtMillis = updatedAtMillis,
+        kcalPer100g = facts.per100g?.nutrients?.kcal,
+        proteinPer100g = facts.per100g?.nutrients?.proteinG,
+        carbsPer100g = facts.per100g?.nutrients?.carbsG,
+        fatPer100g = facts.per100g?.nutrients?.fatG,
+        kcalPerUnit = facts.perUnit?.nutrients?.kcal,
+        proteinPerUnit = facts.perUnit?.nutrients?.proteinG,
+        carbsPerUnit = facts.perUnit?.nutrients?.carbsG,
+        fatPerUnit = facts.perUnit?.nutrients?.fatG,
+        gramsPerUnit = facts.gramsPerUnit?.grams,
+    )
+
     private fun replace(id: Long, change: (Food) -> Food) {
         foods.value = foods.value.map { if (it.id == id) change(it).copy(id = id) else it }
     }

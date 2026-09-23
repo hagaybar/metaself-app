@@ -13,6 +13,7 @@ import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
 import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.food.aFood
+import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.domain.food.CountedAs
@@ -277,6 +278,30 @@ class DayViewModelTest {
         val per100g = foods.current.single().facts.per100g!!
         assertThat(per100g.nutrients.fatG).isWithin(1e-9).of(100.0 / 30.0)
         assertThat(per100g.provenance.source).isEqualTo(Source.TYPED)
+    }
+
+    /**
+     * Issue #7: a food saved with "Infinity" before 0.32.6 has that group cleared when the app
+     * opens — its other group kept — and a row already logged from it keeps its figures (D42).
+     */
+    @Test
+    fun `opening the app clears an impossible figure on a food, and no logged row moves`() = runTest {
+        val broken = aFood(
+            name = "Protein bar",
+            facts = FoodFacts(per100g = aPer100g(kcal = Double.POSITIVE_INFINITY), perUnit = aPerUnit()),
+        )
+        val foods = FakeFoodRepository(listOf(broken))
+        val logged = anItem(id = 7, name = "Protein bar", kcal = Int.MAX_VALUE).copy(foodId = 1)
+        val meals = FakeMealRepository(listOf(aMeal(id = 1, items = listOf(logged))))
+
+        viewModel(mealRepository = meals, foods = foods)
+        advanceUntilIdle()
+
+        val food = foods.current.single()
+        assertThat(food.facts.per100g).isNull()
+        assertThat(food.facts.perUnit).isEqualTo(aPerUnit())
+        assertThat(meals.updated).isEmpty()
+        assertThat(meals.deleted).isEmpty()
     }
 
     private fun viewModel(
