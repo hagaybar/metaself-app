@@ -2,8 +2,13 @@ package com.metaself.app.ui.screen.mealbuilder
 
 import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
+import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.FoundOrCreated
+import com.metaself.app.data.food.MealResult
+import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
@@ -14,6 +19,8 @@ import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -612,6 +619,196 @@ class MealBuilderViewModelTest {
         MealComponent(id = 900, food = cucumber, amount = 100.0, countedAs = CountedAs.GRAMS),
     )
 
+    // --- When an action throws -----------------------------------------------------------------------
+    //
+    // An exception that got past the guard would fail each of these on its own: `runTest` reports a
+    // coroutine's uncaught exception when it ends.
+
+    @Test
+    fun `naming that throws says nothing was changed and still asks for a name`() = runTest(dispatcher) {
+        val meals = Failing(FakeSavedMealRepository().knowsAbout(cucumber, oil))
+        val problems = RecordingProblemLog()
+        val viewModel = opened(carrying(mealId = 0), meals, problems = problems)
+
+        meals.writes = true
+        viewModel.setName("Vegetable salad")
+        viewModel.name()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(viewModel.state.value.needsAName).isTrue()
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        assertThat(problems.recorded.single().detail).contains("disk full")
+    }
+
+    /** The panel stays, amount and all, so putting it in is one tap again. */
+    @Test
+    fun `putting a food in that throws keeps what he typed`() = runTest(dispatcher) {
+        val meals = Failing(withSalad())
+        val problems = RecordingProblemLog()
+        val viewModel = opened(carrying(mealId = 1), meals, problems = problems)
+
+        viewModel.beginAdding(cucumber.id)
+        viewModel.setAmount("100")
+        meals.writes = true
+        viewModel.confirmAdding()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(viewModel.state.value.adding?.amount).isEqualTo("100")
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+    }
+
+    /** The write happened, so "nothing was changed" would be untrue; what failed is opening it. */
+    @Test
+    fun `a write that lands but cannot be read back says it could not be opened`() =
+        runTest(dispatcher) {
+            val meals = Failing(withSalad())
+            val viewModel = opened(carrying(mealId = 1), meals, problems = RecordingProblemLog())
+
+            viewModel.beginAdding(cucumber.id)
+            viewModel.setAmount("100")
+            meals.reads = true
+            viewModel.confirmAdding()
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+            meals.reads = false
+            assertThat(meals.byId(1)!!.components.map { it.food.id }).containsExactly(cucumber.id)
+        }
+
+    @Test
+    fun `a meal that cannot be read says it could not be opened`() = runTest(dispatcher) {
+        val meals = Failing(withSalad()).apply { reads = true }
+        val problems = RecordingProblemLog()
+        val viewModel = opened(carrying(mealId = 1), meals, problems = problems)
+
+        assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+    }
+
+    @Test
+    fun `renaming, removing and reordering that throw say nothing was changed`() =
+        runTest(dispatcher) {
+            val meals = Failing(
+                withSaladHolding(
+                    MealComponent(id = 7, food = cucumber, amount = 100.0, countedAs = CountedAs.GRAMS, position = 0),
+                    MealComponent(id = 8, food = oil, amount = 1.0, countedAs = CountedAs.UNITS, position = 1),
+                ),
+            )
+            val problems = RecordingProblemLog()
+            val viewModel = opened(carrying(mealId = 1), meals, problems = problems)
+            meals.writes = true
+
+            viewModel.rename("Green salad")
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            viewModel.remove(7)
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            viewModel.move(7, by = 1)
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+
+            assertThat(problems.recorded.map { it.kind }).containsExactly("refused", "refused", "refused")
+            assertThat(viewModel.state.value.meal?.components?.map { it.id }).containsExactly(7L, 8L).inOrder()
+        }
+
+    /** The screen leaves only once the meal has gone, so a failure is still there to be read. */
+    @Test
+    fun `a delete that throws stays on the screen and says so`() = runTest(dispatcher) {
+        val meals = Failing(withSalad())
+        val viewModel = opened(carrying(mealId = 1), meals, problems = RecordingProblemLog())
+        var left = false
+
+        meals.writes = true
+        viewModel.delete { left = true }
+        advanceUntilIdle()
+
+        assertThat(left).isFalse()
+        assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(viewModel.state.value.meal?.name).isEqualTo("Vegetable salad")
+
+        meals.writes = false
+        viewModel.delete { left = true }
+        advanceUntilIdle()
+        assertThat(left).isTrue()
+    }
+
+    @Test
+    fun `making a food that throws says nothing was changed and keeps the form open`() =
+        runTest(dispatcher) {
+            val foods = object : FoodRepository by FakeFoodRepository(listOf(cucumber, oil)) {
+                override suspend fun findOrCreate(
+                    name: String,
+                    brand: String?,
+                    facts: FoodFacts,
+                    barcode: String?,
+                ): FoundOrCreated = throw IllegalStateException("disk full")
+            }
+            val problems = RecordingProblemLog()
+            val viewModel = opened(carrying(mealId = 1), withSalad(), foods, problems)
+
+            viewModel.beginCreatingFood()
+            viewModel.createFood(form("Kohlrabi", kcal = "27"))
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
+            assertThat(viewModel.state.value.creating).isTrue()
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        }
+
+    @Test
+    fun `a failure goes when he dismisses it, and when the next action starts`() = runTest(dispatcher) {
+        val meals = Failing(withSalad())
+        val viewModel = opened(carrying(mealId = 1), meals, problems = RecordingProblemLog())
+
+        meals.writes = true
+        viewModel.rename("Green salad")
+        advanceUntilIdle()
+        viewModel.dismissRefusal()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.failed).isNull()
+
+        viewModel.rename("Green salad")
+        advanceUntilIdle()
+        meals.writes = false
+        viewModel.rename("Green salad")
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.failed).isNull()
+        assertThat(viewModel.state.value.meal?.name).isEqualTo("Green salad")
+    }
+
+    /**
+     * A meal store that throws where a test says to, and is the store it wraps everywhere else:
+     * [writes] makes every write throw, [reads] every read of a meal.
+     */
+    private class Failing(private val inner: SavedMealRepository) : SavedMealRepository by inner {
+        var writes = false
+        var reads = false
+
+        private fun refuse(): Nothing = throw IllegalStateException("disk full")
+
+        override suspend fun byId(id: Long): SavedMeal? = if (reads) refuse() else inner.byId(id)
+
+        override suspend fun create(name: String): MealResult =
+            if (writes) refuse() else inner.create(name)
+
+        override suspend fun rename(mealId: Long, name: String): MealResult =
+            if (writes) refuse() else inner.rename(mealId, name)
+
+        override suspend fun put(mealId: Long, foodId: Long, amount: Double, countedAs: CountedAs) =
+            if (writes) refuse() else inner.put(mealId, foodId, amount, countedAs)
+
+        override suspend fun remove(componentId: Long) =
+            if (writes) refuse() else inner.remove(componentId)
+
+        override suspend fun reorder(mealId: Long, componentIdsInOrder: List<Long>) =
+            if (writes) refuse() else inner.reorder(mealId, componentIdsInOrder)
+
+        override suspend fun delete(mealId: Long) = if (writes) refuse() else inner.delete(mealId)
+    }
+
     private fun withSalad() =
         FakeSavedMealRepository(listOf(SavedMeal(name = "Vegetable salad"))).knowsAbout(cucumber, oil)
 
@@ -633,10 +830,11 @@ class MealBuilderViewModelTest {
      */
     private fun TestScope.opened(
         savedState: SavedStateHandle,
-        meals: FakeSavedMealRepository,
-        foods: FakeFoodRepository = FakeFoodRepository(listOf(cucumber, oil)),
+        meals: SavedMealRepository,
+        foods: FoodRepository = FakeFoodRepository(listOf(cucumber, oil)),
+        problems: ProblemLog = ProblemLog.NONE,
     ): MealBuilderViewModel {
-        val viewModel = MealBuilderViewModel(meals, foods, Now { 1_000 }, savedState)
+        val viewModel = MealBuilderViewModel(meals, foods, Now { 1_000 }, problems, savedState)
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
         return viewModel

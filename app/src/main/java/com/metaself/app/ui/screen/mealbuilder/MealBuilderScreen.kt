@@ -86,7 +86,9 @@ fun MealBuilderScreen(
         modifier = modifier,
         onBack = onBack,
     ) {
-        state.refusal?.let { refusal ->
+        // An action that threw says so in the refusal's place (ActionRefused), with the same way out.
+        val sentence = state.refusal ?: state.failed?.let { stringResource(it.sentence) }
+        sentence?.let { refusal ->
             Text(
                 text = refusal,
                 style = MaterialTheme.typography.bodyMedium,

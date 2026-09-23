@@ -3,6 +3,7 @@ package com.metaself.app.ui.screen.mealbuilder
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
@@ -12,16 +13,17 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.domain.food.ReplacedFacts
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.food.MealWording
 import com.metaself.app.ui.food.RetaughtBecause
 import com.metaself.app.ui.food.RetaughtWording
+import com.metaself.app.ui.guarded
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -49,12 +51,18 @@ import javax.inject.Inject
  * he is still typing the number. What the meal already holds is filtered out of them, because the
  * route is read afresh every time this screen is built — including after Android has killed the
  * process and restored it.
+ *
+ * **Nothing here takes the app down.** Every action goes through [guarded]; one that throws puts
+ * [MealBuilderUiState.failed] in the refusal slot and is written to the problem log. Each write is
+ * one transaction, and most are followed by reading the meal back — so a failure in the write
+ * changed nothing, and one in the read after it could not open what was written.
  */
 @HiltViewModel
 class MealBuilderViewModel @Inject constructor(
     private val meals: SavedMealRepository,
     private val foods: FoodRepository,
     private val now: Now,
+    private val problems: ProblemLog,
     savedState: SavedStateHandle,
 ) : ViewModel() {
 
@@ -81,14 +89,16 @@ class MealBuilderViewModel @Inject constructor(
     private val _refusal = MutableStateFlow<String?>(null)
     private val _meal = MutableStateFlow<com.metaself.app.domain.food.SavedMeal?>(null)
     private val _pending = MutableStateFlow<List<Pending>>(emptyList())
+    private val _failed = MutableStateFlow<ActionRefused?>(null)
 
     val state: StateFlow<MealBuilderUiState> = combine(
         _meal,
         foods.observeOffered(),
         _query,
         _adding,
-        combine(_typedName, _creating, _refusal, _pending) { name, creating, refusal, pending ->
-            Aside(name, creating, refusal, pending)
+        combine(_typedName, _creating, _refusal, _pending, _failed) { name, creating, refusal,
+            pending, failed ->
+            Aside(name, creating, refusal, pending, failed)
         },
     ) { meal, ownFoods, query, adding, aside ->
         val inMeal = meal?.components.orEmpty().map { it.food }
@@ -113,6 +123,7 @@ class MealBuilderViewModel @Inject constructor(
             pending = aside.pending,
             creating = aside.creating,
             refusal = aside.refusal,
+            failed = aside.failed,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -121,7 +132,7 @@ class MealBuilderViewModel @Inject constructor(
     )
 
     init {
-        viewModelScope.launch {
+        act({ ActionRefused.COULD_NOT_OPEN }) {
             if (openedMealId != 0L) reload()
             // What the meal already holds is never offered again, here for the reason it is not
             // offered in the search results either — and because the route is re-read every time
@@ -151,28 +162,29 @@ class MealBuilderViewModel @Inject constructor(
     fun name() {
         val typed = _typedName.value.trim()
         if (typed.isBlank()) return
-        viewModelScope.launch {
-            when (val result = meals.create(typed)) {
-                is MealResult.Built -> {
-                    _mealId.value = result.mealId
-                    reload()
+        writeThenReload(
+            write = {
+                when (val result = meals.create(typed)) {
+                    is MealResult.Built -> _mealId.value = result.mealId
+                    is MealResult.NameTaken -> _refusal.value = MealWording.nameTaken(typed)
+                    MealResult.Done -> Unit
                 }
-                is MealResult.NameTaken ->
-                    _refusal.value = MealWording.nameTaken(typed)
-                MealResult.Done -> Unit
-            }
-        }
+            },
+        )
     }
 
     fun rename(name: String) {
         val id = _mealId.value.takeIf { it != 0L } ?: return
-        viewModelScope.launch {
-            when (meals.rename(id, name)) {
-                is MealResult.NameTaken ->
+        var refused = false
+        writeThenReload(
+            write = {
+                if (meals.rename(id, name) is MealResult.NameTaken) {
+                    refused = true
                     _refusal.value = MealWording.nameTaken(name)
-                else -> reload()
-            }
-        }
+                }
+            },
+            reloadIf = { !refused },
+        )
     }
 
     fun search(query: String) {
@@ -201,11 +213,10 @@ class MealBuilderViewModel @Inject constructor(
         val adding = _adding.value ?: return
         val amount = adding.amountOrNull ?: return
         val id = _mealId.value.takeIf { it != 0L } ?: return
-        viewModelScope.launch {
-            meals.put(id, adding.food.id, amount, adding.countedAs)
-            _adding.value = null
-            reload()
-        }
+        writeThenReload(
+            write = { meals.put(id, adding.food.id, amount, adding.countedAs) },
+            afterWrite = { _adding.value = null },
+        )
     }
 
     // --- The foods chosen in the list, waiting for an amount -------------------------------------
@@ -236,11 +247,10 @@ class MealBuilderViewModel @Inject constructor(
         // Until it has a name there is no meal to put anything in, so it goes on waiting. The name
         // is the one gate in this screen and this does not become a second way around it.
         val mealId = _mealId.value.takeIf { it != 0L } ?: return
-        viewModelScope.launch {
-            meals.put(mealId, ready.food.id, amount, ready.countedAs)
-            _pending.value = _pending.value.filterNot { it.food.id == foodId }
-            reload()
-        }
+        writeThenReload(
+            write = { meals.put(mealId, ready.food.id, amount, ready.countedAs) },
+            afterWrite = { _pending.value = _pending.value.filterNot { it.food.id == foodId } },
+        )
     }
 
     /** Grams or whole ones — only the ways this food knows are on offer, and the other says why. */
@@ -263,10 +273,7 @@ class MealBuilderViewModel @Inject constructor(
     }
 
     fun remove(componentId: Long) {
-        viewModelScope.launch {
-            meals.remove(componentId)
-            reload()
-        }
+        writeThenReload(write = { meals.remove(componentId) })
     }
 
     /** The order is his: identity no longer depends on it, and the display does. */
@@ -277,10 +284,7 @@ class MealBuilderViewModel @Inject constructor(
         val to = at + by
         if (at < 0 || to !in order.indices) return
         order[at] = order[to].also { order[to] = order[at] }
-        viewModelScope.launch {
-            meals.reorder(meal.id, order)
-            reload()
-        }
+        writeThenReload(write = { meals.reorder(meal.id, order) })
     }
 
     // --- Making a food on the spot -------------------------------------------------------------
@@ -302,7 +306,8 @@ class MealBuilderViewModel @Inject constructor(
      */
     fun createFood(form: FoodForm) {
         val facts = form.toFacts(now()) ?: return
-        viewModelScope.launch {
+        // One transaction, and nothing read after it: a failure made no food.
+        act({ ActionRefused.NOTHING_CHANGED }) {
             val made = foods.findOrCreate(
                 name = form.name,
                 brand = form.brand.takeIf { it.isNotBlank() },
@@ -340,18 +345,58 @@ class MealBuilderViewModel @Inject constructor(
      * It takes its parts list and nothing else. No food is touched — the schema refuses that — and
      * no past day is touched either: a day logged from this meal loses its title and shows its
      * items, which is what every day looked like before meals he built existed.
+     *
+     * [onDeleted] runs once it has gone — which is when the screen may leave. Leaving on the tap
+     * would take a failure off the screen before it could be said.
      */
-    fun delete() {
+    fun delete(onDeleted: () -> Unit = {}) {
         val id = _mealId.value.takeIf { it != 0L } ?: return
-        viewModelScope.launch {
+        act({ ActionRefused.NOTHING_CHANGED }) {
             meals.delete(id)
             _mealId.value = 0L
             _meal.value = null
+            onDeleted()
         }
     }
 
+    /** Take down whichever sentence is in the refusal slot — a refusal, or an action that failed. */
     fun dismissRefusal() {
         _refusal.value = null
+        _failed.value = null
+    }
+
+    /**
+     * One write, then the meal read back — under the guard, and saying which of the two failed.
+     *
+     * The write is one transaction, so a failure there changed nothing. A failure reading back
+     * comes after a write that happened, so "nothing was changed" would be untrue; what did not
+     * happen is the meal being opened again, and that is what it says.
+     */
+    private fun writeThenReload(
+        write: suspend () -> Unit,
+        afterWrite: () -> Unit = {},
+        reloadIf: () -> Boolean = { true },
+    ) {
+        var written = false
+        act({ if (written) ActionRefused.COULD_NOT_OPEN else ActionRefused.NOTHING_CHANGED }) {
+            write()
+            written = true
+            afterWrite()
+            if (reloadIf()) reload()
+        }
+    }
+
+    /**
+     * Run one action under the guard. The last failure is let go of as the next action starts, and
+     * a failure takes the refusal's place: one sentence at a time, the latest. [how] is asked only
+     * once the action has failed, so it can say how far it got.
+     */
+    private fun act(how: () -> ActionRefused, block: suspend () -> Unit) {
+        _failed.value = null
+        guarded(problems, onRefused = {
+            _refusal.value = null
+            _failed.value = how()
+        }) { block() }
     }
 
     /**
@@ -365,12 +410,13 @@ class MealBuilderViewModel @Inject constructor(
         _meal.value = _mealId.value.takeIf { it != 0L }?.let { meals.byId(it) }
     }
 
-    /** The four things that are not the meal itself, as one value, because `combine` takes five. */
+    /** The five things that are not the meal itself, as one value, because `combine` takes five. */
     private data class Aside(
         val typedName: String,
         val creating: Boolean,
         val refusal: String?,
         val pending: List<Pending>,
+        val failed: ActionRefused?,
     )
 
     private companion object {

@@ -170,6 +170,7 @@ fun SimulatedApp(world: World) {
             steps = world.steps,
             currentHour = CurrentHour { NINE_IN_THE_MORNING },
             loggedFoods = world.loggedFoods,
+            problems = ProblemLog.NONE,
         )
     }
 
@@ -395,6 +396,7 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
             meals = world.savedMeals,
             foods = world.foods,
             now = world.now,
+            problems = ProblemLog.NONE,
             savedState = savedStateFor(here),
         )
     }
@@ -420,10 +422,8 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
         onBeginCreatingFood = builderViewModel::beginCreatingFood,
         onCreateFood = builderViewModel::createFood,
         onCancelCreatingFood = builderViewModel::cancelCreatingFood,
-        onDelete = {
-            builderViewModel.delete()
-            goBack()
-        },
+        // Gone back from once the meal is gone, as the nav host does.
+        onDelete = { builderViewModel.delete(onDeleted = goBack) },
         onDismissRefusal = builderViewModel::dismissRefusal,
         onBack = goBack,
     )

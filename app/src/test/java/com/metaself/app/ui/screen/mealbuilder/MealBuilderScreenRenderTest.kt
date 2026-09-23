@@ -8,6 +8,7 @@ import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -599,6 +600,19 @@ class MealBuilderScreenRenderTest {
         assertThat(render.isDrawnBefore("Search your foods", "Delete this meal")).isTrue()
         assertThat(render.isDrawnBefore("Make a food", "Delete this meal")).isTrue()
         assertThat(render.isDrawnBefore("Olive oil", "Delete this meal")).isTrue()
+    }
+
+    @Test
+    fun `an action that failed says so where a refusal would`() {
+        val texts = draw(
+            MealBuilderUiState(
+                meal = SavedMeal(id = 1, name = "Vegetable salad"),
+                failed = ActionRefused.COULD_NOT_OPEN,
+            ),
+        )
+
+        assertThat(texts).contains("That couldn't be opened. What went wrong is under Settings → Recent problems.")
+        assertThat(texts).contains("All right")
     }
 
     private fun draw(state: MealBuilderUiState): List<String> = render.texts { drawing(state) }

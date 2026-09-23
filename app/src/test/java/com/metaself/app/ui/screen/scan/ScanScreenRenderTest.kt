@@ -5,6 +5,7 @@ import com.metaself.app.domain.product.Product
 import com.metaself.app.domain.product.ProductField
 import com.metaself.app.domain.product.ProductForm
 import com.metaself.app.ui.scan.ContributeWording
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -301,7 +302,17 @@ class ScanScreenRenderTest {
         assertThat(amount).doesNotContain(NOTHING_LOGGED_PACKET)
     }
 
-    private fun draw(state: ScanUiState): List<String> = render.texts {
+    /** Above the camera, with the one way to have it listen again. */
+    @Test
+    fun `a lookup that failed says so above the camera`() {
+        val texts = draw(ScanUiState.Looking, failed = ActionRefused.COULD_NOT_OPEN)
+
+        assertThat(texts).contains("That couldn't be opened. What went wrong is under Settings → Recent problems.")
+        assertThat(texts).contains("All right")
+        assertThat(render.isDrawnBefore("That couldn't be opened", "Look it up")).isTrue()
+    }
+
+    private fun draw(state: ScanUiState, failed: ActionRefused? = null): List<String> = render.texts {
         ScanScreen(
             state = state,
             hasCamera = false,
@@ -315,6 +326,8 @@ class ScanScreenRenderTest {
             onScanAgain = {},
             onDescribeInstead = {},
             onBack = {},
+            failed = failed,
+            onDismissFailure = {},
         )
     }
 

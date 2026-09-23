@@ -27,6 +27,7 @@ import com.metaself.app.domain.portion.Portions
 import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.DailyTargetCalculator
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -1450,6 +1451,27 @@ class DayScreenRenderTest {
         assertThat(texts.filter { it == "Got it" }).hasSize(2)
     }
 
+    /**
+     * A log that failed lands here, where he returns to after logging: in the refusal's slot, with
+     * the same way to take it down.
+     */
+    @Test
+    fun `an action that failed says so where a refusal would, and can be put away`() {
+        var dismissed = false
+        val texts = draw(
+            emptyList(),
+            failed = ActionRefused.MAYBE_PARTIAL,
+            onDismissRefusal = { dismissed = true },
+        )
+
+        assertThat(texts).contains(
+            "That didn't finish, and may have only partly happened. " +
+            "What went wrong is under Settings → Recent problems.",
+        )
+        render.click("All right")
+        assertThat(dismissed).isTrue()
+    }
+
     private fun draw(
         meals: List<Meal>,
         isToday: Boolean = true,
@@ -1467,6 +1489,7 @@ class DayScreenRenderTest {
         encouragement: String? = null,
         chosen: Set<Long> = emptySet(),
         refusal: String? = null,
+        failed: ActionRefused? = null,
         onDismissRefusal: () -> Unit = {},
         onOpenPart: (DayPart) -> Unit = {},
         onAdd: () -> Unit = {},
@@ -1493,6 +1516,7 @@ class DayScreenRenderTest {
                 encouragement = encouragement,
                 chosen = chosen,
                 refusal = refusal,
+                failed = failed,
             ),
             onAdd = onAdd,
             onDescribe = onDescribe,

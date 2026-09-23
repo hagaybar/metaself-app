@@ -413,6 +413,7 @@ fun MetaSelfNavHost(
         composable(Destination.Scan.route) {
             val scanViewModel: ScanViewModel = hiltViewModel()
             val scanState by scanViewModel.state.collectAsStateWithLifecycle()
+            val scanFailed by scanViewModel.failed.collectAsStateWithLifecycle()
             val context = LocalContext.current
 
             var cameraAllowed by remember {
@@ -459,6 +460,8 @@ fun MetaSelfNavHost(
                     navController.navigate(Destination.Describe.route)
                 },
                 onBack = { navController.popBackStack() },
+                failed = scanFailed,
+                onDismissFailure = scanViewModel::dismissFailure,
             )
         }
 
@@ -565,9 +568,14 @@ fun MetaSelfNavHost(
                 onBeginCreatingFood = builderViewModel::beginCreatingFood,
                 onCreateFood = builderViewModel::createFood,
                 onCancelCreatingFood = builderViewModel::cancelCreatingFood,
+                // Left only once the meal is gone, so a delete that fails stays on screen to say so.
+                // And only from this screen: the delete answers later, and Back may have been
+                // pressed in between, when a pop would take the screen underneath with it.
                 onDelete = {
-                    builderViewModel.delete()
-                    navController.popBackStack()
+                    val here = navController.currentBackStackEntry
+                    builderViewModel.delete {
+                        if (navController.currentBackStackEntry == here) navController.popBackStack()
+                    }
                 },
                 onDismissRefusal = builderViewModel::dismissRefusal,
                 onBack = { navController.popBackStack() },
@@ -723,7 +731,8 @@ fun MetaSelfNavHost(
                 },
                 chosenRows = chosenRows,
                 isToday = ready?.isToday ?: true,
-                refusal = ready?.refusal,
+                // An action that threw goes in the refusal's place, as it does on the day.
+                refusal = ready?.refusal ?: ready?.failed?.let { stringResource(it.sentence) },
                 // Decision D8: whatever went wrong, the words are not lost — they arrive in the
                 // manual editor as the item's name, ready to have numbers put beside them.
                 onTypeItMyself = {
