@@ -33,6 +33,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import com.metaself.app.ui.theme.MetaSelfInk
+import com.metaself.app.ui.theme.Spacing
 
 /**
  * One weight, being written down or corrected.
@@ -72,39 +73,45 @@ fun WeightEditorScreen(
         modifier = modifier,
         onBack = onCancel,
     ) {
-        Text(
-            text = stringResource(R.string.weight_on_day, dayLabel),
-            style = MaterialTheme.typography.titleSmall,
-        )
+        // D48's grouping: the day and the way to change it are one thing, and so are the field and
+        // the note about what saving it would replace. The frame puts a section between the two.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(
+                text = stringResource(R.string.weight_on_day, dayLabel),
+                style = MaterialTheme.typography.titleSmall,
+            )
 
-        TextButton(onClick = { pickingDay = true }) {
-            Text(stringResource(R.string.weight_change_day))
+            TextButton(onClick = { pickingDay = true }) {
+                Text(stringResource(R.string.weight_change_day))
+            }
         }
 
-        OutlinedTextField(
-            value = form.kg,
-            onValueChange = {
-                form = form.copy(kg = it)
-                showError = false
-            },
-            label = { Text(stringResource(R.string.weight_field)) },
-            isError = showError,
-            supportingText = if (showError) {
-                { form.error()?.let { Text(it) } }
-            } else {
-                null
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        if (replacing) {
-            Text(
-                text = stringResource(R.string.weight_replaces),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            OutlinedTextField(
+                value = form.kg,
+                onValueChange = {
+                    form = form.copy(kg = it)
+                    showError = false
+                },
+                label = { Text(stringResource(R.string.weight_field)) },
+                isError = showError,
+                supportingText = if (showError) {
+                    { form.error()?.let { Text(it) } }
+                } else {
+                    null
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                modifier = Modifier.fillMaxWidth(),
             )
+
+            if (replacing) {
+                Text(
+                    text = stringResource(R.string.weight_replaces),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MetaSelfInk.two,
+                )
+            }
         }
 
         Button(
