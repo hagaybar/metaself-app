@@ -1323,6 +1323,62 @@ class DayViewModelTest {
     }
 
     /**
+     * The follower of the open stretch is a stream, and a stream that threw has stopped: the
+     * sentence and the tally would stay as they were for as long as the app was open. Coming back to
+     * the screen starts it again.
+     *
+     * The read that throws is armed only once the app has opened, and is the tally's first day — two
+     * days before the ratio began — so what it stops is the follower, woken by a change to the
+     * record, and nothing else.
+     */
+    @Test
+    fun `a stretch follower that threw starts again when he comes back`() = runTest {
+        val profiles = FakeProfileRepository(aProfile())
+        aRatioInForce(profiles)
+        var clock = atHour(TEST_EPOCH_DAY, 22)
+        var date = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
+        val inner = FakeMealRepository(
+            listOf(aMeal(epochDay = TEST_EPOCH_DAY, loggedAtMillis = atHour(TEST_EPOCH_DAY, 9))),
+        )
+        var brokenDay: Long? = null
+        val onceBroken = object : MealRepository by inner {
+            override fun observeDay(epochDay: Long): Flow<List<Meal>> =
+                if (epochDay == brokenDay) {
+                    brokenDay = null
+                    flow { throw IllegalStateException("disk full") }
+                } else {
+                    inner.observeDay(epochDay)
+                }
+        }
+        val problems = RecordingProblemLog()
+        val model = watched(
+            viewModel(
+                profiles = profiles,
+                mealRepository = onceBroken,
+                now = Now { clock },
+                today = Today { date },
+                problems = problems,
+            ),
+        )
+        advanceUntilIdle()
+
+        brokenDay = TEST_EPOCH_DAY - 15
+        inner.log(aMeal(epochDay = TEST_EPOCH_DAY, loggedAtMillis = atHour(TEST_EPOCH_DAY, 17)))
+        advanceUntilIdle()
+        assertThat(problems.recorded.map { it.kind }).containsExactly("refused")
+
+        // As in the tally test above: the fast is done by morning, and only a live follower can
+        // say so.
+        clock = atHour(TEST_EPOCH_DAY + 1, 8)
+        date = date.plusDays(1)
+        model.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(ready(model).windowJudged).isEqualTo(1)
+        assertThat(ready(model).windowKept).isEqualTo(1)
+    }
+
+    /**
      * The tally is said only on days the ratio governed — never on a day before it began.
      *
      * The defect this pins: the streak of stretches appeared on dates before the ratio even

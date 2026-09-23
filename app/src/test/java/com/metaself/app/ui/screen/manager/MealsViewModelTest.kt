@@ -107,6 +107,36 @@ class MealsViewModelTest {
         assertThat(model.state.value.failed).isNull()
     }
 
+    /**
+     * The list is a stream, and a stream that threw has stopped: left there, the tab would go on
+     * showing the list as last read, frozen, for as long as the app is open. Dismissing the failure
+     * starts the read again.
+     */
+    @Test
+    fun `dismissing the failure reads the list again`() = runTest {
+        var reads = 0
+        val working = FakeSavedMeals(listOf(salad))
+        val onceBroken = object : SavedMealRepository by working {
+            override fun observeOffered(): Flow<List<SavedMeal>> {
+                reads++
+                return if (reads == 1) {
+                    flow { throw IllegalStateException("disk unreadable") }
+                } else {
+                    working.observeOffered()
+                }
+            }
+        }
+        val model = MealsViewModel(onceBroken, RecordingProblemLog())
+        advanceUntilIdle()
+        assertThat(model.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+
+        model.dismissFailure()
+        advanceUntilIdle()
+
+        assertThat(model.state.value.failed).isNull()
+        assertThat(model.state.value.meals.map { it.name }).containsExactly("Vegetable salad")
+    }
+
     private val cucumber = aFood("Cucumber", FoodFacts(per100g = aPer100g(16.0))).copy(id = 1)
     private val oil = aFood("Olive oil", FoodFacts(perUnit = aPerUnit("spoon", 119.0))).copy(id = 2)
     private val egg = aFood("Egg", FoodFacts(perUnit = aPerUnit("egg", 78.0))).copy(id = 3)

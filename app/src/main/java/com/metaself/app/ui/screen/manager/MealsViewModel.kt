@@ -24,7 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * **A list that cannot be read says so** rather than taking the app down: the one thing this view
  * model starts is reading the list, so a failure there is [ActionRefused.COULD_NOT_OPEN], written to
- * the problem log. The list stays as it was last read.
+ * the problem log. The list stays as it was last read, until he dismisses the sentence and the read
+ * starts again.
  */
 @HiltViewModel
 class MealsViewModel @Inject constructor(
@@ -36,6 +37,22 @@ class MealsViewModel @Inject constructor(
     val state: StateFlow<MealsUiState> = _state.asStateFlow()
 
     init {
+        follow()
+    }
+
+    /**
+     * He has read the failure; take it down, and start reading the list again.
+     *
+     * Again, because the read is a stream and a stream that threw has stopped: without this the tab
+     * would go on showing the list as last read, however it changed, until the app was reopened.
+     */
+    fun dismissFailure() {
+        val failed = _state.value.failed != null
+        _state.value = _state.value.copy(failed = null)
+        if (failed) follow()
+    }
+
+    private fun follow() {
         guarded(
             problems,
             onRefused = { _state.value = _state.value.copy(failed = ActionRefused.COULD_NOT_OPEN) },
@@ -44,10 +61,5 @@ class MealsViewModel @Inject constructor(
                 _state.value = MealsUiState(meals = meals)
             }
         }
-    }
-
-    /** He has read the failure; take it down. */
-    fun dismissFailure() {
-        _state.value = _state.value.copy(failed = null)
     }
 }

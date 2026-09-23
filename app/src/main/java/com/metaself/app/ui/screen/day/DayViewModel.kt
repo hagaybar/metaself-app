@@ -185,11 +185,27 @@ class DayViewModel @Inject constructor(
     /** Bumped on each return to the screen, so the stretch and the tally are read again with it. */
     private val _looked = MutableStateFlow(0)
 
-    /** The screen came to the front: bring the day and the moment up to date, and recount. */
+    /**
+     * Whether [followTheOpenStretch]'s stream threw and ended. Quiet like the rest of the
+     * once-per-open work — recorded, nothing said on the day — but restarted by [lookedAt], because
+     * unlike the rest it is meant to run for as long as the screen does.
+     *
+     * Declared above `init`, which starts the follower: an initialiser further down would run after
+     * it and could reset a failure already recorded.
+     */
+    private var stretchFollowerStopped = false
+
+    /**
+     * The screen came to the front: bring the day and the moment up to date, and recount.
+     *
+     * And start following the open stretch again if that stream threw: a stopped follower would
+     * leave today's sentence and the tally as they were for as long as the app stayed open.
+     */
     fun lookedAt() {
         _moment.value = now()
         _calendarToday.value = today().toEpochDay()
         _looked.value++
+        if (stretchFollowerStopped) followTheOpenStretch()
     }
 
     /** What was read from Health Connect: every day's steps, and what a usual day looks like. */
@@ -304,7 +320,8 @@ class DayViewModel @Inject constructor(
      * correcting an old day put the sentence right too.
      */
     private fun followTheOpenStretch() {
-        quietly {
+        stretchFollowerStopped = false
+        guarded(problems, onRefused = { stretchFollowerStopped = true }) {
             profiles.windowRules
                 .combine(meals.observeDay(todayEpochDayNow())) { rules, _ -> rules }
                 .combine(_looked) { rules, _ -> rules }

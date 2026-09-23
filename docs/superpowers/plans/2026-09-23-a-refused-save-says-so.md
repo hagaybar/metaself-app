@@ -26,6 +26,11 @@ the process. 73 launches across 9 view models. The only record is one line in Re
    not open the thing, not that nothing was saved.
 5. **Out of scope:** exceptions thrown while drawing, and inside long-lived observed flows. Those
    still crash and are still recorded by the process-wide handler.
+   Two long-lived streams are started from a view model's own launch and so do pass through the
+   guard, where a throw ends the stream rather than the app. Each is restarted rather than left
+   frozen: the meals list reads again when its "could not be opened" sentence is dismissed, and the
+   day's follower of the open eating stretch (the sentence and tally under the ratio) starts again
+   the next time the day screen comes to the front.
 
 ## Wording (strings.xml)
 
