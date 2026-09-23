@@ -125,6 +125,23 @@ class ComposeRender {
         indexOf(firstPrefix) < indexOf(secondPrefix)
 
     /**
+     * Every piece of text on screen NOW, after whatever [click] set off has been drawn — without
+     * rendering afresh, so state the composable was holding (a `remember`, a tapped offer) is
+     * still there.
+     *
+     * A frame is let pass first: a click changes state, and the redraw it causes is posted for the
+     * next frame rather than run on the spot.
+     *
+     * Reads the LAST render's activity, so call [texts] first.
+     */
+    fun textsAgain(): List<String> {
+        val activity = controller?.get() ?: error("nothing has been rendered to read again")
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(FRAME_MS))
+        lastNodes = semanticsNodes(activity.window.decorView)
+        return lastNodes.flatMap { it.texts() }
+    }
+
+    /**
      * Where the node matching [prefix] ends, horizontally, in dp.
      *
      * For asking whether a control was laid out inside the space it was given. A layout that places
@@ -223,5 +240,8 @@ class ComposeRender {
 
         /** For measuring, not for looking: tall enough that nothing goes unplaced. */
         const val TALL_ENOUGH_FOR_ANYTHING = 20_000
+
+        /** Long enough for one frame to come round, at any refresh rate a phone has. */
+        const val FRAME_MS = 100L
     }
 }

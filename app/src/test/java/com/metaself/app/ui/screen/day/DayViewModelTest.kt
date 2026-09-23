@@ -3627,6 +3627,32 @@ class DayViewModelTest {
     }
 
     /**
+     * The accept screen starts over only once the rows are on the day. Started over on the tap, a
+     * failed write left him on an empty describe screen, his answer gone and nothing written.
+     */
+    @Test
+    fun `keeping what was described as a meal reports it was logged only once it was`() = runTest {
+        val failing = Failing(FakeMealRepository()).apply { writes = true }
+        val model = watched(viewModel(mealRepository = failing, problems = RecordingProblemLog()))
+        var loggedTimes = 0
+
+        model.logMealAndChoose(aDescribedSalad()) { loggedTimes++ }
+        advanceUntilIdle()
+
+        assertThat(loggedTimes).isEqualTo(0)
+        assertThat(ready(model).failed).isEqualTo(ActionRefused.MAYBE_PARTIAL)
+
+        failing.writes = false
+        model.logMealAndChoose(aDescribedSalad()) { loggedTimes++ }
+        // Not on the tap: only once the write has answered.
+        assertThat(loggedTimes).isEqualTo(0)
+        advanceUntilIdle()
+
+        assertThat(loggedTimes).isEqualTo(1)
+        assertThat(ready(model).chosen).isNotEmpty()
+    }
+
+    /**
      * Nothing was changed, because the meal, its parts and the gathering are one transaction in the
      * real store (`RoomSavedMealRepositoryTest` shows it rolls back). What he chose stays chosen, and
      * the sheet with it, so he can try again.

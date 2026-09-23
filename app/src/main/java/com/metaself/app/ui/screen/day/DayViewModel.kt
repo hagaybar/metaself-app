@@ -1121,8 +1121,12 @@ class DayViewModel @Inject constructor(
      * over no rows is a Confirm that silently does nothing. It returns before the clearing on
      * purpose — a second tap on the offer hands back an empty answer, and clearing then would throw
      * away the choice the first tap has just made.
+     *
+     * [onLogged] runs once the rows are on the day, and not if the write threw: it is where the
+     * accept screen lets go of its answer, which it must keep while a failure is on screen so there
+     * is something to try again.
      */
-    fun logMealAndChoose(items: List<FoodItem>) {
+    fun logMealAndChoose(items: List<FoodItem>, onLogged: () -> Unit = {}) {
         if (items.isEmpty()) return
         // Synchronously, so that every frame between the tap and the write has an empty choice in
         // it: the sheet stays shut until the ids arrive, and it can never open over the old ones.
@@ -1134,6 +1138,7 @@ class DayViewModel @Inject constructor(
             // Assigned, not added to: a row ticked on the day before he came here is not part of
             // what he just described.
             _chosen.value = ids.toSet()
+            onLogged()
         }
     }
 

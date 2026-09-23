@@ -197,7 +197,15 @@ fun ProposalScreen(
                     )
                 }
 
-                Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
+                // The offer was taken and the day has not answered yet: the answer stays on screen
+                // until the rows are written, so a second tap in that moment would log it twice.
+                val keepInFlight = taken && keeping == null && refusal == null
+
+                Button(
+                    onClick = onSave,
+                    enabled = !keepInFlight,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(stringResource(R.string.propose_save))
                 }
 
@@ -210,8 +218,20 @@ fun ProposalScreen(
                             taken = true
                             onKeepAsMeal()
                         },
+                        enabled = !keepInFlight,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(stringResource(R.string.propose_keep_as_meal)) }
+                }
+
+                // The offer was taken and the write threw, so the sheet the sentence normally sits
+                // in never opened. Said here instead, beside the answer that is still there to try
+                // again — the answer is let go of only once the rows are on the day.
+                if (taken && keeping == null && refusal != null) {
+                    Text(
+                        text = refusal,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
 
                 HorizontalDivider()

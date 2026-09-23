@@ -709,11 +709,13 @@ fun MetaSelfNavHost(
                 },
                 // Saved first and named afterwards (D46(b)): this writes the rows and leaves exactly
                 // them chosen, and nothing about a meal is attempted until he confirms a name. The
-                // answer is started over on the same tap as a plain save, so what is now on the day
-                // cannot be accepted a second time from a screen he comes back to.
+                // answer is started over once the rows are on the day, so what is there cannot be
+                // accepted a second time from a screen he comes back to — and not before, because a
+                // write that throws leaves him the answer to try again, with the failure beside it.
                 onKeepAsMeal = {
-                    dayViewModel.logMealAndChoose(proposeViewModel.accepted())
-                    proposeViewModel.startOver()
+                    dayViewModel.logMealAndChoose(proposeViewModel.accepted()) {
+                        proposeViewModel.startOver()
+                    }
                 },
                 // The day's own act, unchanged: one set of rules about what a part is worth and
                 // which rows can join, and one refusal when they cannot.
