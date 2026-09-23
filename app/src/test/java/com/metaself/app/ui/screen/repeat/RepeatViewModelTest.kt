@@ -38,8 +38,7 @@ import org.junit.jupiter.api.Test
 /**
  * Changing how much of a past meal is being logged again.
  *
- * The case this pins: a row logged as two portions, repeated the next day, with no way to make it
- * one.
+ * Including the case of a row logged as two portions, which must be able to become one.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RepeatViewModelTest {
