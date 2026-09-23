@@ -121,6 +121,42 @@ class ProposalViewModel @Inject constructor(
         }
     }
 
+    /** *Change* under the worth line: the four boxes open, holding the worth (D53 §6). */
+    fun openWorth(index: Int) {
+        updateRow(index) { row ->
+            if (row.editingWorth != null) return@updateRow row
+            WorthBoxes.of(row.item)?.let { row.copy(editingWorth = it) } ?: row
+        }
+    }
+
+    /**
+     * One worth box typed into (D53 §1, §3). Only the worth changes, never the amount. While the
+     * four make a worth the row takes it — his, once any figure differs from what the box opened
+     * with; while one is blank or refused the row keeps its last worth and cannot be logged.
+     * The food it is attached to, if any, stays: typing over his food's worth changes only this
+     * entry.
+     */
+    fun setWorthBox(index: Int, figure: WorthFigure, text: String) {
+        updateRow(index) { row ->
+            val boxes = row.editingWorth?.with(figure, text) ?: return@updateRow row
+            val worth = boxes.worth()
+            row.copy(
+                item = if (worth == null) row.item else row.item.copy(worth = worth),
+                editingWorth = boxes,
+            )
+        }
+    }
+
+    /**
+     * The boxes close on what was typed. Not while one is refused: closing would hide the one
+     * sentence saying why the row cannot be saved.
+     */
+    fun closeWorth(index: Int) {
+        updateRow(index) { row ->
+            if (row.editingWorth?.refused == true) row else row.copy(editingWorth = null)
+        }
+    }
+
     /** Remove a row the model invented, or one the owner did not eat. */
     fun remove(index: Int) {
         val current = _state.value as? ProposalUiState.Proposed ?: return

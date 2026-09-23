@@ -10,7 +10,25 @@ import com.metaself.app.domain.food.Nutrients
  *
  * @property divisor what an amount is divided by before the worth is multiplied by it.
  */
-enum class Per(val divisor: Double) { HUNDRED(100.0), ONE(1.0) }
+enum class Per(val divisor: Double) {
+    HUNDRED(100.0),
+    ONE(1.0),
+    ;
+
+    /** D42's ceiling on calories in a figure stated this way: a food's per-100 g, or per-unit. */
+    val kcalMost: Double
+        get() = when (this) {
+            HUNDRED -> BelievableAmount.KCAL_PER_100G
+            ONE -> BelievableAmount.KCAL_PER_UNIT
+        }
+
+    /** D42's ceiling on grams of one macro in a figure stated this way. */
+    val macroMost: Double
+        get() = when (this) {
+            HUNDRED -> BelievableAmount.MACRO_PER_100G
+            ONE -> BelievableAmount.MACRO_PER_UNIT
+        }
+}
 
 /**
  * Four figures per 100 g, per 100 ml or per one piece (D53 §1). Kept in decimals: it is a food's

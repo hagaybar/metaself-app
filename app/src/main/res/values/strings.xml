@@ -191,6 +191,8 @@
     <string name="propose_per_100">per 100 %1$s</string>
     <string name="propose_per_one">per %1$s</string>
     <string name="propose_blocked">Say how much %1$s was to save this.</string>
+    <string name="propose_change_worth">Change</string>
+    <string name="propose_worth_done">Done</string>
     <string name="propose_total">%1$s kcal in total</string>
     <string name="propose_save">Save this meal</string>
     <string name="propose_keep_as_meal">Save, and keep these as a meal</string>

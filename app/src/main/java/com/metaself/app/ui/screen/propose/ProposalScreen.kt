@@ -63,6 +63,9 @@ fun ProposalScreen(
     onDescribe: (String) -> Unit,
     onSetAmount: (Int, String) -> Unit,
     onStep: (Int, Int) -> Unit,
+    onOpenWorth: (Int) -> Unit,
+    onSetWorthBox: (Int, WorthFigure, String) -> Unit,
+    onCloseWorth: (Int) -> Unit,
     onRemove: (Int) -> Unit,
     onTellItMore: (String) -> Unit,
     onSave: () -> Unit,
@@ -190,6 +193,9 @@ fun ProposalScreen(
                             row = row,
                             onSetAmount = { text -> onSetAmount(index, text) },
                             onStep = { by -> onStep(index, by) },
+                            onOpenWorth = { onOpenWorth(index) },
+                            onSetWorthBox = { figure, text -> onSetWorthBox(index, figure, text) },
+                            onCloseWorth = { onCloseWorth(index) },
                             onRemove = { onRemove(index) },
                         )
                     }
@@ -313,6 +319,9 @@ private fun ProposedRow(
     row: ProposalRow,
     onSetAmount: (String) -> Unit,
     onStep: (Int) -> Unit,
+    onOpenWorth: () -> Unit,
+    onSetWorthBox: (WorthFigure, String) -> Unit,
+    onCloseWorth: () -> Unit,
     onRemove: () -> Unit,
 ) {
     val item = row.item
@@ -378,7 +387,14 @@ private fun ProposedRow(
             )
         }
 
-        item.numbers?.let { numbers ->
+        val boxes = row.editingWorth
+        if (boxes == null) {
+            if (item.rateLine != null) Small(stringResource(R.string.propose_change_worth), onOpenWorth)
+        } else {
+            WorthBoxesFields(boxes, item.unit, onSetWorthBox, onCloseWorth)
+        }
+
+        row.numbers?.let { numbers ->
             Text(
                 text = ProposalWording.rowFigures(numbers),
                 style = MaterialTheme.typography.bodyLarge,
@@ -397,6 +413,47 @@ private fun ProposedRow(
         Small(stringResource(R.string.propose_remove), onRemove)
 
         HorizontalDivider()
+    }
+}
+
+/**
+ * The worth, typed over: four boxes with the food form's labels, and the food form's refusal with
+ * this row's basis and ceilings under them (D53 §6). Done closes them, except while one is refused.
+ */
+@Composable
+private fun WorthBoxesFields(
+    boxes: WorthBoxes,
+    unit: String,
+    onSetWorthBox: (WorthFigure, String) -> Unit,
+    onClose: () -> Unit,
+) {
+    val labels = listOf(
+        R.string.foods_field_kcal,
+        R.string.foods_field_protein,
+        R.string.foods_field_carbs,
+        R.string.foods_field_fat,
+    )
+    WorthFigure.entries.forEach { figure ->
+        OutlinedTextField(
+            value = boxes.typed[figure.ordinal],
+            onValueChange = { onSetWorthBox(figure, it) },
+            label = { Text(stringResource(labels[figure.ordinal])) },
+            isError = boxes.refused,
+            singleLine = true,
+            // Decimal: the worth keeps decimals, as a food's figures do (D38).
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+    if (boxes.refused) {
+        Text(
+            text = ProposalWording.worthRefused(boxes.per, unit),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+    }
+    TextButton(onClick = onClose, enabled = !boxes.refused) {
+        Text(stringResource(R.string.propose_worth_done))
     }
 }
 

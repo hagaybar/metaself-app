@@ -710,6 +710,9 @@ fun MetaSelfNavHost(
                 onDescribe = proposeViewModel::describe,
                 onSetAmount = proposeViewModel::setAmount,
                 onStep = proposeViewModel::step,
+                onOpenWorth = proposeViewModel::openWorth,
+                onSetWorthBox = proposeViewModel::setWorthBox,
+                onCloseWorth = proposeViewModel::closeWorth,
                 onRemove = proposeViewModel::remove,
                 onTellItMore = proposeViewModel::tellItMore,
                 onSave = {

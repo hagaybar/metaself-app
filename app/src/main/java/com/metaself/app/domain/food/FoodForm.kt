@@ -89,9 +89,7 @@ data class FoodForm(
         if (wantsPer100g && per100gJudged.any { (typed, most) -> number(typed, most) == null }) {
             put(
                 FoodField.PER_100G,
-                "All four per 100 g (at most ${words(KCAL_PER_100G)} kcal, and " +
-                    "${words(MACRO_PER_100G)} g of protein, carbohydrate or fat), " +
-                    "or leave them all empty.",
+                allFour("100 g", KCAL_PER_100G, MACRO_PER_100G) + ", or leave them all empty.",
             )
         }
         if (wantsPerUnit) {
@@ -101,9 +99,7 @@ data class FoodForm(
             if (perUnitJudged.any { (typed, most) -> number(typed, most) == null }) {
                 put(
                     FoodField.PER_UNIT,
-                    "All four per unit (at most ${words(KCAL_PER_UNIT)} kcal, and " +
-                        "${words(MACRO_PER_UNIT)} g of protein, carbohydrate or fat), " +
-                        "or leave them all empty.",
+                    allFour("unit", KCAL_PER_UNIT, MACRO_PER_UNIT) + ", or leave them all empty.",
                 )
             }
         }
@@ -176,6 +172,15 @@ data class FoodForm(
     }
 
     companion object {
+        /**
+         * "All four per 100 g (at most 1000 kcal, and 110 g of protein, carbohydrate or fat)" — the
+         * group refusal, without its ending. Shared with the describe screen's worth boxes (D53 §6),
+         * so four figures typed anywhere are refused in one sentence naming the same ceilings.
+         */
+        fun allFour(per: String, kcalMost: Double, macroMost: Double): String =
+            "All four per $per (at most ${words(kcalMost)} kcal, and " +
+                "${words(macroMost)} g of protein, carbohydrate or fat)"
+
         /** A food opened for editing, as the fields it fills. */
         fun of(food: Food): FoodForm = FoodForm(
             name = food.name,

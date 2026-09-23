@@ -103,6 +103,65 @@ class ProposalScreenRenderTest {
         assertThat(texts).doesNotContain("At most 5000 g at a time.")
     }
 
+    // --- The worth, typed over (D53 §1, §3, §6) --------------------------------------------------
+
+    @Test
+    fun `the worth line offers to change it`() {
+        assertThat(draw(proposed(aProposedItem()))).contains(CHANGE)
+    }
+
+    @Test
+    fun `Change opens four boxes holding the worth`() {
+        val burger = aProposedItem()
+        val item = burger.toItemToLog()
+        val state = ProposalUiState.Proposed(
+            rows = listOf(ProposalRow(burger, item, editingWorth = WorthBoxes.of(item))),
+            note = null,
+        )
+
+        val texts = draw(state)
+
+        assertThat(texts).containsAtLeast("Calories", "Protein (g)", "Carbs (g)", "Fat (g)")
+        assertThat(texts).containsAtLeast("250", "18", "0", "20")
+        assertThat(texts).doesNotContain(CHANGE)
+    }
+
+    /** A typed worth is his, and a typed row says nothing about where it came from (D7a). */
+    @Test
+    fun `after a change the estimate's origin line is gone`() {
+        val burger = aProposedItem()
+        val opened = WorthBoxes.of(burger.toItemToLog())!!.with(WorthFigure.KCAL, "240")
+        val item = burger.toItemToLog().copy(worth = opened.worth()!!)
+        val state = ProposalUiState.Proposed(
+            rows = listOf(ProposalRow(burger, item, editingWorth = null)),
+            note = null,
+        )
+
+        val texts = draw(state)
+
+        assertThat(texts).contains("per 100 g: 240 kcal · P 18 · C 0 · F 20")
+        assertThat(texts).contains("480 kcal · P 36 · C 0 · F 40")
+        assertThat(texts).doesNotContain("Estimated — moderate confidence")
+    }
+
+    @Test
+    fun `a worth past its ceiling says the ceiling and turns saving off`() {
+        val burger = aProposedItem()
+        val item = burger.toItemToLog()
+        val boxes = WorthBoxes.of(item)!!.with(WorthFigure.KCAL, "1001")
+        val state = ProposalUiState.Proposed(
+            rows = listOf(ProposalRow(burger, item, editingWorth = boxes)),
+            note = null,
+        )
+
+        val texts = draw(state)
+
+        assertThat(texts).contains(
+            "All four per 100 g (at most 1000 kcal, and 110 g of protein, carbohydrate or fat).",
+        )
+        assertThat(render.isEnabled("Save this meal")).isFalse()
+    }
+
     // --- "2 portion" on the proposal (D37, #27) -------------------------------------------------
 
     /** The app's own "portion" beside the box takes its plural from the number in the box. */
@@ -209,6 +268,9 @@ class ProposalScreenRenderTest {
                 onDescribe = {},
                 onSetAmount = { _, _ -> },
                 onStep = { _, _ -> },
+                onOpenWorth = {},
+                onSetWorthBox = { _, _, _ -> },
+                onCloseWorth = {},
                 onRemove = {},
                 onTellItMore = {},
                 onSave = {},
@@ -266,6 +328,9 @@ class ProposalScreenRenderTest {
             onDescribe = {},
             onSetAmount = { _, _ -> },
             onStep = { _, _ -> },
+            onOpenWorth = {},
+            onSetWorthBox = { _, _, _ -> },
+            onCloseWorth = {},
             onRemove = {},
             onTellItMore = {},
             onSave = {},
@@ -294,6 +359,9 @@ class ProposalScreenRenderTest {
         /** `R.string.propose_count_fewer` and `propose_count_more`, as the phone draws them. */
         const val MINUS = "−"
         const val PLUS = "+"
+
+        /** `R.string.propose_change_worth`, as the phone draws it. */
+        const val CHANGE = "Change"
 
         /** `R.string.action_refused_maybe_partial`, as the phone draws it. */
         const val MAYBE_PARTIAL = "That didn't finish, and may have only partly happened. " +

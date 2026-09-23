@@ -14,6 +14,7 @@ import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
+import com.metaself.app.ui.propose.ProposalWording
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -179,6 +180,156 @@ class ProposalViewModelTest {
         val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
         assertThat(row.estimate).isEqualTo(aProposedItem())
         assertThat(row.item.worth).isInstanceOf(Worth.Estimated::class.java)
+    }
+
+    // --- The worth, typed over (D53 §1, §3) -----------------------------------------------------
+
+    @Test
+    fun `the worth boxes open holding the worth as a person would type it`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+
+        val boxes = (viewModel.state.value as ProposalUiState.Proposed).rows[0].editingWorth!!
+        assertThat(boxes.typed).containsExactly("250", "18", "0", "20").inOrder()
+    }
+
+    /** The source belongs to the row: one figure typed makes all four his (D53 §3, D44's cost). */
+    @Test
+    fun `changing one figure of the worth makes the row typed`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "240")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.worth).isInstanceOf(Worth.Typed::class.java)
+        val numbers = row.numbers!!
+        assertThat(numbers.source).isEqualTo(Source.TYPED)
+        assertThat(numbers.confidence).isNull()
+        assertThat(numbers.kcal).isEqualTo(480)
+        assertThat(numbers.proteinG).isEqualTo(36)
+    }
+
+    /** Compared as numbers: "250.0" is the figure it opened with, and so is "250,0". */
+    @Test
+    fun `retyping the same figure changes nothing`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "250.0")
+        viewModel.setWorthBox(0, WorthFigure.PROTEIN, "18,0")
+
+        val numbers = (viewModel.state.value as ProposalUiState.Proposed).rows[0].numbers!!
+        assertThat(numbers.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(numbers.confidence).isEqualTo(Confidence.MEDIUM)
+    }
+
+    /** Typed away and typed back: the row is the model's again, not a typed copy of it. */
+    @Test
+    fun `typing a figure back to what it opened with returns the row to its source`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "240")
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "250")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.worth).isEqualTo(row.estimate.toItemToLog().worth)
+    }
+
+    @Test
+    fun `a worth past its ceiling blocks the row and says the ceiling`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "1001")
+
+        val proposed = viewModel.state.value as ProposalUiState.Proposed
+        assertThat(proposed.rows[0].editingWorth!!.refused).isTrue()
+        assertThat(proposed.rows[0].numbers).isNull()
+        assertThat(proposed.blockedBy).isEqualTo(0)
+        assertThat(proposed.totalKcal).isEqualTo(150)
+        assertThat(viewModel.accepted()).isEmpty()
+        assertThat(ProposalWording.worthRefused(proposed.rows[0].editingWorth!!.per, "g"))
+            .isEqualTo(
+                "All four per 100 g (at most 1000 kcal, and 110 g of protein, carbohydrate or fat).",
+            )
+    }
+
+    /** A piece's figures have the per-one ceiling: 1001 kcal is a believable bun, 5001 is not. */
+    @Test
+    fun `a piece's worth is judged against the per-one ceiling`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(1)
+        viewModel.setWorthBox(1, WorthFigure.KCAL, "1001")
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).blockedBy).isNull()
+
+        viewModel.setWorthBox(1, WorthFigure.KCAL, "5001")
+        val proposed = viewModel.state.value as ProposalUiState.Proposed
+        assertThat(proposed.blockedBy).isEqualTo(1)
+        assertThat(ProposalWording.worthRefused(proposed.rows[1].editingWorth!!.per, "bun"))
+            .isEqualTo(
+                "All four per bun (at most 5000 kcal, and 500 g of protein, carbohydrate or fat).",
+            )
+    }
+
+    @Test
+    fun `a blank worth box blocks the row as a blank amount does`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.FAT, "")
+
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).blockedBy).isEqualTo(0)
+        assertThat(viewModel.accepted()).isEmpty()
+    }
+
+    @Test
+    fun `the amount and the worth move independently`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "240")
+        viewModel.setAmount(0, "150")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.amountText).isEqualTo("150")
+        assertThat(row.item.rateLine!!.nutrients.kcal).isEqualTo(240.0)
+        assertThat(row.numbers!!.kcal).isEqualTo(360)
+    }
+
+    /** The boxes close on what he typed; while one is refused they stay, with the sentence. */
+    @Test
+    fun `closing the boxes keeps what was typed, and a refused box keeps them open`() = runTest {
+        val viewModel = proposedViewModel()
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "1001")
+
+        viewModel.closeWorth(0)
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).rows[0].editingWorth)
+            .isNotNull()
+
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "240")
+        viewModel.closeWorth(0)
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.editingWorth).isNull()
+        assertThat(row.numbers!!.kcal).isEqualTo(480)
+    }
+
+    /** Typed decimals are kept: the worth is a food's kind of figure, rounded once when logged. */
+    @Test
+    fun `a typed worth keeps its decimals until the row is logged`() = runTest {
+        val viewModel = proposedViewModel()
+
+        viewModel.openWorth(0)
+        viewModel.setWorthBox(0, WorthFigure.PROTEIN, "18.4")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.rateLine!!.nutrients.proteinG).isEqualTo(18.4)
+        // 18.4 per 100 g at 200 g is 36.8, rounded once to 37.
+        assertThat(row.numbers!!.proteinG).isEqualTo(37)
     }
 
     @Test

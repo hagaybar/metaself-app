@@ -1,8 +1,15 @@
 package com.metaself.app.ui.screen.propose
 
 import com.metaself.app.domain.ai.ProposedItem
+import com.metaself.app.domain.amount.BelievableAmount
 import com.metaself.app.domain.amount.ItemToLog
+import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.Rate
+import com.metaself.app.domain.amount.Worth
 import com.metaself.app.domain.day.FoodItem
+import com.metaself.app.domain.food.LoggedFrom
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
 
 /**
@@ -15,7 +22,16 @@ import com.metaself.app.ui.ActionRefused
 data class ProposalRow(
     val estimate: ProposedItem,
     val item: ItemToLog,
+    /** The four worth boxes, while they are open under the worth line; null while closed. */
+    val editingWorth: WorthBoxes? = null,
 ) {
+    /**
+     * What the row will log — or null while its amount is not usable, or while a worth box is
+     * blank or refused, which blocks the row exactly as a blank amount does (D53 §6).
+     */
+    val numbers: LoggedFrom.Numbers?
+        get() = if (editingWorth?.refused == true) null else item.numbers
+
     /**
      * The row whose source the screen's origin line reads (D7a), or null.
      *
@@ -26,6 +42,70 @@ data class ProposalRow(
      */
     val sourceRow: FoodItem?
         get() = item.toFoodItem() ?: item.copy(amountText = "1").toFoodItem()
+}
+
+/** One of the four worth boxes, in the order they are drawn. */
+enum class WorthFigure { KCAL, PROTEIN, CARBS, FAT }
+
+/**
+ * The worth, as four boxes being typed into (D53 §1, §3, §6).
+ *
+ * They open holding the worth as a person would type it, and are judged as typed: a comma is a
+ * decimal point, and each figure has D42's ceiling for the basis — a food's per-100 g ceilings for
+ * per 100 g or ml, its per-unit ones for per one piece. A blank box is refused as a figure past its
+ * ceiling is, since a row has to be worth something to be logged.
+ *
+ * **A figure is changed only when it is a different number from the one it opened with** —
+ * "250.0" for "250" is no change. With none changed the row keeps the worth it had, source and
+ * all; with one changed, all four are his ([Worth.Typed]: the source belongs to the row, D44's
+ * cost). A box left alone keeps its figure at full precision, not the one decimal it was shown with.
+ *
+ * @property opened the worth's figures when the boxes opened, at full precision.
+ * @property openedWith the worth the row had, to return to while nothing differs from it.
+ * @property typed the four boxes' text, in [WorthFigure] order.
+ */
+data class WorthBoxes(
+    val opened: Rate,
+    val openedWith: Worth,
+    val typed: List<String>,
+) {
+    val per: Per get() = opened.per
+
+    private val openedFigures: List<Double>
+        get() = with(opened.nutrients) { listOf(kcal, proteinG, carbsG, fatG) }
+
+    private val judged: List<Double?>
+        get() = typed.mapIndexed { at, text ->
+            val most = if (at == 0) per.kcalMost else per.macroMost
+            text.trim().replace(',', '.').toDoubleOrNull()
+                ?.takeIf { BelievableAmount.isBelievable(it, most) }
+        }
+
+    /** True while any box is blank, not a number, negative or past its ceiling. */
+    val refused: Boolean get() = judged.any { it == null }
+
+    fun with(figure: WorthFigure, text: String): WorthBoxes =
+        copy(typed = typed.mapIndexed { at, old -> if (at == figure.ordinal) text else old })
+
+    /** The worth the boxes now say, or null while [refused]. */
+    fun worth(): Worth? {
+        val figures = judged
+        if (figures.any { it == null }) return null
+        val shown = openedFigures.map { Portions.format(it).toDouble() }
+        val changed = figures.indices.filter { figures[it] != shown[it] }
+        if (changed.isEmpty()) return openedWith
+        val kept = figures.indices.map { if (it in changed) figures[it]!! else openedFigures[it] }
+        return Worth.Typed(Rate(Nutrients(kept[0], kept[1], kept[2], kept[3]), per))
+    }
+
+    companion object {
+        /** The boxes opened on [item]'s worth, or null when it has no worth line to open. */
+        fun of(item: ItemToLog): WorthBoxes? {
+            val rate = item.rateLine ?: return null
+            val figures = with(rate.nutrients) { listOf(kcal, proteinG, carbsG, fatG) }
+            return WorthBoxes(rate, item.worth, figures.map(Portions::format))
+        }
+    }
 }
 
 /** What the describe-a-meal screen is showing. */
@@ -51,14 +131,14 @@ sealed interface ProposalUiState {
         val note: String?,
     ) : ProposalUiState {
         /** What the rows that can be logged add up to; a row with no usable amount adds nothing. */
-        val totalKcal: Int get() = rows.sumOf { it.item.numbers?.kcal ?: 0 }
+        val totalKcal: Int get() = rows.sumOf { it.numbers?.kcal ?: 0 }
 
         /**
          * The first row that cannot be logged as it stands, or null when all of them can. Saving is
          * off while there is one, and the screen names it (D53 §6).
          */
         val blockedBy: Int?
-            get() = rows.indexOfFirst { it.item.numbers == null }.takeIf { it >= 0 }
+            get() = rows.indexOfFirst { it.numbers == null }.takeIf { it >= 0 }
     }
 }
 
