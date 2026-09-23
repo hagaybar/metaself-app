@@ -256,6 +256,37 @@ class RoomFoodRepository @Inject constructor(
             EditResult.Done
         }
 
+    /**
+     * One transaction around the three, relying on [withTransaction] being reentrant: each step's
+     * own transaction joins this one rather than committing on its own. A refusal is RETURNED from
+     * inside, which would commit, so it is thrown instead to make Room roll back — including the
+     * brand column [setBrand] writes before it checks for a clash — and turned back into the result
+     * outside.
+     */
+    override suspend fun saveForm(
+        foodId: Long,
+        name: String,
+        brand: String?,
+        facts: FoodFacts,
+    ): EditResult = try {
+        database.withTransaction {
+            listOf(
+                suspend { rename(foodId, name) },
+                suspend { setBrand(foodId, brand) },
+                suspend { correct(foodId, facts) },
+            ).forEach { step ->
+                val result = step()
+                if (result is EditResult.Refused) throw RolledBack(result)
+            }
+            EditResult.Done
+        }
+    } catch (rolledBack: RolledBack) {
+        rolledBack.refusal
+    }
+
+    /** Carries a refusal out of [saveForm]'s transaction, so the transaction is not committed. */
+    private class RolledBack(val refusal: EditResult.Refused) : Exception()
+
     override suspend fun hide(foodId: Long) {
         dao.setHidden(foodId, now(), now())
     }
