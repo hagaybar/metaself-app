@@ -206,7 +206,9 @@ enum class WorthFigure { KCAL, PROTEIN, CARBS, FAT }
  * **A figure is changed only when it is a different number from the one it opened with** —
  * "250.0" for "250" is no change. With none changed the row keeps the worth it had, source and
  * all; with one changed, all four are his ([Worth.Typed]: the source belongs to the row, D44's
- * cost). A box left alone keeps its figure at full precision, not the one decimal it was shown with.
+ * cost). A box left alone keeps its figure at full precision, not the one decimal it was shown with
+ * — and they open on the worth at full precision ([ItemToLog.exactRate]): for his food, its own
+ * figures, never the whole numbers its worth line prints.
  *
  * @property opened the worth's figures when the boxes opened, at full precision.
  * @property openedWith the worth the row had, to return to while nothing differs from it.
@@ -247,9 +249,9 @@ data class WorthBoxes(
     }
 
     companion object {
-        /** The boxes opened on [item]'s worth, or null when it has no worth line to open. */
+        /** The boxes opened on [item]'s worth, or null when it has no worth to open. */
         fun of(item: ItemToLog): WorthBoxes? {
-            val rate = item.rateLine ?: return null
+            val rate = item.exactRate ?: return null
             val figures = with(rate.nutrients) { listOf(kcal, proteinG, carbsG, fatG) }
             return WorthBoxes(rate, item.worth, figures.map(Portions::format))
         }

@@ -103,49 +103,65 @@ object Logging {
         }
     }
 
-    private fun weighed(facts: FoodFacts, grams: Double): LoggedFrom {
+    /**
+     * What this much of this food is worth before rounding — the figures [log] rounds, from the same
+     * facts by the same rule — or null when it cannot be costed that way.
+     *
+     * For a box that opens holding a food's worth (D53 §1): a food's figures keep their decimals,
+     * and a box opened on the rounded row would hand back 1 g for the 0.5 g the food says.
+     */
+    fun unrounded(facts: FoodFacts, amount: Double, countedAs: CountedAs): Nutrients? =
+        exactly(facts, amount, countedAs)?.nutrients
+
+    /** The unrounded figures, where they came from, and the unit the row names. */
+    private class Exact(val nutrients: Nutrients, val provenance: Provenance, val unit: String)
+
+    private fun exactly(facts: FoodFacts, amount: Double, countedAs: CountedAs): Exact? =
+        when (countedAs) {
+            CountedAs.GRAMS -> weighedExactly(facts, amount)
+            CountedAs.UNITS -> countedExactly(facts, amount)
+        }
+
+    private fun weighed(facts: FoodFacts, grams: Double): LoggedFrom =
+        weighedExactly(facts, grams)?.let { rounded(it.nutrients, it.provenance, grams, it.unit) }
+            ?: LoggedFrom.NotOnOffer(
+                CannotCount.NothingKnowsWhatOneWeighs(facts.perUnit?.unitName ?: FoodFacts.PORTION),
+            )
+
+    private fun weighedExactly(facts: FoodFacts, grams: Double): Exact? {
         val per100g = facts.per100g
         val weight = facts.gramsPerUnit
         val perUnit = facts.perUnit
         return when {
             // What is known, used as it stands.
-            per100g != null -> rounded(
-                per100g.nutrients * (grams / HUNDRED_GRAMS),
-                per100g.provenance,
-                grams,
-                GRAMS_UNIT,
-            )
+            per100g != null ->
+                Exact(per100g.nutrients * (grams / HUNDRED_GRAMS), per100g.provenance, GRAMS_UNIT)
             // Filling the gap: what one is worth, and what one weighs, are both known.
-            perUnit != null && weight != null -> rounded(
+            perUnit != null && weight != null -> Exact(
                 perUnit.nutrients * (grams / weight.grams),
                 perUnit.provenance.weakerOf(weight.provenance),
-                grams,
                 GRAMS_UNIT,
             )
-            else -> LoggedFrom.NotOnOffer(
-                CannotCount.NothingKnowsWhatOneWeighs(perUnit?.unitName ?: FoodFacts.PORTION),
-            )
+            else -> null
         }
     }
 
-    private fun counted(facts: FoodFacts, howMany: Double): LoggedFrom {
+    private fun counted(facts: FoodFacts, howMany: Double): LoggedFrom =
+        countedExactly(facts, howMany)?.let { rounded(it.nutrients, it.provenance, howMany, it.unit) }
+            ?: LoggedFrom.NotOnOffer(CannotCount.NothingSaysWhatOneIs)
+
+    private fun countedExactly(facts: FoodFacts, howMany: Double): Exact? {
         val perUnit = facts.perUnit
         val weight = facts.gramsPerUnit
         val per100g = facts.per100g
         return when {
-            perUnit != null -> rounded(
-                perUnit.nutrients * howMany,
-                perUnit.provenance,
-                howMany,
-                perUnit.unitName,
-            )
-            per100g != null && weight != null -> rounded(
+            perUnit != null -> Exact(perUnit.nutrients * howMany, perUnit.provenance, perUnit.unitName)
+            per100g != null && weight != null -> Exact(
                 per100g.nutrients * (weight.grams * howMany / HUNDRED_GRAMS),
                 per100g.provenance.weakerOf(weight.provenance),
-                howMany,
                 FoodFacts.PORTION,
             )
-            else -> LoggedFrom.NotOnOffer(CannotCount.NothingSaysWhatOneIs)
+            else -> null
         }
     }
 

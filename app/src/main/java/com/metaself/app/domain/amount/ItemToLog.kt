@@ -91,6 +91,23 @@ data class ItemToLog(
             }
         }
 
+    /**
+     * The worth at full precision, for the boxes that open under the line. For his food, its own
+     * figures for 100 g or one of it — which keep their decimals (a food's kind of figure, D53 §1),
+     * where [rateLine] prints them as a row would log them. A box he leaves alone must hand back
+     * the food's 0.5 g, not the line's 1 g.
+     */
+    val exactRate: Rate?
+        get() = when (val worth = worth) {
+            is Worth.Estimated -> worth.rate
+            is Worth.Typed -> worth.rate
+            is Worth.YourFood -> {
+                val per = if (worth.countedAs == CountedAs.GRAMS) Per.HUNDRED else Per.ONE
+                Logging.unrounded(worth.food.facts, per.divisor, worth.countedAs)
+                    ?.let { Rate(it, per) }
+            }
+        }
+
     private fun costed(rate: Rate, provenance: Provenance, amount: Double): LoggedFrom.Numbers =
         Logging.rounded(rate.nutrients * (amount / rate.per.divisor), provenance, amount, unit)
 

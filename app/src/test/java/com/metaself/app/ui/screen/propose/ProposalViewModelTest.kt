@@ -513,6 +513,33 @@ class ProposalViewModelTest {
         assertThat(back.editingWorth).isNull()
     }
 
+    /**
+     * His food's worth line prints whole numbers, as a row would log them; the boxes open on the
+     * food's own figures. Opened on the line's, a 0.5 g fat he left alone would be saved as 1 g —
+     * typed, as his — because he changed the calories.
+     */
+    @Test
+    fun `a figure left alone over his food keeps the food's own decimals`() = runTest {
+        val halfGramFat = hisPita().copy(
+            facts = FoodFacts(perUnit = PerUnit("pita", Nutrients(250.0, 8.0, 50.0, 0.5), typed)),
+        )
+        val viewModel =
+            proposedViewModelOf(aModelPita(), foods = FakeFoodRepository(listOf(halfGramFat)))
+
+        viewModel.openWorth(0)
+        val boxes = (viewModel.state.value as ProposalUiState.Proposed).rows[0].editingWorth!!
+        assertThat(boxes.typed).containsExactly("250", "8", "50", "0.5").inOrder()
+
+        viewModel.setWorthBox(0, WorthFigure.KCAL, "240")
+        viewModel.setAmount(0, "4")
+
+        val row = (viewModel.state.value as ProposalUiState.Proposed).rows[0]
+        assertThat(row.item.worth)
+            .isEqualTo(Worth.Typed(Rate(Nutrients(240.0, 8.0, 50.0, 0.5), Per.ONE)))
+        // Four pitas at 0.5 g is 2 g of fat; at a rounded 1 g it would have been 4.
+        assertThat(row.numbers!!.fatG).isEqualTo(2)
+    }
+
     // --- What a saved row teaches its food (D53 §3) ----------------------------------------------
 
     /** The estimate's own worth goes with the row, unrounded, for the food it lands on. */
