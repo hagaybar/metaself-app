@@ -127,6 +127,8 @@
       correcting one is the point. Reached from a part of the clock on the day, for that day only.
     -->
     <string name="record_title">The day\'s record</string>
+    <!-- D52: the three consistency counts, at the foot of the record screen. -->
+    <string name="record_your_record">Your record</string>
     <!-- What the day came to: the total recorded and how many things. Never the target (D50). -->
     <plurals name="record_things">
         <item quantity="one">%1$d thing</item>

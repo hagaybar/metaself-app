@@ -36,6 +36,7 @@ import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import com.metaself.app.domain.goal.GoalArrival
 import com.metaself.app.domain.milestone.Milestone
+import com.metaself.app.domain.streak.ConsistencyFigure
 import com.metaself.app.domain.product.Product
 import com.metaself.app.domain.repeat.withAmount
 import com.metaself.app.domain.window.DayMeasured
@@ -535,6 +536,67 @@ class DayViewModelTest {
         advanceUntilIdle()
 
         assertThat(model.state.value.let { it as DayUiState.Ready }.streak.currentDays).isEqualTo(5)
+    }
+
+    // --- the one consistency figure (D52) ------------------------------------------------------
+
+    /** Thirty days in a row, ending today: 30 is a milestone and not a multiple of seven. */
+    @Test
+    fun `a run reaching thirty today is a milestone on the day`() = runTest {
+        val model = watched(viewModel(meals = (0L..29L).map { aMeal(epochDay = TEST_EPOCH_DAY - it) }))
+
+        assertThat(ready(model).consistency)
+            .isEqualTo(ConsistencyFigure.Run(days = 30, milestone = true))
+    }
+
+    /**
+     * Seven days ending today: the weekly congratulation fires, so the figure stays plain and the
+     * milestone is said once — and it stays plain once the congratulation is dismissed.
+     */
+    @Test
+    fun `on the day the weekly congratulation fires, the figure stays plain`() = runTest {
+        val model = watched(viewModel(meals = (0L..6L).map { aMeal(epochDay = TEST_EPOCH_DAY - it) }))
+
+        assertThat(ready(model).encouragement).isEqualTo("A week of logging, unbroken.")
+        assertThat(ready(model).consistency)
+            .isEqualTo(ConsistencyFigure.Run(days = 7, milestone = false))
+
+        model.dismissEncouragement()
+        advanceUntilIdle()
+
+        assertThat(ready(model).encouragement).isNull()
+        assertThat(ready(model).consistency)
+            .isEqualTo(ConsistencyFigure.Run(days = 7, milestone = false))
+    }
+
+    /** The morning after, before the first logging: the run stands, the milestone was yesterday's. */
+    @Test
+    fun `a milestone run that ended yesterday is plain`() = runTest {
+        val model = watched(viewModel(meals = (1L..30L).map { aMeal(epochDay = TEST_EPOCH_DAY - it) }))
+
+        assertThat(ready(model).consistency)
+            .isEqualTo(ConsistencyFigure.Run(days = 30, milestone = false))
+    }
+
+    /** A past day's page carries the same figure, but the milestone belongs to today's page. */
+    @Test
+    fun `a past day's page shows the milestone plainly`() = runTest {
+        val model = watched(viewModel(meals = (0L..29L).map { aMeal(epochDay = TEST_EPOCH_DAY - it) }))
+
+        model.showDay(TEST_EPOCH_DAY - 3)
+        advanceUntilIdle()
+
+        assertThat(ready(model).consistency)
+            .isEqualTo(ConsistencyFigure.Run(days = 30, milestone = false))
+    }
+
+    /** A gap two days ago leaves a run of two, so the month speaks instead. */
+    @Test
+    fun `a short run gives way to the thirty-day count`() = runTest {
+        val days = listOf(0L, 1L, 3L, 4L, 5L, 40L)
+        val model = watched(viewModel(meals = days.map { aMeal(epochDay = TEST_EPOCH_DAY - it) }))
+
+        assertThat(ready(model).consistency).isEqualTo(ConsistencyFigure.Recent(days = 5))
     }
 
     @Test

@@ -5,6 +5,13 @@ import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.day.DayTotals
+import com.metaself.app.domain.day.Remaining
+import com.metaself.app.domain.streak.Streak
+import com.metaself.app.domain.target.DailyTargetCalculator
+import com.metaself.app.domain.profile.TEST_YEAR
+import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.ui.screen.day.DayUiState
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import com.metaself.app.domain.food.FoodFacts
@@ -848,6 +855,62 @@ class RecordScreenRenderTest {
     }
 
     /**
+     * D52: the three counts the day no longer prints are here, at the foot of the list, in the
+     * words they always had.
+     */
+    @Test
+    fun `your record is at the foot of the list with all three figures`() {
+        val texts = record(
+            meals = listOf(aMeal(id = 1, items = listOf(anItem(id = 10, name = "Porridge")))),
+            streak = Streak(currentDays = 12, lifetimeDays = 45, daysInLast30 = 22),
+        )
+
+        assertThat(texts).contains("Your record")
+        assertThat(texts).contains("12 days in a row")
+        assertThat(texts).contains("45 days logged")
+        assertThat(texts).contains("22 of the last 30")
+        assertThat(render.isDrawnBefore("Porridge", "Your record")).isTrue()
+    }
+
+    /** D14 holds here too: a run that has ended is absent, and the other two stand. */
+    @Test
+    fun `your record never prints a run that has ended`() {
+        val texts = record(
+            meals = emptyList(),
+            streak = Streak(currentDays = 0, lifetimeDays = 45, daysInLast30 = 3),
+        )
+
+        assertThat(texts).contains("Your record")
+        assertThat(texts.any { it.contains("in a row") }).isFalse()
+        assertThat(texts).contains("45 days logged")
+        assertThat(texts).contains("3 of the last 30")
+    }
+
+    @Test
+    fun `with nothing ever logged there is no record section`() {
+        val texts = record(meals = emptyList())
+
+        assertThat(texts).doesNotContain("Your record")
+    }
+
+    /** The state the record screen is handed carries the day's streak, and nothing else new. */
+    @Test
+    fun `the record's state is handed the day's streak`() {
+        val streak = Streak(currentDays = 4, lifetimeDays = 9, daysInLast30 = 9)
+        val target = DailyTargetCalculator.of(aProfile(), TEST_YEAR)
+        val day = DayUiState.Ready(
+            epochDay = shownDay,
+            isToday = true,
+            target = target,
+            meals = emptyList(),
+            remaining = Remaining.of(target, DayTotals.of(emptyList())),
+            streak = streak,
+        )
+
+        assertThat(RecordUiState.of(day, shownDay).streak).isEqualTo(streak)
+    }
+
+    /**
      * The record screen, drawn as the app draws it.
      *
      * Every test above goes through this one call, which is what the parked version of this file was
@@ -870,6 +933,7 @@ class RecordScreenRenderTest {
         onChooseAll: () -> Unit = {},
         onDeleteChosen: () -> Unit = {},
         onDismissRefusal: () -> Unit = {},
+        streak: Streak = Streak(0, 0, 0),
     ): List<String> = render.texts {
         RecordScreen(
             state = RecordUiState(
@@ -881,6 +945,7 @@ class RecordScreenRenderTest {
                 chosen = chosen,
                 refusal = refusal,
                 failed = failed,
+                streak = streak,
             ),
             canUndo = canUndo,
             onBack = {},

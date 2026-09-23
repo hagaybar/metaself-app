@@ -2,6 +2,7 @@ package com.metaself.app.ui.screen.record
 
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
+import com.metaself.app.domain.streak.Streak
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.screen.day.DayUiState
 
@@ -17,6 +18,11 @@ import com.metaself.app.ui.screen.day.DayUiState
  *
  * What is here is the record and the things that can be done to it: the loggings, which meals he
  * built are open, which rows are ticked, and why the last attempt to make a meal was refused.
+ *
+ * **The one exception is the [streak]**, since D52: the day now prints one consistency figure, and
+ * all three counts moved here, to a "Your record" section at the foot of the list. They are facts
+ * about how much of the record exists, not about how the day is going, which is why they belong on
+ * the screen where the record is read.
  *
  * **[epochDay] is the day this screen was reached from, and there is no way to change it.** See
  * [RecordScreen] for why that is a correctness requirement rather than a simplification.
@@ -41,6 +47,8 @@ data class RecordUiState(
     val refusal: String? = null,
     /** An action on the record that threw rather than finishing, in [refusal]'s slot. */
     val failed: ActionRefused? = null,
+    /** How consistently he has been logging, for "Your record" at the foot of the list (D52). */
+    val streak: Streak = Streak(0, 0, 0),
 ) {
 
     /** Every row of the record, across the loggings they were written in. */
@@ -65,7 +73,7 @@ data class RecordUiState(
          * The record's own state, narrowed from the day's.
          *
          * One view model serves both screens (see [RecordScreen]), so this is where the narrowing
-         * happens: the record takes the seven things it draws and leaves the rest of the day behind.
+         * happens: the record takes the eight things it draws and leaves the rest of the day behind.
          */
         fun of(day: DayUiState.Ready, todayEpochDay: Long): RecordUiState = RecordUiState(
             epochDay = day.epochDay,
@@ -76,6 +84,7 @@ data class RecordUiState(
             chosen = day.chosen,
             refusal = day.refusal,
             failed = day.failed,
+            streak = day.streak,
         )
     }
 }
