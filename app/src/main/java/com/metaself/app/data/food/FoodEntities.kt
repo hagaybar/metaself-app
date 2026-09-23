@@ -108,8 +108,9 @@ data class FoodEntity(
  *
  * @property brandKey the normalised brand, copied from the food. Denormalised **on purpose**: the
  *   identity rule spans a name and a brand, a unique index cannot span two tables, and this is where
- *   the index has to live. The cost is that editing a food's brand must rewrite this on every one of
- *   its name rows, in the same transaction.
+ *   the index has to live. The cost is that editing a food's brand must rewrite this on its own name
+ *   rows, in the same transaction. A name a join brought in keeps the brand it came with, so the
+ *   absorbed food's next log still finds this one.
  * @property isPreferred 1 for the name shown in lists. "Exactly one per food" is not something the
  *   schema can express here, so it is kept in the repository with a test, and display falls back to
  *   the oldest name if it is ever violated — a wrong label rather than a crash.

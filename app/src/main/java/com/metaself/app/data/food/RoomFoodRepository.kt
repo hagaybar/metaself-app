@@ -195,10 +195,22 @@ class RoomFoodRepository @Inject constructor(
             val display = brand?.takeIf { it.isNotBlank() }?.let(FoodKeys::displayName)
                 ?: FoodKeys.NO_BRAND
             val brandKey = FoodKeys.brandKey(brand)
+            // The brand the food's own names are under, read off the name shown rather than
+            // recomputed from the display brand, so it is exactly what the rows hold.
+            val shown = stored.names.firstOrNull { it.isPreferred }
+                ?: stored.names.minByOrNull { it.addedAtMillis }
+            val oldKey = shown?.brandKey ?: FoodKeys.brandKey(stored.food.brand)
 
-            // Every one of this food's names moves brand together, so each has to be free under the
-            // new one. A collision is offered as a merge or a refusal, never resolved silently.
-            stored.names.forEach { name ->
+            dao.setBrand(foodId, display, moment)
+            // Saving the form sets the brand every time, changed or not. Unchanged, no name moves.
+            if (brandKey == oldKey) return@withTransaction EditResult.Done
+
+            // Only the names under the food's own brand move. A name a join brought in keeps the
+            // brand it came with, because that is what lets the next log of the absorbed food find
+            // this one; rewriting it as well put two rows on one (name, brand) whenever the two
+            // joined foods shared a name, and the unique index refused the Save outright.
+            val moving = stored.names.filter { it.brandKey == oldKey }
+            moving.forEach { name ->
                 val taken = dao.foodIdNamed(name.nameKey, brandKey)
                 if (taken != null && taken != foodId) {
                     return@withTransaction EditResult.Refused(
@@ -206,8 +218,10 @@ class RoomFoodRepository @Inject constructor(
                     )
                 }
             }
-            dao.setBrand(foodId, display, moment)
-            dao.setBrandKeyOnNames(foodId, brandKey)
+            // A joined name already under the new brand is the same identity the moving name is
+            // about to take, so it goes rather than collide. Nothing points at a name row.
+            moving.forEach { name -> dao.dropJoinedName(foodId, name.nameKey, brandKey) }
+            dao.moveNamesToBrand(foodId, oldKey, brandKey)
             EditResult.Done
         }
 
