@@ -147,6 +147,7 @@
 
     <string name="weight_title">Weight</string>
     <string name="weight_add">Log a weight</string>
+    <string name="weight_change_goal">Change your goal</string>
     <string name="weight_editor_add">Log a weight</string>
     <string name="weight_editor_edit">Change this reading</string>
     <string name="weight_save">Save</string>

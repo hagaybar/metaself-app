@@ -65,8 +65,9 @@ import com.metaself.app.ui.screen.weight.WeightViewModel
 /**
  * The places this host can be.
  *
- * The profile is not one of them: it is the root's business, reached through `onEditProfile`, for
- * the same reason step 2 gave — it is chosen by data rather than pushed onto a stack.
+ * The profile is not one of them: it is the root's business, reached through `onEditProfile` (and
+ * its editor through `onEditGoal`), for the same reason step 2 gave — it is chosen by data rather
+ * than pushed onto a stack.
  */
 sealed class Destination(val route: String) {
     data object Today : Destination("today")
@@ -157,6 +158,8 @@ private val describeRoute = Destination.Describe.route + "?text={text}"
 @Composable
 fun MetaSelfNavHost(
     onEditProfile: () -> Unit,
+    /** The profile editor, opened straight away: where the goal weight and weekly rate are set. */
+    onEditGoal: () -> Unit,
     dayViewModel: DayViewModel = hiltViewModel(),
     weightViewModel: WeightViewModel = hiltViewModel(),
 ) {
@@ -217,6 +220,12 @@ fun MetaSelfNavHost(
                 onUndoDelete = weightViewModel::undoDelete,
                 onRange = weightViewModel::setRange,
                 onOpenChart = { navController.navigate(Destination.WeightChart.route) },
+                // The editor is the root's, like the profile (see `Destination`); the root keeps
+                // this screen where it is underneath, so closing the editor comes back here.
+                onChangeGoal = {
+                    justLogged = null
+                    onEditGoal()
+                },
                 onBack = {
                     justLogged = null
                     navController.popBackStack()

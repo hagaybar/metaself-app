@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -67,60 +68,98 @@ fun MetaSelfRoot(
             onCancel = null,
         )
 
-        is RootUiState.Ready -> when {
-            editing -> {
-                BackHandler {
-                    editing = false
-                    showErrors = false
-                }
-                SetupScreen(
-                    state = form,
-                    currentYear = currentYear,
-                    showErrors = showErrors,
-                    onChange = { form = it },
-                    onSave = {
-                        val profile = form.toProfile(currentYear)
-                        if (profile == null) {
-                            showErrors = true
-                        } else {
-                            viewModel.save(profile)
+        is RootUiState.Ready -> AppOrCover(
+            cover = when {
+                editing -> {
+                    {
+                        BackHandler {
                             editing = false
                             showErrors = false
                         }
-                    },
-                    onCancel = {
-                        editing = false
-                        showErrors = false
-                    },
-                )
-            }
+                        SetupScreen(
+                            state = form,
+                            currentYear = currentYear,
+                            showErrors = showErrors,
+                            onChange = { form = it },
+                            onSave = {
+                                val profile = form.toProfile(currentYear)
+                                if (profile == null) {
+                                    showErrors = true
+                                } else {
+                                    viewModel.save(profile)
+                                    editing = false
+                                    showErrors = false
+                                }
+                            },
+                            onCancel = {
+                                editing = false
+                                showErrors = false
+                            },
+                        )
+                    }
+                }
 
-            showingProfile -> {
-                BackHandler { showingProfile = false }
-                HomeScreen(
-                    profile = current.profile,
-                    target = current.target,
-                    versionName = versionName,
-                    versionCode = versionCode,
-                    measuredBurn = current.measuredBurn,
-                    burnAdjustmentKcal = current.burnAdjustmentKcal,
-                    daysLoggedRecently = current.daysLoggedRecently,
-                    weightUsedLine = RevisionWording.weightUsed(
-                        weightKg = current.weightUsedKg,
-                        fromTrend = current.targetFollowsTrend,
-                    ),
-                    onEdit = {
-                        form = SetupFormState.from(current.profile)
-                        showErrors = false
-                        editing = true
-                    },
-                    onAllowBelowFloor = viewModel::allowBelowFloor,
-                    onForgetBurnAdjustment = viewModel::forgetBurnAdjustment,
-                    onBack = { showingProfile = false },
-                )
-            }
+                showingProfile -> {
+                    {
+                        BackHandler { showingProfile = false }
+                        HomeScreen(
+                            profile = current.profile,
+                            target = current.target,
+                            versionName = versionName,
+                            versionCode = versionCode,
+                            measuredBurn = current.measuredBurn,
+                            burnAdjustmentKcal = current.burnAdjustmentKcal,
+                            daysLoggedRecently = current.daysLoggedRecently,
+                            weightUsedLine = RevisionWording.weightUsed(
+                                weightKg = current.weightUsedKg,
+                                fromTrend = current.targetFollowsTrend,
+                            ),
+                            onEdit = {
+                                form = SetupFormState.from(current.profile)
+                                showErrors = false
+                                editing = true
+                            },
+                            onAllowBelowFloor = viewModel::allowBelowFloor,
+                            onForgetBurnAdjustment = viewModel::forgetBurnAdjustment,
+                            onBack = { showingProfile = false },
+                        )
+                    }
+                }
 
-            else -> MetaSelfNavHost(onEditProfile = { showingProfile = true })
+                else -> null
+            },
+        ) {
+            MetaSelfNavHost(
+                onEditProfile = { showingProfile = true },
+                // Straight to the editor, where the goal weight and the weekly rate are set, and
+                // back to the weight screen when it closes (issue #11): with the profile page not
+                // open underneath, closing the editor falls through to the app, which AppOrCover
+                // has kept where it was.
+                onEditGoal = {
+                    form = SetupFormState.from(current.profile)
+                    showErrors = false
+                    editing = true
+                },
+            )
         }
     }
 }
+
+/**
+ * [app], or [cover] drawn in its place — with the app kept where he left it underneath.
+ *
+ * The profile and its editor are drawn INSTEAD of the app, so while one is up the app's navigation
+ * is out of the composition, and its back stack is saveable state like any other. Left unsaved, it
+ * was thrown away and the app restarted at the day: harmless while the profile could be opened only
+ * from the day, a trip to the wrong screen once the weight screen's "Change your goal" opens the
+ * editor (issue #11). Held here, the app's saveable state is put away when the cover goes up and
+ * handed back when it comes down, which is what brings the navigation back to the screen it left.
+ */
+@Composable
+internal fun AppOrCover(cover: (@Composable () -> Unit)?, app: @Composable () -> Unit) {
+    val kept = rememberSaveableStateHolder()
+    if (cover != null) cover() else kept.SaveableStateProvider(APP, app)
+}
+
+/** The one thing [AppOrCover] keeps, so any fixed key does. */
+private const val APP = "app"
