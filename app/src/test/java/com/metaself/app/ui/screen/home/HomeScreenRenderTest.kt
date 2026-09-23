@@ -9,6 +9,7 @@ import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.DailyTargetCalculator
 import com.metaself.app.domain.target.MeasuredBurn
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -87,6 +88,7 @@ class HomeScreenRenderTest {
         measuredBurn: MeasuredBurn? = null,
         burnAdjustmentKcal: Int = 0,
         daysLoggedRecently: Int = 0,
+        failed: ActionRefused? = null,
     ): List<String> = render.texts {
         HomeScreen(
             profile = profile,
@@ -100,7 +102,18 @@ class HomeScreenRenderTest {
             onEdit = {},
             onAllowBelowFloor = {},
             onForgetBurnAdjustment = {},
+            failed = failed,
         )
+    }
+
+    /** Forgetting the correction or overruling the floor, having thrown: said on this page. */
+    @Test
+    fun `an action here that threw says so, and nothing is said otherwise`() {
+        val sentence = "That didn't work, and nothing was changed. " +
+            "What went wrong is under Settings → Recent problems."
+
+        assertThat(drawWith(aProfile(), failed = ActionRefused.NOTHING_CHANGED)).contains(sentence)
+        assertThat(drawWith(aProfile())).doesNotContain(sentence)
     }
 
     /** D25: what actually happened, against what the formula predicted. */

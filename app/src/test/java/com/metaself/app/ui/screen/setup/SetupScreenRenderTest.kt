@@ -2,6 +2,7 @@ package com.metaself.app.ui.screen.setup
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.profile.GoalDirection
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -45,7 +46,25 @@ class SetupScreenRenderTest {
         assertThat(draw(holding, showErrors = false)).doesNotContain("How fast")
     }
 
-    private fun draw(state: SetupFormState, showErrors: Boolean): List<String> = render.texts {
+    /** A first save that threw leaves this form up; the sentence is above Save, where he pressed. */
+    @Test
+    fun `a save that threw says so above Save`() {
+        val texts = draw(SetupFormState(), showErrors = false, failed = ActionRefused.NOTHING_CHANGED)
+        val sentence = texts.indexOf(
+            "That didn't work, and nothing was changed. " +
+                "What went wrong is under Settings → Recent problems.",
+        )
+
+        assertThat(sentence).isAtLeast(0)
+        assertThat(texts).contains("All right")
+        assertThat(sentence).isLessThan(texts.indexOf("Work out my target"))
+    }
+
+    private fun draw(
+        state: SetupFormState,
+        showErrors: Boolean,
+        failed: ActionRefused? = null,
+    ): List<String> = render.texts {
         SetupScreen(
             state = state,
             currentYear = 2026,
@@ -53,6 +72,7 @@ class SetupScreenRenderTest {
             onChange = {},
             onSave = {},
             onCancel = null,
+            failed = failed,
         )
     }
 }

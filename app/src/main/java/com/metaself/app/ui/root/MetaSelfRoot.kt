@@ -36,6 +36,7 @@ fun MetaSelfRoot(
     viewModel: RootViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val failed by viewModel.failed.collectAsStateWithLifecycle()
     val currentYear = viewModel.year
 
     var editing by remember { mutableStateOf(false) }
@@ -66,6 +67,8 @@ fun MetaSelfRoot(
                 if (profile == null) showErrors = true else viewModel.save(profile)
             },
             onCancel = null,
+            failed = failed,
+            onDismissFailure = viewModel::dismissFailure,
         )
 
         is RootUiState.Ready -> AppOrCover(
@@ -73,6 +76,7 @@ fun MetaSelfRoot(
                 editing -> {
                     {
                         BackHandler {
+                            viewModel.dismissFailure()
                             editing = false
                             showErrors = false
                         }
@@ -86,22 +90,31 @@ fun MetaSelfRoot(
                                 if (profile == null) {
                                     showErrors = true
                                 } else {
-                                    viewModel.save(profile)
-                                    editing = false
-                                    showErrors = false
+                                    // Closed once it is stored, so a save that throws leaves the
+                                    // editor up with what he typed and the failure above Save.
+                                    viewModel.save(profile) {
+                                        editing = false
+                                        showErrors = false
+                                    }
                                 }
                             },
                             onCancel = {
+                                viewModel.dismissFailure()
                                 editing = false
                                 showErrors = false
                             },
+                            failed = failed,
+                            onDismissFailure = viewModel::dismissFailure,
                         )
                     }
                 }
 
                 showingProfile -> {
                     {
-                        BackHandler { showingProfile = false }
+                        BackHandler {
+                            viewModel.dismissFailure()
+                            showingProfile = false
+                        }
                         HomeScreen(
                             profile = current.profile,
                             target = current.target,
@@ -115,13 +128,19 @@ fun MetaSelfRoot(
                                 fromTrend = current.targetFollowsTrend,
                             ),
                             onEdit = {
+                                viewModel.dismissFailure()
                                 form = SetupFormState.from(current.profile)
                                 showErrors = false
                                 editing = true
                             },
                             onAllowBelowFloor = viewModel::allowBelowFloor,
                             onForgetBurnAdjustment = viewModel::forgetBurnAdjustment,
-                            onBack = { showingProfile = false },
+                            onBack = {
+                                viewModel.dismissFailure()
+                                showingProfile = false
+                            },
+                            failed = failed,
+                            onDismissFailure = viewModel::dismissFailure,
                         )
                     }
                 }

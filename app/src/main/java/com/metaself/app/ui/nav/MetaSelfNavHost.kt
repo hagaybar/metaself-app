@@ -405,6 +405,7 @@ fun MetaSelfNavHost(
                     clipboard.setText(AnnotatedString(settingsViewModel.problemsAsText()))
                 },
                 onClearProblems = settingsViewModel::clearProblems,
+                onDismissFailure = settingsViewModel::dismissFailure,
                 onBack = { navController.popBackStack() },
                 openAtKey = entry.arguments?.getString("at") == "key",
             )

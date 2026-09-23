@@ -78,6 +78,7 @@ class SettingsAtKeySessionTest {
             onDismissBackupMessage = {},
             onCopyProblems = {},
             onClearProblems = {},
+            onDismissFailure = {},
             onBack = {},
             openAtKey = openAtKey,
         )

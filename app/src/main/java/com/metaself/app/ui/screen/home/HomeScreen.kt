@@ -20,6 +20,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.profile.Profile
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.domain.target.DailyTarget
 import com.metaself.app.domain.target.MeasuredBurn
 import com.metaself.app.ui.target.BurnWording
@@ -50,6 +51,9 @@ fun HomeScreen(
     onAllowBelowFloor: () -> Unit,
     onForgetBurnAdjustment: () -> Unit,
     onBack: (() -> Unit)? = null,
+    /** Forgetting the correction or allowing a target below the floor, having thrown instead. */
+    failed: ActionRefused? = null,
+    onDismissFailure: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var showingWorking by rememberSaveable { mutableStateOf(false) }
@@ -104,6 +108,18 @@ fun HomeScreen(
         if (target.floorApplied) {
             TextButton(onClick = onAllowBelowFloor) {
                 Text(stringResource(R.string.home_floor_override))
+            }
+        }
+
+        // Under the two buttons that can put it here.
+        failed?.let {
+            Text(
+                text = stringResource(it.sentence),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+            TextButton(onClick = onDismissFailure) {
+                Text(stringResource(R.string.action_refused_dismiss))
             }
         }
 

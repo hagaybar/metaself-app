@@ -197,6 +197,7 @@ class WindowSettingsRenderTest {
             onDismissBackupMessage = {},
             onCopyProblems = {},
             onClearProblems = {},
+            onDismissFailure = {},
             onBack = {},
         )
     }

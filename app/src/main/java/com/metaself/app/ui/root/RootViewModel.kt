@@ -2,6 +2,7 @@ package com.metaself.app.ui.root
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.domain.profile.Profile
@@ -14,14 +15,17 @@ import com.metaself.app.domain.target.MeasuredBurnCalculator
 import com.metaself.app.domain.weight.WeightReading
 import com.metaself.app.domain.weight.WeightTrend
 import com.metaself.app.domain.target.CurrentTarget
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.guarded
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -29,6 +33,12 @@ import javax.inject.Inject
  *
  * The year arrives as an injected [CurrentYear] rather than being read inside the arithmetic, so
  * that a test can pin an age without pinning a clock.
+ *
+ * **Nothing here takes the app down.** Each action is one write to the profile's store, run through
+ * [guarded]; one that throws is written to the problem log and puts [failed] on whichever of the
+ * root's own screens is up — the setup form or the profile page — saying nothing was changed. Which
+ * screen is up does not depend on it: that is decided by [state], from what is stored, so a refused
+ * first save leaves the setup form where it was, with what he typed.
  */
 @HiltViewModel
 class RootViewModel @Inject constructor(
@@ -37,7 +47,13 @@ class RootViewModel @Inject constructor(
     private val weights: WeightRepository,
     private val today: Today,
     private val currentYear: CurrentYear,
+    private val problems: ProblemLog,
 ) : ViewModel() {
+
+    private val _failed = MutableStateFlow<ActionRefused?>(null)
+
+    /** The last action that threw rather than finishing, until he dismisses it or does another. */
+    val failed: StateFlow<ActionRefused?> = _failed.asStateFlow()
 
     val state: StateFlow<RootUiState> = combine(
         repository.profile,
@@ -113,11 +129,18 @@ class RootViewModel @Inject constructor(
      * of that, and it belongs next to the number rather than buried in settings.
      */
     fun forgetBurnAdjustment() {
-        viewModelScope.launch { repository.saveBurnAdjustment(0) }
+        act { repository.saveBurnAdjustment(0) }
     }
 
-    fun save(profile: Profile) {
-        viewModelScope.launch { repository.save(profile) }
+    /**
+     * @param onSaved what to do once the profile is stored — the editor closes here, and only here,
+     *   so a save that throws leaves it open with what he typed and the sentence above Save.
+     */
+    fun save(profile: Profile, onSaved: () -> Unit = {}) {
+        act {
+            repository.save(profile)
+            onSaved()
+        }
     }
 
     /**
@@ -127,10 +150,24 @@ class RootViewModel @Inject constructor(
      * he has already overruled the next time it starts.
      */
     fun allowBelowFloor() {
-        viewModelScope.launch {
-            val current = repository.profile.first() ?: return@launch
+        act {
+            val current = repository.profile.first() ?: return@act
             repository.save(current.copy(allowBelowFloor = true))
         }
+    }
+
+    /** He has read the failure; take it down. */
+    fun dismissFailure() {
+        _failed.value = null
+    }
+
+    /**
+     * Run one action under the guard, letting go of the last failure first so what is on screen is
+     * about the latest thing he did.
+     */
+    private fun act(block: suspend () -> Unit) {
+        _failed.value = null
+        guarded(problems, onRefused = { _failed.value = ActionRefused.NOTHING_CHANGED }) { block() }
     }
 
     private companion object {

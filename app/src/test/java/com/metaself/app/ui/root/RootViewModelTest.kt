@@ -3,7 +3,9 @@ package com.metaself.app.ui.root
 import com.metaself.app.data.day.DeletedEntry
 import com.metaself.app.data.day.DetachedRow
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.profile.FakeProfileRepository
+import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.time.Today
@@ -17,6 +19,9 @@ import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.target.TargetRevision
+import com.metaself.app.domain.profile.Profile
+import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -113,13 +118,74 @@ class RootViewModelTest {
      * formula predicted (D25). Empty stores mean it has nothing to measure, which is the right
      * answer for every test here.
      */
-    private fun viewModel(profiles: FakeProfileRepository) = RootViewModel(
+    private fun viewModel(
+        profiles: ProfileRepository,
+        problems: ProblemLog = ProblemLog.NONE,
+    ) = RootViewModel(
         repository = profiles,
         meals = EmptyMeals(),
         weights = EmptyWeights(),
         today = Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) },
         currentYear = CurrentYear { TEST_YEAR },
+        problems = problems,
     )
+
+    /** A profile store whose every write throws, as storage that is full or broken would. */
+    private fun refusing(initial: Profile?) = object : ProfileRepository by FakeProfileRepository(initial) {
+        override suspend fun save(profile: Profile) = throw IllegalStateException("disk full")
+        override suspend fun saveBurnAdjustment(kcal: Int) = throw IllegalStateException("disk full")
+    }
+
+    /**
+     * The first save is the one with nothing behind it: which screen is up is decided by what is
+     * stored, so a refused one leaves the setup form up, and the sentence goes on it.
+     */
+    @Test
+    fun `a first save that throws leaves the setup form up and says so`() = runTest {
+        val problems = RecordingProblemLog()
+        val viewModel = viewModel(refusing(null), problems)
+        var saved = false
+
+        viewModel.save(aProfile()) { saved = true }
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.first { it !is RootUiState.Loading })
+            .isInstanceOf(RootUiState.NeedsSetup::class.java)
+        assertThat(viewModel.failed.value).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        assertThat(saved).isFalse()
+    }
+
+    /** The editor closes on this, so a save that throws must not call it. */
+    @Test
+    fun `an edit is reported saved only once it is stored`() = runTest {
+        val viewModel = viewModel(FakeProfileRepository(aProfile()))
+        var saved = false
+
+        viewModel.save(aProfile(weightKg = 82.0)) { saved = true }
+        advanceUntilIdle()
+
+        assertThat(saved).isTrue()
+        assertThat(viewModel.failed.value).isNull()
+    }
+
+    @Test
+    fun `forgetting the correction or overruling the floor, refused, says so`() = runTest {
+        val problems = RecordingProblemLog()
+        val viewModel = viewModel(refusing(aProfile()), problems)
+
+        viewModel.forgetBurnAdjustment()
+        advanceUntilIdle()
+        assertThat(viewModel.failed.value).isEqualTo(ActionRefused.NOTHING_CHANGED)
+
+        viewModel.dismissFailure()
+        assertThat(viewModel.failed.value).isNull()
+
+        viewModel.allowBelowFloor()
+        advanceUntilIdle()
+        assertThat(viewModel.failed.value).isEqualTo(ActionRefused.NOTHING_CHANGED)
+        assertThat(problems.recorded.map { it.kind }).containsExactly("refused", "refused")
+    }
 
     private class EmptyMeals : MealRepository {
         override fun observeDay(epochDay: Long): Flow<List<Meal>> = MutableStateFlow(emptyList())
