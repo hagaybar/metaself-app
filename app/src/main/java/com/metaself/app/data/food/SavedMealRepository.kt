@@ -43,6 +43,8 @@ interface SavedMealRepository {
      * are several writes, and a failure between them used to leave a meal with some of its parts and
      * none of its rows. Anything [then] throws undoes the meal as well. A name already taken is
      * answered before anything is written, so [then] is not run and nothing is left to undo.
+     *
+     * [then] must let a storage failure out rather than catch it — see the implementation.
      */
     suspend fun createThen(name: String, then: suspend (mealId: Long) -> Unit): MealResult
 
@@ -100,6 +102,12 @@ class RoomSavedMealRepository @Inject constructor(
      * transaction and every write [then] makes — through this repository or another over the same
      * database — join this one. A refusal is RETURNED only before anything is written; a failure
      * after that is thrown, which is what rolls the whole of it back.
+     *
+     * **[then] must not catch a Room failure.** A write that fails inside a nested `withTransaction`
+     * ends that nested transaction unmarked, and SQLite then rolls back the WHOLE transaction when
+     * it closes, however the exception was handled. Caught inside [then], nothing is thrown out of
+     * here, so this returns [MealResult.Built] for a meal the rollback has just removed — a success
+     * reported for nothing stored.
      */
     override suspend fun createThen(
         name: String,
