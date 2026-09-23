@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.MetaSelfInk
+import com.metaself.app.ui.theme.Spacing
 
 /**
  * One item, being written down — or one already logged, being corrected.
@@ -58,76 +59,86 @@ fun EntryEditorScreen(
         modifier = modifier,
         onBack = onCancel,
     ) {
-        Field(
-            label = stringResource(R.string.entry_name),
-            value = state.name,
-            error = errors[EntryField.NAME],
-            numeric = false,
-            onValueChange = { onChange(state.copy(name = it)) },
-        )
-
-        // Only for an item that carries a portion with numbers behind it. A typed entry has no
-        // amount to scale, and offering one would invite a figure the record cannot support.
-        if (state.hasAmount) {
+        // D48's grouping: the frame puts a section's gap between its children, so what the thing
+        // is and what it is worth are two children, each spaced inside by the step that says how
+        // closely its parts belong.
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             Field(
-                label = stringResource(R.string.entry_amount, state.amountUnit),
-                value = state.amount,
-                error = errors[EntryField.AMOUNT],
-                numeric = true,
-                onValueChange = { onChange(state.withAmount(it)) },
+                label = stringResource(R.string.entry_name),
+                value = state.name,
+                error = errors[EntryField.NAME],
+                numeric = false,
+                onValueChange = { onChange(state.copy(name = it)) },
             )
+
+            // Only for an item that carries a portion with numbers behind it. A typed entry has no
+            // amount to scale, and offering one would invite a figure the record cannot support.
+            if (state.hasAmount) {
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Field(
+                        label = stringResource(R.string.entry_amount, state.amountUnit),
+                        value = state.amount,
+                        error = errors[EntryField.AMOUNT],
+                        numeric = true,
+                        onValueChange = { onChange(state.withAmount(it)) },
+                    )
+                    Text(
+                        text = stringResource(R.string.entry_amount_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MetaSelfInk.two,
+                    )
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            // Said before the first box it governs, not only in the refusal after Add it (issue
+            // #18, D38). Below the amount, which takes decimals, so it is not read as governing
+            // that box.
             Text(
-                text = stringResource(R.string.entry_amount_note),
+                text = stringResource(R.string.entry_whole_numbers),
                 style = MaterialTheme.typography.bodySmall,
                 color = MetaSelfInk.two,
             )
+
+            Field(
+                label = stringResource(R.string.entry_kcal),
+                value = state.kcal,
+                error = errors[EntryField.KCAL],
+                numeric = true,
+                onValueChange = { onChange(state.copy(kcal = it)) },
+            )
+
+            Text(
+                text = stringResource(R.string.entry_macros_optional),
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+
+            Field(
+                label = stringResource(R.string.entry_protein),
+                value = state.proteinG,
+                error = errors[EntryField.PROTEIN],
+                numeric = true,
+                onValueChange = { onChange(state.copy(proteinG = it)) },
+            )
+
+            Field(
+                label = stringResource(R.string.entry_carbs),
+                value = state.carbsG,
+                error = errors[EntryField.CARBS],
+                numeric = true,
+                onValueChange = { onChange(state.copy(carbsG = it)) },
+            )
+
+            Field(
+                label = stringResource(R.string.entry_fat),
+                value = state.fatG,
+                error = errors[EntryField.FAT],
+                numeric = true,
+                onValueChange = { onChange(state.copy(fatG = it)) },
+            )
         }
-
-        // Said before the first box it governs, not only in the refusal after Add it (issue #18,
-        // D38). Below the amount, which takes decimals, so it is not read as governing that box.
-        Text(
-            text = stringResource(R.string.entry_whole_numbers),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        Field(
-            label = stringResource(R.string.entry_kcal),
-            value = state.kcal,
-            error = errors[EntryField.KCAL],
-            numeric = true,
-            onValueChange = { onChange(state.copy(kcal = it)) },
-        )
-
-        Text(
-            text = stringResource(R.string.entry_macros_optional),
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        Field(
-            label = stringResource(R.string.entry_protein),
-            value = state.proteinG,
-            error = errors[EntryField.PROTEIN],
-            numeric = true,
-            onValueChange = { onChange(state.copy(proteinG = it)) },
-        )
-
-        Field(
-            label = stringResource(R.string.entry_carbs),
-            value = state.carbsG,
-            error = errors[EntryField.CARBS],
-            numeric = true,
-            onValueChange = { onChange(state.copy(carbsG = it)) },
-        )
-
-        Field(
-            label = stringResource(R.string.entry_fat),
-            value = state.fatG,
-            error = errors[EntryField.FAT],
-            numeric = true,
-            onValueChange = { onChange(state.copy(fatG = it)) },
-        )
 
         Button(onClick = onSave, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.entry_save))
@@ -143,7 +154,10 @@ private fun Field(
     numeric: Boolean,
     onValueChange: (String) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+    ) {
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
