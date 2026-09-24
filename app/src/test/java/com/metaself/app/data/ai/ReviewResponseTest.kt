@@ -122,6 +122,34 @@ class ReviewResponseTest {
         assertThat(review.per100g).isNull()
     }
 
+    /**
+     * A scanned food's per-100 g figures are a serving's scaled, so they are stored as long
+     * doubles — here an invented 70 g serving of 6 g protein, 9 g carbohydrate and 4 g fat. A model
+     * echoing them back rounds them, to two decimals or one, and gives no reason, because it
+     * changed nothing. That is kept, not a change without a reason (D54 as amended 2026-09-24).
+     */
+    @Test
+    fun `a held figure the model echoes rounded is kept, not a change without a reason`() {
+        val request = OAT_BISCUIT.copy(
+            per100g = HeldGroup(
+                Nutrients(100.0, 8.571428571428571, 12.857142857142858, 5.714285714285714),
+                Source.LABEL,
+                null,
+            ),
+            perUnit = HeldGroup(Nutrients(95.0, 4.25, 6.3, 3.35), Source.LABEL, null),
+        )
+
+        val result = ReviewResponse.parse(
+            reply(
+                per100g = group(100, "8.57", "12.9", "5.7", confidence = "HIGH"),
+                perUnit = group(95, "4.3", "6.3", "3.4", confidence = "HIGH"),
+            ),
+            request,
+        )
+
+        assertThat(proposed(result)).isEqualTo(FoodReview(null, null, null, emptyList()))
+    }
+
     /** The spec's invented impossible label: 120 kcal against macros worth about 370. */
     @Test
     fun `a label can be contradicted, with its reason`() {

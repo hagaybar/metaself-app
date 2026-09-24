@@ -32,7 +32,8 @@ import kotlin.math.roundToLong
  * - `null` for a group means leave it as it is; a reply cannot remove a group.
  * - `per_unit` is ignored when the editor names no unit.
  * - A figure equal to the one held (D45's comparison) is kept **exactly as held**: a model echoing
- *   3.25 does not turn a label's 3.25 into 3.3. So is one that only rounds back to it.
+ *   3.25 does not turn a label's 3.25 into 3.3. So is one equal to it once both are rounded to one
+ *   decimal: 8.57 or 8.6 given back for a held 8.571428571428571 is an echo, not a change.
  * - A figure that differs is a change, rounded to one decimal place — a guess claims no finer
  *   precision — and must carry a non-blank reason. A group the form did not know is a fill, rounded
  *   the same way, and needs at least one non-blank reason.
@@ -145,7 +146,7 @@ object ReviewResponse {
             val was = holds[i]
             val given = figures[i]
             val rounded = toOneDecimal(given)
-            if (ReplacedFacts.sameFigure(was, given) || ReplacedFacts.sameFigure(was, rounded)) {
+            if (kept(was, given)) {
                 was
             } else {
                 if (reasons[i].isEmpty()) return Read.SetAside
@@ -170,6 +171,17 @@ object ReviewResponse {
     private fun JsonObject.figure(field: String, most: Double): Double? =
         this[field]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()
             ?.takeIf { BelievableAmount.isBelievable(it, most) }
+
+    /**
+     * The model kept [was] when it gave it back as held, as held to D45's nine significant
+     * figures, or as held once both are rounded to one decimal: a food whose figures are a
+     * serving's scaled holds 8.571428571428571, and a model echoing it writes 8.57 or 8.6 with no
+     * reason, because it changed nothing (D54 as amended 2026-09-24). Read as a change, that
+     * missing reason would set the whole group aside.
+     */
+    private fun kept(was: Double, given: Double): Boolean =
+        ReplacedFacts.sameFigure(was, given) ||
+            ReplacedFacts.sameFigure(toOneDecimal(was), toOneDecimal(given))
 
     private fun toOneDecimal(value: Double): Double = (value * 10).roundToLong() / 10.0
 

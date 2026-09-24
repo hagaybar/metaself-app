@@ -14,6 +14,9 @@
 >   model, only when the owner asks for it, and the privacy page says so.
 > - **2026-09-24, amendment** — the weakest-member rule read literally: an accepted group is stored
 >   as the weaker of `AI_ESTIMATE` and the source of the figures the model kept in it (§5).
+> - **2026-09-24, second amendment** — a review keeps what it was told: a figure echoed back
+>   rounded is kept, not changed; how an unusable answer is said, and the model's answer shown on
+>   request; stored figures shown rounded in the editor and kept when their box is untouched (§8).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -150,7 +153,8 @@ unit name is not in the reply either: the proposal is always for the unit in the
 - `null` for a group means *leave it as it is*. A reply cannot remove a group.
 - `per_unit` is ignored when the editor names no unit.
 - A figure is compared with the one the group holds using D45's comparison; **equal is kept, exactly
-  as held** — a model echoing 3.25 does not turn a label's 3.25 into 3.3.
+  as held** — a model echoing 3.25 does not turn a label's 3.25 into 3.3. So is a figure equal to
+  the held one once both are rounded to one decimal (§8.1).
 - A figure that differs is a **change** and must carry a non-blank reason. A group the form did not
   know is a **fill** and needs at least one non-blank reason. Changed and filled figures are rounded
   to one decimal place: a guess claims no finer precision.
@@ -309,6 +313,22 @@ estimation* to:
 > **OpenAI** — meal descriptions are sent for estimation, and a food you ask to have reviewed is sent
 > for review, using *your own* API key. Their terms and pricing apply to you directly, and any cost
 > is yours.
+
+### 8. Amendment, 2026-09-24 — a review keeps what it was told
+
+A food scanned from a packet holds its per-100 g figures as a serving's scaled, so they are stored as
+long doubles — *invented:* 8.571428571428571 g of protein, from 6 g in a 70 g serving. Reviewing such
+a food ended in *The answer could not be understood*: the model echoed 8.57, the reader took the
+echo for a change, a change with no reason set the group aside, and with every group set aside the
+reply was read as unreadable. What follows is settled so that cannot happen, and so that when an
+answer cannot be used he is told so honestly and can see it.
+
+**8.1 An echo is kept.** A figure the model returns is **kept, exactly as held**, when it equals the
+held figure by D45's comparison, or when the two are equal once **both** are rounded to one decimal
+(half up). 8.57 or 8.6 for a held 8.571428571428571 is kept; so is 7.3 for a held 7.25. A figure
+that differs at the first decimal is still a change. The cost: a change smaller than half a tenth
+that also rounds to the held tenth cannot be proposed — below the precision a suggestion claims
+(§3) anyway.
 
 ---
 
