@@ -9,6 +9,7 @@ import androidx.compose.ui.res.stringResource
 import com.metaself.app.R
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.MetaSelfScreen
+import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.screen.foods.FoodsContent
 import com.metaself.app.ui.screen.foods.FoodsUiState
 
@@ -49,6 +50,7 @@ fun ManagerScreen(
     onConfirmMerging: () -> Unit,
     onCancelMerging: () -> Unit,
     onDismissRefusal: () -> Unit,
+    review: ReviewActions,
     onBeginChoosing: (Long) -> Unit,
     onToggleChosen: (Long) -> Unit,
     onClearChoosing: () -> Unit,
@@ -108,6 +110,7 @@ fun ManagerScreen(
                 onConfirmMerging = onConfirmMerging,
                 onCancelMerging = onCancelMerging,
                 onDismissRefusal = onDismissRefusal,
+                review = review,
                 onBeginChoosing = onBeginChoosing,
                 onToggleChosen = onToggleChosen,
                 onClearChoosing = onClearChoosing,

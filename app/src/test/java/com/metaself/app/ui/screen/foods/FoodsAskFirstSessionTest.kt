@@ -17,6 +17,7 @@ import com.metaself.app.data.food.aFood
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.food.Food
 import com.metaself.app.ui.ComposeSession
+import com.metaself.app.ui.food.ReviewActions
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -259,6 +260,12 @@ class FoodsAskFirstSessionTest {
             onConfirmMerging = viewModel::confirmJoining,
             onCancelMerging = viewModel::cancelMerging,
             onDismissRefusal = viewModel::dismissRefusal,
+            review = ReviewActions(
+                onReview = viewModel::review,
+                onAccept = viewModel::acceptGroup,
+                onAcceptAll = viewModel::acceptAll,
+                onDismiss = viewModel::dismissReview,
+            ),
             onBeginChoosing = viewModel::beginChoosing,
             onToggleChosen = viewModel::toggleChosen,
             onClearChoosing = viewModel::clearChoosing,

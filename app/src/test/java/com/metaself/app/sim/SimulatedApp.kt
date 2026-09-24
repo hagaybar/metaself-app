@@ -26,6 +26,7 @@ import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.movement.DayMovement
 import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.ui.screen.foods.FoodsViewModel
 import com.metaself.app.ui.screen.manager.ManagerScreen
@@ -380,6 +381,12 @@ private fun ManagerHere(
         onConfirmMerging = foodsViewModel::confirmJoining,
         onCancelMerging = foodsViewModel::cancelMerging,
         onDismissRefusal = foodsViewModel::dismissRefusal,
+        review = ReviewActions(
+            onReview = foodsViewModel::review,
+            onAccept = foodsViewModel::acceptGroup,
+            onAcceptAll = foodsViewModel::acceptAll,
+            onDismiss = foodsViewModel::dismissReview,
+        ),
         onBeginChoosing = foodsViewModel::beginChoosing,
         onToggleChosen = foodsViewModel::toggleChosen,
         onClearChoosing = foodsViewModel::clearChoosing,
