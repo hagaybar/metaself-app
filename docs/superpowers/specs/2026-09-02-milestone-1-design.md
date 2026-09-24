@@ -291,6 +291,10 @@ correction note is in that file).
   names (#9) are untouched, so the two halves of a cross-language duplicate still have to be found
   by eye before they can be joined. The typed-amount control for logging (#1) is not part of this
   either — the amount box described here belongs to the meal builder, not to the day.
+- **AMENDED 2026-09-24, D55: a food no longer edits in place.** *My foods* keeps finding, choosing,
+  making a meal and joining; tapping a food opens a page of its own, which corrects, reviews, hides
+  and deletes it. The manager is still one menu item, one screen, two tabs.
+  `docs/superpowers/specs/2026-09-24-food-page-design.md`.
 
 **D28 — ADDED 2026-09-14, issue #10. The way in is the owner's own foods; describing is what a
 miss falls through to.** This reverses a deliberate arrangement and the reversal must say so: until
@@ -626,6 +630,12 @@ question or refusal appears where he can see it.**
   is a measurement nobody made (D4). Nothing is averaged or worked out. Where both hold a group, the
   absorbed food's goes with it, unannounced — the question already said whose numbers stay. No
   schema change, no new wording.
+- **AMENDED 2026-09-24, D55: the delete question and its refusal are drawn at the foot of the
+  food's own page**, in place of its buttons, in the same words and the same order; *picking the
+  duplicate from a food's own screen* now means the page closes and the pick is made on the list,
+  with its search kept. *Every way off the editor* reads *every way off the page*, and the tab
+  switch named above cannot happen on a page. The join question and its answers are unchanged.
+  `docs/superpowers/specs/2026-09-24-food-page-design.md`.
 
 **D37 — ADDED 2026-09-19, issue #15, extended by issue #27; the recommended option, taken under the
 owner's standing instruction of 2026-09-19 to choose the recommended option. Where a sentence on
@@ -842,8 +852,8 @@ matches.**
 - **Not taken.** Offering the food already in so its amount can be changed (issue #17);
   matching one food logged in two languages, which is what joining two foods is for (D30). No
   schema change.
-- **Cost accepted.** A short search can now list a food by its brand (`os` finds a food branded
-  Osem), always after every name match and with the brand printed on the row. On Add something, a
+- **Cost accepted.** A short search can now list a food by its brand (`ex` finds a food branded
+  Examplebrand), always after every name match and with the brand printed on the row. On Add something, a
   food found only by its brand counts as found, so describing afresh is not offered for it — the
   duplicate D28 exists to prevent. A new food's brand is still stored as it arrived (untidy
   spacing and all) where renaming a brand tidies it; the search tidies it as it reads, and the

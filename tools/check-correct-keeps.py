@@ -50,13 +50,23 @@ RANK = {"LABEL": 3, "TYPED": 2, "AI_ESTIMATE": 1, "REPEATED": 0, "UNRECOGNISED":
 
 
 def queries():
-    """Every `@Query` in the DAO, by the name of the function it annotates."""
+    """Every `@Query` in the DAO, by the name of the function it annotates.
+
+    A statement is either written in the annotation or named there by a `const val` in the same
+    file (`MEALS_USING`, shared by the delete refusal and the food page, D55 §3).
+    """
     src = DAO.read_text()
+    literal = r'((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+)'
+    joined = lambda body: "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', body)).replace('\\"', '"')
+    constants = {name: joined(body)
+                 for name, body in re.findall(r'const\s+val\s+(\w+)\s*=\s*' + literal, src)}
     found = {}
-    pattern = r'@Query\(\s*((?:"(?:[^"\\]|\\.)*"\s*\+?\s*)+),?\s*\)\s*(?:suspend\s+)?fun\s+(\w+)'
-    for match in re.finditer(pattern, src):
-        parts = re.findall(r'"((?:[^"\\]|\\.)*)"', match.group(1))
-        found[match.group(2)] = "".join(parts).replace('\\"', '"')
+    pattern = r'@Query\(\s*(?:' + literal + r'|(\w+)),?\s*\)\s*(?:suspend\s+)?fun\s+(\w+)'
+    for body, constant, fun in re.findall(pattern, src):
+        if body:
+            found[fun] = joined(body)
+        elif constant in constants:
+            found[fun] = constants[constant]
     return found
 
 

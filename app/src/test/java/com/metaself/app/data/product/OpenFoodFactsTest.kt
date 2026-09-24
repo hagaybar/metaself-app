@@ -24,7 +24,7 @@ class OpenFoodFactsTest {
         val product = OpenFoodFacts.parse("7290000066318", bambaReply)!!
 
         assertThat(product.name).isEqualTo("במבה")
-        assertThat(product.brand).isEqualTo("אסם")
+        assertThat(product.brand).isEqualTo("דוגמה")
         assertThat(product.kcalPer100g).isEqualTo(535.0)
         assertThat(product.proteinPer100g).isEqualTo(17.0)
         assertThat(product.carbsPer100g).isEqualTo(49.0)
@@ -241,7 +241,7 @@ class OpenFoodFactsTest {
             "fat_100g" to "30",
         ).apply { without.forEach { remove(it) } }
             .entries.joinToString(",") { (key, value) -> "\"$key\":$value" }
-        return """{"code":"7290000066318","product":{"product_name":"במבה","brands":"אסם",""" +
+        return """{"code":"7290000066318","product":{"product_name":"במבה","brands":"דוגמה",""" +
             """"serving_size":"1 serving (80 g)","nutriments":{$nutriments}}}"""
     }
 
@@ -261,7 +261,7 @@ class OpenFoodFactsTest {
             ProductForm.prefilled(
                 barcode = "7290000066318",
                 name = "במבה",
-                brand = "אסם",
+                brand = "דוגמה",
                 kcalPer100g = 535.0,
                 proteinPer100g = 17.0,
                 carbsPer100g = 49.0,
@@ -272,7 +272,7 @@ class OpenFoodFactsTest {
         assertThat(read.form.fatPer100g).isEqualTo("")
         assertThat(read.form.kcalPer100g).isEqualTo("535")
         assertThat(read.form.servingSizeG).isEqualTo("80")
-        assertThat(read.form.brand).isEqualTo("אסם")
+        assertThat(read.form.brand).isEqualTo("דוגמה")
     }
 
     /** Only a figure the database does not hold is missing; one it states as 0 is a real 0. */

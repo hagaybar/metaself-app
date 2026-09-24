@@ -1,10 +1,12 @@
 package com.metaself.app.sim
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,8 +29,12 @@ import com.metaself.app.domain.movement.DayMovement
 import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.ui.food.ReviewActions
+import com.metaself.app.ui.nav.FoodPageExit
+import com.metaself.app.ui.nav.TakeFromFoodPage
 import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.ui.screen.foods.FoodsViewModel
+import com.metaself.app.ui.screen.food.FoodPageScreen
+import com.metaself.app.ui.screen.food.FoodPageViewModel
 import com.metaself.app.ui.screen.manager.ManagerScreen
 import com.metaself.app.ui.screen.manager.ManagerViewModel
 import com.metaself.app.ui.screen.manager.MealsViewModel
@@ -121,10 +127,15 @@ sealed interface Where {
     /** The manual form: a name and the numbers, typed in, logged straight onto the day. */
     data object TypingTheNumbers : Where
 
-    data object Manager : Where
+    /**
+     * The foods-and-meals manager. [joinFrom] is the food a page's *Join with a duplicate* opened it
+     * picking a duplicate for, when there was no list beneath the page (D55 §5) — the route's
+     * `foods?joinFrom=`.
+     */
+    data class Manager(val joinFrom: Long? = null) : Where
 
-    /** The manager opened on one food's editor, as "Give this a portion" opens it. */
-    data class EditingFood(val foodId: Long) : Where
+    /** One food's own page (D55), as a row of the list and "Give this a portion" open it. */
+    data class FoodPage(val foodId: Long) : Where
 
     /** [mealId] zero means a meal that does not exist yet, exactly as the real route means it. */
     data class BuildingMeal(val mealId: Long, val foodIds: List<Long> = emptyList()) : Where
@@ -153,7 +164,19 @@ sealed interface Where {
 @Composable
 fun SimulatedApp(world: World) {
     val stack = remember { mutableStateListOf(world.start) }
-    val goBack: () -> Unit = { if (stack.size > 1) stack.removeLast() }
+    // What the nav host keeps for each entry on its back stack and this shell must keep too, by the
+    // entry's place in the stack: the list's view models and the saved state a page's result is left
+    // in, and every `rememberSaveable` — the list's scroll among them — so Back finds the list where
+    // it was (D55 §1). Dropped as the entry leaves the stack, as the nav host drops them.
+    val lists = remember { mutableMapOf<Int, ManagerEntry>() }
+    val saveable = rememberSaveableStateHolder()
+    val leave: () -> Unit = {
+        val top = stack.lastIndex
+        lists.remove(top)
+        saveable.removeState(saveKey(top, stack[top]))
+        stack.removeAt(top)
+    }
+    val goBack: () -> Unit = { if (stack.size > 1) leave() }
     world.goBack = goBack
 
     // One day view model for the whole walk, exactly as the app keeps one for the whole session:
@@ -176,15 +199,53 @@ fun SimulatedApp(world: World) {
         )
     }
 
-    when (val here = stack.last()) {
-        is Where.Today -> TodayHere(dayViewModel, stack)
-        is Where.AddSomething -> AddSomethingHere(world, dayViewModel, stack, goBack)
-        is Where.TypingTheNumbers -> TypingTheNumbersHere(dayViewModel, goBack)
-        is Where.Manager -> ManagerHere(world, stack, goBack)
-        is Where.EditingFood -> ManagerHere(world, stack, goBack, SavedStateHandle(mapOf("food" to here.foodId.toString())))
-        is Where.BuildingMeal -> BuildingMealHere(world, here, goBack)
-        is Where.Record -> RecordHere(dayViewModel, here, goBack)
+    val at = stack.lastIndex
+    saveable.SaveableStateProvider(saveKey(at, stack[at])) {
+        when (val here = stack.last()) {
+            is Where.Today -> TodayHere(dayViewModel, stack)
+            is Where.AddSomething -> AddSomethingHere(world, dayViewModel, stack, goBack)
+            is Where.TypingTheNumbers -> TypingTheNumbersHere(dayViewModel, goBack)
+            is Where.Manager ->
+                ManagerHere(lists.getOrPut(at) { ManagerEntry(world, here.joinFrom) }, stack, goBack)
+            is Where.FoodPage -> FoodPageHere(
+                world = world,
+                here = here,
+                // The entry beneath, as the nav host reads `previousBackStackEntry`.
+                listBelow = lists[at - 1]?.takeIf { stack.getOrNull(at - 1) is Where.Manager },
+                goBack = goBack,
+                replaceWith = { where ->
+                    leave()
+                    stack.add(where)
+                },
+            )
+            is Where.BuildingMeal -> BuildingMealHere(world, here, goBack)
+            is Where.Record -> RecordHere(dayViewModel, here, goBack)
+        }
     }
+}
+
+/**
+ * What one entry's saved state is kept under: its place in the stack AND what it is, so a page
+ * replaced by the list in the same place (D55 §5) starts from nothing rather than from the page's.
+ */
+private fun saveKey(at: Int, where: Where): String = "$at $where"
+
+/**
+ * One manager on the stack: its three view models, held for as long as it is on the stack as the nav
+ * host's back stack entry holds them, and [results] — the entry's own saved state, where a food's page
+ * leaves what it has to tell the list (`NavBackStackEntry.savedStateHandle`).
+ *
+ * [joinFrom] reaches the list's view model the way the route's argument does, in its own saved state.
+ */
+private class ManagerEntry(world: World, joinFrom: Long?) {
+    val manager = ManagerViewModel()
+    val foods = FoodsViewModel(
+        world.foods,
+        ProblemLog.NONE,
+        SavedStateHandle(joinFrom?.let { mapOf(FoodsViewModel.JOIN_FROM to it.toString()) } ?: emptyMap()),
+    )
+    val meals = MealsViewModel(world.savedMeals, ProblemLog.NONE)
+    val results = SavedStateHandle()
 }
 
 /**
@@ -234,7 +295,7 @@ private fun TodayHere(dayViewModel: DayViewModel, stack: MutableList<Where>) {
         onScan = {},
         onOpenWeight = {},
         onOpenSettings = {},
-        onOpenManager = { stack.add(Where.Manager) },
+        onOpenManager = { stack.add(Where.Manager()) },
     )
 }
 
@@ -297,8 +358,8 @@ private fun AddSomethingHere(
     RepeatScreen(
         state = state,
         onDescribe = {},
-        onManageFoods = { stack.add(Where.Manager) },
-        onGivePortion = { foodId -> stack.add(Where.EditingFood(foodId)) },
+        onManageFoods = { stack.add(Where.Manager()) },
+        onGivePortion = { foodId -> stack.add(Where.FoodPage(foodId)) },
         onRepeat = { meal ->
             dayViewModel.logSavedMeal(
                 LoggedMeal(
@@ -344,21 +405,24 @@ private fun AddSomethingHere(
 
 @Composable
 private fun ManagerHere(
-    world: World,
+    entry: ManagerEntry,
     stack: MutableList<Where>,
     goBack: () -> Unit,
-    savedState: SavedStateHandle = SavedStateHandle(),
 ) {
-    // Keyed on nothing: the manager is the root, and a view model rebuilt on every recomposition
-    // would forget which tab is in front between one press and the next.
-    val managerViewModel = remember { ManagerViewModel() }
-    val foodsViewModel =
-        remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, FakeFoodReviewer(), savedState) }
-    val mealsViewModel = remember { MealsViewModel(world.savedMeals, ProblemLog.NONE) }
+    val managerViewModel = entry.manager
+    val foodsViewModel = entry.foods
+    val mealsViewModel = entry.meals
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()
     val foodsState by foodsViewModel.state.collectAsStateWithLifecycle()
     val mealsState by mealsViewModel.state.collectAsStateWithLifecycle()
+
+    // Verbatim from MetaSelfNavHost: what a food's page left for the list, carried across once.
+    TakeFromFoodPage(
+        results = entry.results,
+        onJoinFrom = foodsViewModel::beginJoiningFrom,
+        onHidden = foodsViewModel::sayHidden,
+    )
 
     ManagerScreen(
         tab = tab,
@@ -367,26 +431,16 @@ private fun ManagerHere(
         onSearch = foodsViewModel::search,
         onShowOnlyPortions = foodsViewModel::showOnlyPortions,
         onShowHidden = foodsViewModel::showHidden,
-        onEdit = foodsViewModel::edit,
-        onSetForm = foodsViewModel::setForm,
-        onSave = foodsViewModel::save,
-        onCancelEditing = foodsViewModel::cancelEditing,
-        onHide = foodsViewModel::hide,
-        onUnhide = foodsViewModel::unhide,
-        onDelete = foodsViewModel::askToDelete,
-        onConfirmDeleting = foodsViewModel::confirmDeleting,
-        onCancelDeleting = foodsViewModel::cancelDeleting,
-        onBeginMerging = foodsViewModel::beginMerging,
+        onOpen = { foodId ->
+            foodsViewModel.openingAFood()
+            stack.add(Where.FoodPage(foodId))
+        },
         onMergeInto = foodsViewModel::mergeInto,
         onConfirmMerging = foodsViewModel::confirmJoining,
         onCancelMerging = foodsViewModel::cancelMerging,
         onDismissRefusal = foodsViewModel::dismissRefusal,
-        review = ReviewActions(
-            onReview = foodsViewModel::review,
-            onApply = foodsViewModel::applyReview,
-            onUndo = foodsViewModel::undoReview,
-            onDismiss = foodsViewModel::dismissReview,
-        ),
+        onShowAgain = foodsViewModel::showAgain,
+        onDismissHidden = foodsViewModel::dismissHidden,
         onBeginChoosing = foodsViewModel::beginChoosing,
         onToggleChosen = foodsViewModel::toggleChosen,
         onClearChoosing = foodsViewModel::clearChoosing,
@@ -402,6 +456,63 @@ private fun ManagerHere(
         onBuildMeal = { stack.add(Where.BuildingMeal(mealId = 0)) },
         onEditMeal = { mealId -> stack.add(Where.BuildingMeal(mealId = mealId)) },
         onDismissMealsFailure = mealsViewModel::dismissFailure,
+        onBack = goBack,
+    )
+}
+
+/**
+ * One food's own page (D55). As the nav host does, it is left once it says it is closing, where
+ * [FoodPageExit] says — back, leaving the list beneath what it has to be told, or replaced by the
+ * list picking a duplicate — and told so.
+ */
+@Composable
+private fun FoodPageHere(
+    world: World,
+    here: Where.FoodPage,
+    listBelow: ManagerEntry?,
+    goBack: () -> Unit,
+    replaceWith: (Where) -> Unit,
+) {
+    val pageViewModel = remember(here) {
+        FoodPageViewModel(
+            foods = world.foods,
+            now = world.now,
+            problems = ProblemLog.NONE,
+            reviewer = FakeFoodReviewer(),
+            savedState = SavedStateHandle(mapOf(FoodPageViewModel.FOOD_ID to here.foodId)),
+        )
+    }
+    val page by pageViewModel.state.collectAsStateWithLifecycle()
+
+    LaunchedEffect(page.closing) {
+        val closing = page.closing ?: return@LaunchedEffect
+        when (val exit = FoodPageExit.of(closing, listBelow = listBelow != null)) {
+            is FoodPageExit.Back -> {
+                listBelow?.let { list -> exit.result?.leaveIn(list.results) }
+                goBack()
+            }
+            is FoodPageExit.ToList -> replaceWith(Where.Manager(joinFrom = exit.joinFrom))
+        }
+        pageViewModel.closed()
+    }
+
+    FoodPageScreen(
+        state = page,
+        onSetForm = pageViewModel::setForm,
+        onSave = pageViewModel::save,
+        onHide = pageViewModel::hide,
+        onUnhide = pageViewModel::unhide,
+        onDelete = pageViewModel::askToDelete,
+        onConfirmDeleting = pageViewModel::confirmDeleting,
+        onCancelDeleting = pageViewModel::cancelDeleting,
+        onBeginJoining = pageViewModel::beginJoining,
+        onDismissRefusal = pageViewModel::dismissRefusal,
+        review = ReviewActions(
+            onReview = pageViewModel::review,
+            onApply = pageViewModel::applyReview,
+            onUndo = pageViewModel::undoReview,
+            onDismiss = pageViewModel::dismissReview,
+        ),
         onBack = goBack,
     )
 }

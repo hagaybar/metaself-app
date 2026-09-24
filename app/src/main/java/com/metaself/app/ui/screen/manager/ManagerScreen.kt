@@ -7,9 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.metaself.app.R
-import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.MetaSelfScreen
-import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.screen.foods.FoodsContent
 import com.metaself.app.ui.screen.foods.FoodsUiState
 
@@ -36,21 +34,13 @@ fun ManagerScreen(
     onSearch: (String) -> Unit,
     onShowOnlyPortions: (Boolean) -> Unit,
     onShowHidden: (Boolean) -> Unit,
-    onEdit: (Long) -> Unit,
-    onSetForm: (FoodForm) -> Unit,
-    onSave: () -> Unit,
-    onCancelEditing: () -> Unit,
-    onHide: (Long) -> Unit,
-    onUnhide: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
-    onConfirmDeleting: () -> Unit,
-    onCancelDeleting: () -> Unit,
-    onBeginMerging: (Long) -> Unit,
+    onOpen: (Long) -> Unit,
     onMergeInto: (Long) -> Unit,
     onConfirmMerging: () -> Unit,
     onCancelMerging: () -> Unit,
     onDismissRefusal: () -> Unit,
-    review: ReviewActions,
+    onShowAgain: () -> Unit,
+    onDismissHidden: () -> Unit,
     onBeginChoosing: (Long) -> Unit,
     onToggleChosen: (Long) -> Unit,
     onClearChoosing: () -> Unit,
@@ -96,21 +86,13 @@ fun ManagerScreen(
                 onSearch = onSearch,
                 onShowOnlyPortions = onShowOnlyPortions,
                 onShowHidden = onShowHidden,
-                onEdit = onEdit,
-                onSetForm = onSetForm,
-                onSave = onSave,
-                onCancelEditing = onCancelEditing,
-                onHide = onHide,
-                onUnhide = onUnhide,
-                onDelete = onDelete,
-                onConfirmDeleting = onConfirmDeleting,
-                onCancelDeleting = onCancelDeleting,
-                onBeginMerging = onBeginMerging,
+                onOpen = onOpen,
                 onMergeInto = onMergeInto,
                 onConfirmMerging = onConfirmMerging,
                 onCancelMerging = onCancelMerging,
                 onDismissRefusal = onDismissRefusal,
-                review = review,
+                onShowAgain = onShowAgain,
+                onDismissHidden = onDismissHidden,
                 onBeginChoosing = onBeginChoosing,
                 onToggleChosen = onToggleChosen,
                 onClearChoosing = onClearChoosing,

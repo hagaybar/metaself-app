@@ -14,7 +14,7 @@ object ReviewWording {
 
     /**
      * What a group's suggestion would change, as one line under the verdict (D54 §11): "Per 100 g:
-     * Protein 7.15 → 10 · Fat 8.45 → 7", old to new, or — for a group the form did not know —
+     * Protein 6.25 → 8 · Fat 5.75 → 5", old to new, or — for a group the form did not know —
      * "Per bowl: Filled: 60 kcal · P 4 · C 9 · F 1". [per] is "100 g" or the unit's name. Figures
      * are written as the editor's boxes write them ([FoodForm.shown]), so the old figure reads as
      * the box does.

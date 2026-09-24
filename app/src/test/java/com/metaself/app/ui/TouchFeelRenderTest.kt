@@ -16,7 +16,6 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.food.aFood
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
-import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.screen.day.DayMeals
 import com.metaself.app.ui.screen.foods.FoodsScreen
 import com.metaself.app.ui.screen.foods.FoodsUiState
@@ -100,21 +99,13 @@ class TouchFeelRenderTest {
                         onSearch = {},
                         onShowOnlyPortions = {},
                         onShowHidden = {},
-                        onEdit = {},
-                        onSetForm = {},
-                        onSave = {},
-                        onCancelEditing = {},
-                        onHide = {},
-                        onUnhide = {},
-                        onDelete = {},
-                        onConfirmDeleting = {},
-                        onCancelDeleting = {},
-                        onBeginMerging = {},
+                        onOpen = {},
                         onMergeInto = {},
                         onConfirmMerging = {},
                         onCancelMerging = {},
                         onDismissRefusal = {},
-                        review = ReviewActions.NONE,
+                        onShowAgain = {},
+                        onDismissHidden = {},
                         onBeginChoosing = { chosen = chosen + it },
                         onToggleChosen = { chosen = if (it in chosen) chosen - it else chosen + it },
                         onClearChoosing = {},

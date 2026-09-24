@@ -55,7 +55,7 @@
 
 | Where | In v1? | Process sent |
 |---|---|---|
-| **My foods → a food's editor** (an existing food) | **Yes** | `existing_food` |
+| **My foods → a food's editor** (an existing food) *(Amended 2026-09-24, D55: My foods → a food's page)* | **Yes** | `existing_food` |
 | **The meal builder's *Make a food* panel** (a new food, the only place one is made by hand) | **Yes** | `new_food` |
 | **Joining two foods** | **No — later** | (`merge`, reserved) |
 
@@ -531,7 +531,7 @@ Save to keep them, or Undo."; the per-group suggestion lines go. This supersedes
 no-new-colours rule for the review.*
 
 **11.1 One place to look.** Under the outcome line (§9.4, §10.4), for each group with a suggestion,
-one line in the body's ink — *Per 100 g: Protein 7.15 → 10 · Carbs 5.6 → 5 · Fat 8.45 → 7*, or
+one line in the body's ink — *Per 100 g: Protein 6.25 → 8 · Carbs 4.5 → 4 · Fat 5.75 → 5* (invented figures), or
 *Per {the unit's name}: …* (*Per one:* with no unit named) — each figure old → new, written as the
 editor's boxes write them (§8.5), so the old figure reads as the box does. A group the form did not
 know reads *Per 100 g: Filled: 60 kcal · P 4 · C 9 · F 1*. Under each group's line, in the
@@ -577,6 +577,8 @@ reads *Reviewed: changes applied — {note}*, not *no suggestions left*.
 - **Save** (or **Make it**) writes as §5 says and closes the editor; **Cancel** discards
   everything. Both take every mark with the editor. A Save that is refused leaves the editor, and
   the marks, as they were: the figures are still not saved.
+  *(Amended 2026-09-24, D55: in My foods, Save closes the food's page rather than an editor, and
+  Cancel is Leave it alone, or Back; a refused Save leaves the page and its marks as they were.)*
 - A new review leaves the marks up; applying it adds its own.
 
 Nothing about what is sent (§2), what comes back (§3), or what is stored (§5) changes. Both

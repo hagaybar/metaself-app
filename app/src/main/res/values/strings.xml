@@ -375,6 +375,8 @@
     <string name="foods_merge_this_one_stays">This is the one that stays</string>
     <string name="foods_merge_cancel">Not now</string>
     <string name="foods_refusal_dismiss">All right</string>
+    <!-- On the list, after a food's page hid it (D55 §6), with Show again (foods_unhide) and All right. -->
+    <string name="foods_hidden_notice">“%1$s” is hidden — it is no longer offered when you log something.</string>
     <string name="foods_hold_to_choose">Hold a food to start choosing. Tap the rest.</string>
     <string name="foods_chosen">%1$s chosen</string>
     <!-- Under the count while exactly one food is chosen: the hold hint is gone by then (public issue #12). -->
@@ -387,7 +389,19 @@
     <string name="foods_join_two">Join these two into one food</string>
     <string name="foods_is_chosen">Chosen</string>
     <string name="foods_not_chosen">Not chosen</string>
-    <!-- Asked before a whole food or a whole saved meal is deleted; shared by the food editor and the meal builder (D36). -->
+    <!-- A food's own page (D55 §3): how many entries point at the food, and the saved meals that hold it. The count is exact and arrives already grouped ("1,204"), so it is a string argument. -->
+    <string name="food_page_used_heading">Where it\'s used</string>
+    <string name="food_page_not_logged">Not logged yet</string>
+    <plurals name="food_page_logged">
+        <item quantity="one">Logged once</item>
+        <item quantity="other">Logged %1$s times</item>
+    </plurals>
+    <!-- Followed by each meal's name, each drawn as its own text (bidi, #9). -->
+    <plurals name="food_page_in_meals">
+        <item quantity="one">in %1$d saved meal:</item>
+        <item quantity="other">in %1$d saved meals:</item>
+    </plurals>
+    <!-- Asked before a whole food or a whole saved meal is deleted; shared by a food's page and the meal builder (D36). -->
     <string name="delete_question">Delete “%1$s”? This cannot be undone.</string>
     <string name="delete_do_it">Delete</string>
     <string name="delete_keep_it">Keep it</string>

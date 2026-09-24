@@ -612,16 +612,16 @@ class MealBuilderScreenRenderTest {
      */
     @Test
     fun `two foods of one name are told apart by brand in the sentence`() {
-        val tara = aFood("Milk").copy(id = 7, brand = "Tara")
+        val meadowco = aFood("Milk").copy(id = 7, brand = "Meadowco")
         val texts = draw(
             MealBuilderUiState(
                 meal = salad(),
                 query = "milk",
-                alreadyIn = listOf(milk, tara, aFood("Milk").copy(id = 8)),
+                alreadyIn = listOf(milk, meadowco, aFood("Milk").copy(id = 8)),
             ),
         )
 
-        assertThat(texts).contains("Milk (Dairyco), Milk (Tara) and Milk are already in this meal.")
+        assertThat(texts).contains("Milk (Dairyco), Milk (Meadowco) and Milk are already in this meal.")
         assertThat(texts.none { it == "NA" || it.contains("(NA)") }).isTrue()
     }
 

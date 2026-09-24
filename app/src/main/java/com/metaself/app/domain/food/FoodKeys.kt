@@ -41,8 +41,8 @@ object FoodKeys {
      * two. Removing them with no replacement also makes `צ'יפס` and `ציפס` one food, and `מ"ל` and
      * `מל` one unit, which is what the owner means in both cases.
      *
-     * The two Latin apostrophes are here for the same reason and with the same effect: `Ben &
-     * Jerry's` and `Ben & Jerrys` are one brand.
+     * The two Latin apostrophes are here for the same reason and with the same effect: `Bob &
+     * Jan's` and `Bob & Jans` are one brand.
      *
      * **The plain ASCII quote is in this set, and the design that named the others did not list
      * it.** It has to be: a Hebrew keyboard has no gershayim key, so `מ"ל` typed on a phone is

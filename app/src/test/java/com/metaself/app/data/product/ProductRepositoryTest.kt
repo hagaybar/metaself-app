@@ -25,11 +25,11 @@ class ProductRepositoryTest {
 
     /** Bamba as the database might hold it with the fat left out — the case issue #30 names. */
     private val withoutFat = """{"code":"$barcode","product":{"product_name":"במבה",""" +
-        """"brands":"אסם","serving_size":"1 serving (80 g)","nutriments":""" +
+        """"brands":"דוגמה","serving_size":"1 serving (80 g)","nutriments":""" +
         """{"energy-kcal_100g":535,"proteins_100g":17,"carbohydrates_100g":49}}}"""
 
     private fun complete(fat: String) = """{"code":"$barcode","product":{"product_name":"במבה",""" +
-        """"brands":"אסם","nutriments":{"energy-kcal_100g":535,"proteins_100g":17,""" +
+        """"brands":"דוגמה","nutriments":{"energy-kcal_100g":535,"proteins_100g":17,""" +
         """"carbohydrates_100g":49,"fat_100g":$fat}}}"""
 
     private class InMemoryProducts : ProductDao {

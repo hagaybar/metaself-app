@@ -10,7 +10,7 @@ class ProductFormTest {
     private val complete = ProductForm(
         barcode = "7290000066318",
         name = "במבה",
-        brand = "אסם",
+        brand = "דוגמה",
         kcalPer100g = "535",
         proteinPer100g = "17",
         carbsPer100g = "49",
@@ -24,7 +24,7 @@ class ProductFormTest {
 
         assertThat(product.barcode).isEqualTo("7290000066318")
         assertThat(product.name).isEqualTo("במבה")
-        assertThat(product.brand).isEqualTo("אסם")
+        assertThat(product.brand).isEqualTo("דוגמה")
         assertThat(product.kcalPer100g).isEqualTo(535.0)
         assertThat(product.servingSizeG).isEqualTo(80.0)
     }
@@ -197,7 +197,7 @@ class ProductFormTest {
             Product(
                 barcode = "7290000066318",
                 name = "במבה",
-                brand = "אסם",
+                brand = "דוגמה",
                 kcalPer100g = BelievableAmount.KCAL_PER_100G,
                 proteinPer100g = BelievableAmount.MACRO_PER_100G,
                 carbsPer100g = BelievableAmount.MACRO_PER_100G,
@@ -243,7 +243,7 @@ class ProductFormTest {
     private fun bambaWithoutFat(): ProductForm = ProductForm.prefilled(
         barcode = "7290000066318",
         name = "במבה",
-        brand = "אסם",
+        brand = "דוגמה",
         kcalPer100g = 535.0,
         proteinPer100g = 17.0,
         carbsPer100g = 49.0,
@@ -262,7 +262,7 @@ class ProductFormTest {
         assertThat(form.fatPer100g).isEqualTo("")
         assertThat(form.barcode).isEqualTo("7290000066318")
         assertThat(form.name).isEqualTo("במבה")
-        assertThat(form.brand).isEqualTo("אסם")
+        assertThat(form.brand).isEqualTo("דוגמה")
         assertThat(form.kcalPer100g).isEqualTo("535")
         assertThat(form.proteinPer100g).isEqualTo("17")
         assertThat(form.carbsPer100g).isEqualTo("49")
@@ -352,7 +352,7 @@ class ProductFormTest {
             Product(
                 barcode = "7290000066318",
                 name = "במבה",
-                brand = "אסם",
+                brand = "דוגמה",
                 kcalPer100g = 535.0,
                 proteinPer100g = 17.0,
                 carbsPer100g = 49.0,

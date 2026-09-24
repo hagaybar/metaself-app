@@ -7,14 +7,7 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.EditRefused
 import com.metaself.app.data.food.EditResult
 import com.metaself.app.data.food.FoodRepository
-import com.metaself.app.data.time.Now
-import com.metaself.app.domain.ai.FoodReviewer
-import com.metaself.app.domain.ai.ReviewProcess
-import com.metaself.app.domain.ai.ReviewRequest
-import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.food.Food
-import com.metaself.app.domain.food.FoodField
-import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.food.FoodWording
@@ -28,45 +21,37 @@ import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 /**
- * Maintaining the list of foods.
+ * Maintaining the list of foods: finding them, choosing several, and joining two duplicates into one
+ * (D55 §1).
  *
- * Renaming, correcting, deleting, hiding and joining two duplicates into one — in one place, because
- * they are one job: the list has a duplicate in it, or a wrong number, or a name he has changed his
- * mind about, and he is sitting down to put it right.
+ * **Everything about one food is its page's** (`FoodPageViewModel`): correcting it, reviewing its
+ * figures, hiding it and deleting it. The list keeps what is about more than one food. A page hands
+ * the list two things when it closes onto it — a food to join from ([beginJoiningFrom]) and a food it
+ * has just hidden ([sayHidden]) — and nothing else passes between them.
  *
- * **Nothing here can change what a past day was worth.** Correcting a food fixes the food from now
- * on; the days already logged at the old number stay at the old number. Renaming is the
- * one thing that does reach backwards, and it only moves labels: every day that food was eaten shows
- * the new name, and not one stored number moves for it.
- *
- * **Nothing whole goes, and no two foods become one, without being asked first** (D36). Neither can
- * be put back, so a delete asks "Delete it?" and a join asks which food stays — on both ways into a
- * join — and only the answer does it.
+ * **No two foods become one without being asked first** (D36). A join cannot be put back, so it asks
+ * which food stays — on both ways in — and only the answer does it.
  *
  * **Nothing here takes the app down.** Every action goes through [guarded]; one that throws puts
  * [FoodsUiState.failed] in the refusal slot and is written to the problem log. Each write below is
- * one transaction, so the sentence can say nothing was changed; the reads that open a question or
- * an editor say that it could not be opened.
+ * one transaction, so the sentence can say nothing was changed; the reads that open a question say
+ * that it could not be opened.
  */
 @HiltViewModel
 class FoodsViewModel @Inject constructor(
     private val foods: FoodRepository,
-    private val now: Now,
     private val problems: ProblemLog,
-    private val reviewer: FoodReviewer,
     savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     private val _looking = MutableStateFlow(Looking())
-    private val _editing = MutableStateFlow<Editing?>(null)
     private val _merging = MutableStateFlow<Merging?>(null)
     private val _refusal = MutableStateFlow<String?>(null)
     private val _chosen = MutableStateFlow<Set<Long>>(emptySet())
-    private val _deleting = MutableStateFlow<Deleting?>(null)
     private val _failed = MutableStateFlow<ActionRefused?>(null)
 
-    /** How many reviews have been asked for, so only the latest one's answer is ever shown. */
-    private var reviewsAsked = 0
+    /** The food a page just hid, by id: the line names it as it is called now (§6). */
+    private val _hid = MutableStateFlow<Long?>(null)
 
     val state: StateFlow<FoodsUiState> = combine(
         // Every food, hidden ones included: this is the screen where hiding is undone, and a food
@@ -74,12 +59,10 @@ class FoodsViewModel @Inject constructor(
         foods.observeAll(),
         foods.observeOnlyAPortionCount(),
         _looking,
-        _editing,
-        combine(_merging, _refusal, _chosen, _deleting, _failed) { merging, refusal, chosen, deleting,
-            failed ->
-            Aside(merging, refusal, chosen, deleting, failed)
+        combine(_merging, _refusal, _chosen, _failed, _hid) { merging, refusal, chosen, failed, hid ->
+            Aside(merging, refusal, chosen, failed, hid)
         },
-    ) { all, portionCount, looking, editing, aside ->
+    ) { all, portionCount, looking, aside ->
         FoodsUiState(
             query = looking.query,
             onlyPortions = looking.onlyPortions,
@@ -90,12 +73,12 @@ class FoodsViewModel @Inject constructor(
             // empty list apart from a list emptied by hiding, and the hidden ones are by definition
             // not in the second.
             hiddenCount = all.count { it.hidden },
-            editing = editing,
             merging = aside.merging,
             refusal = aside.refusal,
             chosen = aside.chosen,
-            deleting = aside.deleting,
             failed = aside.failed,
+            // Gone meanwhile — joined away, or deleted — and there is nothing to say it about.
+            hid = aside.hid?.let { id -> all.firstOrNull { it.id == id } },
         )
     }.stateIn(
         scope = viewModelScope,
@@ -104,22 +87,12 @@ class FoodsViewModel @Inject constructor(
     )
 
     init {
-        // Opened from "Give this a portion" on the logging screen, for one food: its editor is
-        // opened, and the list searched down to it, so the editor is on screen rather than below
-        // however many foods come before it. Read before the first frame for the reason the meal
-        // builder reads its chosen foods then. A food that has gone meanwhile opens nothing.
-        //
-        // Once only: the route's arguments outlive the process, so without the mark a manager
-        // recreated after the system ended the app would reopen an editor he had closed.
-        val openFor = savedState.get<String>("food")?.toLongOrNull()
-            ?.takeUnless { savedState.get<Boolean>(FOOD_OPENED) == true }
-        savedState[FOOD_OPENED] = true
-        openFor?.let { foodId ->
-            act(ActionRefused.COULD_NOT_OPEN) {
-                val food = foods.byId(foodId) ?: return@act
-                _looking.value = _looking.value.copy(query = food.name)
-                _editing.value = Editing(foodId = food.id, form = FoodForm.of(food))
-            }
+        // Opened by route from a page with no list beneath it: "Join with a duplicate" (§5). Spent
+        // as it is read, so a list restored after the process ended does not begin again a join he
+        // has since finished or walked away from (§8).
+        savedState.get<String>(JOIN_FROM)?.let { joinFrom ->
+            savedState[JOIN_FROM] = null
+            joinFrom.toLongOrNull()?.let(::beginJoiningFrom)
         }
     }
 
@@ -130,249 +103,80 @@ class FoodsViewModel @Inject constructor(
     }
 
     /**
-     * Searching, and the two filters below, close an open food but leave a join alone, for the
+     * Searching, and the two filters below, take down the hidden line but leave a join alone, for the
      * reason [clearChoosing] gives about what is chosen: while a join waits for its duplicate, the
      * search is how he finds it, and Show hidden is the only way to reach a hidden one. Looking that
      * ended the join would cancel the one act that cannot be undone, silently, the moment it was used.
      */
     fun search(query: String) {
         _looking.value = _looking.value.copy(query = query)
-        stopEditing()
+        _hid.value = null
     }
 
     /** The foods the conversion could say least about, so he can go through them in one sitting. */
     fun showOnlyPortions(only: Boolean) {
         _looking.value = _looking.value.copy(onlyPortions = only)
-        stopEditing()
+        _hid.value = null
     }
 
     fun showHidden(show: Boolean) {
         _looking.value = _looking.value.copy(showHidden = show)
-        stopEditing()
+        _hid.value = null
     }
 
-    fun edit(foodId: Long) {
-        val food = state.value.foods.firstOrNull { it.id == foodId } ?: return
-        dismissRefusal()
+    /**
+     * A food's page is opening from the list (§1). The hidden line goes, as it does on any looking,
+     * and so does a join whose question is up: tapping a row while it was asked about has always
+     * ended it, and a question left behind a page would be waiting, unexplained, on the way back.
+     */
+    fun openingAFood() {
+        _hid.value = null
         _merging.value = null
-        _deleting.value = null
-        _editing.value = Editing(foodId = food.id, form = FoodForm.of(food))
-    }
-
-    /**
-     * He is typing. Any answer about deleting is let go of here: he has gone back to editing, and a
-     * refusal left standing directly above Save reads, after his next Save, as the reason that Save
-     * was refused.
-     */
-    fun setForm(form: FoodForm) {
-        _editing.value = _editing.value?.let { editing ->
-            // Typing in a group withdraws its suggestion, arrived or still out (D54 §4).
-            editing.copy(form = form, reviewing = editing.reviewing.typed(editing.form, form))
-        }
-        _deleting.value = null
-    }
-
-    /**
-     * **Review the figures** (D54): this one food, as the form stands, is sent to the model — its
-     * stored facts tell each group's origin, and nothing else of it is within reach of the request.
-     *
-     * Offered only for a name the form would take, and once at a time. **Nothing is written** — not
-     * to the boxes, not to the food — until he accepts a group and saves. A failure is said under the
-     * button, in the estimator's own words, and leaves the form as it was (D8, D54 §9.4). A review
-     * writes nothing, so one that throws says it could not open.
-     *
-     * **An answer that lands after he has moved on is dropped** (`askToDelete`'s rule): each request
-     * is numbered, and only the latest one, for an editor still waiting on it, is shown. That holds
-     * for one that throws too: its sentence is said only while this editor is still waiting on it.
-     */
-    fun review() {
-        val editing = _editing.value ?: return
-        if (editing.reviewing.asking || FoodField.NAME in editing.errors) return
         dismissRefusal()
-        val asked = ++reviewsAsked
-        _editing.value = editing.copy(reviewing = editing.reviewing.asked())
-        fun stillWaiting() = asked == reviewsAsked && _editing.value?.foodId == editing.foodId &&
-            _editing.value?.reviewing?.asking == true
-        // A throw is logged by the guard and said under the button by `finally` (D54 §9.4).
-        guarded(problems, onRefused = {}) {
-            try {
-                val stored = foods.byId(editing.foodId) ?: return@guarded
-                // The form as it stood when he pressed the button.
-                val request = ReviewRequest.of(
-                    ReviewProcess.EXISTING_FOOD,
-                    editing.form,
-                    stored.facts,
-                    editing.reviewing.accepted,
-                )
-                val result = reviewer.review(request)
-                if (!stillWaiting()) return@guarded
-                val open = _editing.value ?: return@guarded
-                when (result) {
-                    is ReviewResult.Proposed ->
-                        _editing.value = open.copy(
-                            reviewing = open.reviewing.answered(result.review, result.raw),
-                        )
-                    // Arrived, and nothing in it could be used: said as that, not as a failure.
-                    is ReviewResult.Unusable ->
-                        _editing.value = open.copy(
-                            reviewing = open.reviewing.unusable(result.review, result.raw),
-                        )
-                    // Said under the button it answers, not in the slot above Save (§9.4).
-                    is ReviewResult.Failed ->
-                        _editing.value = open.copy(
-                            reviewing = open.reviewing.failed(result.failure, result.raw),
-                        )
-                }
-            } finally {
-                // Thrown, or the food gone: the button must not be left reading Reviewing….
-                if (stillWaiting()) {
-                    _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.failed(null)) }
-                }
-            }
-        }
     }
 
     /**
-     * **Apply these changes** (D54 §11): every suggested group into its boxes, accepted as an
-     * estimate, and the boxes it changed marked until he saves, undoes or types in them.
+     * *Join with a duplicate*, pressed on this food's page (§5): the list picks the duplicate. This
+     * food is the one that survives.
+     *
+     * **Looked up by id, not out of the list on screen**: the list comes back with the search and
+     * filters he left it with, because the duplicate is probably what that search was for, and they
+     * may not hold this food — a hidden one, with Show hidden off, never is. A food gone meanwhile
+     * begins nothing and says nothing: there is nothing to join.
+     *
+     * A join and a choice are not both under way, so the choice is let go of.
      */
-    fun applyReview() {
-        val editing = _editing.value ?: return
-        val (form, reviewing) = editing.reviewing.apply(editing.form)
-        _editing.value = editing.copy(form = form, reviewing = reviewing)
-    }
-
-    /** **Undo**: the boxes and the review go back to how they stood before Apply these changes. */
-    fun undoReview() {
-        val editing = _editing.value ?: return
-        val (form, reviewing) = editing.reviewing.undo(editing.form) ?: return
-        _editing.value = editing.copy(form = form, reviewing = reviewing)
-    }
-
-    /** **Dismiss**, or **Keep mine**: what is left of the review goes; what he accepted stays accepted. */
-    fun dismissReview() {
-        _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.dismissed()) }
-    }
-
-    fun cancelEditing() {
-        closeEditor()
-    }
-
-    /**
-     * Save what he has typed.
-     *
-     * The name, the brand and the numbers are three separate things that can each be refused for
-     * their own reason, but they are saved as one change ([FoodRepository.saveForm]): the first
-     * refusal undoes the rest, so renaming onto a name another food holds cannot half-apply, leaving
-     * the numbers changed and the name not — and a Save that throws has changed nothing either.
-     *
-     * An earlier refusal to delete is let go of first, for the reason [setForm] lets go of it: left
-     * above Save, it would read as this Save's refusal, beside this Save's own answer.
-     */
-    fun save() {
-        val editing = _editing.value ?: return
-        _deleting.value = null
-        if (editing.errors.isNotEmpty()) {
-            _editing.value = editing.copy(showErrors = true)
-            return
-        }
-        act(ActionRefused.NOTHING_CHANGED) {
-            val form = editing.form
-            // A group accepted from a review goes as an estimate, or weaker, even if he then changed
-            // a figure in it (D54 §5); the repository leaves any group whose figures did not change alone.
-            // A box still showing a stored figure as it opened, rounded, saves the stored figure,
-            // so an untouched group is found unchanged and kept, source and all (D54 §8.5).
-            val stored = foods.byId(editing.foodId)?.facts
-            val facts = form.toFacts(now(), estimated = editing.reviewing.accepted, stored = stored)
-                ?: return@act
-            val brand = form.brand.takeIf { it.isNotBlank() }
-            when (val saved = foods.saveForm(editing.foodId, form.name, brand, facts)) {
-                is EditResult.Refused -> refuse(saved.why)
-                EditResult.Done -> closeEditor()
-            }
-        }
-    }
-
-    /** Out of every picker, with its history still attached and its name still shown on every day. */
-    fun hide(foodId: Long) {
-        act(ActionRefused.NOTHING_CHANGED) {
-            foods.hide(foodId)
-            closeEditor()
-        }
-    }
-
-    fun unhide(foodId: Long) {
-        act(ActionRefused.NOTHING_CHANGED) { foods.unhide(foodId) }
-    }
-
-    /**
-     * He pressed Delete: ask first, or say why it cannot go (D36).
-     *
-     * **The refusal is checked before anything is asked.** A food a saved meal uses cannot be
-     * deleted, and asking "Delete it?" only to refuse the answer would be a question with no real
-     * answer. So the meals are read first, and a used food gets [Deleting.Refused] instead of the
-     * question — drawn in its editor, where he pressed Delete, never in the screen-wide refusal at
-     * the top of the list, which is off screen from the foot of an open editor.
-     *
-     * **An answer that arrives after he has moved on is dropped.** This resolves after two reads; if
-     * he has opened another food, searched or started a join meanwhile, landing it would put a
-     * question back onto a screen he has left.
-     */
-    fun askToDelete(foodId: Long) {
-        dismissRefusal()
+    fun beginJoiningFrom(foodId: Long) {
         act(ActionRefused.COULD_NOT_OPEN) {
-            val food = foods.byId(foodId) ?: return@act
-            val using = foods.savedMealsUsing(foodId)
-            if (_editing.value?.foodId != foodId) return@act
-            _deleting.value = if (using.isEmpty()) {
-                Deleting.Asking(food)
-            } else {
-                Deleting.Refused(food, FoodWording.refusal(EditRefused.UsedBySavedMeals(using)))
-            }
+            val keeping = foods.byId(foodId) ?: return@act
+            _chosen.value = emptySet()
+            _hid.value = null
+            dismissRefusal()
+            _merging.value = Merging(keeping = keeping)
         }
     }
 
     /**
-     * He answered Delete: delete it outright.
-     *
-     * Never deletes a day's food: every row it was on keeps its own name, portion, numbers, source
-     * and confidence and simply stops pointing anywhere. What it does lose is the labels — a deleted
-     * food's days fall back to whatever was typed on the day — which is why hiding is usually the
-     * better answer for a food with history, and why this is asked first.
-     *
-     * The question is let go of at once, before the delete lands, so a second press of Delete or a
-     * late Keep it has nothing left to answer: once he has said Delete, the food is going. A refusal
-     * that only arises here — a meal began using the food after he was asked — is shown where the
-     * early one would have been. Either answer is dropped if he has moved to another food meanwhile:
-     * the food still goes, because he did say Delete, but another food's open editor is not closed by
-     * it.
+     * A food's page hid [foodId] and closed onto the list (§6). Said in the list's sentence slot with
+     * a way back: hiding costs nothing to reverse, and a food that silently leaves a list it was just
+     * in reads as deleted.
      */
-    fun confirmDeleting() {
-        val asking = _deleting.value as? Deleting.Asking ?: return
-        _deleting.value = null
+    fun sayHidden(foodId: Long) {
+        _hid.value = foodId
+    }
+
+    /** *Show again*, on the hidden line: the food comes back, and the line goes. */
+    fun showAgain() {
+        val foodId = _hid.value ?: return
         act(ActionRefused.NOTHING_CHANGED) {
-            val result = foods.delete(asking.food.id)
-            if (_editing.value?.foodId != asking.food.id) return@act
-            when (result) {
-                is EditResult.Refused ->
-                    _deleting.value = Deleting.Refused(asking.food, FoodWording.refusal(result.why))
-                EditResult.Done -> closeEditor()
-            }
+            foods.unhide(foodId)
+            _hid.value = null
         }
     }
 
-    /** He answered Keep it. Nothing else moves: the editor stays open, with what he typed in it. */
-    fun cancelDeleting() {
-        _deleting.value = null
-    }
-
-    /** Begin joining this food to a duplicate. This is the one that survives. */
-    fun beginMerging(foodId: Long) {
-        val food = state.value.foods.firstOrNull { it.id == foodId } ?: return
-        _editing.value = null
-        _deleting.value = null
-        dismissRefusal()
-        _merging.value = Merging(keeping = food)
+    /** *All right*, on the hidden line: the line goes, and the food stays hidden. */
+    fun dismissHidden() {
+        _hid.value = null
     }
 
     /**
@@ -380,9 +184,9 @@ class FoodsViewModel @Inject constructor(
      *
      * Lets go of the choice with it once the pair is settled: when he ticked the two, the choice
      * existed to ask this question, and leaving it ticked after he has said no leaves the list in a
-     * mode he did not ask to stay in. When the pair was settled by picking from a food's own editor
-     * nothing is ticked — the editor cannot be open while choosing — so the same clear is harmless
-     * there, and one rule serves both ways in.
+     * mode he did not ask to stay in. When the pair was settled by picking for a food's page nothing
+     * is ticked — beginning that join let go of the choice — so the same clear is harmless there, and
+     * one rule serves both ways in.
      */
     fun cancelMerging() {
         if (_merging.value?.bothChosen == true) _chosen.value = emptySet()
@@ -390,16 +194,16 @@ class FoodsViewModel @Inject constructor(
     }
 
     /**
-     * He has picked the duplicate of the food he opened. This settles the pair and asks; nothing is
-     * joined here.
+     * He has picked the duplicate of the food whose page he joined from. This settles the pair and
+     * asks; nothing is joined here.
      *
-     * A join cannot be undone, and ticking two foods already asks before it joins them. Picking from
-     * a food's own editor is the same irreversible act, so it now asks the same question in the same
-     * words, and [confirmJoining] answers for both ways in (D36).
+     * A join cannot be undone, and ticking two foods already asks before it joins them. Picking for
+     * a food's page is the same irreversible act, so it asks the same question in the same words,
+     * and [confirmJoining] answers for both ways in (D36).
      *
      * **A pick whose read lands after he has backed out is dropped.** The picked food is looked up
-     * first; if meanwhile he pressed Not now, held a row or opened a food, the join he was in has
-     * ended, and writing the pair now would bring back a question he had walked away from.
+     * first; if meanwhile he pressed Not now or held a row, the join he was in has ended, and writing
+     * the pair now would bring back a question he had walked away from.
      * Only the same join, still waiting for its pick, takes it.
      */
     fun mergeInto(loserId: Long) {
@@ -439,8 +243,7 @@ class FoodsViewModel @Inject constructor(
         act(ActionRefused.COULD_NOT_OPEN) {
             val keeping = foods.byId(both[0]) ?: return@act
             val losing = foods.byId(both[1]) ?: return@act
-            _editing.value = null
-            _deleting.value = null
+            _hid.value = null
             dismissRefusal()
             _merging.value = Merging(keeping = keeping, losing = losing)
         }
@@ -449,8 +252,8 @@ class FoodsViewModel @Inject constructor(
     /**
      * Join the settled pair, now that he has seen which one survives.
      *
-     * The one place a join happens, for both ways in — ticked in the list or picked from a food's
-     * own editor — so there is one question and one answer to it, and no second copy to drift.
+     * The one place a join happens, for both ways in — ticked in the list or picked for a food's
+     * page — so there is one question and one answer to it, and no second copy to drift.
      * The picked one's names become aliases of the survivor, which is the step that makes this worth
      * having: without it, joining the Hebrew yoghurt to the English one today means there are two
      * again the next time it is logged in Hebrew.
@@ -474,13 +277,12 @@ class FoodsViewModel @Inject constructor(
     /**
      * Holding a food starts choosing, and chooses that one.
      *
-     * Holding rather than tapping, because a tap already means "open this to fix it": choosing that
-     * began on a tap would turn every attempt to correct a wrong number into the start of a meal.
-     * What is chosen deliberately outlives a search — see [clearChoosing].
+     * Holding rather than tapping, because a tap already means "open this food's page": choosing
+     * that began on a tap would turn every attempt to correct a wrong number into the start of a
+     * meal. What is chosen deliberately outlives a search — see [clearChoosing].
      */
     fun beginChoosing(foodId: Long) {
-        _editing.value = null
-        _deleting.value = null
+        _hid.value = null
         _merging.value = null
         _chosen.value = _chosen.value + foodId
     }
@@ -523,37 +325,32 @@ class FoodsViewModel @Inject constructor(
             _failed.value = how
         }) { block() }
 
-    private fun closeEditor() {
-        stopEditing()
-        _merging.value = null
-    }
-
-    /** Close an open food and any question about deleting it, and nothing else. */
-    private fun stopEditing() {
-        _editing.value = null
-        _deleting.value = null
-    }
-
     /** The five things that are not about looking, as one value, because `combine` takes five. */
     private data class Aside(
         val merging: Merging?,
         val refusal: String?,
         val chosen: Set<Long>,
-        val deleting: Deleting?,
         val failed: ActionRefused?,
+        val hid: Long?,
     )
 
-    /** What is being looked for, as one value, so five things can be combined rather than seven. */
+    /** What is being looked for, as one value, so four things can be combined rather than six. */
     private data class Looking(
         val query: String = "",
         val onlyPortions: Boolean = false,
         val showHidden: Boolean = false,
     )
 
-    private companion object {
-        const val STOP_TIMEOUT_MS = 5_000L
+    companion object {
+        /**
+         * The food a page's *Join with a duplicate* hands the list (§5): a route argument when the
+         * list is opened for it, a result left in the list's back stack entry when it is beneath.
+         */
+        const val JOIN_FROM = "joinFrom"
 
-        /** Saved once the route's food has been acted on, so a recreation does not act on it again. */
-        const val FOOD_OPENED = "foodOpened"
+        /** The food a page hid, left for the list beneath it (§6). */
+        const val HIDDEN = "hidden"
+
+        private const val STOP_TIMEOUT_MS = 5_000L
     }
 }

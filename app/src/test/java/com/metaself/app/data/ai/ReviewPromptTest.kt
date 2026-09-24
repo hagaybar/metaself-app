@@ -263,12 +263,12 @@ class ReviewPromptTest {
     fun `a real brand is sent as typed`() {
         val request = ReviewRequest.of(
             ReviewProcess.NEW_FOOD,
-            FoodForm(name = "Oat biscuit", brand = " Northmill "),
+            FoodForm(name = "Oat biscuit", brand = " Examplebrand "),
             null,
             emptyMap(),
         )
 
-        assertThat(request.brand).isEqualTo("Northmill")
+        assertThat(request.brand).isEqualTo("Examplebrand")
     }
 
     // --- The instructions ------------------------------------------------------------------------

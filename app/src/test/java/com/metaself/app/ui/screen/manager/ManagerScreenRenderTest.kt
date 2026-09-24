@@ -17,7 +17,6 @@ import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import com.metaself.app.ui.MetaSelfScreen
-import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.screen.foods.FoodsUiState
 import org.junit.After
 import org.junit.Test
@@ -231,21 +230,13 @@ class ManagerScreenRenderTest {
             onSearch = {},
             onShowOnlyPortions = {},
             onShowHidden = {},
-            onEdit = {},
-            onSetForm = {},
-            onSave = {},
-            onCancelEditing = {},
-            onHide = {},
-            onUnhide = {},
-            onDelete = {},
-            onConfirmDeleting = {},
-            onCancelDeleting = {},
-            onBeginMerging = {},
+            onOpen = {},
             onMergeInto = {},
             onConfirmMerging = {},
             onCancelMerging = {},
             onDismissRefusal = {},
-            review = ReviewActions.NONE,
+            onShowAgain = {},
+            onDismissHidden = {},
             onBeginChoosing = {},
             onToggleChosen = {},
             onClearChoosing = {},
