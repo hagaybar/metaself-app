@@ -8,6 +8,8 @@ import com.metaself.app.domain.amount.BelievableAmount.MACRO_PER_100G
 import com.metaself.app.domain.amount.BelievableAmount.MACRO_PER_UNIT
 import com.metaself.app.domain.amount.BelievableAmount.words
 import com.metaself.app.domain.day.Source
+import java.math.BigDecimal
+import java.math.RoundingMode
 
 /** Which field of the food form a complaint is about. */
 enum class FoodField {
@@ -135,8 +137,15 @@ data class FoodForm(
      * @param estimated the groups he accepted from a review this session (D54). Each is handed over
      *   labelled by its weakest member ([AcceptedGroup.provenance]); every other group, and the
      *   weight always, as typed.
+     * @param stored the food as it is stored, or null for a food not yet made. A box still showing a
+     *   stored figure as it opened hands over the stored figure, not its rounding ([figure]), so
+     *   Save finds the group unchanged and leaves it — figures and source — alone (D54 §8.5).
      */
-    fun toFacts(setAtMillis: Long, estimated: Map<FactGroup, AcceptedGroup> = emptyMap()): FoodFacts? {
+    fun toFacts(
+        setAtMillis: Long,
+        estimated: Map<FactGroup, AcceptedGroup> = emptyMap(),
+        stored: FoodFacts? = null,
+    ): FoodFacts? {
         if (errors().isNotEmpty()) return null
         val typed = Provenance(Source.TYPED, confidence = null, setAtMillis = setAtMillis)
         fun provenanceOf(group: FactGroup): Provenance =
@@ -144,14 +153,17 @@ data class FoodForm(
         return runCatching {
             FoodFacts(
                 per100g = if (wantsPer100g) {
-                    PerHundredGrams(per100gFigures()!!, provenanceOf(FactGroup.PER_100G))
+                    PerHundredGrams(
+                        per100gFigures(stored?.per100g?.nutrients)!!,
+                        provenanceOf(FactGroup.PER_100G),
+                    )
                 } else {
                     null
                 },
                 perUnit = if (wantsPerUnit) {
                     PerUnit(
                         FoodKeys.displayName(unitName),
-                        perUnitFigures()!!,
+                        perUnitFigures(stored?.perUnit?.nutrients)!!,
                         provenanceOf(FactGroup.PER_UNIT),
                     )
                 } else {
@@ -160,7 +172,7 @@ data class FoodForm(
                 // Never computed from the other two, whatever they say. That arithmetic looks valid
                 // and produces a claim about a physical object out of two estimates.
                 gramsPerUnit = if (wantsWeight) {
-                    GramsPerUnit(number(gramsPerUnit, GRAMS)!!, typed)
+                    GramsPerUnit(figure(gramsPerUnit, stored?.gramsPerUnit?.grams, GRAMS)!!, typed)
                 } else {
                     null
                 },
@@ -169,16 +181,17 @@ data class FoodForm(
     }
 
     /** The four per-100 g figures, or null while the group is empty, half filled or refused. */
-    fun per100gFigures(): Nutrients? = figures(per100gJudged)
+    fun per100gFigures(held: Nutrients? = null): Nutrients? = figures(per100gJudged, held)
 
     /**
      * The four per-one figures, or null while the group is empty, half filled or refused — or names
      * no unit, since "90 kcal" of nothing is not a figure.
      */
-    fun perUnitFigures(): Nutrients? = if (unitName.isBlank()) null else figures(perUnitJudged)
+    fun perUnitFigures(held: Nutrients? = null): Nutrients? =
+        if (unitName.isBlank()) null else figures(perUnitJudged, held)
 
     /** What one weighs, or null while the box is empty or refused. */
-    fun weightFigure(): Double? = number(gramsPerUnit, GRAMS)?.takeIf { it > 0.0 }
+    fun weightFigure(held: Double? = null): Double? = figure(gramsPerUnit, held, GRAMS)?.takeIf { it > 0.0 }
 
     /** The unit name as Save stores it, or null when none is named. */
     fun unitNameAsSaved(): String? = runCatching { FoodKeys.displayName(unitName) }.getOrNull()
@@ -202,8 +215,9 @@ data class FoodForm(
         )
     }
 
-    private fun figures(judged: List<Pair<String, Double>>): Nutrients? {
-        val read = judged.map { (typed, most) -> number(typed, most) ?: return null }
+    private fun figures(judged: List<Pair<String, Double>>, held: Nutrients?): Nutrients? {
+        val holds = held?.let { listOf(it.kcal, it.proteinG, it.carbsG, it.fatG) }
+        val read = judged.mapIndexed { i, (typed, most) -> figure(typed, holds?.get(i), most) ?: return null }
         return runCatching { Nutrients(read[0], read[1], read[2], read[3]) }.getOrNull()
     }
 
@@ -236,19 +250,20 @@ data class FoodForm(
             gramsPerUnit = food.facts.gramsPerUnit?.grams.asTyped(),
         )
 
+        /** A stored number as a field to edit, [shown]; empty for a figure the food does not know. */
+        private fun Double?.asTyped(): String = this?.let(::shown).orEmpty()
+
         /**
-         * A stored number as a field to edit.
+         * A figure as its box shows it: at most two decimals, trailing zeros trimmed (D54 §8.5).
          *
          * Whole where it is whole, so a yoghurt of 72 kcal does not read "72.0" and invite him to
-         * wonder what the zero is doing there. Fractions survive, because per-100-g arithmetic
-         * produces them and rounding a stored fact on the way into a form he might save would be
-         * losing precision by accident.
+         * wonder what the zero is doing there. A scanned food's per-100 g figures are a serving's
+         * scaled and are stored as long doubles, which no one can read or would type; the box shows
+         * 8.57. **Precision is not lost by it**: a box still reading exactly this is read back as
+         * the stored figure ([figure]), so saving an untouched group changes nothing.
          */
-        private fun Double?.asTyped(): String = when {
-            this == null -> ""
-            this % 1.0 == 0.0 -> toInt().toString()
-            else -> toString()
-        }
+        fun shown(value: Double): String =
+            BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString()
     }
 
     /**
@@ -256,6 +271,21 @@ data class FoodForm(
      * figure past what its box can hold, [most] (D42, issue #32). The parse is the one this form
      * always had, a comma read as a decimal point; only the judgement after it is shared.
      */
+    /**
+     * The one rule, for Save and for what a review is told (D54 §8.5): a box whose text is exactly
+     * how [held] is [shown] is still [held], the stored figure, not its rounding — so a group left
+     * as it opened is found unchanged. Anything else is read as typed. [held] is null for a food not
+     * yet made, or a group it does not know.
+     */
+    private fun figure(typed: String, held: Double?, most: Double): Double? {
+        if (held != null && BelievableAmount.isBelievable(held, most) &&
+            typed.trim().replace(',', '.') == shown(held)
+        ) {
+            return held
+        }
+        return number(typed, most)
+    }
+
     private fun number(typed: String, most: Double): Double? =
         typed.trim().replace(',', '.').toDoubleOrNull()
             ?.takeIf { BelievableAmount.isBelievable(it, most) }

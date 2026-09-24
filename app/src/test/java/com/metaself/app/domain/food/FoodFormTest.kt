@@ -228,6 +228,63 @@ class FoodFormTest {
         assertThat(form.proteinPer100g).isEqualTo("8.5")
     }
 
+    // --- Stored figures shown rounded, and kept when their box is untouched (D54 §8.5) ------------
+
+    /**
+     * A scanned food's per-100 g figures are a serving's scaled — here an invented 70 g serving of
+     * 6 g protein, 9 g carbohydrate and 4 g fat — so they are stored as long doubles. A box shows
+     * at most two decimals, trailing zeros trimmed.
+     */
+    private val scanned = FoodFacts(
+        per100g = PerHundredGrams(
+            Nutrients(100.0, 8.571428571428571, 12.857142857142858, 5.714285714285714),
+            Provenance(Source.LABEL, null, 0),
+        ),
+        perUnit = PerUnit(
+            "serving",
+            Nutrients(70.0, 6.000000000000001, 9.0, 4.0),
+            Provenance(Source.LABEL, null, 0),
+        ),
+        gramsPerUnit = GramsPerUnit(70.0, Provenance(Source.LABEL, null, 0)),
+    )
+
+    @Test
+    fun `a stored figure opens rounded to at most two decimals, trailing zeros trimmed`() {
+        val form = FoodForm.of(Food(name = "Seeded cracker", facts = scanned))
+
+        assertThat(listOf(form.kcalPer100g, form.proteinPer100g, form.carbsPer100g, form.fatPer100g))
+            .containsExactly("100", "8.57", "12.86", "5.71").inOrder()
+        assertThat(form.proteinPerUnit).isEqualTo("6")
+        assertThat(FoodForm.shown(8.5)).isEqualTo("8.5")
+        assertThat(FoodForm.shown(0.30000000000000004)).isEqualTo("0.3")
+        assertThat(FoodForm.shown(1000.0)).isEqualTo("1000")
+    }
+
+    /** Saving an untouched box keeps the stored figure, so Save has nothing to write for it. */
+    @Test
+    fun `a box left as it opened saves the stored figure, and Save leaves the group alone`() {
+        val facts = FoodForm.of(Food(name = "Seeded cracker", facts = scanned)).toFacts(0, stored = scanned)!!
+
+        assertThat(facts.per100g!!.nutrients).isEqualTo(scanned.per100g!!.nutrients)
+        assertThat(facts.perUnit!!.nutrients).isEqualTo(scanned.perUnit!!.nutrients)
+        assertThat(Correction.plan(scanned, facts))
+            .isEqualTo(Correction.Plan(Correction.Keep, Correction.Keep, Correction.Keep))
+    }
+
+    /** Typed over — even to the figure it showed, written another way — it is his own number. */
+    @Test
+    fun `a box typed over saves what was typed`() {
+        val form = FoodForm.of(Food(name = "Seeded cracker", facts = scanned))
+
+        val retyped = form.copy(proteinPer100g = "8.6").toFacts(0, stored = scanned)!!
+        val padded = form.copy(proteinPer100g = "8.570").toFacts(0, stored = scanned)!!
+
+        assertThat(retyped.per100g!!.nutrients)
+            .isEqualTo(Nutrients(100.0, 8.6, 12.857142857142858, 5.714285714285714))
+        assertThat(padded.per100g!!.nutrients.proteinG).isEqualTo(8.57)
+        assertThat(Correction.plan(scanned, retyped).per100g).isInstanceOf(Correction.Replace::class.java)
+    }
+
     /** Opening a food and saving it unchanged must not alter what it knows. */
     @Test
     fun `a stored food survives a round trip through the form`() {

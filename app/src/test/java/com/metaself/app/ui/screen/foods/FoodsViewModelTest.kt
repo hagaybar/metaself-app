@@ -1246,6 +1246,34 @@ class FoodsViewModelTest {
             assertThat(saved.gramsPerUnit!!.provenance.source).isEqualTo(Source.TYPED)
         }
 
+    /**
+     * D54 §8.5: a label's long-double figures open rounded, and Save on the untouched editor keeps
+     * them exactly, with their source — no relabelling as typed. Invented figures.
+     */
+    @Test
+    fun `saving a food whose figures opened rounded keeps them exactly, and their source`() =
+        runTest(dispatcher) {
+            val scanned = aFood(
+                name = "Seeded cracker",
+                facts = FoodFacts(
+                    per100g = PerHundredGrams(
+                        Nutrients(100.0, 8.571428571428571, 12.857142857142858, 5.714285714285714),
+                        Provenance(Source.LABEL, null, 0),
+                    ),
+                ),
+            )
+            val foods = FakeFoodRepository(listOf(scanned))
+            val viewModel = watched(foods)
+            viewModel.edit(1)
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.editing!!.form.proteinPer100g).isEqualTo("8.57")
+
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertThat(foods.current.single().facts.per100g).isEqualTo(scanned.facts.per100g)
+        }
+
     /** Still a mix with a guess in it (D54 §5): labelled by its weakest member. */
     @Test
     fun `a figure changed after accepting still saves the group as an estimate`() =

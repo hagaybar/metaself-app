@@ -366,6 +366,23 @@ it is never saved with the food, never written to the problem log, and never sen
 the problem log's promise — it records what failed, never what you ate — kept for a text that can
 hold the food's name. What leaves the screen is what he copies himself.
 
+**8.5 Stored figures are shown rounded, and an untouched box keeps the stored figure.** The food
+editor shows a stored figure with **at most two decimals, trailing zeros trimmed** — 8.57 for a
+stored 8.571428571428571, 72 for 72.0, 8.5 for 8.5. The same form fills the boxes when a suggestion
+is accepted. Nothing is lost by it, because of one rule (`FoodForm.figure`), used by Save
+(`FoodForm.toFacts` with the stored facts) and by what a review is told (`FormOrigins`,
+`ReviewRequest.of`): **a box whose text is exactly the shown form of the stored figure is the stored
+figure**. So opening a food and saving it untouched hands the repository the stored doubles; §5's
+comparison finds the group unchanged, and no statement touches it — figures, source and confidence
+stay as they were, never relabelled `TYPED`. Any other text is read as typed, including the same
+number written another way (8.570), which is his own number. What one weighs follows the same rule.
+
+The costs: he cannot type the shown rounding itself (8.57) over a stored 8.571428571428571 and have
+it stored as exactly 8.57 — it is taken as untouched, a difference far below anything a label or a
+guess claims. And in *Make a food*, where nothing is stored, a figure accepted from a review is
+shown to two decimals, so a kept figure he had typed with three or more decimals is written back
+rounded; the group is an estimate by then (§5).
+
 ---
 
 ## What this amends

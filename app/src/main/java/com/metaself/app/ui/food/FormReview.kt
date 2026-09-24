@@ -81,8 +81,8 @@ data class FormReview(
     }
 
     /**
-     * The answer arrived and nothing in it could be used ([com.metaself.app.domain.ai.ReviewResult.Unusable]):
-     * it is shown as that, with what was set aside and its note, until dismissed. Nothing to accept.
+     * The answer arrived and nothing in it could be used (`ReviewResult.Unusable`): it is shown as
+     * that, with what was set aside and its note, until dismissed. Nothing to accept.
      */
     fun unusable(answer: FoodReview, raw: String? = null): FormReview =
         copy(review = Review.Shown(answer, unusable = true), modelAnswer = raw)

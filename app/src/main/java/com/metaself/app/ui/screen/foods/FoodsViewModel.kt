@@ -288,7 +288,11 @@ class FoodsViewModel @Inject constructor(
             val form = editing.form
             // A group accepted from a review goes as an estimate, or weaker, even if he then changed
             // a figure in it (D54 §5); the repository leaves any group whose figures did not change alone.
-            val facts = form.toFacts(now(), estimated = editing.reviewing.accepted) ?: return@act
+            // A box still showing a stored figure as it opened, rounded, saves the stored figure,
+            // so an untouched group is found unchanged and kept, source and all (D54 §8.5).
+            val stored = foods.byId(editing.foodId)?.facts
+            val facts = form.toFacts(now(), estimated = editing.reviewing.accepted, stored = stored)
+                ?: return@act
             val brand = form.brand.takeIf { it.isNotBlank() }
             when (val saved = foods.saveForm(editing.foodId, form.name, brand, facts)) {
                 is EditResult.Refused -> refuse(saved.why)

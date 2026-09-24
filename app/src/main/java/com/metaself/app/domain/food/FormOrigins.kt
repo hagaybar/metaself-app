@@ -11,7 +11,9 @@ import com.metaself.app.domain.day.Source
  * is then stored cannot disagree:
  *
  * - its boxes equal the stored group ([ReplacedFacts.sameFigures]; the unit name exactly, as Save
- *   would store it) → the stored source and confidence, since Save would leave it alone;
+ *   would store it) → the stored source and confidence, since Save would leave it alone. A box
+ *   still showing a stored figure as it opened, rounded, reads as that figure, by the rule Save
+ *   uses (`FoodForm.toFacts`'s `stored`, D54 §8.5);
  * - it was accepted from a review this session → an estimate with that review's confidence, or
  *   the source of the figures the review kept where that ranks lower ([AcceptedGroup.provenance]);
  * - anything else he typed → [Source.TYPED];
@@ -30,7 +32,7 @@ object FormOrigins {
      * @param accepted the groups accepted from a review this session.
      */
     fun of(stored: FoodFacts?, form: FoodForm, accepted: Map<FactGroup, AcceptedGroup>): Origins {
-        val per100g = form.per100gFigures()?.let { figures ->
+        val per100g = form.per100gFigures(stored?.per100g?.nutrients)?.let { figures ->
             val held = stored?.per100g
             when {
                 held != null && ReplacedFacts.sameFigures(held.nutrients, figures) ->
@@ -40,7 +42,8 @@ object FormOrigins {
         }
 
         val unitName = form.unitNameAsSaved()
-        val perUnit = form.perUnitFigures()?.takeIf { unitName != null }?.let { figures ->
+        val perUnitFigures = form.perUnitFigures(stored?.perUnit?.nutrients)
+        val perUnit = perUnitFigures?.takeIf { unitName != null }?.let { figures ->
             val held = stored?.perUnit
             when {
                 held != null && held.unitName == unitName &&
@@ -50,7 +53,7 @@ object FormOrigins {
         }
 
         // Never accepted from anything: a review cannot answer it.
-        val gramsPerUnit = form.weightFigure()?.let { grams ->
+        val gramsPerUnit = form.weightFigure(stored?.gramsPerUnit?.grams)?.let { grams ->
             val held = stored?.gramsPerUnit
             when {
                 held != null && ReplacedFacts.sameFigure(held.grams, grams) -> held.provenance.origin()

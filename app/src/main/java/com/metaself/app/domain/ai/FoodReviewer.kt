@@ -70,7 +70,7 @@ data class ReviewRequest(
                     HeldGroup(figures, origin.source, origin.confidence)
                 }
 
-            val weight = form.weightFigure()
+            val weight = form.weightFigure(stored?.gramsPerUnit?.grams)
             val weightOrigin = origins.gramsPerUnit
             return ReviewRequest(
                 process = process,
@@ -78,9 +78,9 @@ data class ReviewRequest(
                 brand = form.brand.trim()
                     .takeIf { it.isNotEmpty() && FoodKeys.brandKey(it) != FoodKeys.NO_BRAND_KEY }
                     .orEmpty(),
-                per100g = held(form.per100gFigures(), origins.per100g),
+                per100g = held(form.per100gFigures(stored?.per100g?.nutrients), origins.per100g),
                 unitName = form.unitName.trim(),
-                perUnit = held(form.perUnitFigures(), origins.perUnit),
+                perUnit = held(form.perUnitFigures(stored?.perUnit?.nutrients), origins.perUnit),
                 gramsPerUnit = if (weight == null || weightOrigin == null) {
                     null
                 } else {
