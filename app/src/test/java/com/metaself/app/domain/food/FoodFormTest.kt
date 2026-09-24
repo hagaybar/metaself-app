@@ -399,7 +399,7 @@ class FoodFormTest {
 
     @Test
     fun `a group accepted from a review is handed over as an estimate with its confidence`() {
-        val facts = oatBiscuit.toFacts(5, estimated = mapOf(FactGroup.PER_UNIT to Confidence.MEDIUM))!!
+        val facts = oatBiscuit.toFacts(5, estimated = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.MEDIUM)))!!
 
         assertThat(facts.perUnit!!.provenance)
             .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 5))
@@ -407,12 +407,59 @@ class FoodFormTest {
         assertThat(facts.gramsPerUnit!!.provenance).isEqualTo(Provenance(Source.TYPED, null, 5))
     }
 
+    // D54 §5 as amended 2026-09-24: an accepted group is stored as the weaker of an estimate and
+    // where the figures the review kept in it came from. Downgrading is honest; upgrading never is.
+
+    @Test
+    fun `an accepted group that kept figures copied off a past meal stays repeated, with no confidence`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.HIGH, keptFrom = Source.REPEATED)),
+        )!!
+
+        assertThat(facts.perUnit!!.provenance).isEqualTo(Provenance(Source.REPEATED, null, 5))
+    }
+
+    @Test
+    fun `an accepted group that kept figures of unrecognised origin stays unrecognised`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_100G to AcceptedGroup(Confidence.MEDIUM, keptFrom = Source.UNRECOGNISED)),
+        )!!
+
+        assertThat(facts.per100g!!.provenance).isEqualTo(Provenance(Source.UNRECOGNISED, null, 5))
+    }
+
+    @Test
+    fun `an accepted group whose every figure changed is an estimate with the review's confidence`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_100G to AcceptedGroup(Confidence.LOW, keptFrom = null)),
+        )!!
+
+        assertThat(facts.per100g!!.provenance).isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.LOW, 5))
+    }
+
+    @Test
+    fun `an accepted group that kept label figures is an estimate, never a label`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_100G to AcceptedGroup(Confidence.MEDIUM, keptFrom = Source.LABEL)),
+        )!!
+
+        assertThat(facts.per100g!!.provenance)
+            .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 5))
+    }
+
     /** The weight is never a review's to give (D54 §3), so it is never an estimate here either. */
     @Test
     fun `the weight is typed even when both groups were accepted`() {
         val facts = oatBiscuit.toFacts(
             5,
-            estimated = mapOf(FactGroup.PER_100G to Confidence.LOW, FactGroup.PER_UNIT to Confidence.LOW),
+            estimated = mapOf(
+                FactGroup.PER_100G to AcceptedGroup(Confidence.LOW),
+                FactGroup.PER_UNIT to AcceptedGroup(Confidence.LOW),
+            ),
         )!!
 
         assertThat(facts.per100g!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
@@ -422,7 +469,7 @@ class FoodFormTest {
 
     @Test
     fun `an accepted group the form no longer holds is not invented`() {
-        val facts = yoghurt.toFacts(5, estimated = mapOf(FactGroup.PER_UNIT to Confidence.HIGH))!!
+        val facts = yoghurt.toFacts(5, estimated = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.HIGH)))!!
 
         assertThat(facts.perUnit).isNull()
         assertThat(facts.per100g!!.provenance.source).isEqualTo(Source.TYPED)

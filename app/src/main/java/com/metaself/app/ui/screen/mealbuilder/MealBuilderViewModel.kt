@@ -418,7 +418,7 @@ class MealBuilderViewModel @Inject constructor(
      * afterwards from one made by eating it — and the identity rule catches it if the thing he is
      * making already exists under another spelling.
      *
-     * A group accepted from a review goes as an estimate (D54 §5). If the name is one he already
+     * A group accepted from a review goes as an estimate, or weaker (D54 §5). If the name is one he already
      * has, those estimates are only offered to it: he never saw that food's figures here, so an
      * estimate does not replace one it holds better, and D45's line says only what was replaced.
      */

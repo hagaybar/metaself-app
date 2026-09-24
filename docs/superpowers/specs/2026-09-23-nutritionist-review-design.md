@@ -12,6 +12,8 @@
 >   acceptance is the only way a guess replaces something better; no new marks on screen.
 > - **2026-09-23, consent** — a review may send that one food's name and existing figures to the
 >   model, only when the owner asks for it, and the privacy page says so.
+> - **2026-09-24, amendment** — the weakest-member rule read literally: an accepted group is stored
+>   as the weaker of `AI_ESTIMATE` and the source of the figures the model kept in it (§5).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -217,9 +219,31 @@ The owner's rule of 2026-09-23, verbatim:
 
 | The group in the editor | Stored as |
 |---|---|
-| Accepted from a review this session — **even if he then changed a figure in it** | `AI_ESTIMATE`, the review's confidence for that group. A mixed group is labelled by its weakest member. |
+| Accepted from a review this session — **even if he then changed a figure in it** | `AI_ESTIMATE`, the review's confidence for that group — or, where the figures the model kept rank below an estimate, their source (amendment of 2026-09-24, below). A mixed group is labelled by its weakest member. |
 | Anything else he typed | `TYPED`, as today. |
 | What one weighs | Never accepted from anything; `TYPED` when typed, as today. |
+
+**Amendment, 2026-09-24 — the weakest member includes the figures the model kept.** The owner's
+rule says a mixed group is labelled by its weakest member, and that downgrading is always honest
+while upgrading never is. An accepted group mixes the figures the model changed or filled (an
+estimate) with the figures it kept, which still carry the source the group was sent with. So an
+accepted group is stored as **the weaker of `AI_ESTIMATE` and the source of the figures the model
+kept in it**, by `Provenance.rankOf`:
+
+- **the model kept figures that were `REPEATED` or `UNRECOGNISED`** (rank 0, below an estimate) →
+  the group is stored as that source, with no confidence (on a food only an estimate carries one).
+  A guess never lifts a figure copied off a past meal, or one of unknown origin, to an estimate;
+- **the model kept `LABEL` or `TYPED` figures** (ranked above an estimate) → `AI_ESTIMATE` with the
+  review's confidence, exactly as the table says: the estimate is already the weaker;
+- **the model kept no figure** — it filled the group, or changed all four → `AI_ESTIMATE` with the
+  review's confidence.
+
+A kept earlier estimate (`AI_ESTIMATE`) ties with the new one; the group is `AI_ESTIMATE` with the
+review's confidence, which the model gave for the group as it returned it, having been told the
+earlier one. The source of the kept figures is the one the request sent for the group (§2), so what
+the model is told next time (`FormOrigins`) and what Save stores (`FoodForm.toFacts`) are worked out
+by the same rule (`AcceptedGroup.provenance`). A group stored `UNRECOGNISED` this way is the one case
+in which this version writes that value; it only ever carries forward a figure that already had it.
 
 **What the repository does with them — one transaction, `saveForm` as today.** `correct()` stops
 clearing all three groups. For each group it compares what arrives with what is stored, inside the

@@ -6,6 +6,8 @@ import com.metaself.app.domain.ai.FigureChange
 import com.metaself.app.domain.ai.FoodReview
 import com.metaself.app.domain.ai.Suggestion
 import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.Nutrients
@@ -57,6 +59,18 @@ class FormReviewTest {
 
         assertThat(bare.accept(FactGroup.PER_UNIT, form)!!.second.review).isNull()
         assertThat(noted.accept(FactGroup.PER_UNIT, form)!!.second.review).isNotNull()
+    }
+
+    /** Save labels the group by its weakest member (D54 §5 as amended 2026-09-24), so it has to know. */
+    @Test
+    fun `accepting records the review's confidence and where the figures it kept came from`() {
+        val shown = FormReview().asked()
+            .answered(FoodReview(null, fatChange.copy(keptFrom = Source.REPEATED), null, emptyList()))
+
+        val accepted = shown.accept(FactGroup.PER_UNIT, form)!!.second
+
+        assertThat(accepted.accepted)
+            .containsExactly(FactGroup.PER_UNIT, AcceptedGroup(Confidence.MEDIUM, keptFrom = Source.REPEATED))
     }
 
     @Test

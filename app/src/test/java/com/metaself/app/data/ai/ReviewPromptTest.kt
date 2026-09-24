@@ -7,6 +7,7 @@ import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
@@ -228,7 +229,7 @@ class ReviewPromptTest {
             ReviewProcess.EXISTING_FOOD,
             form,
             stored,
-            accepted = mapOf(FactGroup.PER_UNIT to Confidence.MEDIUM),
+            accepted = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.MEDIUM)),
         )
 
         assertThat(request.name).isEqualTo("Oat biscuit")

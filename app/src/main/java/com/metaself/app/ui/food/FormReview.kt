@@ -1,7 +1,7 @@
 package com.metaself.app.ui.food
 
 import com.metaself.app.domain.ai.FoodReview
-import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.FoodForm
 
@@ -30,15 +30,16 @@ sealed interface Review {
  * drift in what typing, accepting or dismissing does.
  *
  * Pure: every step returns a new value, and nothing here asks the model or writes anything. Save is
- * still the only thing that writes, handing [accepted] to `FoodForm.toFacts` as estimates.
+ * still the only thing that writes, handing [accepted] to `FoodForm.toFacts`.
  *
- * @property accepted each group accepted from a review, with that review's confidence for it. Kept
+ * @property accepted each group accepted from a review, with that review's confidence for it and
+ *   where the figures it kept came from, so Save can label it by its weakest member. Kept
  *   when he then types in the group — it is still a mix with a guess in it (D54 §5) — and when he
  *   dismisses what is left of the review.
  */
 data class FormReview(
     val review: Review? = null,
-    val accepted: Map<FactGroup, Confidence> = emptyMap(),
+    val accepted: Map<FactGroup, AcceptedGroup> = emptyMap(),
 ) {
     /** True while a request is out, when the button reads *Reviewing…* and does nothing. */
     val asking: Boolean get() = review is Review.Asking
@@ -90,7 +91,7 @@ data class FormReview(
         val suggestion = shown.review.suggestionFor(group) ?: return null
         return form.with(group, suggestion.nutrients) to copy(
             review = shown.minus(setOf(group)),
-            accepted = accepted + (group to suggestion.confidence),
+            accepted = accepted + (group to AcceptedGroup(suggestion.confidence, suggestion.keptFrom)),
         )
     }
 

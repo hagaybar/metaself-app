@@ -7,7 +7,6 @@ import com.metaself.app.domain.amount.BelievableAmount.KCAL_PER_UNIT
 import com.metaself.app.domain.amount.BelievableAmount.MACRO_PER_100G
 import com.metaself.app.domain.amount.BelievableAmount.MACRO_PER_UNIT
 import com.metaself.app.domain.amount.BelievableAmount.words
-import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
 
 /** Which field of the food form a complaint is about. */
@@ -34,7 +33,8 @@ enum class FoodField {
  * **Everything typed here is [Source.TYPED]** — with one exception, D54: a group he accepted from a
  * review is handed over as [Source.AI_ESTIMATE] with that review's confidence, even if he then
  * changed a figure in it, because it is still a mix with a guess in it and a mixed group is labelled
- * by its weakest member (D4). What one weighs is never accepted from anything and is always typed.
+ * by its weakest member (D4) — which is the source of the figures the review kept instead, where that
+ * ranks below an estimate ([AcceptedGroup.provenance]). What one weighs is never accepted from anything and is always typed.
  * The rest is the owner's own hand, which is the whole reason a correction is not subject to the
  * ranking that protects him from a guess: the ranking exists to stop a model overwriting him, not to
  * stop him overwriting a model.
@@ -132,16 +132,15 @@ data class FoodForm(
      *
      * @param setAtMillis when he stated them, for showing beside the number later. Never for
      *   choosing between two sources: that is by rank and never by date.
-     * @param estimated the groups he accepted from a review this session, with that review's
-     *   confidence (D54). Each is handed over as an estimate; every other group, and the weight
-     *   always, as typed.
+     * @param estimated the groups he accepted from a review this session (D54). Each is handed over
+     *   labelled by its weakest member ([AcceptedGroup.provenance]); every other group, and the
+     *   weight always, as typed.
      */
-    fun toFacts(setAtMillis: Long, estimated: Map<FactGroup, Confidence> = emptyMap()): FoodFacts? {
+    fun toFacts(setAtMillis: Long, estimated: Map<FactGroup, AcceptedGroup> = emptyMap()): FoodFacts? {
         if (errors().isNotEmpty()) return null
         val typed = Provenance(Source.TYPED, confidence = null, setAtMillis = setAtMillis)
-        fun provenanceOf(group: FactGroup): Provenance = estimated[group]
-            ?.let { Provenance(Source.AI_ESTIMATE, it, setAtMillis) }
-            ?: typed
+        fun provenanceOf(group: FactGroup): Provenance =
+            estimated[group]?.provenance(setAtMillis) ?: typed
         return runCatching {
             FoodFacts(
                 per100g = if (wantsPer100g) {

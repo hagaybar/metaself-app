@@ -269,8 +269,8 @@ class FoodsViewModel @Inject constructor(
         }
         act(ActionRefused.NOTHING_CHANGED) {
             val form = editing.form
-            // A group accepted from a review goes as an estimate, even if he then changed a figure
-            // in it (D54 §5); the repository leaves any group whose figures did not change alone.
+            // A group accepted from a review goes as an estimate, or weaker, even if he then changed
+            // a figure in it (D54 §5); the repository leaves any group whose figures did not change alone.
             val facts = form.toFacts(now(), estimated = editing.reviewing.accepted) ?: return@act
             val brand = form.brand.takeIf { it.isNotBlank() }
             when (val saved = foods.saveForm(editing.foodId, form.name, brand, facts)) {

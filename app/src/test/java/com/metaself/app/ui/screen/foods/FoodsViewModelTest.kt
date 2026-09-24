@@ -15,6 +15,7 @@ import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.ai.Suggestion
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.GramsPerUnit
 import com.metaself.app.domain.food.Nutrients
@@ -1337,7 +1338,8 @@ class FoodsViewModelTest {
 
         val editing = viewModel.state.value.editing!!
         assertThat(editing.reviewing.review).isNull()
-        assertThat(editing.reviewing.accepted).containsExactly(FactGroup.PER_UNIT, Confidence.MEDIUM)
+        assertThat(editing.reviewing.accepted)
+            .containsExactly(FactGroup.PER_UNIT, AcceptedGroup(Confidence.MEDIUM))
         assertThat(editing.form.kcalPer100g).isEqualTo("480")
 
         viewModel.save()

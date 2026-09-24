@@ -161,6 +161,7 @@ object ReviewResponse {
                 filled = false,
                 changes = changes,
                 reason = null,
+                keptFrom = held.source.takeIf { changes.size < FIGURES.size },
             ),
         )
     }

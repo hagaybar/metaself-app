@@ -2,6 +2,7 @@ package com.metaself.app.domain.ai
 
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
@@ -59,7 +60,7 @@ data class ReviewRequest(
             process: ReviewProcess,
             form: FoodForm,
             stored: FoodFacts?,
-            accepted: Map<FactGroup, Confidence>,
+            accepted: Map<FactGroup, AcceptedGroup>,
         ): ReviewRequest {
             val origins = FormOrigins.of(stored, form, accepted)
             fun held(figures: Nutrients?, origin: FormOrigins.Origin?): HeldGroup? =
@@ -104,6 +105,9 @@ data class FigureChange(val figure: Figure, val from: Double, val to: Double, va
  *   filled ones rounded to one decimal place.
  * @property filled true when the form did not know the group; then [changes] is empty and [reason]
  *   is the group's one reason. Otherwise [changes] holds at least one change and [reason] is null.
+ * @property keptFrom where the figures this suggestion keeps came from — the source the group was
+ *   sent with — or null when it keeps none: a fill, or all four changed. Accepting it labels the
+ *   group by its weakest member (D54 §5 as amended 2026-09-24), so the kept figures' source is needed.
  */
 data class Suggestion(
     val nutrients: Nutrients,
@@ -111,6 +115,7 @@ data class Suggestion(
     val filled: Boolean,
     val changes: List<FigureChange>,
     val reason: String?,
+    val keptFrom: Source? = null,
 )
 
 /**

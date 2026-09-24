@@ -55,6 +55,7 @@ class ReviewResponseTest {
                     ),
                 ),
                 reason = null,
+                keptFrom = Source.TYPED,
             ),
         )
         assertThat(review.setAside).isEmpty()
@@ -144,6 +145,43 @@ class ReviewResponseTest {
         assertThat(review.per100g!!.changes).containsExactly(
             FigureChange(Figure.KCAL, 120.0, 370.0, "the macros alone give about 370 kcal"),
         )
+    }
+
+    /**
+     * D54 §5 as amended 2026-09-24: an accepted group is labelled by its weakest member, so the
+     * suggestion has to say where the figures it kept came from. None kept, nothing to say.
+     */
+    @Test
+    fun `a suggestion says where the figures it kept came from, and nothing when it kept none`() {
+        val request = OAT_BISCUIT.copy(
+            per100g = HeldGroup(Nutrients(480.0, 7.0, 62.0, 22.0), Source.REPEATED, null),
+        )
+
+        val oneChanged = proposed(
+            ReviewResponse.parse(
+                reply(
+                    per100g = group(470, 7, 62, 22, kcalReason = "A reason.", confidence = "LOW"),
+                    perUnit = null,
+                ),
+                request,
+            ),
+        )
+        val allChanged = proposed(
+            ReviewResponse.parse(
+                reply(
+                    per100g = group(
+                        470, 8, 60, 21,
+                        kcalReason = "A reason.", proteinReason = "A reason.",
+                        carbsReason = "A reason.", fatReason = "A reason.", confidence = "LOW",
+                    ),
+                    perUnit = null,
+                ),
+                request,
+            ),
+        )
+
+        assertThat(oneChanged.per100g!!.keptFrom).isEqualTo(Source.REPEATED)
+        assertThat(allChanged.per100g!!.keptFrom).isNull()
     }
 
     // --- Fills -----------------------------------------------------------------------------------

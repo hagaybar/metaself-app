@@ -64,11 +64,25 @@ class FormOriginsTest {
         val origins = FormOrigins.of(
             stored,
             accepted,
-            accepted = mapOf(FactGroup.PER_UNIT to Confidence.MEDIUM),
+            accepted = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.MEDIUM)),
         )
 
         assertThat(origins.perUnit).isEqualTo(origin(Source.AI_ESTIMATE, Confidence.MEDIUM))
         assertThat(origins.per100g).isEqualTo(origin(Source.LABEL))
+    }
+
+    /** Told as Save would store it (D54 §5 as amended 2026-09-24): the weakest member, never upgraded. */
+    @Test
+    fun `an accepted group that kept figures copied off a past meal is told as repeated`() {
+        val accepted = untouched.copy(fatPerUnit = "4")
+
+        val origins = FormOrigins.of(
+            stored,
+            accepted,
+            accepted = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.HIGH, keptFrom = Source.REPEATED)),
+        )
+
+        assertThat(origins.perUnit).isEqualTo(origin(Source.REPEATED))
     }
 
     /** Save would issue no statement for it, so it stays what it was — and is told so. */
@@ -77,7 +91,7 @@ class FormOriginsTest {
         val origins = FormOrigins.of(
             stored,
             untouched,
-            accepted = mapOf(FactGroup.PER_100G to Confidence.HIGH),
+            accepted = mapOf(FactGroup.PER_100G to AcceptedGroup(Confidence.HIGH)),
         )
 
         assertThat(origins.per100g).isEqualTo(origin(Source.LABEL))
@@ -146,7 +160,7 @@ class FormOriginsTest {
             .with(FactGroup.PER_UNIT, Nutrients(180.0, 12.0, 27.0, 3.0))
             .copy(gramsPerUnit = "300")
 
-        val origins = FormOrigins.of(null, soup, mapOf(FactGroup.PER_UNIT to Confidence.LOW))
+        val origins = FormOrigins.of(null, soup, mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.LOW)))
 
         assertThat(origins).isEqualTo(
             FormOrigins.Origins(

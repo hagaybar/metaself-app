@@ -12,7 +12,8 @@ import com.metaself.app.domain.day.Source
  *
  * - its boxes equal the stored group ([ReplacedFacts.sameFigures]; the unit name exactly, as Save
  *   would store it) → the stored source and confidence, since Save would leave it alone;
- * - it was accepted from a review this session → an estimate with that review's confidence;
+ * - it was accepted from a review this session → an estimate with that review's confidence, or
+ *   the source of the figures the review kept where that ranks lower ([AcceptedGroup.provenance]);
  * - anything else he typed → [Source.TYPED];
  * - its boxes are empty, half filled or refused → null, not known. Half-typing is not sent.
  *
@@ -26,9 +27,9 @@ object FormOrigins {
 
     /**
      * @param stored the food as it is stored, or null for a food not yet made.
-     * @param accepted the groups accepted from a review this session, with its confidence.
+     * @param accepted the groups accepted from a review this session.
      */
-    fun of(stored: FoodFacts?, form: FoodForm, accepted: Map<FactGroup, Confidence>): Origins {
+    fun of(stored: FoodFacts?, form: FoodForm, accepted: Map<FactGroup, AcceptedGroup>): Origins {
         val per100g = form.per100gFigures()?.let { figures ->
             val held = stored?.per100g
             when {
@@ -62,6 +63,6 @@ object FormOrigins {
 
     private fun Provenance.origin() = Origin(source, confidence)
 
-    private fun Map<FactGroup, Confidence>.origin(group: FactGroup): Origin =
-        get(group)?.let { Origin(Source.AI_ESTIMATE, it) } ?: Origin(Source.TYPED, null)
+    private fun Map<FactGroup, AcceptedGroup>.origin(group: FactGroup): Origin =
+        get(group)?.provenance(setAtMillis = 0)?.origin() ?: Origin(Source.TYPED, null)
 }
