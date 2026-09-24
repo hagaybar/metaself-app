@@ -73,6 +73,21 @@ class FormReviewTest {
             .containsExactly(FactGroup.PER_UNIT, AcceptedGroup(Confidence.MEDIUM, keptFrom = Source.REPEATED))
     }
 
+    /** A review of one food is no answer for another: changing what it is withdraws both groups. */
+    @Test
+    fun `changing the name or brand withdraws both groups, shown or still out`() {
+        val both = FoodReview(fatChange, fatChange, null, emptyList())
+
+        val renamedWhileOut = FormReview().asked()
+            .typed(form, form.copy(name = "Rye biscuit"))
+            .answered(both)
+        val rebrandedWhileShown = FormReview().asked().answered(both)
+            .typed(form, form.copy(brand = "A brand"))
+
+        assertThat(renamedWhileOut.review).isNull()
+        assertThat(rebrandedWhileShown.review).isNull()
+    }
+
     @Test
     fun `typing the weight withdraws nothing`() {
         val shown = FormReview().asked().answered(FoodReview(null, fatChange, null, emptyList()))

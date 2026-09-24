@@ -185,6 +185,8 @@ in it, so the form still shows his figures.
   down whatever is left; groups already accepted stay accepted.
 - **Typing in a group withdraws its suggestion**, whether it has arrived or is still out: he is
   answering that group himself.
+- **Changing the name or brand withdraws both groups' suggestions**, arrived or still out: the
+  review was of the food as it was called when he asked, and is no answer for another one.
 - **After acceptance nothing new appears.** Once saved, the group's existing origin line reads as it
   does for any estimated group today — *This came a close estimate* — because the food's source is
   now `AI_ESTIMATE`. That line already exists; nothing is added.

@@ -69,10 +69,17 @@ data class FormReview(
     /**
      * He typed, from [before] to [after]. **Typing in a group withdraws its suggestion**, whether it
      * has arrived or is still out: he is answering that group himself. The per-one group includes
-     * its unit name — a suggestion for one bowl is no answer for one cup.
+     * its unit name — a suggestion for one bowl is no answer for one cup. **Changing the name or
+     * brand withdraws both groups**: the review was of the food as it was called when he asked, and
+     * is no answer for another one.
      */
     fun typed(before: FoodForm, after: FoodForm): FormReview {
-        val touched = FactGroup.values().filter { boxes(before, it) != boxes(after, it) }.toSet()
+        val renamed = before.name.trim() != after.name.trim() || before.brand.trim() != after.brand.trim()
+        val touched = if (renamed) {
+            FactGroup.values().toSet()
+        } else {
+            FactGroup.values().filter { boxes(before, it) != boxes(after, it) }.toSet()
+        }
         if (touched.isEmpty()) return this
         return when (val now = review) {
             null -> this
