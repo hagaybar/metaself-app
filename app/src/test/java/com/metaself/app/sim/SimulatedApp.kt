@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.backup.BackupOutcome
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.day.InMemoryMealRepository
@@ -351,7 +352,7 @@ private fun ManagerHere(
     // would forget which tab is in front between one press and the next.
     val managerViewModel = remember { ManagerViewModel() }
     val foodsViewModel =
-        remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, savedState) }
+        remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, FakeFoodReviewer(), savedState) }
     val mealsViewModel = remember { MealsViewModel(world.savedMeals, ProblemLog.NONE) }
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()

@@ -10,6 +10,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.aFood
@@ -236,7 +237,7 @@ class FoodsAskFirstSessionTest {
     /** The food list, wired to a live view model exactly as the walk harness's manager wires it. */
     @Composable
     private fun Foods(foods: FakeFoodRepository) {
-        val viewModel = remember { FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE) }
+        val viewModel = remember { FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, FakeFoodReviewer()) }
         val state by viewModel.state.collectAsState()
 
         FoodsScreen(
