@@ -89,3 +89,74 @@ data class ReviewRequest(
         }
     }
 }
+
+/** One of a group's four figures. */
+enum class Figure { KCAL, PROTEIN, CARBS, FAT }
+
+/** One figure the review would change, from what the group holds, and why (D54 §3, §4). */
+data class FigureChange(val figure: Figure, val from: Double, val to: Double, val reason: String)
+
+/**
+ * What a review suggests for one group, ready to be shown and, if he accepts, written into its four
+ * boxes (D54 §4).
+ *
+ * @property nutrients the whole group as it would stand: figures kept exactly as held, changed or
+ *   filled ones rounded to one decimal place.
+ * @property filled true when the form did not know the group; then [changes] is empty and [reason]
+ *   is the group's one reason. Otherwise [changes] holds at least one change and [reason] is null.
+ */
+data class Suggestion(
+    val nutrients: Nutrients,
+    val confidence: Confidence,
+    val filled: Boolean,
+    val changes: List<FigureChange>,
+    val reason: String?,
+)
+
+/**
+ * A review's answer, a group at a time. A group with nothing to show — kept exactly, left alone, or
+ * set aside — is null.
+ *
+ * @property setAside the groups whose suggestion could not be used (D54 §3), each said on screen in
+ *   one line; the group stays as it was.
+ */
+data class FoodReview(
+    val per100g: Suggestion?,
+    val perUnit: Suggestion?,
+    val note: String?,
+    val setAside: List<FactGroup>,
+) {
+    fun suggestionFor(group: FactGroup): Suggestion? = when (group) {
+        FactGroup.PER_100G -> per100g
+        FactGroup.PER_UNIT -> perUnit
+    }
+}
+
+/**
+ * What came back from a review, or what went wrong.
+ *
+ * A failure is one of [EstimateResult]'s, so the editor says it in `ProposalWording.failure`'s
+ * existing sentences and there is one closed set of failures for everything that asks the model.
+ */
+sealed interface ReviewResult {
+
+    data class Proposed(val review: FoodReview) : ReviewResult
+
+    /** [failure] is NoKey, CeilingReached, Unreachable, Refused or Unreadable — never a proposal. */
+    data class Failed(val failure: EstimateResult) : ReviewResult {
+        init {
+            require(failure !is EstimateResult.Proposed && failure !is EstimateResult.AmountMissing) {
+                "a review fails for want of a key, allowance, network, permission or sense; not $failure"
+            }
+        }
+    }
+}
+
+/**
+ * Reviewing one food's figures — D54's narrow interface, beside [MealEstimator] (D2 as amended).
+ *
+ * One call, no retry, and nothing in its vocabulary that names a vendor.
+ */
+interface FoodReviewer {
+    suspend fun review(request: ReviewRequest): ReviewResult
+}
