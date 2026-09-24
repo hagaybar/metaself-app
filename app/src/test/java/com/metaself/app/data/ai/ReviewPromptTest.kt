@@ -349,6 +349,31 @@ class ReviewPromptTest {
         assertThat(system).contains("Keep it unless the figures are")
     }
 
+    /**
+     * D54 §10.2: the note and the reasons are read on screen, so they are asked for in his words —
+     * "per 100 g" and "per" the food's own unit — never in the request's field names, and never as
+     * "the figures for one". The cross-check itself speaks of the unit by its name.
+     */
+    @Test
+    fun `the note and reasons are asked for in plain words, with the food's own unit name`() {
+        val cup = systemMessage(
+            ReviewPrompt.requestBody("a-model", request().copy(unitName = "cup")),
+        )
+
+        assertThat(cup).contains("Write the note and every reason in plain words")
+        assertThat(cup).contains("say \"per 100 g\" and \"per cup\"")
+        assertThat(cup).contains("never write field names such as per_unit, per_100g, grams_per_unit or kcal_reason")
+        assertThat(cup).contains("never write \"the figures for one\"")
+        assertThat(cup).contains("The figures per cup should equal the figures per 100 g")
+
+        val noUnit = systemMessage(
+            ReviewPrompt.requestBody("a-model", request(perUnit = null).copy(unitName = "")),
+        )
+        assertThat(noUnit).contains("Write the note and every reason in plain words")
+        assertThat(noUnit).contains("say \"per 100 g\"")
+        assertThat(noUnit).doesNotContain("\"per \"")
+    }
+
     /** D54 §9.3: every reply ends in a verdict, asked for in the instructions and the schema. */
     @Test
     fun `the note is asked for as a one-sentence verdict, never empty`() {

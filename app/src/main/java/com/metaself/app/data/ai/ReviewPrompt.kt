@@ -74,9 +74,9 @@ object ReviewPrompt {
      * still changed only when its own figures are impossible. The weight is still never answered —
      * the schema has nowhere to put it.
      */
-    private val CROSS_CHECK = """
-        Cross-check: per 100 g, per one and grams_per_unit are all given, so check them against
-        each other. The figures for one should equal the figures per 100 g times grams_per_unit / 100,
+    private fun crossCheck(unit: String) = """
+        Cross-check: per 100 g, per $unit and grams_per_unit are all given, so check them against
+        each other. The figures per $unit should equal the figures per 100 g times grams_per_unit / 100,
         within label rounding. If they disagree beyond rounding, the two groups contradict each
         other and at least one of them is wrong. Decide which group you believe, then
         propose the corrected figures for the group you believe is wrong, even if it is a LABEL group,
@@ -86,13 +86,31 @@ object ReviewPrompt {
         grams_per_unit is given only for this check: never change it, state it or guess it.
     """.trimIndent()
 
-    /** The instructions for [request]: the cross-check only when there is something to check. */
-    private fun instructions(request: ReviewRequest): String =
-        if (request.per100g != null && request.perUnit != null && request.gramsPerUnit != null) {
-            INSTRUCTIONS + "\n\n" + CROSS_CHECK
+    /**
+     * The note and the reasons are drawn on screen as they come (D54 §10.2), so they are asked for
+     * in the words the editor uses — "per 100 g", "per" the food's own unit — and never in the
+     * request's field names, which a model otherwise quotes back ("the per_unit figures").
+     */
+    private fun plainWords(unit: String?): String {
+        val per = if (unit == null) "say \"per 100 g\"" else "say \"per 100 g\" and \"per $unit\""
+        return "- Write the note and every reason in plain words, for the owner to read: $per; " +
+            "never write field names such as per_unit, per_100g, grams_per_unit or kcal_reason, " +
+            "and never write \"the figures for one\"."
+    }
+
+    /**
+     * The instructions for [request]: the plain-words rule, with the food's own unit name when one
+     * is named, and the cross-check only when there is something to check.
+     */
+    private fun instructions(request: ReviewRequest): String {
+        val unit = request.unitName.trim().takeIf { it.isNotEmpty() }
+        val base = INSTRUCTIONS + "\n" + plainWords(unit)
+        return if (request.per100g != null && request.perUnit != null && request.gramsPerUnit != null) {
+            base + "\n\n" + crossCheck(unit ?: "one")
         } else {
-            INSTRUCTIONS
+            base
         }
+    }
 
     /** The whole request: the instructions, the one food as JSON, and the reply's schema. */
     fun requestBody(model: String, request: ReviewRequest): String = buildJsonObject {

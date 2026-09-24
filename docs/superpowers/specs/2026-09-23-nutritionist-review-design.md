@@ -23,7 +23,7 @@
 > - **2026-09-24, fourth amendment** — when per one and per 100 g contradict each other through
 >   what one weighs, the review proposes correcting the group it believes wrong, even a packet
 >   label, always as a suggestion he accepts or dismisses; a label group standing alone is still
->   changed only when its own figures are impossible (§10).
+>   changed only when its own figures are impossible; the model writes in the owner's words (§10).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -475,6 +475,15 @@ which you believe and why. **A label group standing alone is still changed only 
 figures are impossible** (§2's rule, unchanged): a contradiction is the one case in which a label
 whose own figures are possible may be changed. Nothing about storage changes — an accepted
 correction of a label group is stored as §5 says, `AI_ESTIMATE`, the safe direction.
+
+**10.2 The note and the reasons are written in his words.** They are drawn on screen as they come,
+and the same answer had written *the per_unit figures* and *the figures for one* — the request's
+field names and the instructions' own shorthand. The instructions now say: write the note and every
+reason in plain words, saying *per 100 g* and *per {the food's own unit name}* (*per cup*, *per
+biscuit*), never a field name such as `per_unit`, `per_100g`, `grams_per_unit` or `kcal_reason`,
+and never *the figures for one*. With no unit named, only *per 100 g* is given. The cross-check
+(§9.2) speaks of the unit by its name too — *the figures per cup should equal…* — since a model
+mirrors the words it is given.
 
 ---
 
