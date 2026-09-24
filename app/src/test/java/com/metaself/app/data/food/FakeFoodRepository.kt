@@ -1,5 +1,6 @@
 package com.metaself.app.data.food
 
+import com.metaself.app.data.time.Now
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.Correction
 import com.metaself.app.domain.food.Food
@@ -16,7 +17,18 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+
+/**
+ * What the day's logged rows tell the food tables — the part of the database the offered list's
+ * query joins against. Implemented by the day's stand-in (`InMemoryMealRepository`), and wired in
+ * with [FakeFoodRepository.linkedTo] where a test has both.
+ */
+interface LoggedRowsOfFoods {
+    /** Food id → the latest `loggedAtMillis` of a meal holding a row that points at it. */
+    fun observeLatestLogging(): Flow<Map<Long, Long>>
+}
 
 /**
  * The food repository, in memory, for screens and view models under test.
@@ -26,16 +38,37 @@ import kotlinx.coroutines.flow.map
  * ranking**, so a test cannot show a guess overwriting a number the owner typed. Everything else is
  * the simplest thing that behaves.
  *
+ * **And about order, which a walk reads off the top of every list** (public issue #6). [observeAll]
+ * is `updatedAtMillis DESC, id DESC`, as `FoodDao.observeAll`; [observeOffered] is the later of that
+ * and the food's latest logging, then `id DESC`, as `FoodDao.observeOffered`. Every write the real
+ * statements stamp is stamped here from [now], and nothing else is: a repair of impossible figures
+ * keeps the food's stamp.
+ *
  * It is not a substitute for `RoomFoodRepositoryTest`, which is where the real statements and the
  * real indices are exercised, and which runs in CI.
+ *
+ * @param now the clock every write is stamped from. The default counts up from 1, one tick per
+ *   reading, so an order decided by stamps is never a tie by accident. A walk puts every stand-in on
+ *   its one clock with [onClock].
  */
-class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
+class FakeFoodRepository(
+    initial: List<Food> = emptyList(),
+    private var now: Now = CountingClock(),
+) : FoodRepository {
 
     private val foods = MutableStateFlow(initial.mapIndexed { at, food -> food.copy(id = at + 1L) })
     private var nextId: Long = initial.size + 1L
 
     /** Every food it holds, for a test that wants to assert on the store rather than the screen. */
     val current: List<Food> get() = foods.value
+
+    /** Put this store on [clock], so its stamps and the rest of a walk's compare as one timeline. */
+    fun onClock(clock: Now) = apply { now = clock }
+
+    private var rows: LoggedRowsOfFoods? = null
+
+    /** Wire in the day's rows, so the offered list is ordered by the last logging as well. */
+    fun linkedTo(rows: LoggedRowsOfFoods?) = apply { this.rows = rows }
 
     private var mergeRefusal: EditRefused? = null
 
@@ -74,17 +107,26 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
     fun logged(foodId: Long, rows: Int) =
         apply { loggedRows.value = loggedRows.value + (foodId to rows) }
 
-    override fun observeOffered(): Flow<List<Food>> = foods.map { all ->
-        all.filterNot { it.hidden }.sortedByDescending { it.updatedAtMillis }
-    }
+    /** `FoodDao.observeOffered`: not hidden, by the later of edited and last logged, then id. */
+    override fun observeOffered(): Flow<List<Food>> =
+        combine(foods, rows?.observeLatestLogging() ?: flowOf(emptyMap())) { all, latest ->
+            all.filterNot { it.hidden }.sortedWith(
+                compareByDescending<Food> { maxOf(it.updatedAtMillis, latest[it.id] ?: 0L) }
+                    .thenByDescending { it.id },
+            )
+        }
 
-    override fun observeAll(): Flow<List<Food>> = foods
+    /** `FoodDao.observeAll`: `ORDER BY updatedAtMillis DESC, id DESC`. */
+    override fun observeAll(): Flow<List<Food>> = foods.map { all ->
+        all.sortedWith(compareByDescending<Food> { it.updatedAtMillis }.thenByDescending { it.id })
+    }
 
     override fun observeOnlyAPortionCount(): Flow<Int> =
         foods.map { all -> all.count { it.facts.onlyAPortion } }
 
     override fun observeOnlyAPortion(): Flow<List<Food>> =
-        foods.map { all -> all.filter { it.facts.onlyAPortion } }
+        // `ORDER BY updatedAtMillis DESC` leaves ties to SQLite; kept in id order here.
+        foods.map { all -> all.filter { it.facts.onlyAPortion }.sortedByDescending { it.updatedAtMillis } }
 
     override suspend fun byId(id: Long): Food? = foods.value.firstOrNull { it.id == id }
 
@@ -116,16 +158,26 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
             // What the food held a moment ago, reported and not judged — exactly as the real
             // repository reports its snapshot. It already holds `existing`, so this costs nothing.
             val before = existing.facts
-            replace(existing.id) { it.copy(facts = offer(it.facts, facts), barcode = it.barcode ?: barcode) }
+            val moment = now()
+            val offered = offer(existing.facts, facts, moment)
+            val learnsBarcode = barcode != null && existing.barcode == null
+            if (lands(existing.facts, facts) || learnsBarcode) {
+                replace(existing.id, moment) {
+                    it.copy(facts = offered, barcode = it.barcode ?: barcode)
+                }
+            }
             return FoundOrCreated(byId(existing.id)!!, wasCreated = false, before = before)
         }
 
+        val moment = now()
         val made = Food(
             id = nextId++,
             name = FoodKeys.displayName(name),
             brand = brand?.takeIf { it.isNotBlank() }?.let(FoodKeys::displayName) ?: FoodKeys.NO_BRAND,
             barcode = barcode,
-            facts = facts,
+            facts = stamped(facts, moment),
+            createdAtMillis = moment,
+            updatedAtMillis = moment,
         )
         foods.value = foods.value + made
         // A food this call made held nothing a moment ago.
@@ -133,7 +185,9 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
     }
 
     override suspend fun offerFacts(foodId: Long, facts: FoodFacts) {
-        replace(foodId) { it.copy(facts = offer(it.facts, facts)) }
+        val food = byId(foodId) ?: return
+        val moment = now()
+        if (lands(food.facts, facts)) replace(foodId, moment) { it.copy(facts = offer(it.facts, facts, moment)) }
     }
 
     override suspend fun rename(foodId: Long, newName: String): EditResult {
@@ -147,7 +201,8 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         if (clash != null) {
             return EditResult.Refused(EditRefused.AlreadyAnotherFood(clash.id, clash.name))
         }
-        replace(foodId) { it.copy(name = FoodKeys.displayName(newName)) }
+        // `touch`: a rename is an edit, and sends the food up the list.
+        replace(foodId, now()) { it.copy(name = FoodKeys.displayName(newName)) }
         return EditResult.Done
     }
 
@@ -163,7 +218,8 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         if (clash != null) {
             return EditResult.Refused(EditRefused.AlreadyAnotherFood(clash.id, clash.name))
         }
-        replace(foodId) {
+        // Stamped whether or not the brand changed, as `FoodDao.setBrand` is on every Save.
+        replace(foodId, now()) {
             it.copy(brand = brand?.takeIf { b -> b.isNotBlank() } ?: FoodKeys.NO_BRAND)
         }
         return EditResult.Done
@@ -175,23 +231,32 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
      * — so a view model test sees the source the real one stores.
      */
     override suspend fun correct(foodId: Long, facts: FoodFacts): EditResult {
-        replace(foodId) { food ->
-            val plan = Correction.plan(food.facts, facts)
-            food.copy(
+        val food = byId(foodId) ?: return EditResult.Done
+        val moment = now()
+        val plan = Correction.plan(food.facts, facts)
+        // A group left as it was gets no statement, so a correction that changes nothing stamps
+        // nothing; every other group is cleared or written, and each of those stamps the food.
+        if (plan.per100g == Correction.Keep && plan.perUnit == Correction.Keep &&
+            plan.gramsPerUnit == Correction.Keep
+        ) {
+            return EditResult.Done
+        }
+        replace(foodId, moment) {
+            it.copy(
                 facts = FoodFacts(
-                    per100g = applied(plan.per100g, food.facts.per100g),
-                    perUnit = applied(plan.perUnit, food.facts.perUnit),
-                    gramsPerUnit = applied(plan.gramsPerUnit, food.facts.gramsPerUnit),
+                    per100g = applied(plan.per100g, food.facts.per100g, moment),
+                    perUnit = applied(plan.perUnit, food.facts.perUnit, moment),
+                    gramsPerUnit = applied(plan.gramsPerUnit, food.facts.gramsPerUnit, moment),
                 ),
             )
         }
         return EditResult.Done
     }
 
-    private fun <T> applied(step: Correction.Step<T>, held: T?): T? = when (step) {
+    private fun <T> applied(step: Correction.Step<T>, held: T?, moment: Long): T? = when (step) {
         Correction.Keep -> held
         Correction.Clear -> null
-        is Correction.Replace -> step.fact
+        is Correction.Replace -> dated(step.fact, moment)
     }
 
     /** All or nothing, as the real one: a refusal puts every food back as it was. */
@@ -210,11 +275,11 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
     }
 
     override suspend fun hide(foodId: Long) {
-        replace(foodId) { it.copy(hidden = true) }
+        replace(foodId, now()) { it.copy(hidden = true) }
     }
 
     override suspend fun unhide(foodId: Long) {
-        replace(foodId) { it.copy(hidden = false) }
+        replace(foodId, now()) { it.copy(hidden = false) }
     }
 
     override suspend fun savedMealsUsing(foodId: Long): List<String> = usedBy.value[foodId].orEmpty()
@@ -238,8 +303,9 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         mergeRefusal?.let { return EditResult.Refused(it) }
         if (winnerId == loserId) return EditResult.Done
         val loser = byId(loserId) ?: return EditResult.Done
-        // The winner keeps what it holds and fills only its blanks, by the rule the real merge uses.
-        replace(winnerId) { winner ->
+        // The winner keeps what it holds and fills only its blanks, by the rule the real merge uses,
+        // each filled figure keeping its own date; then the winner is touched, as the real one is.
+        replace(winnerId, now()) { winner ->
             val filling = JoinedFacts.fill(winner.facts, loser.facts)
             winner.copy(
                 alsoKnownAs = winner.alsoKnownAs + loser.everyName,
@@ -302,21 +368,58 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         gramsPerUnit = facts.gramsPerUnit?.grams,
     )
 
-    private fun replace(id: Long, change: (Food) -> Food) {
-        foods.value = foods.value.map { if (it.id == id) change(it).copy(id = id) else it }
+    /** Changes one food; [stamp], when given, is written to its `updatedAtMillis` as well. */
+    private fun replace(id: Long, stamp: Long? = null, change: (Food) -> Food) {
+        foods.value = foods.value.map {
+            if (it.id != id) return@map it
+            val changed = change(it).copy(id = id)
+            if (stamp == null) changed else changed.copy(updatedAtMillis = stamp)
+        }
     }
 
     /**
      * The ranking, as the guarded statements apply it: a fact lands only when it is at least as
-     * credible as what is already there, and each fact is decided on its own.
+     * credible as what is already there, and each fact is decided on its own. A fact that lands is
+     * dated [moment], as the statement writes `nowMillis` into its date column.
      */
-    private fun offer(existing: FoodFacts, incoming: FoodFacts): FoodFacts = FoodFacts(
-        per100g = better(existing.per100g, incoming.per100g) { a, b -> a.provenance.rank to b.provenance.rank },
-        perUnit = better(existing.perUnit, incoming.perUnit) { a, b -> a.provenance.rank to b.provenance.rank },
-        gramsPerUnit = better(existing.gramsPerUnit, incoming.gramsPerUnit) { a, b ->
+    private fun offer(existing: FoodFacts, incoming: FoodFacts, moment: Long): FoodFacts = FoodFacts(
+        per100g = better(existing.per100g, incoming.per100g?.let { dated(it, moment) }) { a, b ->
+            a.provenance.rank to b.provenance.rank
+        },
+        perUnit = better(existing.perUnit, incoming.perUnit?.let { dated(it, moment) }) { a, b ->
+            a.provenance.rank to b.provenance.rank
+        },
+        gramsPerUnit = better(existing.gramsPerUnit, incoming.gramsPerUnit?.let { dated(it, moment) }) { a, b ->
             a.provenance.rank to b.provenance.rank
         },
     )
+
+    /**
+     * Whether any guarded statement would write a row: some group arrives that is at least as
+     * credible as what is there. Each one that does stamps the food, identical figures included.
+     */
+    private fun lands(existing: FoodFacts, incoming: FoodFacts): Boolean =
+        landsOver(existing.per100g?.provenance, incoming.per100g?.provenance) ||
+            landsOver(existing.perUnit?.provenance, incoming.perUnit?.provenance) ||
+            landsOver(existing.gramsPerUnit?.provenance, incoming.gramsPerUnit?.provenance)
+
+    private fun landsOver(held: Provenance?, arriving: Provenance?): Boolean =
+        arriving != null && (held == null || arriving.rank >= held.rank)
+
+    private fun stamped(facts: FoodFacts, moment: Long) = FoodFacts(
+        per100g = facts.per100g?.let { dated(it, moment) },
+        perUnit = facts.perUnit?.let { dated(it, moment) },
+        gramsPerUnit = facts.gramsPerUnit?.let { dated(it, moment) },
+    )
+
+    /** A fact with its date column written, as every write of a group writes it. */
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> dated(fact: T, moment: Long): T = when (fact) {
+        is PerHundredGrams -> fact.copy(provenance = fact.provenance.copy(setAtMillis = moment)) as T
+        is PerUnit -> fact.copy(provenance = fact.provenance.copy(setAtMillis = moment)) as T
+        is GramsPerUnit -> fact.copy(provenance = fact.provenance.copy(setAtMillis = moment)) as T
+        else -> fact
+    }
 
     private fun <T> better(existing: T?, incoming: T?, ranks: (T, T) -> Pair<Int, Int>): T? {
         if (incoming == null) return existing
@@ -324,6 +427,11 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         val (mine, theirs) = ranks(existing, incoming)
         return if (theirs >= mine) incoming else existing
     }
+}
+
+/** A clock that counts up from [start], one per reading — ordered, and never a tie by accident. */
+class CountingClock(private var start: Long = 1L) : Now {
+    override fun invoke(): Long = start++
 }
 
 /** A food knowing what 100 grams of it are worth, for a test that does not care which numbers. */

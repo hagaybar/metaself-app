@@ -868,7 +868,8 @@ class FoodPageViewModelTest {
         viewModel.save()
         advanceUntilIdle()
 
-        assertThat(foods.current.single()).isEqualTo(oatBiscuit().copy(id = 1))
+        // Save stamps the food as edited, as the real one does; nothing it holds has moved.
+        assertThat(foods.current.single().copy(updatedAtMillis = 0)).isEqualTo(oatBiscuit().copy(id = 1))
     }
 
     @Test

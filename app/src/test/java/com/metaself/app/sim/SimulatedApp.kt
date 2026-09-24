@@ -15,6 +15,7 @@ import com.metaself.app.data.backup.BackupOutcome
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.food.CountingClock
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.movement.StepAccess
@@ -74,8 +75,21 @@ class World(
     ),
     val weights: InMemoryWeightRepository = InMemoryWeightRepository(),
     val profiles: FakeProfileRepository = FakeProfileRepository(aProfile()),
-    /** Fixed, so nothing in a transcript changes between runs for want of a clock. */
-    val now: Now = Now { FIXED_MOMENT },
+    /**
+     * The one clock every stand-in and view model is stamped from, so "most recent first" compares
+     * like with like, as on a phone.
+     *
+     * It starts at a fixed moment and counts one millisecond per reading, so nothing in a transcript
+     * changes between runs for want of a clock and no two edits tie by accident. A fixed clock made
+     * every edit tie, and the lists then fell back to their id order.
+     *
+     * **One thing it cannot reach.** The day stamps a logging with `System.currentTimeMillis()`
+     * directly (`DayViewModel.writeMeal`), not with this clock, and Robolectric does not intercept
+     * that call. So in a walk every logging carries the real time of the run, which is later than
+     * every edit stamped here: a food or a meal logged in a walk stays above one edited after it,
+     * where on a phone the edit would bring the other to the top.
+     */
+    val now: Now = CountingClock(FIXED_MOMENT),
     val today: Today = Today { FIXED_DAY },
     /**
      * Where the walk begins.
@@ -95,6 +109,12 @@ class World(
      */
     var goBack: () -> Unit = {}
         internal set
+
+    init {
+        // One clock and one database: each store reads what the real queries join against.
+        foods.onClock(now).linkedTo(rows = dayMeals)
+        savedMeals.onClock(now).linkedTo(dayMeals.observeLatestLoggingOfSavedMeals())
+    }
 
     val loggedFoods = LoggedFoods(foods)
 

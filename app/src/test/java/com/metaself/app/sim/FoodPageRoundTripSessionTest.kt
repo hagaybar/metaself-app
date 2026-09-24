@@ -163,7 +163,11 @@ class FoodPageRoundTripSessionTest {
         assertThat(list.none { it.contains("is hidden —") }).isTrue()
     }
 
-    /** Yoghurt first, then twenty foods; the fake keeps this order and an empty search keeps it. */
+    /**
+     * Yoghurt first, then twenty foods: stamped newest first in that order, because the list is
+     * ordered by the last edit as the database orders it, and an empty search keeps that order.
+     */
     private fun longList() =
-        listOf(aFood(name = "Yoghurt")) + (1..20).map { aFood(name = "Food %02d".format(it)) }
+        listOf(aFood(name = "Yoghurt", updatedAtMillis = 100)) +
+            (1..20).map { aFood(name = "Food %02d".format(it), updatedAtMillis = 100L - it) }
 }

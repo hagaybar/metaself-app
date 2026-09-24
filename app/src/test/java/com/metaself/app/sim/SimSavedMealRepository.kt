@@ -1,9 +1,11 @@
 package com.metaself.app.sim
 
+import com.metaself.app.data.food.CountingClock
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.MealNameTaken
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
+import com.metaself.app.data.time.Now
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.MealComponent
@@ -11,6 +13,7 @@ import com.metaself.app.domain.food.SavedMeal
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 /**
@@ -37,7 +40,21 @@ import kotlinx.coroutines.flow.map
  * existing fake's two load-bearing behaviours: a name is taken or it is not, and the same food goes in
  * once — putting it in again changes the amount rather than adding a second row.
  */
-class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealRepository {
+class SimSavedMealRepository(
+    private val foods: FakeFoodRepository,
+    private var now: Now = CountingClock(),
+) : SavedMealRepository {
+
+    /** Put this store on [clock], the one the rest of the walk is stamped from. */
+    fun onClock(clock: Now) = apply { now = clock }
+
+    private var loggings: Flow<Map<Long, Long>> = flowOf(emptyMap())
+
+    /**
+     * Wire in the day: saved meal id → the latest `loggedAtMillis` of a meal logged from it, which the
+     * offered list's order joins against.
+     */
+    fun linkedTo(latestLoggings: Flow<Map<Long, Long>>) = apply { loggings = latestLoggings }
 
     private val meals = MutableStateFlow(emptyList<SavedMeal>())
     private var nextMealId = 1L
@@ -65,13 +82,17 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
      * the same defect this class was written to fix, one layer deeper.
      */
     override fun observeOffered(): Flow<List<SavedMeal>> =
-        combine(meals, foods.observeAll()) { all, current ->
+        combine(meals, foods.observeAll(), loggings) { all, current, latest ->
             all.filterNot { it.hidden }
                 .map { it.refreshed(current) }
-                // Newest change first, as the database orders them. Left unsorted, the list came out
-                // in creation order and nothing ever moved to the top, so a walk would report that
-                // editing a meal does not bring it to the front — when the app says it does.
-                .sortedByDescending { it.updatedAtMillis }
+                // `SavedMealDao.observeOffered`: the later of its last change and its last logging,
+                // newest first, then id. Left unsorted, the list came out in creation order and
+                // nothing ever moved to the top, so a walk would report that editing a meal does not
+                // bring it to the front — when the app says it does.
+                .sortedWith(
+                    compareByDescending<SavedMeal> { maxOf(it.updatedAtMillis, latest[it.id] ?: 0L) }
+                        .thenByDescending { it.id },
+                )
         }
 
     override suspend fun byId(id: Long): SavedMeal? =
@@ -94,10 +115,12 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
         meals.value.firstOrNull { FoodKeys.nameKey(it.name) == key }?.let {
             return MealResult.NameTaken(MealNameTaken(it.id))
         }
+        val moment = now()
         val made = SavedMeal(
             id = nextMealId++,
             name = FoodKeys.displayName(name),
-            updatedAtMillis = tick(),
+            createdAtMillis = moment,
+            updatedAtMillis = moment,
         )
         meals.value = meals.value + made
         return MealResult.Built(made.id)
@@ -184,11 +207,7 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
     /** Every change stamps the meal, because the list is ordered by when it was last touched. */
     private fun replace(id: Long, change: (SavedMeal) -> SavedMeal) {
         meals.value = meals.value.map {
-            if (it.id == id) change(it).copy(id = id, updatedAtMillis = tick()) else it
+            if (it.id == id) change(it).copy(id = id, updatedAtMillis = now()) else it
         }
     }
-
-    private var clock = 1L
-
-    private fun tick(): Long = clock++
 }
