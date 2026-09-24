@@ -302,6 +302,52 @@ class ReviewPromptTest {
         assertThat(parsed["model"]!!.jsonPrimitive.content).isEqualTo("a-model")
     }
 
+    /**
+     * D54 §9.2: with both groups and what one weighs, the model is told the two groups must agree
+     * through that weight, and what to do when they do not. Without all three there is nothing to
+     * check them against, and the rule is not sent.
+     */
+    @Test
+    fun `the two groups are cross-checked through what one weighs, only when all three are held`() {
+        val rule = "should equal the figures per 100 g times grams_per_unit / 100"
+
+        val all = systemMessage(ReviewPrompt.requestBody("a-model", request()))
+        assertThat(all).contains(rule)
+        assertThat(all).contains("which group you believe and why")
+        assertThat(all).contains("propose the corrected figures")
+        assertThat(all).contains("flag it in the note")
+        // The existing rule stands beside it.
+        assertThat(all).contains("Never state what one piece weighs")
+
+        listOf(
+            request(per100g = null),
+            request(perUnit = null),
+            request().copy(gramsPerUnit = null),
+        ).forEach { without ->
+            val system = systemMessage(ReviewPrompt.requestBody("a-model", without))
+            assertThat(system).doesNotContain(rule)
+            assertThat(system).contains("Never state what one piece weighs")
+        }
+    }
+
+    /** D54 §9.3: every reply ends in a verdict, asked for in the instructions and the schema. */
+    @Test
+    fun `the note is asked for as a one-sentence verdict, never empty`() {
+        val body = ReviewPrompt.requestBody("a-model", request())
+        val system = systemMessage(body)
+
+        assertThat(system).contains("what you concluded, in one sentence")
+        assertThat(system).contains("Never leave the note empty")
+        assertThat(system).doesNotContain("or leave it empty")
+
+        val note = Json.parseToJsonElement(body).jsonObject["response_format"]!!.jsonObject
+            .getValue("json_schema").jsonObject.getValue("schema").jsonObject
+            .getValue("properties").jsonObject.getValue("note").jsonObject
+        assertThat(note["type"]!!.jsonPrimitive.content).isEqualTo("string")
+        assertThat(note["description"]!!.jsonPrimitive.content)
+            .isEqualTo("What you concluded, in one sentence. Never empty.")
+    }
+
     @Test
     fun `Hebrew survives being sent`() {
         val body = ReviewPrompt.requestBody("a-model", request(name = "עוגיית שיבולת שועל"))
@@ -377,6 +423,10 @@ class ReviewPromptTest {
         return Json.parseToJsonElement(messages[1].jsonObject["content"]!!.jsonPrimitive.content)
             .jsonObject
     }
+
+    private fun systemMessage(body: String): String =
+        Json.parseToJsonElement(body).jsonObject["messages"]!!.jsonArray[0].jsonObject["content"]!!
+            .jsonPrimitive.content
 
     private fun requiredOf(schema: JsonObject): List<String> =
         schema["required"]!!.jsonArray.map { it.jsonPrimitive.content }
