@@ -629,24 +629,27 @@ class FoodsScreenRenderTest {
     // --- A review (D54) ---------------------------------------------------------------------------
 
     /**
-     * The suggestion is drawn beside the figures it would change — under the per-one heading and not
-     * under per 100 g — and nothing of it is in any box until he accepts.
+     * D54 §11: what would change is listed in one place, under the verdict — group, figure, old →
+     * new, its reason small — with Apply these changes and Keep mine, and nothing under the groups'
+     * headings or in any box until he applies it.
      */
     @Test
-    fun `a review's change is drawn under the group it would change and in no box`() {
-        val texts = draw(reviewing(Review.Shown(FoodReview(null, fatTo4, null, emptyList()))))
+    fun `a review lists what would change under its verdict, with Apply and Keep mine`() {
+        val texts = draw(reviewing(Review.Shown(FoodReview(null, fatTo4, "Fat was low.", emptyList()))))
 
-        val line = "Fat 1 → 4 g — A reason."
-        assertThat(texts).contains(line)
-        assertThat(texts.count { it == "Use these" }).isEqualTo(1)
-        assertThat(render.isDrawnBefore("What 100 g of it are worth", "What one of it is worth"))
-            .isTrue()
-        assertThat(render.isDrawnBefore("What one of it is worth", line)).isTrue()
-        assertThat(render.isDrawnBefore("What one of it is worth", "Use these")).isTrue()
-        assertThat(render.isDrawnBefore("Use these", "What one of it weighs")).isTrue()
+        val verdict = "Reviewed: 1 suggestion below — Fat was low."
+        val change = "Per biscuit: Fat 1 → 4"
+        assertThat(texts.count { it == change }).isEqualTo(1)
+        assertThat(texts).contains("A reason.")
+        assertThat(render.isDrawnBefore(verdict, change)).isTrue()
+        assertThat(render.isDrawnBefore(change, "A reason.")).isTrue()
+        assertThat(render.isDrawnBefore("A reason.", "Apply these changes")).isTrue()
+        assertThat(render.isDrawnBefore("Apply these changes", "Keep mine")).isTrue()
+        assertThat(render.isDrawnBefore("Keep mine", "What 100 g of it are worth")).isTrue()
         assertThat(render.fieldTexts()).doesNotContain("4")
+        assertThat(texts).doesNotContain("Use these")
         assertThat(texts).doesNotContain("Use all")
-        assertThat(texts).contains("Dismiss")
+        assertThat(texts).doesNotContain("Dismiss")
     }
 
     @Test
@@ -664,7 +667,7 @@ class FoodsScreenRenderTest {
     }
 
     @Test
-    fun `two suggestions offer Use all, and a note and a set-aside group are said under the button`() {
+    fun `two groups are listed each on its line, and a note and a set-aside group are said`() {
         val texts = draw(
             reviewing(
                 Review.Shown(
@@ -680,7 +683,6 @@ class FoodsScreenRenderTest {
 
         assertThat(texts).contains("Reviewed: 1 suggestion below — A short note.")
         assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
-        assertThat(texts).doesNotContain("Use all")
 
         val both = draw(
             reviewing(
@@ -697,8 +699,10 @@ class FoodsScreenRenderTest {
             ),
         )
 
-        assertThat(both.count { it == "Use these" }).isEqualTo(2)
-        assertThat(both).contains("Use all")
+        assertThat(both).contains("Per 100 g: Calories 480 → 470")
+        assertThat(both).contains("Per biscuit: Fat 1 → 4")
+        assertThat(render.isDrawnBefore("Per 100 g: Calories", "Per biscuit: Fat")).isTrue()
+        assertThat(both.count { it == "Apply these changes" }).isEqualTo(1)
     }
 
     @Test
@@ -708,7 +712,8 @@ class FoodsScreenRenderTest {
         )
 
         assertThat(texts).contains("Reviewed: no changes suggested.")
-        assertThat(texts).doesNotContain("Use these")
+        assertThat(texts).doesNotContain("Apply these changes")
+        assertThat(texts).contains("Dismiss")
     }
 
     // --- Every outcome ends in a line under the button (D54 §9.4) ----------------------------------
@@ -840,6 +845,24 @@ class FoodsScreenRenderTest {
         assertThat(draw(reviewing(null))).doesNotContain("Show the model's answer")
     }
 
+    /**
+     * D54 §11: after Apply these changes, each box the review changed says so to a screen reader,
+     * and a line under the verdict counts them, with Undo. A box it kept says nothing.
+     */
+    @Test
+    fun `after applying, the changed boxes are marked and counted under the verdict`() {
+        val base = reviewing(Review.Shown(FoodReview(null, fatTo4, "Fat was low.", emptyList())))
+        val (form, applied) = base.editing!!.reviewing.apply(base.editing!!.form)
+        val texts = draw(base.copy(editing = base.editing!!.copy(form = form, reviewing = applied)))
+
+        val line = "1 figure changed by the review — not saved yet. Save to keep it, or Undo."
+        assertThat(texts).contains(line)
+        assertThat(render.isDrawnBefore("Reviewed: changes applied — Fat was low.", line)).isTrue()
+        assertThat(render.isDrawnBefore(line, "Undo")).isTrue()
+        assertThat(texts).doesNotContain("Apply these changes")
+        assertThat(render.fieldsSaid(CHANGED)).containsExactly("4")
+    }
+
     /** An editor with the Oat biscuit open (invented figures) and [review] as its review. */
     private fun reviewing(review: Review?): FoodsUiState {
         val food = Food(
@@ -896,6 +919,9 @@ class FoodsScreenRenderTest {
     }
 
     private companion object {
+        /** What a screen reader says of a box the review changed and he has not saved (D54 §11). */
+        const val CHANGED = "changed by the review, not saved"
+
         /**
          * Shared by the two food forms: this editor and the builder's. The packet-label form has its
          * own sentence, "…for this packet…" (D38), because "on this food" is not true there.

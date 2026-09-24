@@ -114,12 +114,12 @@ class FormReviewTest {
     }
 
     @Test
-    fun `accepting the last suggestion takes the review down, and the note keeps it up`() {
+    fun `applying the last suggestion takes the review down, and the note keeps it up`() {
         val bare = FormReview().asked().answered(FoodReview(null, fatChange, null, emptyList()))
         val noted = FormReview().asked().answered(FoodReview(null, fatChange, "A note.", emptyList()))
 
-        assertThat(bare.accept(FactGroup.PER_UNIT, form)!!.second.review).isNull()
-        assertThat(noted.accept(FactGroup.PER_UNIT, form)!!.second.review).isNotNull()
+        assertThat(bare.apply(form).second.review).isNull()
+        assertThat(noted.apply(form).second.review).isNotNull()
     }
 
     /** Save labels the group by its weakest member (D54 §5 as amended 2026-09-24), so it has to know. */
@@ -128,7 +128,7 @@ class FormReviewTest {
         val shown = FormReview().asked()
             .answered(FoodReview(null, fatChange.copy(keptFrom = Source.REPEATED), null, emptyList()))
 
-        val accepted = shown.accept(FactGroup.PER_UNIT, form)!!.second
+        val accepted = shown.apply(form).second
 
         assertThat(accepted.accepted)
             .containsExactly(FactGroup.PER_UNIT, AcceptedGroup(Confidence.MEDIUM, keptFrom = Source.REPEATED))
@@ -164,5 +164,103 @@ class FormReviewTest {
         val typed = shown.typed(form, form.copy(fatPer100g = "21"))
 
         assertThat((typed.review as Review.Shown).review.setAside).isEmpty()
+    }
+
+    // --- Apply these changes, and Undo (D54 §11) ----------------------------------------------------
+
+    private val kcalFill = Suggestion(
+        nutrients = Nutrients(470.0, 7.0, 62.0, 22.0),
+        confidence = Confidence.LOW,
+        filled = true,
+        changes = emptyList(),
+        reason = "A reason.",
+    )
+
+    /**
+     * Apply these changes accepts every group with a suggestion, as the accept path always did; the
+     * boxes whose value came from the review are the ones it changed — every box of a filled group,
+     * only the changed figures of the others.
+     */
+    @Test
+    fun `applying accepts every group and marks exactly the boxes the review changed`() {
+        val shown = FormReview().asked().answered(FoodReview(kcalFill, fatChange, null, emptyList()))
+
+        val (applied, reviewing) = shown.apply(form)
+
+        assertThat(applied.fatPerUnit).isEqualTo("4")
+        assertThat(applied.kcalPer100g).isEqualTo("470")
+        assertThat(reviewing.accepted.keys).containsExactly(FactGroup.PER_100G, FactGroup.PER_UNIT)
+        assertThat(reviewing.changedBoxes).containsExactly(
+            ReviewedBox(FactGroup.PER_100G, Figure.KCAL),
+            ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN),
+            ReviewedBox(FactGroup.PER_100G, Figure.CARBS),
+            ReviewedBox(FactGroup.PER_100G, Figure.FAT),
+            ReviewedBox(FactGroup.PER_UNIT, Figure.FAT),
+        )
+    }
+
+    @Test
+    fun `typing in a changed box takes its mark off, and only its`() {
+        val shown = FormReview().asked().answered(FoodReview(kcalFill, fatChange, null, emptyList()))
+        val (applied, reviewing) = shown.apply(form)
+
+        val typed = reviewing.typed(applied, applied.copy(fatPerUnit = "5"))
+
+        assertThat(typed.changedBoxes).doesNotContain(ReviewedBox(FactGroup.PER_UNIT, Figure.FAT))
+        assertThat(typed.changedBoxes).hasSize(4)
+        assertThat(reviewing.typed(applied, applied.copy(gramsPerUnit = "20")).changedBoxes).hasSize(5)
+    }
+
+    @Test
+    fun `once every mark is typed off there is nothing left to undo`() {
+        val shown = FormReview().asked().answered(FoodReview(null, fatChange, null, emptyList()))
+        val (applied, reviewing) = shown.apply(form)
+
+        val typed = reviewing.typed(applied, applied.copy(fatPerUnit = "5"))
+
+        assertThat(typed.changedBoxes).isEmpty()
+        assertThat(typed.undo(applied.copy(fatPerUnit = "5"))).isNull()
+    }
+
+    /** Undo puts back what the boxes held and the review as it stood, suggestions and all. */
+    @Test
+    fun `Undo restores the boxes, the suggestions and what was accepted before`() {
+        val shown = FormReview().asked().answered(FoodReview(kcalFill, fatChange, "A note.", emptyList()))
+        val (applied, reviewing) = shown.apply(form)
+
+        val (restored, undone) = reviewing.undo(applied)!!
+
+        assertThat(restored).isEqualTo(form)
+        assertThat(undone).isEqualTo(shown)
+        assertThat(undone.accepted).isEmpty()
+        assertThat(undone.changedBoxes).isEmpty()
+    }
+
+    /** A box he typed in since is his answer, and Undo leaves it; his typing withdrew its group. */
+    @Test
+    fun `Undo keeps what he typed since, and does not bring back a group he answered`() {
+        val shown = FormReview().asked().answered(FoodReview(kcalFill, fatChange, null, emptyList()))
+        val (applied, reviewing) = shown.apply(form)
+        val typedForm = applied.copy(kcalPer100g = "465")
+        val typed = reviewing.typed(applied, typedForm)
+
+        val (restored, undone) = typed.undo(typedForm)!!
+
+        assertThat(restored.kcalPer100g).isEqualTo("465")
+        assertThat(restored.proteinPer100g).isEqualTo("7")
+        assertThat(restored.fatPerUnit).isEqualTo("1")
+        val left = (undone.review as Review.Shown).review
+        assertThat(left.per100g).isNull()
+        assertThat(left.perUnit).isEqualTo(fatChange)
+    }
+
+    @Test
+    fun `the marks outlast a dismissal and a new request, and Dismiss is not undone`() {
+        val shown = FormReview().asked().answered(FoodReview(null, fatChange, "A note.", emptyList()))
+        val (applied, reviewing) = shown.apply(form)
+
+        assertThat(reviewing.dismissed().changedBoxes).hasSize(1)
+        assertThat(reviewing.asked().changedBoxes).hasSize(1)
+        assertThat(reviewing.dismissed().undo(applied)!!.second.review).isNull()
     }
 }

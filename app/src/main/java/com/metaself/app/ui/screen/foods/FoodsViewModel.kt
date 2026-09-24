@@ -12,7 +12,6 @@ import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
-import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
@@ -233,21 +232,24 @@ class FoodsViewModel @Inject constructor(
         }
     }
 
-    /** **Use these**: the group's four suggested figures into its boxes, accepted as an estimate. */
-    fun acceptGroup(group: FactGroup) {
+    /**
+     * **Apply these changes** (D54 §11): every suggested group into its boxes, accepted as an
+     * estimate, and the boxes it changed marked until he saves, undoes or types in them.
+     */
+    fun applyReview() {
         val editing = _editing.value ?: return
-        val (form, reviewing) = editing.reviewing.accept(group, editing.form) ?: return
+        val (form, reviewing) = editing.reviewing.apply(editing.form)
         _editing.value = editing.copy(form = form, reviewing = reviewing)
     }
 
-    /** **Use all**: every group with a suggestion, as [acceptGroup]. */
-    fun acceptAll() {
+    /** **Undo**: the boxes and the review go back to how they stood before Apply these changes. */
+    fun undoReview() {
         val editing = _editing.value ?: return
-        val (form, reviewing) = editing.reviewing.acceptAll(editing.form)
+        val (form, reviewing) = editing.reviewing.undo(editing.form) ?: return
         _editing.value = editing.copy(form = form, reviewing = reviewing)
     }
 
-    /** **Dismiss**: what is left of the review goes; what he accepted stays accepted. */
+    /** **Dismiss**, or **Keep mine**: what is left of the review goes; what he accepted stays accepted. */
     fun dismissReview() {
         _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.dismissed()) }
     }

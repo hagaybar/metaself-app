@@ -587,8 +587,8 @@ fun MetaSelfNavHost(
                 onCancelCreatingFood = builderViewModel::cancelCreatingFood,
                 newFoodReview = ReviewActions(
                     onReview = builderViewModel::reviewNewFood,
-                    onAccept = builderViewModel::acceptNewFoodGroup,
-                    onAcceptAll = builderViewModel::acceptAllForNewFood,
+                    onApply = builderViewModel::applyNewFoodReview,
+                    onUndo = builderViewModel::undoNewFoodReview,
                     onDismiss = builderViewModel::dismissNewFoodReview,
                 ),
                 // Left only once the meal is gone, so a delete that fails stays on screen to say so.
@@ -657,8 +657,8 @@ fun MetaSelfNavHost(
                 onDismissRefusal = foodsViewModel::dismissRefusal,
                 review = ReviewActions(
                     onReview = foodsViewModel::review,
-                    onAccept = foodsViewModel::acceptGroup,
-                    onAcceptAll = foodsViewModel::acceptAll,
+                    onApply = foodsViewModel::applyReview,
+                    onUndo = foodsViewModel::undoReview,
                     onDismiss = foodsViewModel::dismissReview,
                 ),
                 onBeginChoosing = foodsViewModel::beginChoosing,

@@ -618,7 +618,7 @@ class MealBuilderViewModelTest {
         viewModel.reviewNewFood()
         advanceUntilIdle()
 
-        viewModel.acceptAllForNewFood()
+        viewModel.applyNewFoodReview()
         advanceUntilIdle()
         viewModel.createFood()
         advanceUntilIdle()
@@ -657,7 +657,7 @@ class MealBuilderViewModelTest {
             viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
             viewModel.reviewNewFood()
             advanceUntilIdle()
-            viewModel.acceptAllForNewFood()
+            viewModel.applyNewFoodReview()
             advanceUntilIdle()
 
             viewModel.createFood()
@@ -669,6 +669,32 @@ class MealBuilderViewModelTest {
             assertThat(held.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
             assertThat(viewModel.state.value.adding!!.retaughtNotice).isNull()
         }
+
+    /** D54 §11, in *Make a food*: Undo empties the boxes the review filled and shows it again. */
+    @Test
+    fun `Undo in the new food puts back what the boxes held and the suggestions`() = runTest(dispatcher) {
+        val viewModel = opened(
+            carrying(mealId = 1),
+            withSalad(),
+            reviewer = FakeFoodReviewer(lentilsFilled()),
+        )
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+        val shown = viewModel.state.value.making!!.reviewing
+
+        viewModel.applyNewFoodReview()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.making!!.reviewing.changedBoxes).hasSize(8)
+        viewModel.undoNewFoodReview()
+        advanceUntilIdle()
+
+        val making = viewModel.state.value.making!!
+        assertThat(making.form).isEqualTo(FoodForm(name = "Lentil soup", unitName = "bowl"))
+        assertThat(making.reviewing).isEqualTo(shown)
+        assertThat(making.reviewing.accepted).isEmpty()
+    }
 
     @Test
     fun `typing in a group of the new food withdraws its suggestion`() = runTest(dispatcher) {

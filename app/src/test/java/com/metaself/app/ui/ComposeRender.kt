@@ -227,6 +227,17 @@ class ComposeRender {
     fun fieldTexts(): List<String> =
         lastNodes.mapNotNull { it.config.getOrNull(SemanticsProperties.EditableText)?.text }
 
+    /**
+     * What every text field that a screen reader describes as [state] holds — a box marked by its
+     * state description rather than by anything visible, which is all a render here can see of a
+     * colour.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun fieldsSaid(state: String): List<String> = lastNodes
+        .filter { it.config.getOrNull(SemanticsProperties.StateDescription) == state }
+        .mapNotNull { it.config.getOrNull(SemanticsProperties.EditableText)?.text }
+
     fun dispose() {
         controller?.pause()?.stop()?.destroy()
         controller = null

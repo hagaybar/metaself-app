@@ -13,7 +13,6 @@ import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.food.CountedAs
-import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
@@ -400,21 +399,21 @@ class MealBuilderViewModel @Inject constructor(
         }
     }
 
-    /** **Use these** in *Make a food*: the group's suggested figures into its boxes, accepted. */
-    fun acceptNewFoodGroup(group: FactGroup) {
+    /** **Apply these changes** in *Make a food* (D54 §11), as My foods' editor does it. */
+    fun applyNewFoodReview() {
         val making = _making.value ?: return
-        val (form, reviewing) = making.reviewing.accept(group, making.form) ?: return
+        val (form, reviewing) = making.reviewing.apply(making.form)
         _making.value = making.copy(form = form, reviewing = reviewing)
     }
 
-    /** **Use all** in *Make a food*. */
-    fun acceptAllForNewFood() {
+    /** **Undo** in *Make a food*: the boxes and the review as they stood before applying. */
+    fun undoNewFoodReview() {
         val making = _making.value ?: return
-        val (form, reviewing) = making.reviewing.acceptAll(making.form)
+        val (form, reviewing) = making.reviewing.undo(making.form) ?: return
         _making.value = making.copy(form = form, reviewing = reviewing)
     }
 
-    /** **Dismiss** in *Make a food*: what is left goes; what he accepted stays accepted. */
+    /** **Dismiss** or **Keep mine** in *Make a food*: what is left goes; what he accepted stays accepted. */
     fun dismissNewFoodReview() {
         _making.value = _making.value?.let { it.copy(reviewing = it.reviewing.dismissed()) }
     }
