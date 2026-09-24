@@ -1,0 +1,67 @@
+# From a cold start, with nothing stored: three foods typed onto the day, a meal built out of them in
+# the foods-and-meals manager, and that meal logged onto the day from Add something.
+#
+# Adapted from the corrected cold-start walk of 2026-09-17 to the app as it is now: a saved meal on
+# Add something opens on a tap and is logged only by Log it. Every food, name and figure here is
+# invented, and chosen to keep the arithmetic round.
+
+# Three foods, each typed onto the day, which is also what makes each one a food.
+press Type the numbers
+type What was it? | Carrot
+type Calories | 40
+type Protein (g) | 1
+type Carbohydrate (g) | 9
+type Fat (g) | 0
+press Add it
+
+press Type the numbers
+type What was it? | Hummus
+type Calories | 160
+type Protein (g) | 8
+type Carbohydrate (g) | 14
+type Fat (g) | 10
+press Add it
+
+press Type the numbers
+type What was it? | Pitta
+type Calories | 250
+type Protein (g) | 9
+type Carbohydrate (g) | 50
+type Fat (g) | 1
+press Add it
+
+# The manager is behind the day's More menu.
+press More
+press Foods & meals
+press My meals
+press Build a meal
+type What do you call it? | Carrot plate
+press Start it
+
+# One portion of each. Searching first, as a person with a long list would: a shortened word, so only
+# the list's row answers to the name.
+type Search your foods | Carr
+press Carrot
+type How much | 1
+press Put it in
+type Search your foods | Humm
+press Hummus
+type How much | 1
+press Put it in
+type Search your foods | Pitt
+press Pitta
+type How much | 1
+press Put it in
+look
+
+# Leave it and come back: the meal is kept as it goes, worth 450 kcal.
+back
+look
+back
+
+# And log it onto the day from Add something: a tap opens the meal, and only Log it logs.
+press Add something
+press My meals
+press Carrot plate
+press Log it
+look
