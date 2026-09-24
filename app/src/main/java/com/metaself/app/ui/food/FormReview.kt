@@ -1,6 +1,7 @@
 package com.metaself.app.ui.food
 
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FoodReview
 import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
@@ -38,6 +39,29 @@ sealed interface Review {
     data class Failed(val failure: EstimateResult?) : Review
 }
 
+/** One of the eight figure boxes: which group, which figure. */
+data class ReviewedBox(val group: FactGroup, val figure: Figure)
+
+/**
+ * What **Apply these changes** did, held until he saves, cancels, undoes it or types over every box
+ * it changed (D54 §11).
+ *
+ * @property boxes the boxes whose value came from the review and that he has not typed in since —
+ *   each drawn in the teal accent, and counted in the line under the verdict.
+ * @property groups the groups it wrote into.
+ * @property before the form as it stood when he pressed it, and [wrote] as it stood after: **Undo**
+ *   puts [before]'s text back into every box of [groups] that still holds what the review wrote.
+ * @property previous the review as it stood when he pressed it, kept up to date with his typing
+ *   since (a group he has typed in stays withdrawn), for **Undo** to return to.
+ */
+data class Applied(
+    val boxes: Set<ReviewedBox>,
+    val groups: Set<FactGroup>,
+    val before: FoodForm,
+    val wrote: FoodForm,
+    val previous: FormReview,
+)
+
 /**
  * A food editor's review and what he has accepted from it this editing session — the one piece
  * both editors hold, My foods' and the meal builder's *Make a food* (D54 §4), so the two cannot
@@ -54,12 +78,18 @@ sealed interface Review {
  *   review that could not be read or used, proposed nothing, or set a group aside (§8.4). Held
  *   here to be shown and nothing else: it is never saved, and never written to the problem log.
  *   A new request or **Dismiss** takes it down.
+ * @property applied what **Apply these changes** did and **Undo** would take back; null when there
+ *   is nothing to undo.
  */
 data class FormReview(
     val review: Review? = null,
     val accepted: Map<FactGroup, AcceptedGroup> = emptyMap(),
     val modelAnswer: String? = null,
+    val applied: Applied? = null,
 ) {
+    /** The boxes drawn as changed by the review and not saved (D54 §11). */
+    val changedBoxes: Set<ReviewedBox> get() = applied?.boxes.orEmpty()
+
     /** True while a request is out, when the button reads *Reviewing…* and does nothing. */
     val asking: Boolean get() = review is Review.Asking
 
@@ -108,26 +138,39 @@ data class FormReview(
      * is no answer for another one.
      */
     fun typed(before: FoodForm, after: FoodForm): FormReview {
+        val marked = typedMarks(before, after)
         val renamed = before.name.trim() != after.name.trim() || before.brand.trim() != after.brand.trim()
         val touched = if (renamed) {
             FactGroup.values().toSet()
         } else {
             FactGroup.values().filter { boxes(before, it) != boxes(after, it) }.toSet()
         }
-        if (touched.isEmpty()) return this
+        if (touched.isEmpty()) return marked
         return when (val now = review) {
-            null, is Review.Failed -> this
-            is Review.Asking -> copy(review = Review.Asking(now.withdrawn + touched))
-            is Review.Shown -> copy(review = now.minus(touched))
+            null, is Review.Failed -> marked
+            is Review.Asking -> marked.copy(review = Review.Asking(now.withdrawn + touched))
+            is Review.Shown -> marked.copy(review = now.minus(touched))
         }
     }
 
     /**
-     * **Use these**: the suggestion's four figures go into [group]'s boxes — never the unit name,
-     * never the weight — and the group is accepted with the review's confidence. Null when there is
-     * no suggestion for it.
+     * **A box he types in is his again**: its mark comes off (D54 §11). What Undo would return to
+     * follows his typing too, so a group he answered is not brought back. With no mark left, there
+     * is nothing to undo.
      */
-    fun accept(group: FactGroup, form: FoodForm): Pair<FoodForm, FormReview>? {
+    private fun typedMarks(before: FoodForm, after: FoodForm): FormReview {
+        val applied = applied ?: return this
+        val left = applied.boxes.filterTo(mutableSetOf()) { textOf(before, it) == textOf(after, it) }
+        if (left.isEmpty()) return copy(applied = null)
+        return copy(applied = applied.copy(boxes = left, previous = applied.previous.typed(before, after)))
+    }
+
+    /**
+     * The suggestion's four figures go into [group]'s boxes — never the unit name, never the
+     * weight — and the group is accepted with the review's confidence. Null when there is no
+     * suggestion for it.
+     */
+    private fun accept(group: FactGroup, form: FoodForm): Pair<FoodForm, FormReview>? {
         val shown = review as? Review.Shown ?: return null
         val suggestion = shown.review.suggestionFor(group) ?: return null
         return form.with(group, suggestion.nutrients) to copy(
@@ -136,14 +179,62 @@ data class FormReview(
         )
     }
 
-    /** **Use all**: [accept] for every group with a suggestion. */
-    fun acceptAll(form: FoodForm): Pair<FoodForm, FormReview> =
-        FactGroup.values().fold(form to this) { (form, reviewing), group ->
+    /**
+     * **Apply these changes** (D54 §11): every group with a suggestion is accepted, as the one accept
+     * path has always done it, and the boxes it changed are marked — every box of a group it filled,
+     * the changed figures of the others. Nothing is saved: Save still writes, and **Undo** takes it
+     * back. Marks from an earlier apply that he has not typed over stay marked.
+     */
+    fun apply(form: FoodForm): Pair<FoodForm, FormReview> {
+        val shown = (review as? Review.Shown)?.review ?: return form to this
+        val groups = FactGroup.values().filter { shown.suggestionFor(it) != null }.toSet()
+        if (groups.isEmpty()) return form to this
+        val changed = groups.flatMap { group ->
+            val suggestion = shown.suggestionFor(group)!!
+            val figures = if (suggestion.filled) Figure.values().toList() else suggestion.changes.map { it.figure }
+            figures.map { ReviewedBox(group, it) }
+        }
+        val (wrote, accepting) = groups.fold(form to this) { (form, reviewing), group ->
             reviewing.accept(group, form) ?: (form to reviewing)
         }
+        return wrote to accepting.copy(
+            applied = Applied(
+                boxes = changedBoxes + changed,
+                groups = groups,
+                before = form,
+                wrote = wrote,
+                previous = this,
+            ),
+        )
+    }
 
-    /** **Dismiss**: whatever is left is taken down; groups already accepted stay accepted. */
-    fun dismissed(): FormReview = copy(review = null, modelAnswer = null)
+    /**
+     * **Undo** (D54 §11): every box the apply wrote goes back to what it held — except one he has
+     * typed in since, which is his answer — and the review returns to where it stood, its
+     * suggestions and what was accepted with it. Null when there is nothing to undo.
+     */
+    fun undo(form: FoodForm): Pair<FoodForm, FormReview>? {
+        val applied = applied ?: return null
+        val restored = applied.groups.fold(form) { restoring, group ->
+            Figure.values().fold(restoring) { it, figure ->
+                val box = ReviewedBox(group, figure)
+                val untouched = textOf(it, box) == textOf(applied.wrote, box)
+                if (untouched) it.withBox(box, textOf(applied.before, box)) else it
+            }
+        }
+        return restored to applied.previous
+    }
+
+    /**
+     * **Dismiss**, or **Keep mine**: whatever is left is taken down; groups already accepted stay
+     * accepted, and a box changed by the review stays marked. Undo after it does not bring the
+     * dismissed review back.
+     */
+    fun dismissed(): FormReview = copy(
+        review = null,
+        modelAnswer = null,
+        applied = applied?.let { it.copy(previous = it.previous.dismissed()) },
+    )
 
     /**
      * The answer without [groups]. Once nothing is left to act on — no suggestion, no set-aside
@@ -172,5 +263,35 @@ data class FormReview(
             form.carbsPerUnit,
             form.fatPerUnit,
         )
+    }
+
+    private fun textOf(form: FoodForm, box: ReviewedBox): String = when (box.group) {
+        FactGroup.PER_100G -> when (box.figure) {
+            Figure.KCAL -> form.kcalPer100g
+            Figure.PROTEIN -> form.proteinPer100g
+            Figure.CARBS -> form.carbsPer100g
+            Figure.FAT -> form.fatPer100g
+        }
+        FactGroup.PER_UNIT -> when (box.figure) {
+            Figure.KCAL -> form.kcalPerUnit
+            Figure.PROTEIN -> form.proteinPerUnit
+            Figure.CARBS -> form.carbsPerUnit
+            Figure.FAT -> form.fatPerUnit
+        }
+    }
+
+    private fun FoodForm.withBox(box: ReviewedBox, text: String): FoodForm = when (box.group) {
+        FactGroup.PER_100G -> when (box.figure) {
+            Figure.KCAL -> copy(kcalPer100g = text)
+            Figure.PROTEIN -> copy(proteinPer100g = text)
+            Figure.CARBS -> copy(carbsPer100g = text)
+            Figure.FAT -> copy(fatPer100g = text)
+        }
+        FactGroup.PER_UNIT -> when (box.figure) {
+            Figure.KCAL -> copy(kcalPerUnit = text)
+            Figure.PROTEIN -> copy(proteinPerUnit = text)
+            Figure.CARBS -> copy(carbsPerUnit = text)
+            Figure.FAT -> copy(fatPerUnit = text)
+        }
     }
 }

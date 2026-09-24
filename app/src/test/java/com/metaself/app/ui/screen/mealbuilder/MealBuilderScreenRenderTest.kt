@@ -168,11 +168,11 @@ class MealBuilderScreenRenderTest {
     }
 
     /**
-     * *Make a food* offers the review once it has a name, and draws a filled group's suggestion under
-     * that group's heading — the same pieces as My foods' editor (D54). Figures invented.
+     * *Make a food* offers the review once it has a name, and lists a filled group's suggestion under
+     * its verdict — the same pieces as My foods' editor (D54 §11). Figures invented.
      */
     @Test
-    fun `making a food on the spot offers a review and draws what it suggests under its group`() {
+    fun `making a food on the spot offers a review and lists what it suggests under the verdict`() {
         val nameless = draw(MealBuilderUiState(meal = salad(), making = MakingFood()))
         assertThat(nameless).doesNotContain("Review the figures")
 
@@ -189,11 +189,12 @@ class MealBuilderScreenRenderTest {
             ),
         )
 
-        val line = "Suggested: 60 kcal · P 4 · C 9 · F 1 — A reason."
+        val line = "Per 100 g: Filled: 60 kcal · P 4 · C 9 · F 1"
         assertThat(texts).contains("Review the figures")
         assertThat(texts).contains(line)
-        assertThat(render.isDrawnBefore("What 100 g of it are worth", line)).isTrue()
-        assertThat(render.isDrawnBefore("Use these", "What one of it is worth")).isTrue()
+        assertThat(texts).contains("A reason.")
+        assertThat(render.isDrawnBefore(line, "Apply these changes")).isTrue()
+        assertThat(render.isDrawnBefore("Keep mine", "What 100 g of it are worth")).isTrue()
         assertThat(render.fieldTexts()).doesNotContain("60")
     }
 
@@ -201,6 +202,28 @@ class MealBuilderScreenRenderTest {
      * D54 §9.4: in *Make a food* too, a review ends in one line under its button — a failure
      * included, which was said at the top of the builder, off screen from the panel.
      */
+    /**
+     * D54 §11, in *Make a food*: after applying, the boxes it filled say so to a screen reader, and
+     * the line names this panel's own button that keeps them.
+     */
+    @Test
+    fun `a new food's applied figures are marked, and the line names Make it`() {
+        val filled = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A reason.")
+        val shown = FormReview(review = Review.Shown(FoodReview(filled, null, null, emptyList())))
+        val (form, applied) = shown.apply(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+        val texts = draw(
+            MealBuilderUiState(meal = salad(), making = MakingFood(form = form, reviewing = applied)),
+        )
+
+        assertThat(texts).contains(
+            "4 figures changed by the review — not saved yet. Press Make it to keep them, or Undo.",
+        )
+        assertThat(texts).contains("Undo")
+        assertThat(render.fieldsSaid("changed by the review, not saved"))
+            .containsExactly("60", "4", "9", "1").inOrder()
+    }
+
     @Test
     fun `a new food's review outcome is said under its button, a failure included`() {
         fun drawn(review: Review) = draw(

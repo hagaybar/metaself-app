@@ -23,6 +23,7 @@ import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import com.metaself.app.ui.food.FormReview
+import com.metaself.app.ui.food.ReviewedBox
 import com.metaself.app.ui.food.Review
 import kotlinx.coroutines.CompletableDeferred
 import com.metaself.app.data.diagnostics.ProblemLog
@@ -1215,7 +1216,7 @@ class FoodsViewModelTest {
     }
 
     @Test
-    fun `accepting per biscuit fills its four boxes, and Save stores only that group as an estimate`() =
+    fun `applying per biscuit fills its four boxes, and Save stores only that group as an estimate`() =
         runTest(dispatcher) {
             val foods = FakeFoodRepository(listOf(oatBiscuit()))
             val viewModel = watched(foods, reviewer = FakeFoodReviewer(fatChanged()))
@@ -1224,7 +1225,7 @@ class FoodsViewModelTest {
             viewModel.review()
             advanceUntilIdle()
 
-            viewModel.acceptGroup(FactGroup.PER_UNIT)
+            viewModel.applyReview()
             advanceUntilIdle()
 
             val form = viewModel.state.value.editing!!.form
@@ -1283,7 +1284,7 @@ class FoodsViewModelTest {
             advanceUntilIdle()
             viewModel.review()
             advanceUntilIdle()
-            viewModel.acceptGroup(FactGroup.PER_UNIT)
+            viewModel.applyReview()
             advanceUntilIdle()
             viewModel.setForm(viewModel.state.value.editing!!.form.copy(kcalPerUnit = "95"))
 
@@ -1353,13 +1354,13 @@ class FoodsViewModelTest {
     @Test
     fun `Dismiss takes down what is left and keeps what was accepted`() = runTest(dispatcher) {
         val foods = FakeFoodRepository(listOf(oatBiscuit()))
-        val viewModel = watched(foods, reviewer = FakeFoodReviewer(bothChanged()))
+        val viewModel = watched(foods, reviewer = FakeFoodReviewer(fatChanged()))
         viewModel.edit(1)
         advanceUntilIdle()
         viewModel.review()
         advanceUntilIdle()
 
-        viewModel.acceptGroup(FactGroup.PER_UNIT)
+        viewModel.applyReview()
         viewModel.dismissReview()
         advanceUntilIdle()
 
@@ -1378,7 +1379,7 @@ class FoodsViewModelTest {
     }
 
     @Test
-    fun `Use all accepts every group with a suggestion`() = runTest(dispatcher) {
+    fun `Apply these changes accepts every group with a suggestion`() = runTest(dispatcher) {
         val viewModel = watched(
             FakeFoodRepository(listOf(oatBiscuit())),
             reviewer = FakeFoodReviewer(bothChanged()),
@@ -1388,13 +1389,65 @@ class FoodsViewModelTest {
         viewModel.review()
         advanceUntilIdle()
 
-        viewModel.acceptAll()
+        viewModel.applyReview()
         advanceUntilIdle()
 
         val editing = viewModel.state.value.editing!!
         assertThat(editing.form.kcalPer100g).isEqualTo("470")
         assertThat(editing.form.fatPerUnit).isEqualTo("4")
         assertThat(editing.reviewing.accepted.keys)
+            .containsExactly(FactGroup.PER_100G, FactGroup.PER_UNIT)
+    }
+
+    /** D54 §11: Undo puts the boxes and the review back as they stood, and Save then keeps them. */
+    @Test
+    fun `Undo restores the boxes and the suggestions, and nothing is accepted`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(oatBiscuit()))
+        val viewModel = watched(foods, reviewer = FakeFoodReviewer(bothChanged()))
+        viewModel.edit(1)
+        advanceUntilIdle()
+        val opened = viewModel.state.value.editing!!.form
+        viewModel.review()
+        advanceUntilIdle()
+        val shown = viewModel.state.value.editing!!.reviewing
+
+        viewModel.applyReview()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.editing!!.reviewing.changedBoxes).hasSize(2)
+        viewModel.undoReview()
+        advanceUntilIdle()
+
+        val editing = viewModel.state.value.editing!!
+        assertThat(editing.form).isEqualTo(opened)
+        assertThat(editing.reviewing).isEqualTo(shown)
+        assertThat(editing.reviewing.accepted).isEmpty()
+        assertThat(editing.reviewing.changedBoxes).isEmpty()
+
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertThat(foods.current.single()).isEqualTo(oatBiscuit().copy(id = 1))
+    }
+
+    @Test
+    fun `typing in a box the review changed takes its mark off`() = runTest(dispatcher) {
+        val viewModel = watched(
+            FakeFoodRepository(listOf(oatBiscuit())),
+            reviewer = FakeFoodReviewer(bothChanged()),
+        )
+        viewModel.edit(1)
+        advanceUntilIdle()
+        viewModel.review()
+        advanceUntilIdle()
+        viewModel.applyReview()
+        advanceUntilIdle()
+
+        viewModel.setForm(viewModel.state.value.editing!!.form.copy(fatPerUnit = "5"))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.editing!!.reviewing.changedBoxes)
+            .containsExactly(ReviewedBox(FactGroup.PER_100G, Figure.KCAL))
+        assertThat(viewModel.state.value.editing!!.reviewing.accepted.keys)
             .containsExactly(FactGroup.PER_100G, FactGroup.PER_UNIT)
     }
 
@@ -1406,7 +1459,7 @@ class FoodsViewModelTest {
         advanceUntilIdle()
         viewModel.review()
         advanceUntilIdle()
-        viewModel.acceptGroup(FactGroup.PER_UNIT)
+        viewModel.applyReview()
 
         viewModel.cancelEditing()
         viewModel.edit(1)

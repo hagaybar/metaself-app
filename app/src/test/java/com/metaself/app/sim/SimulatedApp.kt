@@ -383,8 +383,8 @@ private fun ManagerHere(
         onDismissRefusal = foodsViewModel::dismissRefusal,
         review = ReviewActions(
             onReview = foodsViewModel::review,
-            onAccept = foodsViewModel::acceptGroup,
-            onAcceptAll = foodsViewModel::acceptAll,
+            onApply = foodsViewModel::applyReview,
+            onUndo = foodsViewModel::undoReview,
             onDismiss = foodsViewModel::dismissReview,
         ),
         onBeginChoosing = foodsViewModel::beginChoosing,
@@ -445,8 +445,8 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
         onCancelCreatingFood = builderViewModel::cancelCreatingFood,
         newFoodReview = ReviewActions(
             onReview = builderViewModel::reviewNewFood,
-            onAccept = builderViewModel::acceptNewFoodGroup,
-            onAcceptAll = builderViewModel::acceptAllForNewFood,
+            onApply = builderViewModel::applyNewFoodReview,
+            onUndo = builderViewModel::undoNewFoodReview,
             onDismiss = builderViewModel::dismissNewFoodReview,
         ),
         // Gone back from once the meal is gone, as the nav host does.

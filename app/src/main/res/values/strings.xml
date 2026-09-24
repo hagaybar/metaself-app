@@ -305,8 +305,22 @@
     <string name="review_the_figures">Review the figures</string>
     <string name="review_asking">Reviewing…</string>
     <string name="review_sends">Sends this food\'s name, brand and figures, and where each came from, to the model, with your key. Nothing else.</string>
-    <string name="review_use_these">Use these</string>
-    <string name="review_use_all">Use all</string>
+    <!-- Under the verdict: every suggested group at once, or none (D54 §11). -->
+    <string name="review_apply">Apply these changes</string>
+    <string name="review_keep_mine">Keep mine</string>
+    <string name="review_undo">Undo</string>
+    <!-- Said after Apply these changes, until Save, Cancel, Undo, or he types over every box. -->
+    <plurals name="review_applied">
+        <item quantity="one">%1$d figure changed by the review — not saved yet. Save to keep it, or Undo.</item>
+        <item quantity="other">%1$d figures changed by the review — not saved yet. Save to keep them, or Undo.</item>
+    </plurals>
+    <!-- The same in the meal builder's Make a food, whose button that saves is Make it. -->
+    <plurals name="review_applied_new_food">
+        <item quantity="one">%1$d figure changed by the review — not saved yet. Press Make it to keep it, or Undo.</item>
+        <item quantity="other">%1$d figures changed by the review — not saved yet. Press Make it to keep them, or Undo.</item>
+    </plurals>
+    <!-- What a screen reader says of a box the review changed. -->
+    <string name="review_changed_box">changed by the review, not saved</string>
     <string name="review_dismiss">Dismiss</string>
     <!-- The line under the button after every review (D54 §9.4). No full stop: the model's note
          follows after " — ", or the line ends in one. -->
@@ -317,6 +331,7 @@
         <item quantity="other">Reviewed: %1$d suggestions below</item>
     </plurals>
     <string name="review_none_left">Reviewed: no suggestions left</string>
+    <string name="review_changes_applied">Reviewed: changes applied</string>
     <string name="review_unusable">The model\'s answer arrived, but its suggestions could not be used</string>
     <string name="review_show_answer">Show the model\'s answer</string>
     <string name="review_hide_answer">Hide the model\'s answer</string>

@@ -26,6 +26,10 @@
 >   changed only when its own figures are impossible; the model writes in the owner's words; it
 >   says whether it found a problem in a field of its own, and the line under the button says so;
 >   and the button's small print sits directly under it, with the outcome below (§10).
+> - **2026-09-24, fifth amendment** — what would change is listed in one place, under the verdict,
+>   with **Apply these changes** and **Keep mine**; figures applied are drawn in the teal accent
+>   and counted, *not saved yet*, with **Undo**; the per-group lines go. The owner's earlier *no new
+>   marks* is superseded for the review by his feedback (§11).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -194,7 +198,8 @@ in it, so the form still shows his figures.
 - **Under the review button**, the note if there is one, any *couldn't be used* line, and **Use all**
   (shown only when two groups have suggestions) and **Dismiss**.
 - A group with no suggestion says nothing. No badge, colour or icon is added to any box, before or
-  after (the owner's *no new marks*).
+  after (the owner's *no new marks*). *(Superseded 2026-09-24, §11: the suggestion is listed under
+  the verdict, and a box it changed is drawn in the teal accent until saved.)*
 - **Use these** copies the four suggested figures into that group's boxes — never the unit name,
   never the weight — records the group as accepted with the review's confidence, and takes the
   suggestion lines down. **Use all** does that for every group with a suggestion. **Dismiss** takes
@@ -513,6 +518,69 @@ read as part of the answer, and the answer's **Dismiss** and **Show the model's 
 from the line they belong to. The order is now: the button; directly under it, its small print;
 then, together, the outcome line, any *couldn't be used* lines, **Use all** and **Dismiss**, and
 **Show the model's answer**. Same type, ink and scrolling into view as §9.4; both editors.
+
+### 11. Amendment, 2026-09-24 (fifth) — a review says what changes
+
+With the fourth amendment's build it was not clear from the screen whether anything had changed,
+which value, or whether to save: each group's suggestion sat under its own heading with its own
+**Use these**, **Use all** sat under the button, and after accepting, the boxes looked exactly as
+they had. The owner's decision of 2026-09-24, on issue #18: *the changes are listed under
+the verdict (group, figure, old → new) with Apply these changes / Keep mine; applied figures are
+highlighted in the app's teal accent with a line "N figures changed by the review — not saved yet.
+Save to keep them, or Undo."; the per-group suggestion lines go. This supersedes the earlier
+no-new-colours rule for the review.*
+
+**11.1 One place to look.** Under the outcome line (§9.4, §10.4), for each group with a suggestion,
+one line in the body's ink — *Per 100 g: Protein 7.15 → 10 · Carbs 5.6 → 5 · Fat 8.45 → 7*, or
+*Per {the unit's name}: …* (*Per one:* with no unit named) — each figure old → new, written as the
+editor's boxes write them (§8.5), so the old figure reads as the box does. A group the form did not
+know reads *Per 100 g: Filled: 60 kcal · P 4 · C 9 · F 1*. Under each group's line, in the
+captions' ink, its reasons, each said once. Then two buttons: **Apply these changes** and **Keep
+mine**. Nothing is drawn under the groups' headings any more: **Use these** and **Use all** are
+gone. **Dismiss** stays for an answer with nothing to apply (no changes, a problem found, unusable,
+a failure). *Invented figures throughout.*
+
+**Partial acceptance is not offered.** A per-group *Apply* was considered and left out: the owner
+asked for one place to look and two answers, and a review's two groups are usually one judgement
+(§9.2 cross-checks them against each other). The cost: to keep one group and not the other he
+applies both and types over the one he does not want, or undoes and types.
+
+**11.2 Apply these changes** accepts every group with a suggestion through the one accept path §4
+and §5 already describe — nothing about what is stored, or how it is labelled, changes. **Keep
+mine** is **Dismiss**: what is left of the review goes, and the form is untouched.
+
+**11.3 What was applied is marked until it is saved.** Every box whose value came from the review
+— every box of a group it filled, and only the changed figures of the others; never a figure it
+kept — is drawn in the teal accent: a `tertiary` border and label and a `tertiaryContainer` fill,
+the family the D52 milestone uses, which means nothing else in the editor. The figure keeps the
+body's ink. Every pairing is measured against the 4.5:1 text floor in both schemes by
+`InkLadderTest`. Each marked box also says to a screen reader *changed by the review, not saved*,
+since a colour alone says nothing to one. Directly under the outcome line:
+
+> *N figures changed by the review — not saved yet. Save to keep them, or Undo.*
+
+(*1 figure … Save to keep it, or Undo.* for one), with **Undo** under it. In *Make a food*, whose
+button that saves is **Make it**, the line reads *… Press Make it to keep them, or Undo.* N is
+the number of boxes still marked. With a note left on screen after applying, the outcome line
+reads *Reviewed: changes applied — {note}*, not *no suggestions left*.
+
+**11.4 How a mark goes.**
+
+- **Typing in a marked box** takes its mark off, and only its: that figure is his again. The count
+  drops with it; when no mark is left, the line and **Undo** go. Typing in the group still leaves
+  it accepted, stored as an estimate (§5, unchanged).
+- **Undo** puts back, in every box the apply wrote, what it held before — except a box he has typed
+  in since, which is his answer and stays — and returns the review to where it stood before he
+  applied: its lines, **Apply these changes** and **Keep mine**, and the groups accepted as they
+  were. A group he typed in since stays withdrawn, as typing always withdraws it (§4). A review he
+  dismissed after applying is not brought back by **Undo**.
+- **Save** (or **Make it**) writes as §5 says and closes the editor; **Cancel** discards
+  everything. Both take every mark with the editor. A Save that is refused leaves the editor, and
+  the marks, as they were: the figures are still not saved.
+- A new review leaves the marks up; applying it adds its own.
+
+Nothing about what is sent (§2), what comes back (§3), or what is stored (§5) changes. Both
+editors, My foods' and *Make a food*.
 
 ---
 

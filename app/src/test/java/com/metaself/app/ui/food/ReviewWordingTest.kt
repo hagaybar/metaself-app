@@ -11,59 +11,62 @@ import org.junit.jupiter.api.Test
 /** The lines a review's suggestion is drawn as, under its group (D54 §4). Figures invented. */
 class ReviewWordingTest {
 
+    /** Figures are written as the editor's boxes write them: up to two decimals (D54 §8.5). */
     @Test
-    fun `a changed figure reads from, to, and why`() {
-        val line = ReviewWording.change(
-            FigureChange(Figure.FAT, 1.0, 4.0, "18 g of a food with 22 g of fat per 100 g holds about 4 g."),
-        )
-
-        assertThat(line).isEqualTo("Fat 1 → 4 g — 18 g of a food with 22 g of fat per 100 g holds about 4 g.")
-    }
-
-    @Test
-    fun `calories are in kcal and a decimal keeps one place`() {
-        assertThat(ReviewWording.change(FigureChange(Figure.KCAL, 120.0, 370.0, "Why.")))
-            .isEqualTo("Calories 120 → 370 kcal — Why.")
-        assertThat(ReviewWording.change(FigureChange(Figure.CARBS, 12.0, 12.5, "Why.")))
-            .isEqualTo("Carbs 12 → 12.5 g — Why.")
-        assertThat(ReviewWording.change(FigureChange(Figure.PROTEIN, 0.0, 2.0, "Why.")))
-            .isEqualTo("Protein 0 → 2 g — Why.")
-    }
-
-    @Test
-    fun `a filled group is one line of its four figures and its reason`() {
-        val lines = ReviewWording.lines(
+    fun `a changed group is one line of what would change, old to new`() {
+        val line = ReviewWording.changes(
+            "100 g",
             Suggestion(
-                nutrients = Nutrients(60.0, 4.0, 9.0, 1.0),
-                confidence = Confidence.LOW,
-                filled = true,
-                changes = emptyList(),
-                reason = "A typical lentil soup.",
-            ),
-        )
-
-        assertThat(lines).containsExactly("Suggested: 60 kcal · P 4 · C 9 · F 1 — A typical lentil soup.")
-    }
-
-    @Test
-    fun `a changed group is one line per change`() {
-        val lines = ReviewWording.lines(
-            Suggestion(
-                nutrients = Nutrients(370.0, 30.0, 40.0, 10.0),
+                nutrients = Nutrients(120.0, 10.0, 5.0, 7.0),
                 confidence = Confidence.MEDIUM,
                 filled = false,
                 changes = listOf(
-                    FigureChange(Figure.KCAL, 120.0, 370.0, "The macros alone give about 370."),
-                    FigureChange(Figure.FAT, 9.0, 10.0, "Rounded."),
+                    FigureChange(Figure.PROTEIN, 7.15, 10.0, "Why."),
+                    FigureChange(Figure.CARBS, 5.6, 5.0, "Why."),
+                    FigureChange(Figure.FAT, 8.45, 7.0, "Why."),
                 ),
                 reason = null,
             ),
         )
 
-        assertThat(lines).containsExactly(
-            "Calories 120 → 370 kcal — The macros alone give about 370.",
-            "Fat 9 → 10 g — Rounded.",
-        ).inOrder()
+        assertThat(line).isEqualTo("Per 100 g: Protein 7.15 → 10 · Carbs 5.6 → 5 · Fat 8.45 → 7")
+    }
+
+    @Test
+    fun `calories are named, and a filled group is its four figures`() {
+        assertThat(
+            ReviewWording.changes(
+                "biscuit",
+                Suggestion(Nutrients(95.0, 1.0, 12.0, 1.0), Confidence.LOW, false,
+                    listOf(FigureChange(Figure.KCAL, 90.0, 95.0, "Why.")), null),
+            ),
+        ).isEqualTo("Per biscuit: Calories 90 → 95")
+        assertThat(
+            ReviewWording.changes(
+                "bowl",
+                Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "Why."),
+            ),
+        ).isEqualTo("Per bowl: Filled: 60 kcal · P 4 · C 9 · F 1")
+    }
+
+    /** One small line per group, each reason once, in the order the figures came. */
+    @Test
+    fun `a group's reasons are one line, each said once`() {
+        val changed = Suggestion(
+            nutrients = Nutrients(120.0, 10.0, 5.0, 7.0),
+            confidence = Confidence.MEDIUM,
+            filled = false,
+            changes = listOf(
+                FigureChange(Figure.PROTEIN, 7.0, 10.0, "The label was misread."),
+                FigureChange(Figure.CARBS, 6.0, 5.0, "The label was misread."),
+                FigureChange(Figure.FAT, 8.0, 7.0, "Rounded."),
+            ),
+            reason = null,
+        )
+        val filled = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A thick soup.")
+
+        assertThat(ReviewWording.reasons(changed)).isEqualTo("The label was misread. Rounded.")
+        assertThat(ReviewWording.reasons(filled)).isEqualTo("A thick soup.")
     }
 
     @Test

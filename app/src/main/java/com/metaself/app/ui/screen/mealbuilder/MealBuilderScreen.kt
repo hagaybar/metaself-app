@@ -11,6 +11,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
@@ -36,10 +38,12 @@ import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.food.AskBeforeDeleting
 import com.metaself.app.ui.food.FoodWording
-import com.metaself.app.ui.food.GroupSuggestion
 import com.metaself.app.ui.food.HowItIsCounted
 import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.food.ReviewTheFigures
+import com.metaself.app.ui.food.ReviewedBox
+import com.metaself.app.ui.food.changedBoxColors
+import com.metaself.app.ui.food.changedByReview
 import com.metaself.app.ui.food.named
 import com.metaself.app.ui.food.namesTogether
 import com.metaself.app.ui.portion.portionWords
@@ -596,7 +600,8 @@ private fun HowMuchOfIt(
  *
  * Its form lives in the view model ([MakingFood]) rather than in a `remember`, because a review
  * asked for here has to outlive its request (D54). The review is drawn by the same pieces as My
- * foods' editor draws it — the button under the name, each suggestion under its group's heading.
+ * foods' editor draws it — the button under the name, what would change under the button, and each
+ * box the review changed drawn in the teal accent (D54 §11).
  */
 @Composable
 private fun NewFood(
@@ -607,6 +612,7 @@ private fun NewFood(
     review: ReviewActions,
 ) {
     val form = making.form
+    val changed = making.reviewing.changedBoxes
 
     // Grouped as My foods' editor is (D48): each group one block, tight inside, a section apart.
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
@@ -629,6 +635,8 @@ private fun NewFood(
             offered = FoodField.NAME !in making.errors,
             unitName = form.unitName,
             actions = review,
+            // Make it is this panel's Save, so the line after Apply these changes names it.
+            appliedLine = R.plurals.review_applied_new_food,
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -638,11 +646,10 @@ private fun NewFood(
                 text = stringResource(R.string.foods_group_per_100g),
                 style = MaterialTheme.typography.titleSmall,
             )
-            GroupSuggestion(making.reviewing, FactGroup.PER_100G, review.onAccept)
-            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_100G), numeric = true)
-            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_100G), numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.KCAL) in changed)
+            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN) in changed)
+            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.CARBS) in changed)
+            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.FAT) in changed)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -650,12 +657,11 @@ private fun NewFood(
                 text = stringResource(R.string.foods_group_per_unit),
                 style = MaterialTheme.typography.titleSmall,
             )
-            GroupSuggestion(making.reviewing, FactGroup.PER_UNIT, review.onAccept)
             Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), making.errorFor(FoodField.UNIT_NAME))
-            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_UNIT), numeric = true)
-            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_UNIT), numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed)
+            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed)
+            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed)
+            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.FAT) in changed)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -690,6 +696,8 @@ private fun Field(
     label: String,
     error: String?,
     numeric: Boolean = false,
+    /** The review wrote this box's value and it is not saved yet: drawn and said so (D54 §11). */
+    changed: Boolean = false,
 ) {
     OutlinedTextField(
         value = value,
@@ -701,7 +709,8 @@ private fun Field(
         keyboardOptions = KeyboardOptions(
             keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
         ),
-        modifier = Modifier.fillMaxWidth(),
+        colors = if (changed) changedBoxColors() else OutlinedTextFieldDefaults.colors(),
+        modifier = Modifier.fillMaxWidth().changedByReview(changed),
     )
 }
 

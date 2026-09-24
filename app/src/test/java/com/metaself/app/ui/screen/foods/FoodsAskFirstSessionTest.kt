@@ -262,8 +262,8 @@ class FoodsAskFirstSessionTest {
             onDismissRefusal = viewModel::dismissRefusal,
             review = ReviewActions(
                 onReview = viewModel::review,
-                onAccept = viewModel::acceptGroup,
-                onAcceptAll = viewModel::acceptAll,
+                onApply = viewModel::applyReview,
+                onUndo = viewModel::undoReview,
                 onDismiss = viewModel::dismissReview,
             ),
             onBeginChoosing = viewModel::beginChoosing,
