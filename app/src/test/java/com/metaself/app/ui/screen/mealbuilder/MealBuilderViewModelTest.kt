@@ -789,6 +789,30 @@ class MealBuilderViewModelTest {
             assertThat(state.making!!.reviewing.review).isEqualTo(Review.Shown(answer, unusable = true))
         }
 
+    /** D54 §8.4: shown on request in *Make a food* too, and never written to the problem log. */
+    @Test
+    fun `a new food's review that proposed nothing brings the model's answer, unlogged`() =
+        runTest(dispatcher) {
+            val raw = """{"per_100g":null,"per_unit":null,"note":""}"""
+            val problems = RecordingProblemLog()
+            val viewModel = opened(
+                carrying(mealId = 1),
+                withSalad(),
+                problems = problems,
+                reviewer = FakeFoodReviewer(
+                    ReviewResult.Proposed(FoodReview(null, null, null, emptyList()), raw),
+                ),
+            )
+            viewModel.beginCreatingFood()
+            viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+            viewModel.reviewNewFood()
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.making!!.reviewing.modelAnswer).isEqualTo(raw)
+            assertThat(problems.recorded).isEmpty()
+        }
+
     /** Make it on a form that is not yet answerable says why, in the panel, and makes nothing. */
     @Test
     fun `making a food the form refuses shows its reasons and makes nothing`() = runTest(dispatcher) {

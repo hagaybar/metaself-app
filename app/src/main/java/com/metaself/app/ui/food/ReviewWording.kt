@@ -7,6 +7,8 @@ import com.metaself.app.domain.amount.Per
 import com.metaself.app.domain.amount.Rate
 import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.propose.ProposalWording
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 
 /**
  * The lines a review's suggestion is drawn as, under the heading of the group it would change
@@ -38,4 +40,14 @@ object ReviewWording {
         } else {
             suggestion.changes.map(::change)
         }
+
+    /**
+     * The model's answer as **Show the model's answer** draws it (D54 §8.4): pretty-printed when it
+     * is JSON, as it came when it is not — a reply that could not be read is shown as it is.
+     */
+    fun modelAnswer(raw: String): String = runCatching {
+        pretty.encodeToString(JsonElement.serializer(), Json.parseToJsonElement(raw))
+    }.getOrDefault(raw)
+
+    private val pretty = Json { prettyPrint = true }
 }

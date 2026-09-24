@@ -352,6 +352,20 @@ form is untouched. *The answer could not be understood* stays for a reply not in
 problem log records it as `review unusable`, by its kind alone — none of the answer, which can
 hold the food's name (§6).
 
+**8.4 Show the model's answer.** After a review whose reply could not be read, could not be used,
+proposed nothing, or set a group aside, the editor offers one more text button under the review
+button: **Show the model's answer**. It shows the reply as it came — the message's content, or the
+whole body when there is no content to find — pretty-printed when it is JSON, in selectable text,
+with **Copy** to put it on the clipboard; pressed again (**Hide the model's answer**) it folds away. It
+is not offered when every suggestion is on screen, since those speak for themselves. A new review
+or **Dismiss** takes it down; closing the editor forgets it. Both editors, My foods' and *Make a
+food*.
+
+**It is shown, never kept.** The reply travels from the reviewer to the editor's state and is drawn;
+it is never saved with the food, never written to the problem log, and never sent anywhere. That is
+the problem log's promise — it records what failed, never what you ate — kept for a text that can
+hold the food's name. What leaves the screen is what he copies himself.
+
 ---
 
 ## What this amends

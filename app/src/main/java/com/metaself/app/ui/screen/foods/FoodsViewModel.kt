@@ -219,12 +219,16 @@ class FoodsViewModel @Inject constructor(
                 val open = _editing.value ?: return@guarded
                 when (result) {
                     is ReviewResult.Proposed ->
-                        _editing.value = open.copy(reviewing = open.reviewing.answered(result.review))
+                        _editing.value = open.copy(
+                            reviewing = open.reviewing.answered(result.review, result.raw),
+                        )
                     // Arrived, and nothing in it could be used: said as that, not as a failure.
                     is ReviewResult.Unusable ->
-                        _editing.value = open.copy(reviewing = open.reviewing.unusable(result.review))
+                        _editing.value = open.copy(
+                            reviewing = open.reviewing.unusable(result.review, result.raw),
+                        )
                     is ReviewResult.Failed -> {
-                        _editing.value = open.copy(reviewing = open.reviewing.failed())
+                        _editing.value = open.copy(reviewing = open.reviewing.failed(result.raw))
                         _failed.value = null
                         _refusal.value = ProposalWording.failure(result.failure)
                     }

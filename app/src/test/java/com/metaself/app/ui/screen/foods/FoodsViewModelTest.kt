@@ -1488,6 +1488,36 @@ class FoodsViewModelTest {
             assertThat(state.editing!!.reviewing.review).isEqualTo(Review.Shown(answer, unusable = true))
         }
 
+    /**
+     * D54 §8.4: the model's answer reaches the editor to be shown on request — and is only shown.
+     * The problem log records what failed, never what was sent or said, and nothing is added to it.
+     */
+    @Test
+    fun `the model's answer reaches the editor after an unreadable or unusable review, and is not logged`() =
+        runTest(dispatcher) {
+            val raw = """{"per_100g":{"kcal":500},"note":"Oat biscuit"}"""
+            listOf(
+                ReviewResult.Failed(EstimateResult.Unreadable("not the shape"), raw),
+                ReviewResult.Unusable(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), raw),
+            ).forEach { answer ->
+                val problems = RecordingProblemLog()
+                val viewModel = watched(
+                    FakeFoodRepository(listOf(oatBiscuit())),
+                    problems,
+                    FakeFoodReviewer(answer),
+                )
+                viewModel.edit(1)
+                advanceUntilIdle()
+
+                viewModel.review()
+                advanceUntilIdle()
+
+                assertWithMessage("$answer").that(viewModel.state.value.editing!!.reviewing.modelAnswer)
+                    .isEqualTo(raw)
+                assertWithMessage("$answer").that(problems.recorded).isEmpty()
+            }
+        }
+
     /** D8: the way on is typing, and the form is exactly as he left it. */
     @Test
     fun `a review past the day's allowance says the existing sentence and leaves the form alone`() =

@@ -380,9 +380,22 @@ class ReviewResponseTest {
             OAT_BISCUIT,
         )
 
-        assertThat(result).isEqualTo(
-            ReviewResult.Unusable(FoodReview(null, null, "A note.", listOf(FactGroup.PER_100G))),
-        )
+        assertThat((result as ReviewResult.Unusable).review)
+            .isEqualTo(FoodReview(null, null, "A note.", listOf(FactGroup.PER_100G)))
+    }
+
+    // --- The model's answer, shown on request (D54 §8.4) ------------------------------------------
+
+    @Test
+    fun `every answer carries the model's reply as it came, and a garbled one the whole body`() {
+        val content = """{"per_100g":null,"per_unit":null,"note":""}"""
+        val unusable = reply(per100g = group(500, 7, 62, 22), perUnit = null)
+
+        assertThat(ReviewResponse.parse(envelope(content), OAT_BISCUIT).raw).isEqualTo(content)
+        assertThat(ReviewResponse.parse(unusable, OAT_BISCUIT).raw).contains("\"kcal\":500")
+        assertThat(ReviewResponse.parse(envelope("not json either"), OAT_BISCUIT).raw)
+            .isEqualTo("not json either")
+        assertThat(ReviewResponse.parse("not json", OAT_BISCUIT).raw).isEqualTo("not json")
     }
 
     // --- The rest --------------------------------------------------------------------------------
@@ -409,10 +422,8 @@ class ReviewResponseTest {
             OAT_BISCUIT,
         )
 
-        assertThat(result).isEqualTo(
-            ReviewResult.Proposed(
-                FoodReview(per100g = null, perUnit = null, note = "Consistent.", setAside = emptyList()),
-            ),
+        assertThat(proposed(result)).isEqualTo(
+            FoodReview(per100g = null, perUnit = null, note = "Consistent.", setAside = emptyList()),
         )
     }
 

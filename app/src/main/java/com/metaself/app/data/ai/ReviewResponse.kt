@@ -62,11 +62,25 @@ object ReviewResponse {
         data object SetAside : Read
     }
 
-    fun parse(body: String, request: ReviewRequest): ReviewResult = runCatching {
-        val content = json.parseToJsonElement(body)
-            .jsonObject["choices"]!!.jsonArray
-            .first().jsonObject["message"]!!.jsonObject["content"]!!
-            .jsonPrimitive.content
+    fun parse(body: String, request: ReviewRequest): ReviewResult {
+        val content = runCatching {
+            json.parseToJsonElement(body)
+                .jsonObject["choices"]!!.jsonArray
+                .first().jsonObject["message"]!!.jsonObject["content"]!!
+                .jsonPrimitive.content
+        }.getOrNull()
+        // What *Show the model's answer* shows (D54 §8.4): the content, or the body when there is none.
+        val raw = content ?: body
+        return runCatching { answer(content!!, request) }.getOrElse {
+            ReviewResult.Failed(
+                EstimateResult.Unreadable("the reply was not in the shape this app asked for"),
+                raw,
+            )
+        }
+    }
+
+    /** The message's [content], read against what was asked; it is also what goes as the raw reply. */
+    private fun answer(content: String, request: ReviewRequest): ReviewResult {
         val payload = json.parseToJsonElement(content).jsonObject
 
         // Both groups are required by the schema; one that is absent is not the shape asked for.
@@ -98,13 +112,11 @@ object ReviewResponse {
             setAside = setAside,
         )
 
-        if (setAside.isNotEmpty() && review.per100g == null && review.perUnit == null) {
-            ReviewResult.Unusable(review)
+        return if (setAside.isNotEmpty() && review.per100g == null && review.perUnit == null) {
+            ReviewResult.Unusable(review, content)
         } else {
-            ReviewResult.Proposed(review)
+            ReviewResult.Proposed(review, content)
         }
-    }.getOrElse {
-        ReviewResult.Failed(EstimateResult.Unreadable("the reply was not in the shape this app asked for"))
     }
 
     /**
