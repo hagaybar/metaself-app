@@ -315,7 +315,6 @@ class ReviewPromptTest {
         assertThat(all).contains(rule)
         assertThat(all).contains("which group you believe and why")
         assertThat(all).contains("propose the corrected figures")
-        assertThat(all).contains("flag it in the note")
         // The existing rule stands beside it.
         assertThat(all).contains("Never state what one piece weighs")
 
@@ -328,6 +327,26 @@ class ReviewPromptTest {
             assertThat(system).doesNotContain(rule)
             assertThat(system).contains("Never state what one piece weighs")
         }
+    }
+
+    /**
+     * D54 §10.1: when the two groups contradict each other through what one weighs, one of them is
+     * wrong, and the model proposes the corrected figures for the one it believes wrong — a label
+     * group included — rather than only flagging it. A label group on its own is still changed
+     * only when its own figures are impossible.
+     */
+    @Test
+    fun `when the groups contradict, the group believed wrong is corrected, even a label`() {
+        val system = systemMessage(ReviewPrompt.requestBody("a-model", request()))
+
+        assertThat(system).contains("propose the corrected figures for the group you believe is wrong")
+        assertThat(system).contains("even if it is a LABEL group")
+        assertThat(system).contains("with a reason for each figure you change")
+        assertThat(system).contains("checked on its own is still changed only when its own figures")
+        assertThat(system).doesNotContain("keep its figures")
+        assertThat(system).doesNotContain("flag it in the note")
+        // The label rule for a group standing alone is unchanged.
+        assertThat(system).contains("Keep it unless the figures are")
     }
 
     /** D54 §9.3: every reply ends in a verdict, asked for in the instructions and the schema. */

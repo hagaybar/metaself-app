@@ -20,6 +20,10 @@
 > - **2026-09-24, third amendment** — a kept figure is judged at the precision the model wrote it
 >   in; the model cross-checks per one against per 100 g when it can; and every review ends in a
 >   plain line under the button, with the model's one-sentence verdict (§9).
+> - **2026-09-24, fourth amendment** — when per one and per 100 g contradict each other through
+>   what one weighs, the review proposes correcting the group it believes wrong, even a packet
+>   label, always as a suggestion he accepts or dismisses; a label group standing alone is still
+>   changed only when its own figures are impossible (§10).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -421,7 +425,8 @@ one weighs, the instructions add: the figures for one should equal the figures p
 in the note — which group it believes and why — and proposes the corrected figures for the group it
 does not believe; a `LABEL` group it still changes only when its own figures are impossible, and a
 label that merely disagrees with the other group is flagged in the note, with the reason, and left
-as it is. What one weighs is still never stated, never changed and never guessed: it is given only to
+as it is. *(Amended 2026-09-24, §10.1: a label group that contradicts the other group may now be
+corrected.)* What one weighs is still never stated, never changed and never guessed: it is given only to
 check the groups against each other. Without both groups and the weight, the rule is not sent.
 
 **9.3 The note is a verdict, and never empty.** The instructions ask for the note on every reply:
@@ -449,6 +454,27 @@ it answers, in both editors, and no longer above Save in My foods or at the top 
 — where it was off screen from the button, and a review looked as if it had done nothing. An answer
 whose every suggestion was withdrawn while it was out is no longer silently dropped: it says *no
 suggestions left*.
+
+### 10. Amendment, 2026-09-24 (fourth) — a contradiction gets a proposal
+
+A food scanned from a packet held per 100 g as a label and per one whose protein, carbohydrate and
+fat were not per 100 g times the weight over 100, while the calories agreed. The review saw it,
+said in its note that the per-one figures were wrong — and, obeying §9.2's *a label that merely
+disagrees is flagged and left as it is*, proposed nothing, so the screen read *Reviewed: no changes
+suggested* above a note naming a problem. What follows is settled so that a contradiction the
+model finds is one he can act on.
+
+**10.1 When the groups contradict, the one believed wrong gets corrected figures.** The owner's
+decision of 2026-09-24, on issue #18: when per 100 g and per one contradict each other (per one ≠
+per 100 g × `grams_per_unit` / 100 beyond label rounding), the review may propose correcting the
+group it believes wrong **even if that group is a packet label** — always as a suggestion he
+accepts or dismisses. The cross-check instructions (§9.2) now say: the two groups contradict and
+at least one is wrong; decide which you believe; propose the corrected figures for the one you
+believe is wrong, even a `LABEL` group, with a reason for each figure changed; and say in the note
+which you believe and why. **A label group standing alone is still changed only when its own
+figures are impossible** (§2's rule, unchanged): a contradiction is the one case in which a label
+whose own figures are possible may be changed. Nothing about storage changes — an accepted
+correction of a label group is stored as §5 says, `AI_ESTIMATE`, the safe direction.
 
 ---
 

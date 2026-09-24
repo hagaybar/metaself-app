@@ -67,18 +67,22 @@ object ReviewPrompt {
     """.trimIndent()
 
     /**
-     * Sent only when both groups and what one weighs are held (D54 §9.2): then the two groups can
-     * be checked against each other, and a disagreement is said rather than passed over. The weight
-     * is still never answered — the schema has nowhere to put it.
+     * Sent only when both groups and what one weighs are held (D54 §9.2, as amended by §10.1): then
+     * the two groups can be checked against each other. When they contradict, one of them is wrong,
+     * and the model proposes the corrected figures for the one it believes wrong — a label group
+     * included, always as a suggestion he accepts or dismisses. A label group standing alone is
+     * still changed only when its own figures are impossible. The weight is still never answered —
+     * the schema has nowhere to put it.
      */
     private val CROSS_CHECK = """
         Cross-check: per 100 g, per one and grams_per_unit are all given, so check them against
         each other. The figures for one should equal the figures per 100 g times grams_per_unit / 100,
-        within label rounding. If they disagree beyond rounding, say so in the note:
-        which group you believe and why. Then propose the corrected figures
-        for the group you do not believe. A LABEL group is still changed only when its own figures
-        are impossible: if a LABEL group merely disagrees with the other group,
-        flag it in the note with the reason and keep its figures.
+        within label rounding. If they disagree beyond rounding, the two groups contradict each
+        other and at least one of them is wrong. Decide which group you believe, then
+        propose the corrected figures for the group you believe is wrong, even if it is a LABEL group,
+        with a reason for each figure you change. Say in the note which group you believe and why.
+        This is the one case in which a LABEL group whose own figures are possible may be changed.
+        A LABEL group checked on its own is still changed only when its own figures are impossible.
         grams_per_unit is given only for this check: never change it, state it or guess it.
     """.trimIndent()
 
