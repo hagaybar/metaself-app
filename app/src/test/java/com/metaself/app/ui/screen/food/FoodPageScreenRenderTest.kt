@@ -1,6 +1,7 @@
 package com.metaself.app.ui.screen.food
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.domain.day.Confidence
@@ -65,6 +66,33 @@ class FoodPageScreenRenderTest {
         assertThat(texts).contains(SENDS)
         assertThat(render.isDrawnBefore("Brand", "Review the figures")).isTrue()
         assertThat(render.isDrawnBefore("Review the figures", "What 100 g of it are worth")).isTrue()
+    }
+
+    /**
+     * The two groups draw the same four labels, and a screen reader used to hear eight boxes by four
+     * names (public issue #3). Each box now has a name of its own, on the box itself; the labels on
+     * screen are unchanged.
+     */
+    @Test
+    fun `each figure box has a name of its own, per 100 g and per the food's unit`() {
+        val texts = draw(opened(greekYoghurt()))
+
+        assertThat(texts.count { it == "Calories" }).isEqualTo(2)
+        for (label in listOf("Calories", "Protein (g)", "Carbs (g)", "Fat (g)")) {
+            for (name in listOf("$label per 100 g", "$label per cup")) {
+                assertWithMessage(name).that(render.describedCount(name)).isEqualTo(1)
+                assertWithMessage(name).that(render.describedIsField(name)).isTrue()
+            }
+        }
+    }
+
+    /** A food with no unit named yet: the heading's "one of it" is what the boxes are per. */
+    @Test
+    fun `a figure box per unit with no unit named is said per one`() {
+        draw(opened(examplebrandOatBiscuit()))
+
+        assertThat(render.describedCount("Calories per one")).isEqualTo(1)
+        assertThat(render.describedCount("Calories per 100 g")).isEqualTo(1)
     }
 
     /** Today's origin words, in the drawn place (D55 open question 2, default): none for typed. */

@@ -24,6 +24,7 @@ import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AskBeforeDeleting
 import com.metaself.app.ui.food.FactHeading
 import com.metaself.app.ui.food.Field
+import com.metaself.app.ui.food.figureSaid
 import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.food.PartsLine
 import com.metaself.app.ui.food.ReviewActions
@@ -191,6 +192,8 @@ private fun Page(
                     ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
             )
             FourFigures(
+                group = FactGroup.PER_100G,
+                unitName = form.unitName,
                 kcal = Box(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, editing.errorFor(FoodField.PER_100G), ReviewedBox(FactGroup.PER_100G, Figure.KCAL) in changed),
                 protein = Box(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, null, ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN) in changed),
                 carbs = Box(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, null, ReviewedBox(FactGroup.PER_100G, Figure.CARBS) in changed),
@@ -206,6 +209,8 @@ private fun Page(
             )
             Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), editing.errorFor(FoodField.UNIT_NAME))
             FourFigures(
+                group = FactGroup.PER_UNIT,
+                unitName = form.unitName,
                 kcal = Box(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, editing.errorFor(FoodField.PER_UNIT), ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed),
                 protein = Box(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, null, ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed),
                 carbs = Box(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, null, ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed),
@@ -322,21 +327,25 @@ private data class Box(
     val changed: Boolean,
 )
 
-/** A group's four figures, two by two, as D55's drawing lays them out. */
+/**
+ * A group's four figures, two by two, as D55's drawing lays them out. Each box is named for a
+ * screen reader by its label and its [group] (public issue #3), since both groups draw the same four
+ * labels.
+ */
 @Composable
-private fun FourFigures(kcal: Box, protein: Box, carbs: Box, fat: Box) {
+private fun FourFigures(group: FactGroup, unitName: String, kcal: Box, protein: Box, carbs: Box, fat: Box) {
     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-        FigureBox(kcal, stringResource(R.string.foods_field_kcal), Modifier.weight(1f))
-        FigureBox(protein, stringResource(R.string.foods_field_protein), Modifier.weight(1f))
+        FigureBox(kcal, stringResource(R.string.foods_field_kcal), group, unitName, Modifier.weight(1f))
+        FigureBox(protein, stringResource(R.string.foods_field_protein), group, unitName, Modifier.weight(1f))
     }
     Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-        FigureBox(carbs, stringResource(R.string.foods_field_carbs), Modifier.weight(1f))
-        FigureBox(fat, stringResource(R.string.foods_field_fat), Modifier.weight(1f))
+        FigureBox(carbs, stringResource(R.string.foods_field_carbs), group, unitName, Modifier.weight(1f))
+        FigureBox(fat, stringResource(R.string.foods_field_fat), group, unitName, Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun FigureBox(box: Box, label: String, modifier: Modifier) {
+private fun FigureBox(box: Box, label: String, group: FactGroup, unitName: String, modifier: Modifier) {
     Field(
         value = box.value,
         onValueChange = box.onValueChange,
@@ -345,6 +354,7 @@ private fun FigureBox(box: Box, label: String, modifier: Modifier) {
         modifier = modifier,
         numeric = true,
         changed = box.changed,
+        said = figureSaid(label, group, unitName),
     )
 }
 

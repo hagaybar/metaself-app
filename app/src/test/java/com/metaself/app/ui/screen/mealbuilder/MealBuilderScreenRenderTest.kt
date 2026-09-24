@@ -141,6 +141,85 @@ class MealBuilderScreenRenderTest {
         assertThat(texts).contains("Down")
     }
 
+    // --- Every repeated control names its part (public issue #3) ------------------------------
+
+    private fun twoParts() = SavedMeal(
+        id = 1,
+        name = "Vegetable salad",
+        components = listOf(
+            MealComponent(10, cucumber, 100.0, CountedAs.GRAMS, position = 0),
+            MealComponent(11, oil, 1.0, CountedAs.UNITS, position = 1),
+        ),
+    )
+
+    /**
+     * Up, Down and Remove are drawn once per part, and a screen reader heard every copy by the same
+     * word. Each now says which part it moves or takes out; the words on screen are unchanged.
+     */
+    @Test
+    fun `up, down and remove on each part say which part`() {
+        val texts = draw(MealBuilderUiState(meal = twoParts()))
+
+        assertThat(texts.count { it == "Up" }).isEqualTo(2)
+        for (name in listOf("Cucumber", "Olive oil")) {
+            assertThat(render.describedCount("Move $name up")).isEqualTo(1)
+            assertThat(render.describedCount("Move $name down")).isEqualTo(1)
+            assertThat(render.describedCount("Remove $name")).isEqualTo(1)
+        }
+    }
+
+    /** The same shape for two foods brought in at once, each waiting for an amount. */
+    @Test
+    fun `each waiting food's box and buttons say which food`() {
+        val texts = draw(
+            MealBuilderUiState(
+                meal = SavedMeal(id = 1, name = "Vegetable salad"),
+                pending = listOf(
+                    Pending(food = cucumber, countedAs = CountedAs.GRAMS),
+                    Pending(food = stew, countedAs = CountedAs.UNITS),
+                ),
+            ),
+        )
+
+        assertThat(texts.count { it == "Put it in" }).isEqualTo(2)
+        for (name in listOf("Cucumber", "Leftover stew")) {
+            assertThat(render.describedCount("How much of $name")).isEqualTo(1)
+            assertThat(render.describedIsField("How much of $name")).isTrue()
+            assertThat(render.describedCount("Put $name in")).isEqualTo(1)
+            assertThat(render.describedCount("Leave $name out")).isEqualTo(1)
+            assertThat(render.describedCount("Weigh it, for $name")).isEqualTo(1)
+        }
+    }
+
+    /**
+     * The food made on the spot draws its four labels twice, once per group, and the walk that found
+     * this could not aim at a single one of the eight boxes. Each box now has a name of its own.
+     */
+    @Test
+    fun `making a food on the spot names each figure box by its group`() {
+        val texts = draw(
+            MealBuilderUiState(
+                meal = salad(),
+                making = MakingFood(form = FoodForm(name = "Lentil soup", unitName = "bowl")),
+            ),
+        )
+
+        assertThat(texts.count { it == "Calories" }).isEqualTo(2)
+        for (label in listOf("Calories", "Protein (g)", "Carbs (g)", "Fat (g)")) {
+            for (name in listOf("$label per 100 g", "$label per bowl")) {
+                assertWithMessage(name).that(render.describedCount(name)).isEqualTo(1)
+                assertWithMessage(name).that(render.describedIsField(name)).isTrue()
+            }
+        }
+    }
+
+    @Test
+    fun `a food made on the spot with no unit named yet has its boxes said per one`() {
+        draw(MealBuilderUiState(meal = salad(), making = MakingFood()))
+
+        assertThat(render.describedCount("Calories per one")).isEqualTo(1)
+    }
+
     /**
      * Going away to the foods manager to make a missing food and back again would lose the meal
      * being built.

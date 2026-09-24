@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.ui.food.AmountTooMuch
+import com.metaself.app.ui.food.saidAs
 import com.metaself.app.ui.theme.Spacing
 
 /**
@@ -35,6 +36,9 @@ import com.metaself.app.ui.theme.Spacing
  *   D37 — see [unitWord]).
  * @param counted true for a piece, which is stepped; false for grams, millilitres and the rest.
  * @param inGrams whether the ceiling sentence names grams; a ceiling of anything else names no unit.
+ * @param of the thing whose amount this is, when the box is drawn once per row: the box and its
+ *   − and + are then said with its name — "How much of Pizza", "One more of Pizza" — so one row's
+ *   controls are not heard by the same names as the next row's (public issue #3). Never drawn.
  */
 @Composable
 fun AmountBox(
@@ -47,14 +51,18 @@ fun AmountBox(
     onText: (String) -> Unit,
     onStep: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    of: String? = null,
 ) {
+    val fewerSaid = of?.let { stringResource(R.string.said_one_less, it) }
+    val moreSaid = of?.let { stringResource(R.string.said_one_more, it) }
+    val boxSaid = of?.let { stringResource(R.string.said_how_much, it) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (counted) Step(stringResource(R.string.propose_count_fewer)) { onStep(-1) }
+            if (counted) Step(stringResource(R.string.propose_count_fewer), fewerSaid) { onStep(-1) }
             OutlinedTextField(
                 value = text,
                 onValueChange = onText,
@@ -64,10 +72,10 @@ fun AmountBox(
                 // Decimal, not Number: an amount is read as a decimal and a comma is accepted for
                 // the point, so a keyboard with neither would refuse half a bun.
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).saidAs(boxSaid),
             )
             Text(text = unitWords, style = MaterialTheme.typography.bodyLarge)
-            if (counted) Step(stringResource(R.string.propose_count_more)) { onStep(+1) }
+            if (counted) Step(stringResource(R.string.propose_count_more), moreSaid) { onStep(+1) }
         }
         AmountTooMuch(
             tooMuch = tooMuch,
@@ -78,9 +86,10 @@ fun AmountBox(
 }
 
 @Composable
-private fun Step(label: String, onClick: () -> Unit) {
+private fun Step(label: String, said: String?, onClick: () -> Unit) {
     TextButton(
         onClick = onClick,
+        modifier = Modifier.saidAs(said),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
     ) {
         Text(text = label, style = MaterialTheme.typography.labelMedium)

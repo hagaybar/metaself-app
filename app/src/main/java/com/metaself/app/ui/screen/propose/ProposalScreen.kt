@@ -37,6 +37,7 @@ import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.day.DayTotalsWording
 import com.metaself.app.ui.food.ModelAnswer
+import com.metaself.app.ui.food.saidAs
 import com.metaself.app.ui.portion.AmountBox
 import com.metaself.app.ui.portion.unitWord
 import com.metaself.app.ui.propose.ProposalWording
@@ -399,6 +400,7 @@ private fun ProposedRow(
             inGrams = Portions.isGrams(item.unit),
             onText = onSetAmount,
             onStep = onStep,
+            of = item.name,
         )
 
         item.rateLine?.let { rate ->
@@ -415,9 +417,12 @@ private fun ProposedRow(
 
         val boxes = row.editingWorth
         if (boxes == null) {
-            if (item.rateLine != null) Small(stringResource(R.string.propose_change_worth), onOpenWorth)
+            if (item.rateLine != null) {
+                val label = stringResource(R.string.propose_change_worth)
+                Small(label, onOpenWorth, said = stringResource(R.string.said_for, label, item.name))
+            }
         } else {
-            WorthBoxesFields(boxes, item.unit, onSetWorthBox, onCloseWorth)
+            WorthBoxesFields(boxes, item.name, item.unit, onSetWorthBox, onCloseWorth)
         }
 
         row.numbers?.let { numbers ->
@@ -448,7 +453,8 @@ private fun ProposedRow(
 
         YourFoodLine(row, onUseYourFood, onUseEstimate, onCountInFoodUnit)
 
-        Small(stringResource(R.string.propose_remove), onRemove)
+        // Every control a row repeats is also said with the row's name (public issue #3).
+        Small(stringResource(R.string.propose_remove), onRemove, said = stringResource(R.string.said_remove, item.name))
 
         HorizontalDivider()
     }
@@ -470,7 +476,7 @@ private fun YourFoodLine(
         val label = row.estimateKcal
             ?.let { stringResource(R.string.propose_use_estimate_kcal, it.toString()) }
             ?: stringResource(R.string.propose_use_estimate)
-        Small(label, onUseEstimate)
+        Small(label, onUseEstimate, said = stringResource(R.string.said_for, label, row.item.name))
         return
     }
     row.yourFoodOffered?.let { food ->
@@ -488,17 +494,22 @@ private fun YourFoodLine(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Small(stringResource(R.string.propose_count_it_in, words), onCountInFoodUnit)
+        val countIn = stringResource(R.string.propose_count_it_in, words)
+        Small(countIn, onCountInFoodUnit, said = stringResource(R.string.said_for, countIn, row.item.name))
     }
 }
 
 /**
  * The worth, typed over: four boxes with the food form's labels, and the food form's refusal with
  * this row's basis and ceilings under them (D53 §6). Done closes them, except while one is refused.
+ *
+ * Two rows' boxes can be open at once, so each box and Done are also said with the row's [name] and
+ * basis — "Calories per 100 g, for Pizza" (public issue #3).
  */
 @Composable
 private fun WorthBoxesFields(
     boxes: WorthBoxes,
+    name: String,
     unit: String,
     onSetWorthBox: (WorthFigure, String) -> Unit,
     onClose: () -> Unit,
@@ -509,16 +520,22 @@ private fun WorthBoxesFields(
         R.string.foods_field_carbs,
         R.string.foods_field_fat,
     )
+    val basis = when (boxes.per) {
+        Per.HUNDRED -> stringResource(R.string.propose_per_100, unit)
+        Per.ONE -> stringResource(R.string.propose_per_one, unit)
+    }
     WorthFigure.entries.forEach { figure ->
+        val label = stringResource(labels[figure.ordinal])
         OutlinedTextField(
             value = boxes.typed[figure.ordinal],
             onValueChange = { onSetWorthBox(figure, it) },
-            label = { Text(stringResource(labels[figure.ordinal])) },
+            label = { Text(label) },
             isError = boxes.refused,
             singleLine = true,
             // Decimal: the worth keeps decimals, as a food's figures do (D38).
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .saidAs(stringResource(R.string.said_for, "$label $basis", name)),
         )
     }
     if (boxes.refused) {
@@ -528,15 +545,21 @@ private fun WorthBoxesFields(
             color = MaterialTheme.colorScheme.error,
         )
     }
-    TextButton(onClick = onClose, enabled = !boxes.refused) {
-        Text(stringResource(R.string.propose_worth_done))
+    val done = stringResource(R.string.propose_worth_done)
+    TextButton(
+        onClick = onClose,
+        enabled = !boxes.refused,
+        modifier = Modifier.saidAs(stringResource(R.string.said_for, done, name)),
+    ) {
+        Text(done)
     }
 }
 
 @Composable
-private fun Small(label: String, onClick: () -> Unit) {
+private fun Small(label: String, onClick: () -> Unit, said: String? = null) {
     TextButton(
         onClick = onClick,
+        modifier = Modifier.saidAs(said),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
     ) {
         Text(text = label, style = MaterialTheme.typography.labelMedium)

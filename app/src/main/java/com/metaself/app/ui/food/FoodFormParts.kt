@@ -16,9 +16,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.ui.theme.Spacing
 
 /*
@@ -85,6 +88,11 @@ internal fun Field(
     numeric: Boolean = false,
     /** The review wrote this box's value and it is not saved yet: drawn and said so (D54 §11). */
     changed: Boolean = false,
+    /**
+     * What a screen reader calls the box, when [label] alone is not enough to tell it from another
+     * box on the same screen (public issue #3) — see [figureSaid]. Never drawn.
+     */
+    said: String? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -97,9 +105,30 @@ internal fun Field(
             keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
         ),
         colors = if (changed) changedBoxColors() else OutlinedTextFieldDefaults.colors(),
-        modifier = modifier.fillMaxWidth().changedByReview(changed),
+        modifier = modifier.fillMaxWidth().changedByReview(changed).saidAs(said),
     )
 }
+
+/** Names the node for a screen reader as [said], or leaves it as it is when there is nothing to say. */
+internal fun Modifier.saidAs(said: String?): Modifier =
+    if (said == null) this else semantics { contentDescription = said }
+
+/**
+ * What a screen reader calls one figure box of a food's form: its label and the group it is in.
+ *
+ * The form draws the same four labels in both groups — "Calories" under per 100 g and again under
+ * per one — so the label alone names two boxes, and nothing that reads the screen could aim at
+ * either (public issue #3). "Calories per 100 g" and "Calories per bar" are one box each. With no
+ * unit named yet the group is per "one", as its heading says.
+ */
+@Composable
+internal fun figureSaid(label: String, group: FactGroup, unitName: String): String =
+    when (group) {
+        FactGroup.PER_100G -> stringResource(R.string.said_per_100g, label)
+        FactGroup.PER_UNIT -> unitName.trim().takeIf { it.isNotEmpty() }
+            ?.let { stringResource(R.string.said_per_unit, label, it) }
+            ?: stringResource(R.string.said_per_one, label)
+    }
 
 /**
  * A line made of parts, each its own text with ` · ` between them — never one joined string, so a

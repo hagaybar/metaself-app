@@ -563,4 +563,24 @@
     <string name="action_refused_maybe_partial">That didn\'t finish, and may have only partly happened. What went wrong is under Settings → Recent problems.</string>
     <string name="action_refused_could_not_open">That couldn\'t be opened. What went wrong is under Settings → Recent problems.</string>
     <string name="action_refused_dismiss">All right</string>
+
+    <!--
+      Names a screen reader hears for a control repeated once per row or per group, so that two
+      copies are two controls and not one name said twice (public issue #3). Never drawn: the
+      visible label stays as it is. %1$s is the food the row is about, unless said otherwise.
+    -->
+    <string name="said_move_up">Move %1$s up</string>
+    <string name="said_move_down">Move %1$s down</string>
+    <string name="said_remove">Remove %1$s</string>
+    <string name="said_how_much">How much of %1$s</string>
+    <string name="said_put_in">Put %1$s in</string>
+    <string name="said_leave_out">Leave %1$s out</string>
+    <string name="said_one_less">One less of %1$s</string>
+    <string name="said_one_more">One more of %1$s</string>
+    <!-- %1$s is the control's own label, %2$s the food: "Weigh it, for Pizza". -->
+    <string name="said_for">%1$s, for %2$s</string>
+    <!-- A food form's figure box. %1$s is the box's label; %2$s the unit the food is counted in. -->
+    <string name="said_per_100g">%1$s per 100 g</string>
+    <string name="said_per_unit">%1$s per %2$s</string>
+    <string name="said_per_one">%1$s per one</string>
 </resources>
