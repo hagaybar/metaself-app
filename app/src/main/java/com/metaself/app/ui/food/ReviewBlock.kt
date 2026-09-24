@@ -212,10 +212,11 @@ private fun Answer(shown: Review.Shown, unitName: String, actions: ReviewActions
 /**
  * **Show the model's answer** (D54 §8.4): the reply as it came, pretty-printed when it is JSON, in
  * text he can select, with **Copy** to put it on the clipboard. Shown only — the editor holds it
- * for this and nothing else.
+ * for this and nothing else. Also drawn by the describe screen when an answer's item could not be
+ * used (issue #1).
  */
 @Composable
-private fun ModelAnswer(raw: String) {
+internal fun ModelAnswer(raw: String) {
     var open by rememberSaveable(raw) { mutableStateOf(false) }
     TextButton(onClick = { open = !open }) {
         Text(stringResource(if (open) R.string.review_hide_answer else R.string.review_show_answer))

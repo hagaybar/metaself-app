@@ -163,6 +163,24 @@ class EstimatePromptTest {
     }
 
     /**
+     * Grams and millilitres come back as "g" and "ml" in every language, so the phone never has to
+     * guess at a spelling; a piece keeps the description's own word (issue #1). The sentence is
+     * asserted as written, so rewording it is a decision and not an accident.
+     */
+    @Test
+    fun `grams and millilitres are always written g and ml, and a piece keeps its own word`() {
+        val body = EstimatePrompt.requestBody(model = "a-model", description = "סלט")
+
+        val instructions = systemText(body)
+
+        assertThat(instructions)
+            .contains("When the unit is grams or millilitres, write it exactly \"g\" or \"ml\"")
+        assertThat(instructions)
+            .contains("never a translation, a plural or an abbreviation of them")
+        assertThat(instructions).contains("the word for a piece")
+    }
+
+    /**
      * D16, from the other side: the only inputs the request can be built from are the model's name,
      * his words, his added sentence and the app's own retry list. The assignment below compiles only
      * while that is the signature, and the count shows there is no second way in.
@@ -203,6 +221,11 @@ class EstimatePromptTest {
             assertThat(asAWord.containsMatchIn(body)).isFalse()
         }
     }
+
+    /** The app's own instructions, as the first message carries them. */
+    private fun systemText(body: String): String =
+        Json.parseToJsonElement(body).jsonObject["messages"]!!.jsonArray.first()
+            .jsonObject["content"]!!.jsonPrimitive.content
 
     private fun itemSchema(): JsonObject {
         val body = Json.parseToJsonElement(

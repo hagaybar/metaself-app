@@ -36,6 +36,7 @@ import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.day.DayTotalsWording
+import com.metaself.app.ui.food.ModelAnswer
 import com.metaself.app.ui.portion.AmountBox
 import com.metaself.app.ui.portion.unitWord
 import com.metaself.app.ui.propose.ProposalWording
@@ -154,6 +155,9 @@ fun ProposalScreen(
                         )
                     }
 
+                    // An answer that arrived and could not be used can be read, to see why (#1).
+                    state.answer?.let { ModelAnswer(it) }
+
                     // Said AND offered: the sentence above names settings, and this is the way there,
                     // straight to the key (public issue #11).
                     if (state.needsKey) {
@@ -193,17 +197,24 @@ fun ProposalScreen(
             is ProposalUiState.Proposed -> {
                 // An item the answer held and this app could not use is said, not silently
                 // missing: a row that is not there is the omission a list exists to show.
-                if (state.dropped.isNotEmpty()) {
-                    Text(
-                        text = pluralStringResource(
-                            R.plurals.propose_dropped,
-                            state.dropped.size,
-                            state.dropped.size,
-                            state.dropped.joinToString(", "),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
+                // And why can be seen: the answer as it came, when an item was dropped (#1). One
+                // block with the sentence, as the failure and its answer are on the describe side.
+                if (state.dropped.isNotEmpty() || state.answer != null) {
+                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                        if (state.dropped.isNotEmpty()) {
+                            Text(
+                                text = pluralStringResource(
+                                    R.plurals.propose_dropped,
+                                    state.dropped.size,
+                                    state.dropped.size,
+                                    state.dropped.joinToString(", "),
+                                ),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                        state.answer?.let { ModelAnswer(it) }
+                    }
                 }
 
                 // The rows are one list, a related step apart, not a section each.

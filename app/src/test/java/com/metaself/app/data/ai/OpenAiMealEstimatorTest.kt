@@ -1,7 +1,9 @@
 package com.metaself.app.data.ai
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -168,6 +170,26 @@ class OpenAiMealEstimatorTest {
         assertThat(settings.calls).isEqualTo(0)
     }
 
+    /**
+     * The answer kept for *Show the model's answer* is shown only (issue #1): the problem log gets
+     * the one fixed line it always did, and neither the answer nor the names in it.
+     */
+    @Test
+    fun `an unreadable answer is logged without the answer or its names`() = runTest {
+        val content = """{"note":"","items":[{"name":"Quinoa","detail":"","amount":1,
+            "unit":"cup","figures_per":"100","kcal":120,"protein_g":4,"carbs_g":21,"fat_g":2,
+            "confidence":"LOW"}]}"""
+        server.enqueue(MockResponse().setBody(reply(content)))
+        val problems = RecordingProblemLog()
+
+        val result = estimator(problems = problems).estimate("quinoa")
+
+        assertThat((result as EstimateResult.Unreadable).answer).isEqualTo(content)
+        assertThat(problems.recorded.map { it.kind to it.detail })
+            .containsExactly("estimate unreadable" to result.why)
+        assertThat(problems.recorded.single().detail).doesNotContain("Quinoa")
+    }
+
     @Test
     fun `nothing unexpected escapes the seam and crashes the app`() = runTest {
         // The first Test button press crashed: no INTERNET permission, so Android threw a
@@ -192,10 +214,12 @@ class OpenAiMealEstimatorTest {
     private fun estimator(
         key: String? = "a-key",
         settings: FakeSettings = FakeSettings(),
+        problems: ProblemLog = ProblemLog.NONE,
     ) = OpenAiMealEstimator(
         keys = FakeKeys(key),
         settings = settings,
         client = OkHttpClient(),
+        problems = problems,
         baseUrl = server.url("/v1/chat/completions").toString(),
     )
 

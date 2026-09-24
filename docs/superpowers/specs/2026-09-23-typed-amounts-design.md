@@ -106,6 +106,27 @@ exceeds the ceiling on a hand-typed item (10,000 kcal, or 1,000 g of protein, ca
 An amount past its own box limit is not judged this way; it arrives with its box refusing it. A
 non-finite amount is treated as no amount, so D34's second ask applies.
 
+**Amended 2026-09-24, after a Hebrew description lost most of its items (issue #1).** The model
+answers in the description's language, units included, and a per-100 worth whose unit was a Hebrew
+plural or abbreviation of the gram or millilitre was read as per 100 of a counted piece and
+dropped. Three changes, none of which converts anything:
+
+- **The unit is recognised however it is spelled.** `Portions` reads a unit trimmed, in lower case,
+  without a trailing full stop and without abbreviation marks (the apostrophe and quote, the Hebrew
+  geresh ׳ and gershayim ״), against lists that include the Hebrew plurals and abbreviations —
+  *גרמים*, *גר'*, *ג׳*, *מ״ל*, *מיליליטר* — and English *gr*. Kilograms and litres in either
+  language (*קילו*, *ק"ג*, *ליטר*, *ל'*) are recognised as measured and are still **not** grams or
+  millilitres: nothing multiplies by 1000 (D4), so a per-100 worth of them is still dropped, as is a
+  per-100 worth of a cup.
+- **The model is asked for "g" and "ml" exactly, in every language** — never a translation, plural or
+  abbreviation. Every other unit, a piece's word included, stays in the description's language,
+  since that is what §4 and §5 compare. Only his words are sent (D16), as before.
+- **Why an item was dropped can be seen.** Whenever an item was dropped, or the answer failed as
+  unreadable, the describe screen offers **Show the model's answer** — the answer as it came,
+  pretty-printed, selectable, with **Copy** — as a review does (D54 §8.4). Shown only: never stored,
+  never written to the problem log. An answer whose every item was dropped says *None of the items in
+  the answer could be used: X* rather than that it could not be understood.
+
 ### 3. Where every figure says it came from (D4)
 
 **The row's source is the worth's source. The amount has no source and never changes one.** This is

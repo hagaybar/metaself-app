@@ -43,6 +43,7 @@ class OpenAiMealEstimator(
         when (result) {
             is EstimateResult.Proposed -> Unit
             is EstimateResult.Refused -> problems.record("estimate refused", result.detail)
+            // The app's own sentence only: the answer and the names in it are what he ate.
             is EstimateResult.Unreadable -> problems.record("estimate unreadable", result.why)
             // The item names are the model's words for what he ate, and never go in the log.
             is EstimateResult.AmountMissing ->

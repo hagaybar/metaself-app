@@ -122,6 +122,44 @@ class ProposalScreenRenderTest {
         assertThat(draw(two)).contains("2 items in the answer couldn't be used: Sauce, Pickles")
     }
 
+    /**
+     * With an item dropped, the answer can be read (issue #1): the button, then the answer
+     * pretty-printed and Copy. Shown only — the screen is handed it and keeps nothing.
+     */
+    @Test
+    fun `an answer with a dropped item can be shown`() {
+        val state = proposed(aProposedItem())
+            .copy(dropped = listOf("Sauce"), answer = """{"items":[{"name":"Sauce"}]}""")
+
+        assertThat(draw(state)).contains(SHOW_ANSWER)
+        render.click(SHOW_ANSWER)
+
+        val shown = render.textsAgain()
+        assertThat(shown.joinToString("\n")).contains("\"name\": \"Sauce\"")
+        assertThat(shown).contains("Copy")
+    }
+
+    @Test
+    fun `an answer used whole offers no answer to show`() {
+        assertThat(draw(proposed(aProposedItem()))).doesNotContain(SHOW_ANSWER)
+    }
+
+    /** An answer that failed as unreadable can be read too, under the sentence saying so. */
+    @Test
+    fun `an unreadable answer can be shown under its failure`() {
+        val state = ProposalUiState.Describing(failure = "Could not be understood.", answer = "not JSON")
+
+        assertThat(draw(state)).contains(SHOW_ANSWER)
+        render.click(SHOW_ANSWER)
+        assertThat(render.textsAgain()).contains("not JSON")
+    }
+
+    @Test
+    fun `a failure with no answer offers none`() {
+        assertThat(draw(ProposalUiState.Describing(failure = "Could not reach the model.")))
+            .doesNotContain(SHOW_ANSWER)
+    }
+
     @Test
     fun `nothing dropped says nothing`() {
         assertThat(draw(proposed(aProposedItem())).joinToString()).doesNotContain("couldn't be used")
@@ -499,6 +537,8 @@ class ProposalScreenRenderTest {
 
         /** `R.string.propose_change_worth`, as the phone draws it. */
         const val CHANGE = "Change"
+
+        const val SHOW_ANSWER = "Show the model's answer"
 
         /** `R.string.action_refused_maybe_partial`, as the phone draws it. */
         const val MAYBE_PARTIAL = "That didn't finish, and may have only partly happened. " +

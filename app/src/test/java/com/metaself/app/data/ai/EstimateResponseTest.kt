@@ -159,12 +159,103 @@ class EstimateResponseTest {
         assertThat(proposal.dropped).isEmpty()
     }
 
+    /**
+     * When an item was dropped, the answer as it came travels with the proposal, so *Show the
+     * model's answer* can say why (issue #1). Only then: an answer used whole needs no explaining.
+     */
+    @Test
+    fun `an answer with a dropped item carries the answer as it came`() {
+        val content =
+            items(item(name = "Quinoa", unit = "cup", amount = "1") + "," + item(name = "Rice"))
+
+        val result = EstimateResponse.parse(replyWith(content))
+
+        val proposal = (result as EstimateResult.Proposed).proposal
+
+        assertThat(proposal.answer).isEqualTo(content)
+    }
+
+    @Test
+    fun `an answer used whole carries no answer`() {
+        val proposal = (EstimateResponse.parse(replyWith(BURGER_AND_BUN)) as EstimateResult.Proposed)
+            .proposal
+
+        assertThat(proposal.answer).isNull()
+    }
+
+    /**
+     * Every item dropped: unreadable, but it was read — the names and the answer go with it, so
+     * the screen can say what could not be used rather than that nothing could be understood.
+     */
+    @Test
+    fun `an answer whose every item was dropped carries the names and the answer`() {
+        val content = items(
+            item(name = "Quinoa", unit = "cup", amount = "1") + "," +
+                item(name = "Tuna", unit = "tin", amount = "1"),
+        )
+
+        val result = EstimateResponse.parse(replyWith(content)) as EstimateResult.Unreadable
+
+        assertThat(result.dropped).containsExactly("Quinoa", "Tuna").inOrder()
+        assertThat(result.answer).isEqualTo(content)
+    }
+
+    @Test
+    fun `an answer that is not JSON carries the answer as it came`() {
+        val prose = "About 830 calories, I would guess."
+
+        val result = EstimateResponse.parse(replyWith(prose)) as EstimateResult.Unreadable
+
+        assertThat(result.answer).isEqualTo(prose)
+        assertThat(result.dropped).isEmpty()
+    }
+
     @Test
     fun `per 100 ml is a worth per 100 of the millilitre`() {
         val juice = proposed(item(name = "Orange juice", unit = "ml", amount = "330")).single()
 
         assertThat(juice.rate.per).isEqualTo(Per.HUNDRED)
         assertThat(juice.unit).isEqualTo("ml")
+    }
+
+    /**
+     * The model answers in the language it was asked in, units included. Grams and millilitres
+     * written in Hebrew — plural, abbreviated, marked with an apostrophe or with the Hebrew geresh
+     * and gershayim — are grams and millilitres, and a per-100 worth of them is kept (issue #1).
+     */
+    @Test
+    fun `per 100 of grams or millilitres written in Hebrew is kept`() {
+        val units = listOf("גרמים", "גר", "גר'", "ג׳", "מ״ל", "מ\"ל", "מיליליטר")
+        val reply = units.mapIndexed { i, unit -> item(name = "פריט $i", unit = unit) }
+            .joinToString(",")
+
+        val piece = item(name = "מלפפון", unit = "יחידה", figuresPer = "1", amount = "1")
+
+        val items = proposed("$reply,$piece")
+
+        assertThat(items.map { it.unit }).containsExactlyElementsIn(units + "יחידה").inOrder()
+    }
+
+    /**
+     * A per-100 worth of kilograms, litres or cups still cannot be costed: nothing here multiplies
+     * by 1000 or knows what a cup weighs (D4). Dropped and named, as before.
+     */
+    @Test
+    fun `per 100 of kilograms, litres or cups is still dropped and named`() {
+        val result = EstimateResponse.parse(
+            replyWith(
+                items(
+                    item(name = "Rice", unit = "קילו", amount = "1") + "," +
+                        item(name = "Milk", unit = "ליטר", amount = "1") + "," +
+                        item(name = "Quinoa", unit = "כוס", amount = "1") + "," +
+                        item(name = "Bread"),
+                ),
+            ),
+        )
+
+        val proposal = (result as EstimateResult.Proposed).proposal
+        assertThat(proposal.items.map { it.name }).containsExactly("Bread")
+        assertThat(proposal.dropped).containsExactly("Rice", "Milk", "Quinoa").inOrder()
     }
 
     /**
@@ -321,9 +412,12 @@ class EstimateResponseTest {
         carbs: String = "0",
         fat: String = "20",
         confidence: String = "MEDIUM",
-    ): String = """{"name":"$name","detail":"$detail","amount":$amount,"unit":"$unit",
+    ): String = """{"name":"$name","detail":"$detail","amount":$amount,"unit":"${quoted(unit)}",
         "figures_per":"$figuresPer","kcal":$kcal,"protein_g":$protein,"carbs_g":$carbs,
         "fat_g":$fat,"confidence":"$confidence"}"""
+
+    /** A unit as it sits inside a JSON string: a Hebrew double mark typed as `"` is escaped. */
+    private fun quoted(unit: String): String = unit.replace("\"", "\\\"")
 
     private fun replyWith(content: String): String =
         """{"choices":[{"message":{"content":${JsonPrimitive(content)}}}]}"""

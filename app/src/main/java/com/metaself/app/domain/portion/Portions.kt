@@ -25,8 +25,15 @@ object Portions {
      * or a millilitre into grams introduces one this app does not have anywhere and is not allowed
      * to invent (D4). A row logged through this app's own arithmetic always says "g"; a row
      * described in words keeps whatever the model answered, which is why the rest are here.
+     *
+     * Written as [unitKey] leaves them: no abbreviation marks and no full stop, so "gr.", "ג'" and
+     * "ג׳" (the Hebrew geresh) are all "ג" or "gr" by the time they are looked up here. The model
+     * answers in the description's language and abbreviates as a person would (issue #1).
      */
-    private val GRAM_SPELLINGS = setOf("g", "gram", "grams", "גרם")
+    private val GRAM_SPELLINGS = setOf(
+        "g", "gr", "gram", "grams", "gramme", "grammes",
+        "גרם", "גרמים", "גר", "ג",
+    )
 
     /**
      * The ways the millilitre is written, kept apart for the same reason as [GRAM_SPELLINGS]: a
@@ -35,7 +42,8 @@ object Portions {
      */
     private val MILLILITRE_SPELLINGS = setOf(
         "ml", "millilitre", "millilitres", "milliliter", "milliliters",
-        "מ\"ל", "מל",
+        // מ"ל, מ״ל (gershayim) and מ''ל all arrive here as "מל".
+        "מל", "מיליליטר", "מיליליטרים",
     )
 
     /**
@@ -46,9 +54,22 @@ object Portions {
      * "1.5" for a pizza slice is the thing being fixed.
      */
     private val MASS_UNITS = GRAM_SPELLINGS + MILLILITRE_SPELLINGS + setOf(
-        "kg", "l", "cl", "oz", "lb",
-        "ליטר", "קג",
+        "kg", "kilo", "kilos", "kilogram", "kilograms", "kilogramme", "kilogrammes",
+        "l", "litre", "litres", "liter", "liters", "cl", "oz", "lb",
+        // ק"ג and ק״ג arrive as "קג"; ל' and ל׳ as "ל".
+        "קג", "קילו", "קילוגרם", "קילוגרמים", "ליטר", "ליטרים", "ל",
     )
+
+    /**
+     * A unit as the three lists above hold it: trimmed, lower case, with a trailing full stop and
+     * every abbreviation mark gone — the apostrophe and quote a keyboard types, and the Hebrew
+     * geresh (׳) and gershayim (״) a Hebrew one does. The marks only say "this is shortened"; the
+     * letters are what say which unit it is. Nothing is converted: this recognises a spelling.
+     */
+    private fun unitKey(unit: String): String =
+        unit.trim().lowercase().removeSuffix(".").filterNot { it in ABBREVIATION_MARKS }
+
+    private const val ABBREVIATION_MARKS = "'\"\u05F3\u05F4"
 
     /**
      * A number, then the first word after it.
@@ -68,7 +89,7 @@ object Portions {
      * counted in slices is what fills its per-slice one. Asking it twice would guarantee that the
      * list of what counts as a gram drifts between the screen and the conversion.
      */
-    fun isMass(unit: String): Boolean = unit.trim().lowercase() in MASS_UNITS
+    fun isMass(unit: String): Boolean = unitKey(unit) in MASS_UNITS
 
     /**
      * Whether this unit IS the gram, however it was spelled.
@@ -78,13 +99,13 @@ object Portions {
      * number on the row can be used as a number of grams, which is what anything doing arithmetic
      * with it has to know. Everything else [isMass] accepts needs a conversion, and there is none.
      */
-    fun isGrams(unit: String): Boolean = unit.trim().lowercase() in GRAM_SPELLINGS
+    fun isGrams(unit: String): Boolean = unitKey(unit) in GRAM_SPELLINGS
 
     /**
      * Whether this unit IS the millilitre, however it was spelled — the one unit a per-100 ml worth
      * can be multiplied by. Like [isGrams], narrower than [isMass] and needing no factor.
      */
-    fun isMillilitres(unit: String): Boolean = unit.trim().lowercase() in MILLILITRE_SPELLINGS
+    fun isMillilitres(unit: String): Boolean = unitKey(unit) in MILLILITRE_SPELLINGS
 
     fun words(amount: Double, unit: String): String = "${format(amount)} $unit"
 

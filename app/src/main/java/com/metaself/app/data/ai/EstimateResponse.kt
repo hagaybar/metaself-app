@@ -30,21 +30,34 @@ import kotlinx.serialization.json.jsonPrimitive
  * stated, past what a whole item typed by hand may be. If dropping leaves nothing at all, the whole reply
  * is unreadable — which is also what a reply containing a single lumped total amounts to, and it is
  * refused for the same reason. What was dropped is named on the proposal ([MealProposal.dropped]),
- * so the missing row is said rather than left to be noticed.
+ * so the missing row is said rather than left to be noticed, and the answer as it came goes with it
+ * ([MealProposal.answer], [EstimateResult.Unreadable.answer]) so why can be seen (issue #1).
  */
 object EstimateResponse {
 
     private val json = Json { ignoreUnknownKeys = true }
 
-    fun parse(body: String): EstimateResult = runCatching {
-        val content = json.parseToJsonElement(body)
-            .jsonObject["choices"]!!.jsonArray
-            .first().jsonObject["message"]!!.jsonObject["content"]!!
-            .jsonPrimitive.content
+    fun parse(body: String): EstimateResult {
+        val content = runCatching {
+            json.parseToJsonElement(body)
+                .jsonObject["choices"]!!.jsonArray
+                .first().jsonObject["message"]!!.jsonObject["content"]!!
+                .jsonPrimitive.content
+        }.getOrNull()
+        // What *Show the model's answer* shows (issue #1): the content, or the body when there is
+        // none — as a review's answer does (D54 §8.4).
+        val raw = content ?: body
+        return runCatching { answer(content!!) }.getOrElse {
+            EstimateResult.Unreadable("the reply was not in the shape this app asked for", raw)
+        }
+    }
 
+    /** The message's [content], read; it is also the answer kept when an item was dropped. */
+    private fun answer(content: String): EstimateResult {
         val payload = json.parseToJsonElement(content).jsonObject
         val read = payload["items"]!!.jsonArray.map { it.jsonObject to it.jsonObject.toItem() }
         val items = read.mapNotNull { it.second }
+        val anyDropped = read.any { it.second == null }
         val dropped = read.filter { it.second == null }.mapNotNull { (item, _) ->
             item["name"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         }
@@ -53,8 +66,8 @@ object EstimateResponse {
         // Logged anyway, an item naming a unit and no amount could not join a meal (issue #23).
         val withoutAmount = items.filter { it.amount <= 0.0 || it.unit.isBlank() }
 
-        if (items.isEmpty()) {
-            EstimateResult.Unreadable("the reply held no items this app could use")
+        return if (items.isEmpty()) {
+            EstimateResult.Unreadable("the reply held no items this app could use", content, dropped)
         } else if (withoutAmount.isNotEmpty()) {
             EstimateResult.AmountMissing(withoutAmount.map { it.name })
         } else {
@@ -63,10 +76,11 @@ object EstimateResponse {
                     items = items,
                     note = payload["note"]?.jsonPrimitive?.content?.takeIf { it.isNotBlank() },
                     dropped = dropped,
+                    answer = content.takeIf { anyDropped },
                 ),
             )
         }
-    }.getOrElse { EstimateResult.Unreadable("the reply was not in the shape this app asked for") }
+    }
 
     /**
      * One item, or null when it is not in the shape asked for (D53 §2): a figure missing, not a

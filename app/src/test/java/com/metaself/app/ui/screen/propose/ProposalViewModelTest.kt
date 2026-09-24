@@ -88,6 +88,63 @@ class ProposalViewModelTest {
             .containsExactly("Sauce")
     }
 
+    /**
+     * The model's answer reaches the screen when an item was dropped, for *Show the model's answer*
+     * (issue #1) — and goes nowhere else: nothing is written to the problem log.
+     */
+    @Test
+    fun `the answer behind a dropped item reaches the screen and not the problem log`() = runTest {
+        val answer = """{"note":"","items":[{"name":"Sauce"}]}"""
+        val proposal = aProposal().copy(dropped = listOf("Sauce"), answer = answer)
+        val problems = RecordingProblemLog()
+        val estimator = FakeEstimator(EstimateResult.Proposed(proposal))
+        val viewModel = ProposalViewModel(estimator, problems, FakeFoodRepository())
+
+        viewModel.describe("a burger in a bun, with sauce")
+        advanceUntilIdle()
+
+        assertThat((viewModel.state.value as ProposalUiState.Proposed).answer).isEqualTo(answer)
+        assertThat(problems.recorded).isEmpty()
+    }
+
+    @Test
+    fun `an unreadable answer reaches the screen, and not the problem log`() = runTest {
+        val unreadable = EstimateResult.Unreadable("why", answer = "not JSON")
+        val problems = RecordingProblemLog()
+        val viewModel = ProposalViewModel(FakeEstimator(unreadable), problems, FakeFoodRepository())
+
+        viewModel.describe("soup")
+        advanceUntilIdle()
+
+        val describing = viewModel.state.value as ProposalUiState.Describing
+        assertThat(describing.answer).isEqualTo("not JSON")
+        assertThat(describing.failure).isEqualTo(ProposalWording.failure(unreadable))
+        assertThat(problems.recorded).isEmpty()
+    }
+
+    /** Every item dropped is said as that, not as an answer that could not be understood. */
+    @Test
+    fun `an answer whose every item was dropped names them`() {
+        val failure = ProposalWording.failure(
+            EstimateResult.Unreadable("why", answer = "{}", dropped = listOf("Quinoa", "Tuna")),
+        )
+
+        assertThat(failure).isEqualTo(
+            "None of the items in the answer could be used: Quinoa, Tuna. Type the numbers instead.",
+        )
+    }
+
+    @Test
+    fun `a failure that is not an answer carries none`() = runTest {
+        val estimator = FakeEstimator(EstimateResult.Unreachable)
+        val viewModel = ProposalViewModel(estimator, ProblemLog.NONE, FakeFoodRepository())
+
+        viewModel.describe("soup")
+        advanceUntilIdle()
+
+        assertThat((viewModel.state.value as ProposalUiState.Describing).answer).isNull()
+    }
+
     // --- The typed amount (D53 §1, §6) -----------------------------------------------------------
 
     @Test

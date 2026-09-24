@@ -107,6 +107,56 @@ class PortionsTest {
         }
     }
 
+    /**
+     * The model answers in the language it was asked in, so a gram comes back as a Hebrew word,
+     * plural or abbreviated, its abbreviation mark typed as an apostrophe or as the Hebrew geresh.
+     * Each is the gram with no factor at all (issue #1).
+     */
+    @Test
+    fun `the gram written in Hebrew, plural or abbreviated, is the gram`() {
+        listOf(
+            "גרם", "גרמים", "גר", "גר'", "גר׳", "ג'", "ג׳", "gr", "gr.", "g.", "גרם.",
+        ).forEach {
+            assertThat(Portions.isGrams(it)).isTrue()
+            assertThat(Portions.isMass(it)).isTrue()
+        }
+    }
+
+    /** The same for the millilitre, its double mark typed as a quote, the gershayim or two apostrophes. */
+    @Test
+    fun `the millilitre written in Hebrew, however it is marked, is the millilitre`() {
+        listOf(
+            "מ\"ל", "מ״ל", "מ''ל", "מ׳׳ל", "מל", "מיליליטר", "מיליליטרים", "mL", "ml.",
+        ).forEach {
+            assertThat(Portions.isMillilitres(it)).isTrue()
+            assertThat(Portions.isMass(it)).isTrue()
+        }
+    }
+
+    /**
+     * Kilograms and litres in Hebrew are measured out, and are NOT grams or millilitres: nothing
+     * here multiplies by 1000 (D4), so a per-100 worth cannot be costed against them.
+     */
+    @Test
+    fun `kilograms and litres in Hebrew are measured, but are neither grams nor millilitres`() {
+        listOf(
+            "קילו", "קילוגרם", "קילוגרמים", "ק\"ג", "ק״ג", "קג", "kilo", "kilogram", "kilograms",
+            "ליטר", "ליטרים", "ל'", "ל׳", "litre", "liter", "litres", "liters",
+        ).forEach {
+            assertThat(Portions.isMass(it)).isTrue()
+            assertThat(Portions.isGrams(it)).isFalse()
+            assertThat(Portions.isMillilitres(it)).isFalse()
+        }
+    }
+
+    /** A cup is counted, in either language: a per-100 worth of one means nothing (D53 §2). */
+    @Test
+    fun `a cup is counted, in either language`() {
+        listOf("cup", "כוס", "כוסות", "יחידה").forEach {
+            assertThat(Portions.isMass(it)).isFalse()
+        }
+    }
+
     @Test
     fun `millilitres are not grams`() {
         assertThat(Portions.isGrams("ml")).isFalse()
