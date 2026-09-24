@@ -44,6 +44,7 @@ class WalkTheApp {
             outcome = Transcript.Outcome.Did,
             screen = session.screen(),
             actions = session.actions().map { it.toString() },
+            layers = session.layers(),
         )
 
         SimulationScript.parse(commandsFile().takeIf { it.exists() }?.readText().orEmpty())
@@ -88,6 +89,7 @@ class WalkTheApp {
             outcome = outcome,
             screen = session.screen(),
             actions = session.actions().map { it.toString() },
+            layers = session.layers(),
         )
     }
 
