@@ -11,7 +11,7 @@
 <header><a class="back" href="./">← MetaSelf</a></header>
 
 <h1>Privacy</h1>
-<p class="updated">Last updated 22 September 2026</p>
+<p class="updated">Last updated 24 September 2026</p>
 
 <p>MetaSelf is a personal Android application written for a single user. It is not published on any
 app store, has no accounts, no analytics, no advertising and no operator. <strong>There is no server
@@ -31,13 +31,19 @@ or export.</p>
 
 <h2>What leaves your phone, and when</h2>
 
-<p>Four things, each only when you do something that requires it.</p>
+<p>Five things, each only when you do something that requires it.</p>
 
 <ol>
   <li><strong>A meal description, to OpenAI.</strong> When you ask for an estimate from words, the
   text you typed is sent using <em>your own</em> API key. Nothing else goes with it — not your
   weight, age, goal, history or any identifier. Repeating a meal, or typing the numbers yourself,
   sends nothing at all.</li>
+
+  <li><strong>One food's name and figures, to OpenAI, when you ask for a review.</strong> When you
+  press <em>Review the figures</em> on a food, that one food is sent using <em>your own</em> API key:
+  its name and brand, the figures it holds and where each came from, what one of it is called, and
+  what one of it weighs. Nothing else goes with it — no other food, not what or when you ate, not your
+  weight, age, goal or any identifier. Nothing is sent unless you press the button.</li>
 
   <li><strong>A barcode number, to Open Food Facts.</strong> Only the number. The camera is used
   for nothing but reading barcodes; the picture is read on the phone and never stored or sent. A
