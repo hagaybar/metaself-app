@@ -315,7 +315,6 @@ class ReviewPromptTest {
         assertThat(all).contains(rule)
         assertThat(all).contains("which group you believe and why")
         assertThat(all).contains("propose the corrected figures")
-        assertThat(all).contains("flag it in the note")
         // The existing rule stands beside it.
         assertThat(all).contains("Never state what one piece weighs")
 
@@ -328,6 +327,51 @@ class ReviewPromptTest {
             assertThat(system).doesNotContain(rule)
             assertThat(system).contains("Never state what one piece weighs")
         }
+    }
+
+    /**
+     * D54 §10.1: when the two groups contradict each other through what one weighs, one of them is
+     * wrong, and the model proposes the corrected figures for the one it believes wrong — a label
+     * group included — rather than only flagging it. A label group on its own is still changed
+     * only when its own figures are impossible.
+     */
+    @Test
+    fun `when the groups contradict, the group believed wrong is corrected, even a label`() {
+        val system = systemMessage(ReviewPrompt.requestBody("a-model", request()))
+
+        assertThat(system).contains("propose the corrected figures for the group you believe is wrong")
+        assertThat(system).contains("even if it is a LABEL group")
+        assertThat(system).contains("with a reason for each figure you change")
+        assertThat(system).contains("checked on its own is still changed only when its own figures")
+        assertThat(system).doesNotContain("keep its figures")
+        assertThat(system).doesNotContain("flag it in the note")
+        // The label rule for a group standing alone is unchanged.
+        assertThat(system).contains("Keep it unless the figures are")
+    }
+
+    /**
+     * D54 §10.2: the note and the reasons are read on screen, so they are asked for in his words —
+     * "per 100 g" and "per" the food's own unit — never in the request's field names, and never as
+     * "the figures for one". The cross-check itself speaks of the unit by its name.
+     */
+    @Test
+    fun `the note and reasons are asked for in plain words, with the food's own unit name`() {
+        val cup = systemMessage(
+            ReviewPrompt.requestBody("a-model", request().copy(unitName = "cup")),
+        )
+
+        assertThat(cup).contains("Write the note and every reason in plain words")
+        assertThat(cup).contains("say \"per 100 g\" and \"per cup\"")
+        assertThat(cup).contains("never write field names such as per_unit, per_100g, grams_per_unit or kcal_reason")
+        assertThat(cup).contains("never write \"the figures for one\"")
+        assertThat(cup).contains("The figures per cup should equal the figures per 100 g")
+
+        val noUnit = systemMessage(
+            ReviewPrompt.requestBody("a-model", request(perUnit = null).copy(unitName = "")),
+        )
+        assertThat(noUnit).contains("Write the note and every reason in plain words")
+        assertThat(noUnit).contains("say \"per 100 g\"")
+        assertThat(noUnit).doesNotContain("\"per \"")
     }
 
     /** D54 §9.3: every reply ends in a verdict, asked for in the instructions and the schema. */
@@ -346,6 +390,28 @@ class ReviewPromptTest {
         assertThat(note["type"]!!.jsonPrimitive.content).isEqualTo("string")
         assertThat(note["description"]!!.jsonPrimitive.content)
             .isEqualTo("What you concluded, in one sentence. Never empty.")
+    }
+
+    /**
+     * D54 §10.3: whether the review found a problem is not read out of the note's prose — the model
+     * says it in a required field with two values, so the headline can never say "no changes
+     * suggested" over a note that names a problem.
+     */
+    @Test
+    fun `the reply carries a required verdict, consistent or problem_found`() {
+        val body = ReviewPrompt.requestBody("a-model", request())
+        val schema = Json.parseToJsonElement(body).jsonObject["response_format"]!!.jsonObject
+            .getValue("json_schema").jsonObject.getValue("schema").jsonObject
+
+        assertThat(requiredOf(schema)).contains("verdict")
+        val verdict = schema.getValue("properties").jsonObject.getValue("verdict").jsonObject
+        assertThat(verdict["type"]!!.jsonPrimitive.content).isEqualTo("string")
+        assertThat(verdict["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
+            .containsExactly("consistent", "problem_found").inOrder()
+
+        val system = systemMessage(body)
+        assertThat(system).contains("\"consistent\" only when you found nothing wrong")
+        assertThat(system).contains("\"problem_found\" when you found anything wrong")
     }
 
     @Test
@@ -369,8 +435,8 @@ class ReviewPromptTest {
         assertThat(schema["type"]!!.jsonPrimitive.content).isEqualTo("object")
         assertThat(schema["additionalProperties"]!!.jsonPrimitive.content).isEqualTo("false")
         assertThat(schema["properties"]!!.jsonObject.keys)
-            .containsExactly("per_100g", "per_unit", "note")
-        assertThat(requiredOf(schema)).containsExactly("per_100g", "per_unit", "note")
+            .containsExactly("per_100g", "per_unit", "note", "verdict")
+        assertThat(requiredOf(schema)).containsExactly("per_100g", "per_unit", "note", "verdict")
 
         listOf("per_100g", "per_unit").forEach { group ->
             val options = schema["properties"]!!.jsonObject[group]!!.jsonObject["anyOf"]!!.jsonArray

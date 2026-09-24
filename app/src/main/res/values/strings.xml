@@ -311,6 +311,7 @@
     <!-- The line under the button after every review (D54 §9.4). No full stop: the model's note
          follows after " — ", or the line ends in one. -->
     <string name="review_no_changes">Reviewed: no changes suggested</string>
+    <string name="review_problem_found">Reviewed: a problem found</string>
     <plurals name="review_suggestions">
         <item quantity="one">Reviewed: %1$d suggestion below</item>
         <item quantity="other">Reviewed: %1$d suggestions below</item>

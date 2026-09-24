@@ -20,6 +20,12 @@
 > - **2026-09-24, third amendment** — a kept figure is judged at the precision the model wrote it
 >   in; the model cross-checks per one against per 100 g when it can; and every review ends in a
 >   plain line under the button, with the model's one-sentence verdict (§9).
+> - **2026-09-24, fourth amendment** — when per one and per 100 g contradict each other through
+>   what one weighs, the review proposes correcting the group it believes wrong, even a packet
+>   label, always as a suggestion he accepts or dismisses; a label group standing alone is still
+>   changed only when its own figures are impossible; the model writes in the owner's words; it
+>   says whether it found a problem in a field of its own, and the line under the button says so;
+>   and the button's small print sits directly under it, with the outcome below (§10).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -144,6 +150,7 @@ Pinned by a `strict` JSON schema, every field required, each group nullable:
 | `per_100g` | `null`, or `{kcal, protein_g, carbs_g, fat_g, kcal_reason, protein_reason, carbs_reason, fat_reason, confidence}` — numbers, decimals allowed; reasons strings; confidence `LOW`/`MEDIUM`/`HIGH`. |
 | `per_unit` | The same shape, or `null`. |
 | `note` | One short note, or `""`. |
+| `verdict` | `"consistent"` or `"problem_found"` — what the model concluded (added 2026-09-24, §10.3). |
 
 (Nullability is `anyOf: [{the object}, {"type": "null"}]`, which strict structured outputs accept.)
 
@@ -421,7 +428,8 @@ one weighs, the instructions add: the figures for one should equal the figures p
 in the note — which group it believes and why — and proposes the corrected figures for the group it
 does not believe; a `LABEL` group it still changes only when its own figures are impossible, and a
 label that merely disagrees with the other group is flagged in the note, with the reason, and left
-as it is. What one weighs is still never stated, never changed and never guessed: it is given only to
+as it is. *(Amended 2026-09-24, §10.1: a label group that contradicts the other group may now be
+corrected.)* What one weighs is still never stated, never changed and never guessed: it is given only to
 check the groups against each other. Without both groups and the weight, the rule is not sent.
 
 **9.3 The note is a verdict, and never empty.** The instructions ask for the note on every reply:
@@ -430,12 +438,12 @@ and why. The schema describes it so (a `description`; strict structured outputs 
 constraint), and an empty note is still read, not refused: the line below appears without it.
 
 **9.4 Every outcome ends in a line under the button.** Directly under **Review the figures**, above
-its small print, in the body's own type and ink (no new colour, badge or icon), the editor says what
+its small print *(amended 2026-09-24, §10.4: below its small print)*, in the body's own type and ink (no new colour, badge or icon), the editor says what
 the review came to, and the screen scrolls it into view when the answer arrives:
 
 | Outcome | The line |
 |---|---|
-| Nothing suggested | *Reviewed: no changes suggested — {note}* |
+| Nothing suggested | *Reviewed: no changes suggested — {note}* — only when the verdict is `consistent`; otherwise *Reviewed: a problem found — {note}* (§10.3) |
 | Suggestions (N groups with **Use these**) | *Reviewed: N suggestion(s) below — {note}* |
 | Every change set aside (§8.3) | *The model's answer arrived, but its suggestions could not be used — {note}* |
 | Suggestions all withdrawn by his typing, or all used, with the note or a set-aside line left | *Reviewed: no suggestions left — {note}* |
@@ -449,6 +457,62 @@ it answers, in both editors, and no longer above Save in My foods or at the top 
 — where it was off screen from the button, and a review looked as if it had done nothing. An answer
 whose every suggestion was withdrawn while it was out is no longer silently dropped: it says *no
 suggestions left*.
+
+### 10. Amendment, 2026-09-24 (fourth) — a contradiction gets a proposal
+
+A food scanned from a packet held per 100 g as a label and per one whose protein, carbohydrate and
+fat were not per 100 g times the weight over 100, while the calories agreed. The review saw it,
+said in its note that the per-one figures were wrong — and, obeying §9.2's *a label that merely
+disagrees is flagged and left as it is*, proposed nothing, so the screen read *Reviewed: no changes
+suggested* above a note naming a problem. What follows is settled so that a contradiction the
+model finds is one he can act on.
+
+**10.1 When the groups contradict, the one believed wrong gets corrected figures.** The owner's
+decision of 2026-09-24, on issue #18: when per 100 g and per one contradict each other (per one ≠
+per 100 g × `grams_per_unit` / 100 beyond label rounding), the review may propose correcting the
+group it believes wrong **even if that group is a packet label** — always as a suggestion he
+accepts or dismisses. The cross-check instructions (§9.2) now say: the two groups contradict and
+at least one is wrong; decide which you believe; propose the corrected figures for the one you
+believe is wrong, even a `LABEL` group, with a reason for each figure changed; and say in the note
+which you believe and why. **A label group standing alone is still changed only when its own
+figures are impossible** (§2's rule, unchanged): a contradiction is the one case in which a label
+whose own figures are possible may be changed. Nothing about storage changes — an accepted
+correction of a label group is stored as §5 says, `AI_ESTIMATE`, the safe direction.
+
+**10.2 The note and the reasons are written in his words.** They are drawn on screen as they come,
+and the same answer had written *the per_unit figures* and *the figures for one* — the request's
+field names and the instructions' own shorthand. The instructions now say: write the note and every
+reason in plain words, saying *per 100 g* and *per {the food's own unit name}* (*per cup*, *per
+biscuit*), never a field name such as `per_unit`, `per_100g`, `grams_per_unit` or `kcal_reason`,
+and never *the figures for one*. With no unit named, only *per 100 g* is given. The cross-check
+(§9.2) speaks of the unit by its name too — *the figures per cup should equal…* — since a model
+mirrors the words it is given.
+
+**10.3 Whether a problem was found is its own field.** The same answer proposed nothing and its note
+named a problem, and the line read *Reviewed: no changes suggested — {a note naming a problem}*,
+which is not true. Rather than reading the note's prose, the strict schema gains a required
+`verdict`, an enum of `"consistent"` and `"problem_found"`, and the instructions say: *consistent*
+only when nothing was found wrong, missing or contradictory; *problem_found* when anything was,
+whether or not corrected figures are proposed. It is read strictly the other way round: only
+`"consistent"` is consistent, and anything else — a missing verdict included — is a problem found,
+so the line may say nothing is wrong only when the model said so. The line under the button (§9.4)
+is now:
+
+| Outcome | The line |
+|---|---|
+| Suggestions (N groups with **Use these**), whatever the verdict | *Reviewed: N suggestion(s) below — {note}* |
+| Nothing suggested, verdict `problem_found` | *Reviewed: a problem found — {note}* |
+| Nothing suggested, verdict `consistent` | *Reviewed: no changes suggested — {note}* |
+
+The other rows of §9.4 are unchanged. The verdict is not stored and not shown on its own; it
+chooses the words of the line and nothing else.
+
+**10.4 The small print stays with the button; the outcome comes below it.** With the outcome line
+between **Review the figures** and its small print, the small print (*Sends this food's name…*)
+read as part of the answer, and the answer's **Dismiss** and **Show the model's answer** sat apart
+from the line they belong to. The order is now: the button; directly under it, its small print;
+then, together, the outcome line, any *couldn't be used* lines, **Use all** and **Dismiss**, and
+**Show the model's answer**. Same type, ink and scrolling into view as §9.4; both editors.
 
 ---
 

@@ -8,6 +8,7 @@ import com.metaself.app.domain.ai.HeldGroup
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.amount.BelievableAmount
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.food.FactGroup
@@ -33,6 +34,7 @@ import kotlin.math.roundToLong
  *
  * - `null` for a group means leave it as it is; a reply cannot remove a group.
  * - `per_unit` is ignored when the editor names no unit.
+ * - `verdict` is [Verdict.CONSISTENT] only when it says "consistent" (§10.3).
  * - A figure equal to the one held (D45's comparison) is kept **exactly as held**: a model echoing
  *   3.25 does not turn a label's 3.25 into 3.3. So is one that is the held figure written at the
  *   model's own precision — 8.57 or 8.6 given back for a held 8.571428571428571 is an echo, not a
@@ -113,6 +115,7 @@ object ReviewResponse {
             perUnit = (perUnit as? Read.Suggested)?.suggestion,
             note = payload["note"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() },
             setAside = setAside,
+            verdict = verdictOf(payload["verdict"]?.jsonPrimitive?.contentOrNull),
         )
 
         return if (setAside.isNotEmpty() && review.per100g == null && review.perUnit == null) {
@@ -232,6 +235,14 @@ object ReviewResponse {
     private const val MOST_DECIMALS = 3
 
     private fun toOneDecimal(value: Double): Double = (value * 10).roundToLong() / 10.0
+
+    /**
+     * Only "consistent" is [Verdict.CONSISTENT] (D54 §10.3); anything else, a missing verdict
+     * included, is a problem found — the line under the button may say nothing is wrong only when
+     * the model said so.
+     */
+    private fun verdictOf(raw: String?): Verdict =
+        if (raw == "consistent") Verdict.CONSISTENT else Verdict.PROBLEM_FOUND
 
     /** Anything unrecognised is LOW — [EstimateResponse]'s rule, and the safe direction. */
     private fun confidenceOf(raw: String?): Confidence = when (raw?.uppercase()) {
