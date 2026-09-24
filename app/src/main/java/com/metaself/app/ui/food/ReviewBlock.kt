@@ -28,9 +28,9 @@ data class ReviewActions(
 
 /**
  * **Review the figures**, with its one line of small print saying what is sent, and under it what
- * the review said that belongs to no one group: that it changed nothing, its note, a group whose
- * suggestion could not be used, and **Use all** and **Dismiss** (D54 §1, §4). Shared by My foods'
- * editor and the meal builder's *Make a food*.
+ * the review said that belongs to no one group: that it changed nothing, or that nothing in it
+ * could be used (§8.3), its note, a group whose suggestion could not be used, and **Use all** and
+ * **Dismiss** (D54 §1, §4). Shared by My foods' editor and the meal builder's *Make a food*.
  *
  * No badge, colour or icon is added to anything for a review — the owner's "no new marks": the
  * words are drawn in the captions' own ink.
@@ -60,6 +60,7 @@ fun ReviewTheFigures(
         val shown = reviewing.review as? Review.Shown ?: return@Column
         val review = shown.review
         if (shown.nothingSuggested) Caption(stringResource(R.string.review_no_changes))
+        if (shown.unusable) Caption(stringResource(R.string.review_unusable))
         review.note?.takeIf { it.isNotBlank() }?.let { Caption(it) }
         review.setAside.forEach { group ->
             Caption(

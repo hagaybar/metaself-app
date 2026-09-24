@@ -43,8 +43,14 @@ class OpenAiFoodReviewer(
      * **A refusal is logged by its kind and [status] only, never in the provider's words**: those
      * can quote back what was sent, name included. The words are still shown on screen, where he
      * reads them himself. A refusal with no status is one this app raised in making the call.
+     *
+     * An answer that arrived and could not be used is logged too, by its kind alone: the answer
+     * itself can hold the name, so none of it is written.
      */
     private fun ReviewResult.alsoRecorded(status: Int?): ReviewResult = also { result ->
+        if (result is ReviewResult.Unusable) {
+            problems.record("review unusable", "every group the answer changed was set aside")
+        }
         if (result !is ReviewResult.Failed) return@also
         when (val failure = result.failure) {
             is EstimateResult.Refused -> problems.record(

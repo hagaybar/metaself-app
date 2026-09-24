@@ -1468,6 +1468,26 @@ class FoodsViewModelTest {
         assertThat(shown.nothingSuggested).isTrue()
     }
 
+    /** D54 §8.3: an answer that arrived and could not be used says so, not "could not be understood". */
+    @Test
+    fun `an answer whose every suggestion was set aside is said as unusable, not as a failure`() =
+        runTest(dispatcher) {
+            val answer = FoodReview(null, null, null, listOf(FactGroup.PER_100G))
+            val viewModel = watched(
+                FakeFoodRepository(listOf(oatBiscuit())),
+                reviewer = FakeFoodReviewer(ReviewResult.Unusable(answer)),
+            )
+            viewModel.edit(1)
+            advanceUntilIdle()
+
+            viewModel.review()
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.refusal).isNull()
+            assertThat(state.editing!!.reviewing.review).isEqualTo(Review.Shown(answer, unusable = true))
+        }
+
     /** D8: the way on is typing, and the form is exactly as he left it. */
     @Test
     fun `a review past the day's allowance says the existing sentence and leaves the form alone`() =

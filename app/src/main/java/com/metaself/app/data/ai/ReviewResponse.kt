@@ -40,7 +40,8 @@ import kotlin.math.roundToLong
  *   reason.
  * - **A group is set aside whole, never repaired**, when a figure is missing, not finite, negative
  *   or past D42's ceiling for its basis, or when a change or fill has no reason anywhere in its
- *   group. If every group that changed was set aside, the reply is unreadable.
+ *   group. If every group that changed was set aside, the answer is [ReviewResult.Unusable] —
+ *   it arrived and was read; what it suggested could not be used.
  */
 object ReviewResponse {
 
@@ -98,7 +99,7 @@ object ReviewResponse {
         )
 
         if (setAside.isNotEmpty() && review.per100g == null && review.perUnit == null) {
-            ReviewResult.Failed(EstimateResult.Unreadable("no suggestion in the reply could be used"))
+            ReviewResult.Unusable(review)
         } else {
             ReviewResult.Proposed(review)
         }

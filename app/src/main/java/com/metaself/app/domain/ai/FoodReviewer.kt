@@ -147,6 +147,13 @@ sealed interface ReviewResult {
 
     data class Proposed(val review: FoodReview) : ReviewResult
 
+    /**
+     * The answer arrived in the shape asked for, and every group it changed was set aside, so there
+     * is nothing to accept (D54 §8.3). Not a failure to understand it, and not said as one: the
+     * editor says the answer could not be used, with [review]'s set-aside lines and note.
+     */
+    data class Unusable(val review: FoodReview) : ReviewResult
+
     /** [failure] is NoKey, CeilingReached, Unreachable, Refused or Unreadable — never a proposal. */
     data class Failed(val failure: EstimateResult) : ReviewResult {
         init {

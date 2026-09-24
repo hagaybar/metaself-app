@@ -163,7 +163,8 @@ unit name is not in the reply either: the proposal is always for the unit in the
   past D42's ceiling for its basis (per 100 g: 1000 kcal and 110 g; per one: 5000 kcal and 500 g),
   or when a change or fill has no reason anywhere in its group. That group stays as it was and the
   screen says one line: *Its suggestion for per 100 g couldn't be used.* If every group that changed
-  is set aside, the reply is `Unreadable`.
+  is set aside, the answer is *unusable* — arrived and read, with nothing to accept — and is said as
+  that, not as a failure to understand it (§8.3).
 - A reply that changes nothing is a real answer: *No changes suggested.*
 
 *Invented example, continuing §2:* the reply keeps per 100 g exactly (a label, and consistent), and
@@ -201,7 +202,9 @@ in it, so the form still shows his figures.
 - A failure is said in the editor's own sentence slot, above Save, in `ProposalWording.failure`'s
   existing words — *No API key yet…*, *You have used today's estimates…*, *Could not reach the
   model…*, *The provider refused: …*, *The answer could not be understood…* — and the form is
-  untouched (D8: the way on is typing).
+  untouched (D8: the way on is typing). *Could not be understood* is said only of a reply that was
+  not in the shape asked for. An answer that arrived in that shape with every group it changed set
+  aside is not a failure to understand it, and is said under the review button (§8.3).
 
 ### 5. How it is stored — the owner's rule, and what Save does
 
@@ -336,6 +339,18 @@ non-blank reason in its group — models explain two linked changes once. A grou
 of a reason only when a change in it has no reason anywhere in the group, which is the fill's rule
 (§3) applied to changes. The cost: a borrowed reason may explain a sibling figure rather than this
 one; it is still the model's own words about the group, shown beside the figure.
+
+**8.3 An unusable answer says what happened.** When the answer arrived in the shape asked for and
+every group it changed was set aside, the result is its own (`ReviewResult.Unusable`), not
+`Unreadable`. Under the review button, in the captions' ink, the editor says:
+
+> *The model's answer arrived, but its suggestions could not be used.*
+
+followed by the answer's note, if any, and the existing *Its suggestion for … couldn't be used.* line
+for each group set aside, with **Dismiss**. Nothing goes in the sentence slot above Save, and the
+form is untouched. *The answer could not be understood* stays for a reply not in the asked shape. The
+problem log records it as `review unusable`, by its kind alone — none of the answer, which can
+hold the food's name (§6).
 
 ---
 

@@ -20,8 +20,14 @@ sealed interface Review {
      *
      * @property nothingSuggested the answer itself changed nothing, which is a real answer and is
      *   said: *No changes suggested.*
+     * @property unusable the answer arrived, and every group it changed was set aside: said as
+     *   that, above its set-aside lines — never as an answer that could not be understood (§8.3).
      */
-    data class Shown(val review: FoodReview, val nothingSuggested: Boolean = false) : Review
+    data class Shown(
+        val review: FoodReview,
+        val nothingSuggested: Boolean = false,
+        val unusable: Boolean = false,
+    ) : Review
 }
 
 /**
@@ -64,6 +70,12 @@ data class FormReview(
             review = if (nothingLeft && !nothingSuggested) null else Review.Shown(left, nothingSuggested),
         )
     }
+
+    /**
+     * The answer arrived and nothing in it could be used ([com.metaself.app.domain.ai.ReviewResult.Unusable]):
+     * it is shown as that, with what was set aside and its note, until dismissed. Nothing to accept.
+     */
+    fun unusable(answer: FoodReview): FormReview = copy(review = Review.Shown(answer, unusable = true))
 
     /** The request failed, or was dropped: nothing is shown, and what was accepted stays. */
     fun failed(): FormReview = copy(review = null)

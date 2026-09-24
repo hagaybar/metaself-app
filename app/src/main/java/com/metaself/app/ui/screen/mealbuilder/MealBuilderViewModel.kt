@@ -387,6 +387,9 @@ class MealBuilderViewModel @Inject constructor(
                 when (result) {
                     is ReviewResult.Proposed ->
                         _making.value = open.copy(reviewing = open.reviewing.answered(result.review))
+                    // Arrived, and nothing in it could be used: said as that, not as a failure.
+                    is ReviewResult.Unusable ->
+                        _making.value = open.copy(reviewing = open.reviewing.unusable(result.review))
                     is ReviewResult.Failed -> {
                         _making.value = open.copy(reviewing = open.reviewing.failed())
                         _refusal.value = ProposalWording.failure(result.failure)

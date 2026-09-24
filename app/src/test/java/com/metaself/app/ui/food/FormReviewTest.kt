@@ -55,6 +55,16 @@ class FormReviewTest {
     }
 
     @Test
+    fun `an answer whose every suggestion was set aside is shown as unusable, with what went`() {
+        val answer = FoodReview(null, null, null, listOf(FactGroup.PER_100G))
+
+        val reviewing = FormReview().asked().unusable(answer)
+
+        assertThat(reviewing.review).isEqualTo(Review.Shown(answer, unusable = true))
+        assertThat(reviewing.asking).isFalse()
+    }
+
+    @Test
     fun `an answer that changed nothing is shown as that until dismissed`() {
         val answered = FormReview().asked().answered(FoodReview(null, null, null, emptyList()))
 

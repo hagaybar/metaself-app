@@ -25,6 +25,7 @@ import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.CannotCount
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.MealComponent
@@ -765,6 +766,27 @@ class MealBuilderViewModelTest {
             assertThat(state.refusal).isEqualTo(ProposalWording.failure(EstimateResult.NoKey))
             assertThat(state.making!!.form).isEqualTo(FoodForm(name = "Lentil soup", unitName = "bowl"))
             assertThat(state.making!!.reviewing.asking).isFalse()
+        }
+
+    /** D54 §8.3: an answer that arrived and could not be used says so, not "could not be understood". */
+    @Test
+    fun `a new food's review whose every suggestion was set aside is said as unusable`() =
+        runTest(dispatcher) {
+            val answer = FoodReview(null, null, null, listOf(FactGroup.PER_UNIT))
+            val viewModel = opened(
+                carrying(mealId = 1),
+                withSalad(),
+                reviewer = FakeFoodReviewer(ReviewResult.Unusable(answer)),
+            )
+            viewModel.beginCreatingFood()
+            viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+            viewModel.reviewNewFood()
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.refusal).isNull()
+            assertThat(state.making!!.reviewing.review).isEqualTo(Review.Shown(answer, unusable = true))
         }
 
     /** Make it on a form that is not yet answerable says why, in the panel, and makes nothing. */

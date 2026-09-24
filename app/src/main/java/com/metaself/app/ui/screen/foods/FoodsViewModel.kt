@@ -220,6 +220,9 @@ class FoodsViewModel @Inject constructor(
                 when (result) {
                     is ReviewResult.Proposed ->
                         _editing.value = open.copy(reviewing = open.reviewing.answered(result.review))
+                    // Arrived, and nothing in it could be used: said as that, not as a failure.
+                    is ReviewResult.Unusable ->
+                        _editing.value = open.copy(reviewing = open.reviewing.unusable(result.review))
                     is ReviewResult.Failed -> {
                         _editing.value = open.copy(reviewing = open.reviewing.failed())
                         _failed.value = null

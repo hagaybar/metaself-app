@@ -708,6 +708,20 @@ class FoodsScreenRenderTest {
         assertThat(texts).doesNotContain("Use these")
     }
 
+    /** D54 §8.3: said as what happened, with the group that went, and never as not understood. */
+    @Test
+    fun `an answer whose suggestions could not be used says so, and which`() {
+        val texts = draw(
+            reviewing(
+                Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true),
+            ),
+        )
+
+        assertThat(texts).contains("The model's answer arrived, but its suggestions could not be used.")
+        assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
+        assertThat(texts.joinToString()).doesNotContain("could not be understood")
+    }
+
     /** An editor with the Oat biscuit open (invented figures) and [review] as its review. */
     private fun reviewing(review: Review?): FoodsUiState {
         val food = Food(

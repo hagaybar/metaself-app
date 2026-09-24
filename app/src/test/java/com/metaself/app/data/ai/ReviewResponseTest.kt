@@ -344,7 +344,7 @@ class ReviewResponseTest {
         )
 
         assertThat(proposed(past100g).setAside).containsExactly(FactGroup.PER_100G)
-        assertThat(pastUnit).isInstanceOf(ReviewResult.Failed::class.java)
+        assertThat(pastUnit).isInstanceOf(ReviewResult.Unusable::class.java)
         assertThat(proposed(atUnit).perUnit!!.nutrients).isEqualTo(Nutrients(5000.0, 1.0, 12.0, 500.0))
     }
 
@@ -365,19 +365,24 @@ class ReviewResponseTest {
         }
     }
 
+    /**
+     * The answer arrived in the shape asked for; what it suggested could not be used. That is not
+     * "could not be understood" (D54 §8.3), so it is its own result, carrying what was set aside.
+     */
     @Test
-    fun `when every group that changed is set aside the reply is unreadable`() {
+    fun `when every group that changed is set aside the answer arrived but is unusable`() {
         val result = ReviewResponse.parse(
             reply(
                 per100g = group(500, 7, 62, 22, confidence = "HIGH"),
                 perUnit = group(90, 1, 12, 1),
+                note = "A note.",
             ),
             OAT_BISCUIT,
         )
 
-        assertThat(result).isInstanceOf(ReviewResult.Failed::class.java)
-        assertThat((result as ReviewResult.Failed).failure)
-            .isInstanceOf(EstimateResult.Unreadable::class.java)
+        assertThat(result).isEqualTo(
+            ReviewResult.Unusable(FoodReview(null, null, "A note.", listOf(FactGroup.PER_100G))),
+        )
     }
 
     // --- The rest --------------------------------------------------------------------------------
