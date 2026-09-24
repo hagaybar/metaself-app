@@ -134,12 +134,16 @@ class OpenAiFoodReviewerTest {
 
     /**
      * The log is written to be shared, and a food's name is what he eats (D54 §6). Every failure
-     * that is logged is logged under its own kind, and the name is in none of them.
+     * that is logged is logged under its own kind, and the name is in none of them — not even when
+     * the provider's own refusal quotes it back.
      */
     @Test
     fun `the problem log records each failure and never the food's name`() = runTest {
         val log = RecordingLog()
-        server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":{}}"""))
+        server.enqueue(
+            MockResponse().setResponseCode(400)
+                .setBody("""{"error":{"message":"Could not review $NAME: request too large"}}"""),
+        )
         server.enqueue(MockResponse().setBody(reply("""{"per_100g":"$NAME"}""")))
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
 
@@ -147,6 +151,7 @@ class OpenAiFoodReviewerTest {
 
         assertThat(log.problems.map { it.kind })
             .containsExactly("review refused", "review unreadable", "review unreachable").inOrder()
+        assertThat(log.problems.first().detail).isEqualTo("the provider answered 400")
         log.problems.forEach { problem ->
             assertThat(problem.kind).doesNotContain(NAME)
             assertThat(problem.detail).doesNotContain(NAME)

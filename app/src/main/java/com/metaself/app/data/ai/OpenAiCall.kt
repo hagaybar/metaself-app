@@ -38,8 +38,12 @@ class OpenAiCall(
          * [EstimateResult.Unreachable] or [EstimateResult.Refused] — the call's failures, so a
          * caller's existing sentences for them are reused unchanged. Whether an answer is readable
          * is the caller's to judge.
+         *
+         * @property status the provider's HTTP status when it answered with a refusal, else null —
+         *   something a caller can log without logging the provider's words, which may quote back
+         *   what was sent.
          */
-        data class Failed(val failure: EstimateResult) : Outcome {
+        data class Failed(val failure: EstimateResult, val status: Int? = null) : Outcome {
             init {
                 require(
                     failure is EstimateResult.NoKey || failure is EstimateResult.CeilingReached ||
@@ -76,7 +80,7 @@ class OpenAiCall(
                 settings.recordCall()
 
                 if (!response.isSuccessful) {
-                    Outcome.Failed(EstimateResult.Refused(refusalOf(response.code, text)))
+                    Outcome.Failed(EstimateResult.Refused(refusalOf(response.code, text)), response.code)
                 } else {
                     Outcome.Body(text)
                 }

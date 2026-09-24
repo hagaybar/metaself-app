@@ -49,15 +49,17 @@ data class FormReview(
 
     /**
      * The answer has come back. A group he has typed in meanwhile is left out of it. If that leaves
-     * nothing of an answer that did suggest something, nothing is shown: "No changes suggested"
-     * would not be true.
+     * nothing of an answer that did suggest something — no suggestion, no set-aside line, no note —
+     * nothing is shown: "No changes suggested" would not be true. A note keeps it up, as it does
+     * once the answer is shown.
      */
     fun answered(answer: FoodReview): FormReview {
         val withdrawn = (review as? Review.Asking)?.withdrawn.orEmpty()
         val nothingSuggested = answer.per100g == null && answer.perUnit == null &&
             answer.setAside.isEmpty()
         val left = withdrawn.fold(answer) { it, group -> it.without(group) }
-        val nothingLeft = left.per100g == null && left.perUnit == null && left.setAside.isEmpty()
+        val nothingLeft = left.per100g == null && left.perUnit == null && left.setAside.isEmpty() &&
+            left.note.isNullOrBlank()
         return copy(
             review = if (nothingLeft && !nothingSuggested) null else Review.Shown(left, nothingSuggested),
         )

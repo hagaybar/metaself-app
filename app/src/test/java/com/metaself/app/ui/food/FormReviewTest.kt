@@ -44,6 +44,16 @@ class FormReviewTest {
         assertThat(answered.review).isNull()
     }
 
+    /** As [FormReview.accept] and typing treat a note: it keeps the answer up until dismissed. */
+    @Test
+    fun `an answer whose suggestions were all typed over while it was out still shows its note`() {
+        val reviewing = FormReview().asked().typed(form, form.copy(fatPerUnit = "2"))
+
+        val answered = reviewing.answered(FoodReview(null, fatChange, "A note.", emptyList()))
+
+        assertThat(answered.review).isEqualTo(Review.Shown(FoodReview(null, null, "A note.", emptyList())))
+    }
+
     @Test
     fun `an answer that changed nothing is shown as that until dismissed`() {
         val answered = FormReview().asked().answered(FoodReview(null, null, null, emptyList()))

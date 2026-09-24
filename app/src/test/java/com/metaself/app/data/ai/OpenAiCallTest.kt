@@ -99,7 +99,9 @@ class OpenAiCallTest {
         val outcome = call(settings = settings).send { "{}" }
 
         assertThat(outcome)
-            .isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Refused("Incorrect API key provided")))
+            .isEqualTo(
+                OpenAiCall.Outcome.Failed(EstimateResult.Refused("Incorrect API key provided"), status = 401),
+            )
         assertThat(settings.calls).isEqualTo(1)
     }
 
@@ -108,7 +110,9 @@ class OpenAiCallTest {
         server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":{}}"""))
 
         assertThat(call().send { "{}" })
-            .isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Refused("the provider answered 429")))
+            .isEqualTo(
+                OpenAiCall.Outcome.Failed(EstimateResult.Refused("the provider answered 429"), status = 429),
+            )
     }
 
     @Test

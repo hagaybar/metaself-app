@@ -285,7 +285,9 @@ in, and it is also what D44 asks of a logged row — a figure is credited to who
   failures and the same sentences (§4). The network code is shared with the meal estimator rather
   than copied, so the two cannot drift in how they count or how they fail.
 - **The problem log never records the food's name** — the log is written to be shared, and a food's
-  name is what he eats (`OpenAiMealEstimator`'s rule for item names).
+  name is what he eats (`OpenAiMealEstimator`'s rule for item names). So a refusal is logged by its
+  kind and the provider's status only, never in the provider's own words, which can quote back what
+  was sent; the words are still shown on screen.
 
 ### 7. The privacy page and the terms
 
