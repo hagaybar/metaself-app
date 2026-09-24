@@ -23,6 +23,11 @@ import kotlinx.serialization.json.putJsonObject
  * Since D53 the reply gives what each item is worth (per 100 g, per 100 ml or per one piece) and how
  * much there was, apart, with every field required. An unstated amount is one natural piece, never
  * grams the model made up. What is sent does not change: the words, and nothing else.
+ *
+ * Grams and millilitres are asked for as exactly "g" and "ml" in every language (issue #1): the
+ * phone recognises the usual spellings too (`Portions`), but a unit it does not recognise makes a
+ * per-100 worth unusable, and a spelling asked for is one fewer to guess at. A piece keeps the
+ * description's own word, since that is what matching compares against his foods (D53 §4, §5).
  */
 object EstimatePrompt {
 
@@ -54,6 +59,9 @@ object EstimatePrompt {
           juice" is 330 and "ml". If none was stated, use the natural piece of the thing: "a bun" is
           1 and "bun", "two slices of pizza" is 2 and "slice", "a cappuccino" is 1 and "cup". Name a
           piece in the singular.
+        - When the unit is grams or millilitres, write it exactly "g" or "ml", whatever language
+          the description is in: never a translation, a plural or an abbreviation of them. Every
+          other unit, the word for a piece included, is written in the description's language.
         - Never convert an amount that was stated.
           Never make up grams or millilitres for an amount that was not stated, not even in the
           detail. The detail may say the size of piece you assumed in words, such as "large",
@@ -67,7 +75,8 @@ object EstimatePrompt {
           If you are unsure, give your best single figure and lower the confidence instead.
         - Confidence is LOW, MEDIUM or HIGH, and describes how sure you are about the figures for
           one piece or for 100 of the unit, including the size of piece you assumed.
-        - Reply in the same language the description was written in, including the item names.
+        - Reply in the same language the description was written in, including the item names;
+          only "g" and "ml" are always written that way.
         - Add at most one short note about the biggest assumption you made. Leave it out if there
           isn't one.
     """.trimIndent()
