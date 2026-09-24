@@ -18,6 +18,7 @@ import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.FoodReview
 import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.ReviewProcess
+import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.ai.Suggestion
 import com.metaself.app.domain.day.Confidence
@@ -704,6 +705,46 @@ class MealBuilderViewModelTest {
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.making).isEqualTo(MakingFood())
+    }
+
+    @Test
+    fun `a review that throws while the panel waits says it could not be opened`() = runTest(dispatcher) {
+        val throwing = object : FoodReviewer {
+            override suspend fun review(request: ReviewRequest): ReviewResult =
+                throw IllegalStateException("no network stack")
+        }
+        val viewModel = opened(carrying(mealId = 1), withSalad(), reviewer = throwing)
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+        assertThat(viewModel.state.value.making!!.reviewing.asking).isFalse()
+    }
+
+    @Test
+    fun `a review that throws after the panel closed says nothing`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val throwing = object : FoodReviewer {
+            override suspend fun review(request: ReviewRequest): ReviewResult {
+                gate.await()
+                throw IllegalStateException("no network stack")
+            }
+        }
+        val viewModel = opened(carrying(mealId = 1), withSalad(), reviewer = throwing)
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        viewModel.cancelCreatingFood()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.failed).isNull()
+        assertThat(viewModel.state.value.refusal).isNull()
     }
 
     @Test

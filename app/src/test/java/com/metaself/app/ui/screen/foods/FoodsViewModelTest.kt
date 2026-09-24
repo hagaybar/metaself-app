@@ -1420,6 +1420,41 @@ class FoodsViewModelTest {
             }
         }
 
+    /** The same rule for a review that throws: its sentence belongs to an editor he has left. */
+    @Test
+    fun `a review that throws after the editor closed or another food opened says nothing`() =
+        runTest(dispatcher) {
+            val ways: List<Pair<String, (FoodsViewModel) -> Unit>> = listOf(
+                "closed" to { it.cancelEditing() },
+                "another food" to { it.edit(2) },
+                "closed and opened again" to { it.cancelEditing(); it.edit(1) },
+            )
+            ways.forEach { (way, move) ->
+                val gate = CompletableDeferred<Unit>()
+                val throwing = object : FoodReviewer {
+                    override suspend fun review(request: ReviewRequest): ReviewResult {
+                        gate.await()
+                        throw IllegalStateException("no network stack")
+                    }
+                }
+                val viewModel = watched(
+                    FakeFoodRepository(listOf(oatBiscuit(), aFood(name = "Tahini"))),
+                    reviewer = throwing,
+                )
+                viewModel.edit(1)
+                advanceUntilIdle()
+                viewModel.review()
+                advanceUntilIdle()
+
+                move(viewModel)
+                gate.complete(Unit)
+                advanceUntilIdle()
+
+                assertWithMessage(way).that(viewModel.state.value.failed).isNull()
+                assertWithMessage(way).that(viewModel.state.value.refusal).isNull()
+            }
+        }
+
     @Test
     fun `a review that changes nothing says so`() = runTest(dispatcher) {
         val viewModel = watched(FakeFoodRepository(listOf(oatBiscuit())), reviewer = FakeFoodReviewer())

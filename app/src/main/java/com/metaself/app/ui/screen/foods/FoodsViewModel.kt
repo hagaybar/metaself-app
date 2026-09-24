@@ -184,7 +184,8 @@ class FoodsViewModel @Inject constructor(
      * review writes nothing, so one that throws says it could not open.
      *
      * **An answer that lands after he has moved on is dropped** (`askToDelete`'s rule): each request
-     * is numbered, and only the latest one, for an editor still waiting on it, is shown.
+     * is numbered, and only the latest one, for an editor still waiting on it, is shown. That holds
+     * for one that throws too: its sentence is said only while this editor is still waiting on it.
      */
     fun review() {
         val editing = _editing.value ?: return
@@ -194,10 +195,18 @@ class FoodsViewModel @Inject constructor(
         _editing.value = editing.copy(reviewing = editing.reviewing.asked())
         fun stillWaiting() = asked == reviewsAsked && _editing.value?.foodId == editing.foodId &&
             _editing.value?.reviewing?.asking == true
+        // Set in `finally`, before the guard's handler runs, so a throw is said only where it was
+        // still being waited on — never over the list, or another food.
+        var thrownHere = false
 
-        act(ActionRefused.COULD_NOT_OPEN) {
+        guarded(problems, onRefused = {
+            if (thrownHere) {
+                _refusal.value = null
+                _failed.value = ActionRefused.COULD_NOT_OPEN
+            }
+        }) {
             try {
-                val stored = foods.byId(editing.foodId) ?: return@act
+                val stored = foods.byId(editing.foodId) ?: return@guarded
                 // The form as it stood when he pressed the button.
                 val request = ReviewRequest.of(
                     ReviewProcess.EXISTING_FOOD,
@@ -206,8 +215,8 @@ class FoodsViewModel @Inject constructor(
                     editing.reviewing.accepted,
                 )
                 val result = reviewer.review(request)
-                if (!stillWaiting()) return@act
-                val open = _editing.value ?: return@act
+                if (!stillWaiting()) return@guarded
+                val open = _editing.value ?: return@guarded
                 when (result) {
                     is ReviewResult.Proposed ->
                         _editing.value = open.copy(reviewing = open.reviewing.answered(result.review))
@@ -220,6 +229,7 @@ class FoodsViewModel @Inject constructor(
             } finally {
                 // Thrown, or the food gone: the button must not be left reading Reviewing….
                 if (stillWaiting()) {
+                    thrownHere = true
                     _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.failed()) }
                 }
             }

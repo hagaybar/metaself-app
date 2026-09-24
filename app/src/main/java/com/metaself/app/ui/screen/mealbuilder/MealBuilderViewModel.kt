@@ -363,8 +363,17 @@ class MealBuilderViewModel @Inject constructor(
         val waiting = making.copy(reviewing = making.reviewing.asked())
         _making.value = waiting
         fun stillWaiting() = asked == reviewsAsked && _making.value?.reviewing?.asking == true
+        // Set in `finally`, before the guard's handler runs, so a throw is said only while this
+        // panel is still waiting on it — never over the builder once the panel has gone.
+        var thrownHere = false
 
-        act({ ActionRefused.COULD_NOT_OPEN }) {
+        _failed.value = null
+        guarded(problems, onRefused = {
+            if (thrownHere) {
+                _refusal.value = null
+                _failed.value = ActionRefused.COULD_NOT_OPEN
+            }
+        }) {
             try {
                 val request = ReviewRequest.of(
                     ReviewProcess.NEW_FOOD,
@@ -373,8 +382,8 @@ class MealBuilderViewModel @Inject constructor(
                     accepted = making.reviewing.accepted,
                 )
                 val result = reviewer.review(request)
-                if (!stillWaiting()) return@act
-                val open = _making.value ?: return@act
+                if (!stillWaiting()) return@guarded
+                val open = _making.value ?: return@guarded
                 when (result) {
                     is ReviewResult.Proposed ->
                         _making.value = open.copy(reviewing = open.reviewing.answered(result.review))
@@ -386,6 +395,7 @@ class MealBuilderViewModel @Inject constructor(
             } finally {
                 // Thrown: the button must not be left reading Reviewing….
                 if (stillWaiting()) {
+                    thrownHere = true
                     _making.value = _making.value?.let { it.copy(reviewing = it.reviewing.failed()) }
                 }
             }
