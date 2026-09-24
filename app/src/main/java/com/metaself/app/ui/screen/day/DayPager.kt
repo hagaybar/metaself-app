@@ -38,6 +38,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -210,11 +212,7 @@ private fun DayPagerOn(
         floatingActionButton = {
             // The main action opens the search over the owner's own foods, and describing is what
             // that search falls through to when none of them is it. See D28 and DayScreenContent.
-            ExtendedFloatingActionButton(
-                onClick = onRepeat,
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text(stringResource(R.string.today_add)) },
-            )
+            AddSomethingButton(onClick = onRepeat)
         },
     ) {
         // Pull down to read the steps again. Everything else on this screen is already live — the
@@ -319,3 +317,22 @@ private fun DayPagerOn(
 
 /** Matches the room the shared scaffold leaves; the pager scrolls itself and must repeat it. */
 private val FLOATING_BUTTON_ROOM = 88.dp
+
+/**
+ * The way in to adding anything to the day, drawn as the screen's floating button.
+ *
+ * Its own function so a render test can ask what a screen reader hears from it (public issue #3),
+ * without the view model the pager needs.
+ */
+@Composable
+internal fun AddSomethingButton(onClick: () -> Unit) {
+    val said = stringResource(R.string.today_add)
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        // Named on the button itself: the words drawn inside it never reached the accessibility
+        // tree (a render reads nothing from them), so without this the button announced nothing.
+        modifier = Modifier.semantics { contentDescription = said },
+        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+        text = { Text(said) },
+    )
+}
