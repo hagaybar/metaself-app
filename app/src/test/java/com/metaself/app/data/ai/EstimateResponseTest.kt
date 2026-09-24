@@ -159,6 +159,57 @@ class EstimateResponseTest {
         assertThat(proposal.dropped).isEmpty()
     }
 
+    /**
+     * When an item was dropped, the answer as it came travels with the proposal, so *Show the
+     * model's answer* can say why (issue #1). Only then: an answer used whole needs no explaining.
+     */
+    @Test
+    fun `an answer with a dropped item carries the answer as it came`() {
+        val content =
+            items(item(name = "Quinoa", unit = "cup", amount = "1") + "," + item(name = "Rice"))
+
+        val result = EstimateResponse.parse(replyWith(content))
+
+        val proposal = (result as EstimateResult.Proposed).proposal
+
+        assertThat(proposal.answer).isEqualTo(content)
+    }
+
+    @Test
+    fun `an answer used whole carries no answer`() {
+        val proposal = (EstimateResponse.parse(replyWith(BURGER_AND_BUN)) as EstimateResult.Proposed)
+            .proposal
+
+        assertThat(proposal.answer).isNull()
+    }
+
+    /**
+     * Every item dropped: unreadable, but it was read — the names and the answer go with it, so
+     * the screen can say what could not be used rather than that nothing could be understood.
+     */
+    @Test
+    fun `an answer whose every item was dropped carries the names and the answer`() {
+        val content = items(
+            item(name = "Quinoa", unit = "cup", amount = "1") + "," +
+                item(name = "Tuna", unit = "tin", amount = "1"),
+        )
+
+        val result = EstimateResponse.parse(replyWith(content)) as EstimateResult.Unreadable
+
+        assertThat(result.dropped).containsExactly("Quinoa", "Tuna").inOrder()
+        assertThat(result.answer).isEqualTo(content)
+    }
+
+    @Test
+    fun `an answer that is not JSON carries the answer as it came`() {
+        val prose = "About 830 calories, I would guess."
+
+        val result = EstimateResponse.parse(replyWith(prose)) as EstimateResult.Unreadable
+
+        assertThat(result.answer).isEqualTo(prose)
+        assertThat(result.dropped).isEmpty()
+    }
+
     @Test
     fun `per 100 ml is a worth per 100 of the millilitre`() {
         val juice = proposed(item(name = "Orange juice", unit = "ml", amount = "330")).single()

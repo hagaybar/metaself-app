@@ -272,6 +272,8 @@ sealed interface ProposalUiState {
         val needsKey: Boolean = false,
         /** Asking threw rather than answering. Drawn where [failure] is. */
         val refused: ActionRefused? = null,
+        /** The answer that could not be used, for *Show the model's answer* (issue #1). Shown only. */
+        val answer: String? = null,
     ) : ProposalUiState
 
     data object Waiting : ProposalUiState
@@ -281,6 +283,8 @@ sealed interface ProposalUiState {
         val note: String?,
         /** Names of items the answer held that could not be used, said above the rows. */
         val dropped: List<String> = emptyList(),
+        /** The answer as it came when an item was dropped, for *Show the model's answer*. Shown only. */
+        val answer: String? = null,
     ) : ProposalUiState {
         /** What the rows that can be logged add up to; a row with no usable amount adds nothing. */
         val totalKcal: Int get() = rows.sumOf { it.numbers?.kcal ?: 0 }

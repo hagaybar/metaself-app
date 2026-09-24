@@ -42,8 +42,17 @@ sealed interface EstimateResult {
     /**
      * A reply arrived and could not be understood — including one that gave a bare total instead of
      * components, which is refused deliberately rather than accepted as one vague item.
+     *
+     * [why] is the app's own sentence and is what the problem log gets. [answer] is the model's
+     * answer as it came, when one arrived, for *Show the model's answer* — shown only, never stored
+     * or logged. [dropped] names the items when the answer was read and every one of them was
+     * unusable, so the screen says that rather than that nothing could be understood (issue #1).
      */
-    data class Unreadable(val why: String) : EstimateResult
+    data class Unreadable(
+        val why: String,
+        val answer: String? = null,
+        val dropped: List<String> = emptyList(),
+    ) : EstimateResult
 
     /**
      * The reply left out how much of something there was, even when asked again (D34).

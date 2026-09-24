@@ -30,8 +30,13 @@ object ProposalWording {
         is EstimateResult.Refused ->
             "The provider refused: ${result.detail}"
 
-        is EstimateResult.Unreadable ->
+        // Read, and nothing in it usable: said as that, naming them, not as not understood.
+        is EstimateResult.Unreadable -> if (result.dropped.isNotEmpty()) {
+            "None of the items in the answer could be used: ${result.dropped.joinToString(", ")}. " +
+                "Type the numbers instead."
+        } else {
             "The answer could not be understood. Type the numbers instead."
+        }
 
         is EstimateResult.AmountMissing ->
             "It would not say how much of ${result.items.joinToString(", ")} there was. " +

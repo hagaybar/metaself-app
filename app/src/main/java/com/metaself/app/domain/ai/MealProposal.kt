@@ -63,6 +63,12 @@ data class MealProposal(
      * name has nothing to be called and is not in it.
      */
     val dropped: List<String> = emptyList(),
+    /**
+     * The model's answer as it came, when any item was dropped — for *Show the model's answer*, so
+     * why can be seen (issue #1). Null when every item was used. Shown only: never stored, never
+     * written to the problem log.
+     */
+    val answer: String? = null,
 ) {
     init {
         require(items.isNotEmpty()) { "a proposal cannot be empty" }

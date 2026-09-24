@@ -91,12 +91,14 @@ class ProposalViewModel @Inject constructor(
                         rows = result.proposal.items.map { ProposalRow.of(it, offered) },
                         note = result.proposal.note,
                         dropped = result.proposal.dropped,
+                        answer = result.proposal.answer,
                     )
                 }
 
                 else -> ProposalUiState.Describing(
                     failure = ProposalWording.failure(result),
                     needsKey = result is EstimateResult.NoKey,
+                    answer = (result as? EstimateResult.Unreadable)?.answer,
                 )
             }
         }
