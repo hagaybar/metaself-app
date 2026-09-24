@@ -35,11 +35,12 @@ import kotlin.math.roundToLong
  *   3.25 does not turn a label's 3.25 into 3.3. So is one equal to it once both are rounded to one
  *   decimal: 8.57 or 8.6 given back for a held 8.571428571428571 is an echo, not a change.
  * - A figure that differs is a change, rounded to one decimal place — a guess claims no finer
- *   precision — and must carry a non-blank reason. A group the form did not know is a fill, rounded
- *   the same way, and needs at least one non-blank reason.
+ *   precision — and carries a reason: its own, or else the first non-blank reason in its group. A
+ *   group the form did not know is a fill, rounded the same way, and needs at least one non-blank
+ *   reason.
  * - **A group is set aside whole, never repaired**, when a figure is missing, not finite, negative
- *   or past D42's ceiling for its basis, or when a change or fill has no reason. If every group
- *   that changed was set aside, the reply is unreadable.
+ *   or past D42's ceiling for its basis, or when a change or fill has no reason anywhere in its
+ *   group. If every group that changed was set aside, the reply is unreadable.
  */
 object ReviewResponse {
 
@@ -141,6 +142,9 @@ object ReviewResponse {
         val holds = listOf(
             held.nutrients.kcal, held.nutrients.proteinG, held.nutrients.carbsG, held.nutrients.fatG,
         )
+        // A change with no reason of its own borrows the group's first: models often explain two
+        // linked changes once. Only a change with no reason anywhere in the group sets it aside.
+        val groupReason = reasons.firstOrNull { it.isNotEmpty() }
         val changes = mutableListOf<FigureChange>()
         val result = FIGURES.indices.map { i ->
             val was = holds[i]
@@ -149,8 +153,8 @@ object ReviewResponse {
             if (kept(was, given)) {
                 was
             } else {
-                if (reasons[i].isEmpty()) return Read.SetAside
-                changes += FigureChange(FIGURES[i].first, was, rounded, reasons[i])
+                val reason = reasons[i].ifEmpty { groupReason ?: return Read.SetAside }
+                changes += FigureChange(FIGURES[i].first, was, rounded, reason)
                 rounded
             }
         }

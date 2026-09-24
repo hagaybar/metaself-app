@@ -305,6 +305,29 @@ class ReviewResponseTest {
     }
 
     @Test
+    fun `a change with no reason of its own borrows the group's first reason`() {
+        val review = proposed(
+            ReviewResponse.parse(
+                reply(
+                    per100g = group(
+                        470, 8, 62, 22,
+                        proteinReason = "the macros give about 470 kcal with 8 g of protein",
+                        confidence = "MEDIUM",
+                    ),
+                    perUnit = null,
+                ),
+                OAT_BISCUIT,
+            ),
+        )
+
+        assertThat(review.setAside).isEmpty()
+        assertThat(review.per100g!!.changes).containsExactly(
+            FigureChange(Figure.KCAL, 480.0, 470.0, "the macros give about 470 kcal with 8 g of protein"),
+            FigureChange(Figure.PROTEIN, 7.0, 8.0, "the macros give about 470 kcal with 8 g of protein"),
+        ).inOrder()
+    }
+
+    @Test
     fun `a figure past D42's ceiling for its basis sets the group aside`() {
         // Per 100 g: at most 1000 kcal and 110 g. Per one: at most 5000 kcal and 500 g.
         val past100g = ReviewResponse.parse(

@@ -155,14 +155,15 @@ unit name is not in the reply either: the proposal is always for the unit in the
 - A figure is compared with the one the group holds using D45's comparison; **equal is kept, exactly
   as held** — a model echoing 3.25 does not turn a label's 3.25 into 3.3. So is a figure equal to
   the held one once both are rounded to one decimal (§8.1).
-- A figure that differs is a **change** and must carry a non-blank reason. A group the form did not
-  know is a **fill** and needs at least one non-blank reason. Changed and filled figures are rounded
-  to one decimal place: a guess claims no finer precision.
+- A figure that differs is a **change** and must carry a non-blank reason — its own, or else the
+  group's first non-blank reason (§8.2). A group the form did not know is a **fill** and needs at
+  least one non-blank reason. Changed and filled figures are rounded to one decimal place: a guess
+  claims no finer precision.
 - **A group is set aside, whole, not repaired**, when any figure is missing, not finite, negative or
   past D42's ceiling for its basis (per 100 g: 1000 kcal and 110 g; per one: 5000 kcal and 500 g),
-  or when a change or fill has no reason. That group stays as it was and the screen says one line:
-  *Its suggestion for per 100 g couldn't be used.* If every group that changed is set aside, the reply
-  is `Unreadable`.
+  or when a change or fill has no reason anywhere in its group. That group stays as it was and the
+  screen says one line: *Its suggestion for per 100 g couldn't be used.* If every group that changed
+  is set aside, the reply is `Unreadable`.
 - A reply that changes nothing is a real answer: *No changes suggested.*
 
 *Invented example, continuing §2:* the reply keeps per 100 g exactly (a label, and consistent), and
@@ -329,6 +330,12 @@ held figure by D45's comparison, or when the two are equal once **both** are rou
 that differs at the first decimal is still a change. The cost: a change smaller than half a tenth
 that also rounds to the held tenth cannot be proposed — below the precision a suggestion claims
 (§3) anyway.
+
+**8.2 A change may borrow its group's reason.** A change whose own reason is blank takes the first
+non-blank reason in its group — models explain two linked changes once. A group is set aside for want
+of a reason only when a change in it has no reason anywhere in the group, which is the fill's rule
+(§3) applied to changes. The cost: a borrowed reason may explain a sibling figure rather than this
+one; it is still the model's own words about the group, shown beside the figure.
 
 ---
 
