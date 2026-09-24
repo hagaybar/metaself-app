@@ -32,6 +32,12 @@ class Transcript {
          * words rather than a summary of them.
          */
         data class Stuck(val why: String) : Outcome
+
+        /**
+         * The finger came down, but on a menu, dialog or sheet open over what was named — so the
+         * window on top answered, as it would on a phone, and nothing beneath it was touched.
+         */
+        data class LandedOutside(val why: String) : Outcome
     }
 
     fun record(step: Step, outcome: Outcome, screen: List<String>, actions: List<String>) {
@@ -39,6 +45,12 @@ class Transcript {
     }
 
     val stuckCount: Int get() = entries.count { it.outcome is Outcome.Stuck }
+
+    /** Steps that did not do what they said: stuck, or landed on something open over the target. */
+    val notAsAskedCount: Int get() = entries.count { it.outcome !is Outcome.Did }
+
+    /** Every step and what became of it, for a check that reads the walk rather than its rendering. */
+    val steps: List<Entry> get() = entries.toList()
 
     fun render(title: String): String = buildString {
         appendLine("# $title")
@@ -61,6 +73,8 @@ class Transcript {
                     // the harness's own limits.
                     appendLine("**DID NOT HAPPEN** (the instruction found nothing to act on): ${outcome.why}")
                 }
+                is Outcome.LandedOutside ->
+                    appendLine("**LANDED ON WHAT WAS OPEN OVER IT**: ${outcome.why}")
             }
             appendLine()
             appendLine("Screen now:")

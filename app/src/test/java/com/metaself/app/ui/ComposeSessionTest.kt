@@ -4,6 +4,12 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -113,6 +119,78 @@ class ComposeSessionTest {
         assertThat(failure).hasMessageThat().contains("Press me")
     }
 
+    // --- A press is a touch (public issue #6, item 1) --------------------------------------------
+
+    @Test
+    fun `a press on a control behind an open menu does not reach it, and closes the menu`() {
+        session.start { BehindAMenu() }
+        session.press("Open the menu")
+        assertThat(session.screen()).contains("Rename")
+
+        val failure = runCatching { session.press("Behind") }.exceptionOrNull()
+
+        assertThat(failure).isInstanceOf(ComposeSession.LandedOutside::class.java)
+        assertThat(session.screen()).contains("Behind pressed 0 times")
+        assertThat(session.screen()).doesNotContain("Rename")
+    }
+
+    @Test
+    fun `with a menu open, only what is in the menu can be touched`() {
+        session.start { BehindAMenu() }
+        session.press("Open the menu")
+
+        assertThat(session.actions().map { it.label }).containsExactly("Rename")
+        assertThat(session.layers().map { it.kind to it.reachable })
+            .containsExactly("the screen" to false, "a menu" to true).inOrder()
+    }
+
+    @Test
+    fun `a control inside the open menu is pressed as usual`() {
+        session.start { BehindAMenu() }
+        session.press("Open the menu")
+
+        val after = session.press("Rename")
+
+        assertThat(after).contains("Renamed")
+        assertThat(after).doesNotContain("Rename")
+    }
+
+    @Test
+    fun `a press beneath an open dialog closes the dialog and reaches nothing`() {
+        session.start { BehindADialog() }
+        session.press("Open the dialog")
+        assertThat(session.screen()).contains("Are you sure?")
+
+        val failure = runCatching { session.press("Behind") }.exceptionOrNull()
+
+        assertThat(failure).isInstanceOf(ComposeSession.LandedOutside::class.java)
+        assertThat(session.screen()).contains("Behind pressed 0 times")
+        assertThat(session.screen()).doesNotContain("Are you sure?")
+    }
+
+    @Test
+    fun `a press beneath an open sheet lands on its scrim, which closes it`() {
+        session.start { BehindASheet() }
+        session.press("Open the sheet")
+        assertThat(session.screen()).contains("On the sheet")
+
+        val failure = runCatching { session.press("Behind") }.exceptionOrNull()
+
+        assertThat(failure).isInstanceOf(ComposeSession.LandedOutside::class.java)
+        assertThat(session.screen()).contains("Behind pressed 0 times")
+        assertThat(session.screen()).doesNotContain("On the sheet")
+    }
+
+    @Test
+    fun `a switched-off button ignores the finger, and is listed as switched off`() {
+        session.start { SwitchedOff() }
+
+        val after = session.press("Save")
+
+        assertThat(after).contains("pressed: nothing")
+        assertThat(session.actions().single { it.label == "Save" }.toString()).contains("SWITCHED OFF")
+    }
+
     @Test
     fun `lists what can be done here, so the walk has options rather than guesses`() {
         session.start { Form() }
@@ -168,5 +246,69 @@ private fun TwoAdds() {
     Column {
         TextButton(onClick = {}) { Text("Add a food") }
         TextButton(onClick = {}) { Text("Add a food to the meal") }
+    }
+}
+
+@Composable
+private fun BehindAMenu() {
+    var behind by remember { mutableStateOf(0) }
+    var open by remember { mutableStateOf(false) }
+    var renamed by remember { mutableStateOf(false) }
+    Column {
+        Text("Behind pressed $behind times")
+        if (renamed) Text("Renamed")
+        TextButton(onClick = { behind++ }) { Text("Behind") }
+        TextButton(onClick = { open = true }) { Text("Open the menu") }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("Rename") },
+                onClick = {
+                    renamed = true
+                    open = false
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun BehindADialog() {
+    var behind by remember { mutableStateOf(0) }
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Text("Behind pressed $behind times")
+        TextButton(onClick = { behind++ }) { Text("Behind") }
+        TextButton(onClick = { open = true }) { Text("Open the dialog") }
+    }
+    if (open) {
+        AlertDialog(
+            onDismissRequest = { open = false },
+            confirmButton = { TextButton(onClick = { open = false }) { Text("Yes") } },
+            text = { Text("Are you sure?") },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BehindASheet() {
+    var behind by remember { mutableStateOf(0) }
+    var open by remember { mutableStateOf(false) }
+    Column {
+        Text("Behind pressed $behind times")
+        TextButton(onClick = { behind++ }) { Text("Behind") }
+        TextButton(onClick = { open = true }) { Text("Open the sheet") }
+    }
+    if (open) {
+        ModalBottomSheet(onDismissRequest = { open = false }) { Text("On the sheet") }
+    }
+}
+
+@Composable
+private fun SwitchedOff() {
+    var pressed by remember { mutableStateOf("pressed: nothing") }
+    Column {
+        Button(onClick = { pressed = "pressed: Save" }, enabled = false) { Text("Save") }
+        Text(pressed)
     }
 }

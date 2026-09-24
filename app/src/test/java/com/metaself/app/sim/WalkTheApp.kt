@@ -78,6 +78,8 @@ class WalkTheApp {
                 is Step.Unreadable -> throw IllegalArgumentException(step.why)
             }
             Transcript.Outcome.Did
+        } catch (landed: ComposeSession.LandedOutside) {
+            Transcript.Outcome.LandedOutside(landed.message.orEmpty())
         } catch (failure: Throwable) {
             Transcript.Outcome.Stuck(failure.message ?: failure.toString())
         }
