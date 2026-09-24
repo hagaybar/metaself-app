@@ -9,7 +9,7 @@ class ProductContributionTest {
     private val product = Product(
         barcode = "7290000066318",
         name = "במבה",
-        brand = "אסם",
+        brand = "דוגמה",
         kcalPer100g = 535.0,
         proteinPer100g = 17.0,
         carbsPer100g = 49.0,
@@ -25,7 +25,7 @@ class ProductContributionTest {
 
         assertThat(fields["code"]).isEqualTo("7290000066318")
         assertThat(fields["product_name"]).isEqualTo("במבה")
-        assertThat(fields["brands"]).isEqualTo("אסם")
+        assertThat(fields["brands"]).isEqualTo("דוגמה")
         assertThat(fields["nutriment_energy-kcal"]).isEqualTo("535")
         assertThat(fields["nutriment_proteins"]).isEqualTo("17")
         assertThat(fields["nutriment_carbohydrates"]).isEqualTo("49")

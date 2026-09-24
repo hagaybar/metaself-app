@@ -7,12 +7,14 @@ import com.metaself.app.domain.food.Correction
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
+import com.metaself.app.domain.food.FoodUse
 import com.metaself.app.domain.food.GramsPerUnit
 import com.metaself.app.domain.food.JoinedFacts
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -335,6 +337,11 @@ class RoomFoodRepository @Inject constructor(
     // The same query the delete's own refusal asks, so the question and the refusal cannot disagree
     // about which meals stand in the way.
     override suspend fun savedMealsUsing(foodId: Long): List<String> = dao.mealsUsing(foodId)
+
+    override fun observeUse(foodId: Long): Flow<FoodUse> =
+        combine(dao.observeLoggedCount(foodId), dao.observeMealsUsing(foodId)) { logged, meals ->
+            FoodUse(logged = logged, savedMeals = meals)
+        }
 
     override suspend fun delete(foodId: Long): EditResult = database.withTransaction {
         // Asked rather than caught. The database would refuse this anyway — that is what the

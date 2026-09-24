@@ -55,7 +55,7 @@ data class Product(
             isQuantityOfFood(ProductField.CARBS, carbsPer100g) &&
             isQuantityOfFood(ProductField.FAT, fatPer100g)
 
-    /** "במבה — אסם", or just the name when the database has no brand for it. */
+    /** "במבה — דוגמה", or just the name when the database has no brand for it. */
     val label: String get() = brand?.takeIf { it.isNotBlank() }?.let { "$name — $it" } ?: name
 
     /**

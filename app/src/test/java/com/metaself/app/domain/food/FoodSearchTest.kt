@@ -75,11 +75,11 @@ class FoodSearchTest {
      */
     @Test
     fun `a brand kept with untidy spacing is found as it reads`() {
-        val iceCream = aFood("Ice cream").copy(brand = "  Ben   &  Jerry's ")
+        val iceCream = aFood("Ice cream").copy(brand = "  Bob   &  Jan's ")
 
-        assertThat(FoodSearch.matching(listOf(cucumber, iceCream), "ben & jerry's"))
+        assertThat(FoodSearch.matching(listOf(cucumber, iceCream), "bob & jan's"))
             .containsExactly(iceCream)
-        assertThat(FoodSearch.matching(listOf(cucumber, iceCream), "Jerry"))
+        assertThat(FoodSearch.matching(listOf(cucumber, iceCream), "Jan"))
             .containsExactly(iceCream)
     }
 
@@ -155,11 +155,11 @@ class FoodSearchTest {
     @Test
     fun `each word may be found in a different name, alias or brand`() {
         val yoghurt = aFood("Yoghurt").copy(alsoKnownAs = listOf("יוגורט"), brand = "Dairyco")
-        val iceCream = aFood("Ice cream").copy(brand = "  Ben   &  Jerry's ")
+        val iceCream = aFood("Ice cream").copy(brand = "  Bob   &  Jan's ")
 
         assertThat(FoodSearch.matching(listOf(cucumber, yoghurt), "יוגורט dairyco"))
             .containsExactly(yoghurt)
-        assertThat(FoodSearch.matching(listOf(cucumber, iceCream), "jerry's ice cream"))
+        assertThat(FoodSearch.matching(listOf(cucumber, iceCream), "jan's ice cream"))
             .containsExactly(iceCream)
     }
 

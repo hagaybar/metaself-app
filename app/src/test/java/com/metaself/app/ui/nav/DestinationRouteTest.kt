@@ -78,10 +78,50 @@ class DestinationRouteTest {
             .isEqualTo("meal/build/0?foods=3,7,12")
     }
 
-    /** "Give this a portion" opens the manager on that food, by the route the host registers. */
+    /**
+     * A food's own page (D55), for one food: the id is a required part of the path, because a page
+     * of no particular food cannot be drawn. Where a row in My foods and "Give this a portion" go.
+     */
     @Test
-    fun `the manager can be opened on one food`() {
-        assertThat(Destination.Foods.editing(7L)).isEqualTo("foods?food=7")
+    fun `a food's page is opened by its id`() {
+        assertThat(Destination.Food.of(7L)).isEqualTo("food/7")
+    }
+
+    /** The page is not the manager: the bare `foods` route still opens the list. */
+    @Test
+    fun `a food's page has a route of its own`() {
+        val routes = listOf(
+            Destination.Today.route,
+            Destination.AddEntry.route,
+            Destination.EditEntry.route,
+            Destination.Weight.route,
+            Destination.Settings.route,
+            Destination.Describe.route,
+            Destination.Repeat.route,
+            Destination.Foods.route,
+            Destination.Food.route,
+            Destination.BuildMeal.route,
+            Destination.Scan.route,
+            Destination.LogWeight.route,
+            Destination.EditWeight.route,
+            Destination.WeightChart.route,
+            Destination.Record.route,
+        )
+
+        assertThat(routes).containsNoDuplicates()
+        assertThat(Destination.Food.route).isEqualTo("food/{foodId}")
+        assertThat(Destination.Foods.route).isEqualTo("foods")
+    }
+
+    /**
+     * *Join with a duplicate* on a page with no list beneath it (D55 §5) opens the list picking,
+     * by an optional argument on the route the bare `foods` still reaches.
+     */
+    @Test
+    fun `the list can be opened picking a duplicate for one food`() {
+        assertThat(Destination.Foods.joiningFrom(7L)).isEqualTo("foods?joinFrom=7")
+        assertThat(Destination.Foods.registered).isEqualTo("foods?joinFrom={joinFrom}")
+        assertThat(Destination.Foods.route).isEqualTo("foods")
     }
 
     /** "Add a key in settings" opens settings at the key, by the route the host registers. */

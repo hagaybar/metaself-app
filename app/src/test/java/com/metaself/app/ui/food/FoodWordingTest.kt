@@ -1,6 +1,15 @@
 package com.metaself.app.ui.food
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.GramsPerUnit
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
 import java.util.Locale
 import org.junit.jupiter.api.Test
 
@@ -31,5 +40,107 @@ class FoodWordingTest {
         } finally {
             Locale.setDefault(was)
         }
+    }
+
+    // --- The summary line (D55 §1) --------------------------------------------------------------
+    //
+    // The foods and figures are D55's invented examples. A list of parts, never one string: a
+    // Hebrew brand and a Latin figure in one string may be reordered by the bidi algorithm.
+
+    private fun label() = Provenance(Source.LABEL, null, setAtMillis = 0)
+
+    private fun typed() = Provenance(Source.TYPED, null, setAtMillis = 0)
+
+    private val greekYoghurt = Food(
+        name = "Greek yoghurt",
+        facts = FoodFacts(
+            per100g = PerHundredGrams(Nutrients(100.0, 8.0, 4.0, 5.0), label()),
+            perUnit = PerUnit("cup", Nutrients(150.0, 12.0, 6.0, 7.5), label()),
+            gramsPerUnit = GramsPerUnit(150.0, typed()),
+        ),
+    )
+
+    @Test
+    fun `a food knowing both ways of counting is summed up per 100 g, with what one weighs`() {
+        assertThat(FoodWording.summary(greekYoghurt))
+            .containsExactly("No brand", "100 kcal per 100 g", "one cup is 150 g").inOrder()
+    }
+
+    @Test
+    fun `a branded food whose portion has no name weighs one portion`() {
+        val biscuit = Food(
+            name = "Oat biscuit",
+            brand = "Examplebrand",
+            facts = FoodFacts(
+                per100g = PerHundredGrams(Nutrients(450.0, 8.0, 60.0, 20.0), label()),
+                gramsPerUnit = GramsPerUnit(12.0, typed()),
+            ),
+        )
+
+        assertThat(FoodWording.summary(biscuit))
+            .containsExactly("Examplebrand", "450 kcal per 100 g", "one portion is 12 g").inOrder()
+    }
+
+    @Test
+    fun `a food knowing only per 100 g says nothing about weight`() {
+        val soup = Food(
+            name = "Lentil soup",
+            facts = FoodFacts(
+                per100g = PerHundredGrams(
+                    Nutrients(90.0, 5.0, 13.0, 2.0),
+                    Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, setAtMillis = 0),
+                ),
+            ),
+        )
+
+        assertThat(FoodWording.summary(soup))
+            .containsExactly("No brand", "90 kcal per 100 g").inOrder()
+    }
+
+    @Test
+    fun `a food knowing only per one is summed up per one`() {
+        val bun = Food(
+            name = "Hamburger bun",
+            facts = FoodFacts(perUnit = PerUnit("bun", Nutrients(150.0, 5.0, 28.0, 2.0), typed())),
+            hidden = true,
+        )
+
+        assertThat(FoodWording.summary(bun)).containsExactly("No brand", "150 kcal per bun").inOrder()
+    }
+
+    /** Invented: a bun said to weigh 60 g, to show per one and a weight together. */
+    @Test
+    fun `a food knowing per one and a weight gives both`() {
+        val bun = Food(
+            name = "Hamburger bun",
+            facts = FoodFacts(
+                perUnit = PerUnit("bun", Nutrients(150.0, 5.0, 28.0, 2.0), typed()),
+                gramsPerUnit = GramsPerUnit(60.0, typed()),
+            ),
+        )
+
+        assertThat(FoodWording.summary(bun))
+            .containsExactly("No brand", "150 kcal per bun", "one bun is 60 g").inOrder()
+    }
+
+    @Test
+    fun `the brand that means none is never printed`() {
+        for (none in listOf("NA", "na", "N/A", "N.A.")) {
+            val parts = FoodWording.summary(greekYoghurt.copy(brand = none))
+            assertThat(parts.first()).isEqualTo("No brand")
+            assertThat(parts.none { it.contains(none) }).isTrue()
+        }
+    }
+
+    /** Invented: a tray worth 1,204 kcal, to show the summary groups as every figure is grouped. */
+    @Test
+    fun `a thousand-calorie figure is grouped in the summary`() {
+        val tray = Food(
+            name = "Lasagne tray",
+            facts = FoodFacts(perUnit = PerUnit("tray", Nutrients(1_204.0, 60.0, 110.0, 55.0), typed())),
+        )
+
+        assertThat(FoodWording.summary(tray)).contains("${FoodWording.grouped(1_204.0)} kcal per tray")
+        assertThat(FoodWording.summary(tray)).contains("1,204 kcal per tray")
     }
 }

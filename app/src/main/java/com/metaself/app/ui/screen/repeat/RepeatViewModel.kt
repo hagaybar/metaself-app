@@ -88,7 +88,7 @@ class RepeatViewModel @Inject constructor(
     /**
      * The question open, about the food as it is NOW rather than as it was when he picked it.
      *
-     * "Give this a portion" leaves this screen for the food's editor with the question still open,
+     * "Give this a portion" leaves this screen for the food's page with the question still open,
      * and he comes back to it. The foods are observed, so the list already shows the new portion; a
      * question still holding the food as picked would keep counting switched off beside a row that
      * says it can be counted — and, worse, would log from the old figures while the preview drew the
@@ -97,7 +97,7 @@ class RepeatViewModel @Inject constructor(
      * move it.
      *
      * Looked for among every food offered, not only those the search finds. One gone from that —
-     * deleted, hidden, or joined into another in the editor — closes the question: logging it would
+     * deleted, hidden, or joined into another from its page — closes the question: logging it would
      * write a row about a food that no longer exists.
      */
     private fun refreshed(choosing: Choosing, offered: List<Food>): Choosing? {

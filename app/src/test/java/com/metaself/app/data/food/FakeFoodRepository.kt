@@ -5,6 +5,7 @@ import com.metaself.app.domain.food.Correction
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
+import com.metaself.app.domain.food.FoodUse
 import com.metaself.app.domain.food.GramsPerUnit
 import com.metaself.app.domain.food.JoinedFacts
 import com.metaself.app.domain.food.Nutrients
@@ -13,6 +14,8 @@ import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /**
@@ -46,7 +49,7 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
      */
     fun refusesToMerge(why: EditRefused) = apply { mergeRefusal = why }
 
-    private val usedBy = mutableMapOf<Long, List<String>>()
+    private val usedBy = MutableStateFlow<Map<Long, List<String>>>(emptyMap())
 
     /**
      * Make this food one that these saved meals use.
@@ -54,10 +57,22 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
      * The other refusal decided by a query over the saved meals, which this fake has no sight of.
      * Both [savedMealsUsing] and [delete] answer from it, as the real repository answers both from
      * one query — so a test that switches it on after the owner was asked reaches the real late
-     * refusal, rather than a stand-in that accepts every delete.
+     * refusal, rather than a stand-in that accepts every delete. [observeUse] says it again when it
+     * changes, as the real one's meals are observed.
      */
     fun usedBySavedMeals(foodId: Long, vararg meals: String) =
-        apply { usedBy[foodId] = meals.toList() }
+        apply { usedBy.value = usedBy.value + (foodId to meals.toList()) }
+
+    private val loggedRows = MutableStateFlow<Map<Long, Int>>(emptyMap())
+
+    /**
+     * Make this many logged rows point at this food.
+     *
+     * The logged rows live in the day's tables, which this fake has no sight of; this stands in for
+     * them. [observeUse] says it again when it changes, as the real count is observed.
+     */
+    fun logged(foodId: Long, rows: Int) =
+        apply { loggedRows.value = loggedRows.value + (foodId to rows) }
 
     override fun observeOffered(): Flow<List<Food>> = foods.map { all ->
         all.filterNot { it.hidden }.sortedByDescending { it.updatedAtMillis }
@@ -202,13 +217,20 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         replace(foodId) { it.copy(hidden = false) }
     }
 
-    override suspend fun savedMealsUsing(foodId: Long): List<String> = usedBy[foodId].orEmpty()
+    override suspend fun savedMealsUsing(foodId: Long): List<String> = usedBy.value[foodId].orEmpty()
 
+    override fun observeUse(foodId: Long): Flow<FoodUse> =
+        combine(loggedRows, usedBy) { rows, meals ->
+            FoodUse(logged = rows[foodId] ?: 0, savedMeals = meals[foodId].orEmpty().sorted())
+        }.distinctUntilChanged()
+
+    /** The real delete leaves the rows attached to no food, so its id counts nothing afterwards. */
     override suspend fun delete(foodId: Long): EditResult {
-        usedBy[foodId]?.takeIf { it.isNotEmpty() }?.let {
+        usedBy.value[foodId]?.takeIf { it.isNotEmpty() }?.let {
             return EditResult.Refused(EditRefused.UsedBySavedMeals(it))
         }
         foods.value = foods.value.filterNot { it.id == foodId }
+        loggedRows.value = loggedRows.value - foodId
         return EditResult.Done
     }
 
@@ -231,8 +253,14 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         foods.value = foods.value.filterNot { it.id == loserId }
         // The real merge moves the loser's meal components onto the winner, so the meals that used
         // the loser now use the winner — and a delete of the winner is refused for them.
-        usedBy.remove(loserId)?.let { meals ->
-            usedBy[winnerId] = (usedBy[winnerId].orEmpty() + meals).distinct()
+        usedBy.value[loserId]?.let { meals ->
+            usedBy.value = usedBy.value - loserId +
+                (winnerId to (usedBy.value[winnerId].orEmpty() + meals).distinct())
+        }
+        // And its logged rows (`movePastRows`), so the winner counts both.
+        loggedRows.value[loserId]?.let { rows ->
+            val together = (loggedRows.value[winnerId] ?: 0) + rows
+            loggedRows.value = loggedRows.value - loserId + (winnerId to together)
         }
         return EditResult.Done
     }

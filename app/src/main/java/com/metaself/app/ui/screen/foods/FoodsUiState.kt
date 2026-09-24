@@ -1,29 +1,7 @@
 package com.metaself.app.ui.screen.foods
 
 import com.metaself.app.domain.food.Food
-import com.metaself.app.domain.food.FoodField
-import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.ActionRefused
-import com.metaself.app.ui.food.FormReview
-
-/**
- * A food opened for editing.
- *
- * @property showErrors false until he has tried to save. A form that complains about empty fields
- *   the moment it opens is a form shouting at somebody who has not done anything yet.
- * @property reviewing a review of this food asked for in this editor, and the groups accepted from
- *   it (D54). Lives and dies with the editor: Cancel, or opening another food, forgets it.
- */
-data class Editing(
-    val foodId: Long,
-    val form: FoodForm,
-    val showErrors: Boolean = false,
-    val reviewing: FormReview = FormReview(),
-) {
-    val errors: Map<FoodField, String> get() = form.errors()
-
-    fun errorFor(field: FoodField): String? = if (showErrors) errors[field] else null
-}
 
 /**
  * Joining two foods the owner has decided are one thing.
@@ -33,7 +11,7 @@ data class Editing(
  *   this way round, and on screen, because a merge is not reversible and "which one wins" is not
  *   something to leave him guessing at.
  * @property losing the food it absorbs, once it is known. Null only while he is still picking it off
- *   the list — the way in from a single food's own editor. Set as soon as the other food is known,
+ *   the list — the way in from a single food's page (D55 §5). Set as soon as the other food is known,
  *   whether picked from the list or ticked beside the first, so both ways in end on the same
  *   question with the same answers (D36): the same irreversible act asks the same thing. Held rather
  *   than acted on at once because a merge cannot be undone, and a pick is one tap on a long list.
@@ -48,32 +26,8 @@ data class Merging(val keeping: Food, val losing: Food? = null) {
 }
 
 /**
- * Deleting one whole food: either the question, or the reason it cannot go (D36).
- *
- * @property food the food as STORED, not whatever is half-typed in its name field, because the stored
- *   food is what goes and the question names what goes.
- */
-sealed interface Deleting {
-    val food: Food
-
-    /** "Delete it? This cannot be undone." — nothing has happened yet. */
-    data class Asking(override val food: Food) : Deleting
-
-    /**
-     * A saved meal uses it, so it cannot go, and nothing was asked.
-     *
-     * Drawn in the food's editor directly above its buttons, not in the screen-wide refusal slot:
-     * Delete sits at the foot of a long editor, and the top of the list is off screen from there, so
-     * a refusal drawn up there would make the tap look dead.
-     */
-    data class Refused(override val food: Food, val sentence: String) : Deleting
-}
-
-/**
- * What the foods manager is showing.
- *
- * One screen holding the whole of what maintaining a food list means: renaming, correcting,
- * deleting, hiding and joining two duplicates into one.
+ * What the food list is showing: finding, choosing, and joining two duplicates into one. A food's
+ * own page holds the rest (D55).
  *
  * @property onlyAPortionCount how many foods know nothing but that one unnamed portion of them had
  *   these calories — the ones the conversion could say least about. Derived from the data rather
@@ -89,8 +43,8 @@ sealed interface Deleting {
  * @property failed an action that threw rather than finishing, drawn in the same slot as [refusal]
  *   and never at the same time: there is nothing to act on, only the fact, and where it was written
  *   down.
- * @property deleting the delete question, or its refusal, for the food whose editor is open. Null
- *   whenever he is not in the middle of deleting something; every way off the editor lets go of it.
+ * @property hid a food its page has just hidden, as it is stored now, said at the top of the list
+ *   with Show again (D55 §6). Null once answered, and on any search, filter, choosing or opening.
  */
 data class FoodsUiState(
     val query: String = "",
@@ -99,12 +53,11 @@ data class FoodsUiState(
     val foods: List<Food> = emptyList(),
     val onlyAPortionCount: Int = 0,
     val hiddenCount: Int = 0,
-    val editing: Editing? = null,
     val merging: Merging? = null,
     val refusal: String? = null,
     val chosen: Set<Long> = emptySet(),
-    val deleting: Deleting? = null,
     val failed: ActionRefused? = null,
+    val hid: Food? = null,
 ) {
     /**
      * True while the list is in choosing mode, which is simply "something is chosen".

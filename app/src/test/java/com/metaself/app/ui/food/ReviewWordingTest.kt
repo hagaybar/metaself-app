@@ -17,19 +17,19 @@ class ReviewWordingTest {
         val line = ReviewWording.changes(
             "100 g",
             Suggestion(
-                nutrients = Nutrients(120.0, 10.0, 5.0, 7.0),
+                nutrients = Nutrients(100.0, 8.0, 4.0, 5.0),
                 confidence = Confidence.MEDIUM,
                 filled = false,
                 changes = listOf(
-                    FigureChange(Figure.PROTEIN, 7.15, 10.0, "Why."),
-                    FigureChange(Figure.CARBS, 5.6, 5.0, "Why."),
-                    FigureChange(Figure.FAT, 8.45, 7.0, "Why."),
+                    FigureChange(Figure.PROTEIN, 6.25, 8.0, "Why."),
+                    FigureChange(Figure.CARBS, 4.5, 4.0, "Why."),
+                    FigureChange(Figure.FAT, 5.75, 5.0, "Why."),
                 ),
                 reason = null,
             ),
         )
 
-        assertThat(line).isEqualTo("Per 100 g: Protein 7.15 → 10 · Carbs 5.6 → 5 · Fat 8.45 → 7")
+        assertThat(line).isEqualTo("Per 100 g: Protein 6.25 → 8 · Carbs 4.5 → 4 · Fat 5.75 → 5")
     }
 
     @Test
@@ -53,7 +53,7 @@ class ReviewWordingTest {
     @Test
     fun `a group's reasons are one line, each said once`() {
         val changed = Suggestion(
-            nutrients = Nutrients(120.0, 10.0, 5.0, 7.0),
+            nutrients = Nutrients(100.0, 8.0, 4.0, 5.0),
             confidence = Confidence.MEDIUM,
             filled = false,
             changes = listOf(

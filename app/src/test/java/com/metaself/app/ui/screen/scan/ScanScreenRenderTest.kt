@@ -55,7 +55,7 @@ class ScanScreenRenderTest {
         val form = ProductForm(
             barcode = "7290000066318",
             name = "במבה",
-            brand = "אסם",
+            brand = "דוגמה",
             kcalPer100g = "535",
             proteinPer100g = "17",
             carbsPer100g = "49",
@@ -103,7 +103,7 @@ class ScanScreenRenderTest {
     private val bambaWithoutFat = ProductForm.prefilled(
         barcode = "7290000066318",
         name = "במבה",
-        brand = "אסם",
+        brand = "דוגמה",
         kcalPer100g = 535.0,
         proteinPer100g = 17.0,
         carbsPer100g = 49.0,
@@ -127,7 +127,7 @@ class ScanScreenRenderTest {
         assertThat(texts).contains(LACKS_FAT)
         assertThat(texts.indexOf(LACKS_FAT)).isLessThan(texts.indexOf(PACKET_FIGURES_KEPT))
         assertThat(texts.indexOf(LACKS_FAT)).isLessThan(texts.indexOf("Calories per 100 g"))
-        assertThat(texts).containsAtLeast("במבה", "אסם", "535", "17", "49", "80")
+        assertThat(texts).containsAtLeast("במבה", "דוגמה", "535", "17", "49", "80")
         assertThat(texts[texts.indexOf("Fat per 100 g") + 1]).isEqualTo("")
         assertThat(texts[texts.indexOf("Protein per 100 g") + 1]).isEqualTo("17")
         assertThat(texts[texts.indexOf("Calories per 100 g") + 1]).isEqualTo("535")
@@ -212,7 +212,7 @@ class ScanScreenRenderTest {
         val form = ProductForm(
             barcode = "7290000066318",
             name = "במבה",
-            brand = "אסם",
+            brand = "דוגמה",
             kcalPer100g = "535",
             proteinPer100g = "17",
             carbsPer100g = "49",
@@ -235,7 +235,7 @@ class ScanScreenRenderTest {
     private val bamba = Product(
         barcode = "7290000066318",
         name = "במבה",
-        brand = "אסם",
+        brand = "דוגמה",
         kcalPer100g = 535.0,
         proteinPer100g = 17.0,
         carbsPer100g = 49.0,

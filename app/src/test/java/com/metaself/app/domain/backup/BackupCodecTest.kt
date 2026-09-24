@@ -38,13 +38,13 @@ class BackupCodecTest {
                 items = listOf(
                     BackupItem(
                         name = "יוגורט בסגנון יווני",
-                        portion = "130 g",
-                        portionAmount = 130.0,
+                        portion = "150 g",
+                        portionAmount = 150.0,
                         portionUnit = "g",
-                        kcal = 130,
-                        proteinG = 10,
-                        carbsG = 5,
-                        fatG = 7,
+                        kcal = 150,
+                        proteinG = 12,
+                        carbsG = 6,
+                        fatG = 8,
                         source = "AI_ESTIMATE",
                         confidence = "HIGH",
                     ),
@@ -74,7 +74,7 @@ class BackupCodecTest {
         val text = BackupCodec.encode(full)
 
         assertThat(text).contains("יוגורט בסגנון יווני")
-        assertThat(text).contains("\"kcal\": 130")
+        assertThat(text).contains("\"kcal\": 150")
         assertThat(text.lines().size).isGreaterThan(10)
     }
 
@@ -182,7 +182,7 @@ class BackupCodecTest {
 
         assertThat(text).contains("\"portion_amount\": null")
         assertThat(restored.portionAmount).isEqualTo(0.0)
-        assertThat(restored.kcal).isEqualTo(130)
+        assertThat(restored.kcal).isEqualTo(150)
         assertThat(restored.name).isEqualTo(item.name)
     }
 

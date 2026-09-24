@@ -663,12 +663,12 @@ class RepeatViewModelTest {
     }
 
     /**
-     * "Give this a portion" leaves for the food's editor with this question still open, and he comes
+     * "Give this a portion" leaves for the food's page with this question still open, and he comes
      * back to it. The count has to be on offer when he does: a question still holding the food as
      * it was when he picked it would keep the option he just made possible switched off.
      */
     @Test
-    fun `a portion given in the editor reaches the question already open`() = runTest(dispatcher) {
+    fun `a portion given on the food's page reaches the question already open`() = runTest(dispatcher) {
         val foods = FakeFoodRepository(listOf(aFood(name = "Rice", facts = FoodFacts(per100g = aPer100g()))))
         val viewModel = watched(foods)
         viewModel.beginChoosing(0)

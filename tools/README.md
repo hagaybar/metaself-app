@@ -19,6 +19,11 @@ Scripts carried in version control so they are not only on one machine.
   gets no statement) against `sqlite3` from the latest exported schema. It plans each group from the
   food as the app READS it, not from its columns, and asserts what the app reads afterwards. CI's
   `RoomFoodRepositoryTest` is still the real check.
+- `check-food-use.py` — runs a food page's *Where it's used* reads (D55 §3: how many logged rows
+  point at a food, and which saved meals hold it) against `sqlite3` from the latest exported schema,
+  through rows logged, deleted and moved by a join, and models whether the app reads the food at
+  all. It resolves a statement held in a `const val`, as `check-correct-keeps.py` now does. That
+  each answer is emitted again when the tables move is only checked by CI's `RoomFoodRepositoryTest`.
 
 The copies that actually run live in `~/bin`. These are the source of truth for what they should
 contain.

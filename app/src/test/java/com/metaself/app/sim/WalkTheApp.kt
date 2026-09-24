@@ -108,7 +108,7 @@ class WalkTheApp {
          */
         fun startingPlace(): Where {
             val asked = File("../simulation/start.txt").takeIf { it.exists() }?.readText()?.trim()
-            return if (asked.equals("manager", ignoreCase = true)) Where.Manager else Where.Today
+            return if (asked.equals("manager", ignoreCase = true)) Where.Manager() else Where.Today
         }
 
         fun outputDir() = File("build/simulation")

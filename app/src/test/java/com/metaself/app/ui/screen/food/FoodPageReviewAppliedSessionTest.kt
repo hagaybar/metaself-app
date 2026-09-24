@@ -1,9 +1,8 @@
-package com.metaself.app.ui.screen.foods
+package com.metaself.app.ui.screen.food
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.SavedStateHandle
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -27,7 +26,6 @@ import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import com.metaself.app.ui.ComposeSession
-import com.metaself.app.ui.food.ReviewActions
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,8 +33,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Apply these changes, Undo and Save, pressed through against the view model they are really wired
- * to (D54 §11): a box the review changed is marked for a screen reader after Apply, and the mark
+ * Apply these changes, Undo and Save on a food's own page (D55), pressed through against the view
+ * model they are really wired to (D54 §11): a box the review changed is marked for a screen reader after Apply, and the mark
  * goes when he types in it, undoes, or saves. Every figure is invented.
  *
  * A mark is a colour on screen, which a render here cannot see; what it can see is the state
@@ -46,7 +44,7 @@ import org.robolectric.annotation.Config
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w360dp-h640dp")
-class FoodsReviewAppliedSessionTest {
+class FoodPageReviewAppliedSessionTest {
 
     @get:Rule
     val compose = createComposeRule()
@@ -55,8 +53,7 @@ class FoodsReviewAppliedSessionTest {
 
     @Test
     fun `applying marks the changed boxes, and typing in one takes its mark off`() {
-        session.start { Foods(FakeFoodRepository(listOf(oatBiscuit()))) }
-        session.press("Oat biscuit")
+        session.start { Page(FakeFoodRepository(listOf(oatBiscuit()))) }
         val shown = session.press("Review the figures")
         assertThat(shown).contains("Per 100 g: Calories 480 → 470")
         assertThat(shown).contains("Per biscuit: Fat 1 → 4")
@@ -75,8 +72,7 @@ class FoodsReviewAppliedSessionTest {
 
     @Test
     fun `Undo puts the figures back, takes every mark off, and offers the changes again`() {
-        session.start { Foods(FakeFoodRepository(listOf(oatBiscuit()))) }
-        session.press("Oat biscuit")
+        session.start { Page(FakeFoodRepository(listOf(oatBiscuit()))) }
         session.press("Review the figures")
         session.press("Apply these changes")
         assertThat(marked()).isEqualTo(2)
@@ -91,16 +87,16 @@ class FoodsReviewAppliedSessionTest {
     }
 
     @Test
-    fun `Save keeps the applied figures, and no mark is left`() {
+    fun `Save keeps the applied figures, and the page closes`() {
         val foods = FakeFoodRepository(listOf(oatBiscuit()))
-        session.start { Foods(foods) }
-        session.press("Oat biscuit")
+        session.start { Page(foods) }
         session.press("Review the figures")
         session.press("Apply these changes")
         assertThat(marked()).isEqualTo(2)
 
-        session.press("Save")
+        val after = session.press("Save")
 
+        assertThat(after).doesNotContain("Save")
         assertThat(marked()).isEqualTo(0)
         val saved = foods.current.single().facts
         assertThat(saved.per100g!!.nutrients.kcal).isEqualTo(470.0)
@@ -144,46 +140,19 @@ class FoodsReviewAppliedSessionTest {
         ),
     )
 
-    /** The food list, wired to a live view model exactly as the walk harness's manager wires it. */
+    /** One food's page, food 1, on a live view model whose review proposes [bothChanged]. */
     @Composable
-    private fun Foods(foods: FakeFoodRepository) {
+    private fun Page(foods: FakeFoodRepository) {
         val viewModel = remember {
-            FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, FakeFoodReviewer(bothChanged()))
+            FoodPageViewModel(
+                foods,
+                Now { 1_000 },
+                ProblemLog.NONE,
+                FakeFoodReviewer(bothChanged()),
+                SavedStateHandle(mapOf(FoodPageViewModel.FOOD_ID to 1L)),
+            )
         }
-        val state by viewModel.state.collectAsState()
-
-        FoodsScreen(
-            state = state,
-            onSearch = viewModel::search,
-            onShowOnlyPortions = viewModel::showOnlyPortions,
-            onShowHidden = viewModel::showHidden,
-            onEdit = viewModel::edit,
-            onSetForm = viewModel::setForm,
-            onSave = viewModel::save,
-            onCancelEditing = viewModel::cancelEditing,
-            onHide = viewModel::hide,
-            onUnhide = viewModel::unhide,
-            onDelete = viewModel::askToDelete,
-            onConfirmDeleting = viewModel::confirmDeleting,
-            onCancelDeleting = viewModel::cancelDeleting,
-            onBeginMerging = viewModel::beginMerging,
-            onMergeInto = viewModel::mergeInto,
-            onConfirmMerging = viewModel::confirmJoining,
-            onCancelMerging = viewModel::cancelMerging,
-            onDismissRefusal = viewModel::dismissRefusal,
-            review = ReviewActions(
-                onReview = viewModel::review,
-                onApply = viewModel::applyReview,
-                onUndo = viewModel::undoReview,
-                onDismiss = viewModel::dismissReview,
-            ),
-            onBeginChoosing = viewModel::beginChoosing,
-            onToggleChosen = viewModel::toggleChosen,
-            onClearChoosing = viewModel::clearChoosing,
-            onMakeMeal = {},
-            onJoinChosen = viewModel::joinChosen,
-            onBack = {},
-        )
+        LiveFoodPage(viewModel)
     }
 
     private companion object {

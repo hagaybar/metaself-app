@@ -47,7 +47,7 @@ class ScanViewModelTest {
     private val bamba = Product(
         barcode = "7290000066318",
         name = "במבה",
-        brand = "אסם",
+        brand = "דוגמה",
         kcalPer100g = 535.0,
         proteinPer100g = 17.0,
         carbsPer100g = 49.0,
@@ -126,7 +126,7 @@ class ScanViewModelTest {
     private val withoutFat = ProductForm.prefilled(
         barcode = "7290000066318",
         name = "במבה",
-        brand = "אסם",
+        brand = "דוגמה",
         kcalPer100g = 535.0,
         proteinPer100g = 17.0,
         carbsPer100g = 49.0,

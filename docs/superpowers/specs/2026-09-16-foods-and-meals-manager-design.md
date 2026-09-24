@@ -82,6 +82,12 @@ The foods manager as it already exists — search, rename, correct each of the t
 own provenance, hide, delete, join two duplicates — now with a home of its own rather than a link
 from the logging screen. Nothing about what the screen does changes.
 
+> Corrected 2026-09-24, by D55 (`2026-09-24-food-page-design.md`). A food no longer opens in place
+> of its row. The list keeps search, choosing and joining two duplicates; tapping a food opens a page
+> of its own, where it is renamed, corrected, reviewed, hidden and deleted. The editor had grown
+> taller than the phone once a review could sit in it, and correcting one food is not helped by the
+> foods around it; joining is, and stays on the list.
+
 ### 3.3 My meals
 
 New. Every meal the owner has built: its name, what it comes to, and what is in it. Renaming,

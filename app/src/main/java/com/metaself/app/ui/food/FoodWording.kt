@@ -27,14 +27,38 @@ import kotlin.math.roundToInt
 object FoodWording {
 
     /** Every way this food can say what it is worth, in the order it would be counted. */
-    fun whatItKnows(food: Food): List<String> = listOfNotNull(
-        food.facts.per100g?.let { "${grouped(it.nutrients.kcal)} kcal per 100 g" },
-        food.facts.perUnit?.let { "${grouped(it.nutrients.kcal)} kcal per ${it.unitName}" },
-        food.facts.gramsPerUnit?.let { weight ->
-            val unit = food.facts.perUnit?.unitName ?: FoodFacts.PORTION
-            "one $unit is ${grouped(weight.grams)} g"
-        },
+    fun whatItKnows(food: Food): List<String> =
+        listOfNotNull(per100g(food), perUnit(food), weighs(food))
+
+    /**
+     * What a food is, in one line, as its row in *My foods* and the head of its page say it (D55
+     * §1): the brand or [NO_BRAND]; the first way of counting it knows, in [whatItKnows]'s order;
+     * and what one weighs, when it knows — "No brand · 100 kcal per 100 g · one cup is 150 g".
+     *
+     * **Parts, never one string**, for the reason this object's KDoc gives: a Hebrew brand and a
+     * Latin figure are two runs of opposite direction. The screen draws each as its own text with
+     * the ` · ` between them. A food knowing both ways of counting shows per 100 g only; its page
+     * shows the rest.
+     */
+    fun summary(food: Food): List<String> = listOfNotNull(
+        food.realBrand ?: NO_BRAND,
+        per100g(food) ?: perUnit(food),
+        weighs(food),
     )
+
+    private fun per100g(food: Food): String? =
+        food.facts.per100g?.let { "${grouped(it.nutrients.kcal)} kcal per 100 g" }
+
+    private fun perUnit(food: Food): String? =
+        food.facts.perUnit?.let { "${grouped(it.nutrients.kcal)} kcal per ${it.unitName}" }
+
+    private fun weighs(food: Food): String? = food.facts.gramsPerUnit?.let { weight ->
+        val unit = food.facts.perUnit?.unitName ?: FoodFacts.PORTION
+        "one $unit is ${grouped(weight.grams)} g"
+    }
+
+    /** What [summary] says of a food with no brand, where `NA` would otherwise be printed. */
+    const val NO_BRAND = "No brand"
 
     /**
      * The brand, when it is one — `NA` is the brand of food with no brand and is not worth saying.

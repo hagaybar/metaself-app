@@ -13,13 +13,17 @@ import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
+import com.metaself.app.domain.food.FoodUse
 import com.metaself.app.domain.food.GramsPerUnit
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import com.metaself.app.domain.food.ReplacedFacts
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -656,6 +660,111 @@ class RoomFoodRepositoryTest {
 
         assertThat(repository.delete(food.id)).isEqualTo(EditResult.Done)
         assertThat(repository.observeAll().first()).isEmpty()
+    }
+
+    // --- Where it's used (D55 §3) ----------------------------------------------------------------------
+    //
+    // The statements themselves are also run by `tools/check-food-use.py` against the exported
+    // schema on the development box. What only this can check is Room's side: that each answer is
+    // said again when the tables under it move, which is what keeps an open page's count true.
+
+    private val savedMeals by lazy {
+        RoomSavedMealRepository(database, database.savedMealDao(), database.foodDao(), Now { moment })
+    }
+
+    /** A day's meal holding one row of each of these foods (null: a row attached to no food). */
+    private suspend fun logged(vararg foodIds: Long?, epochDay: Long = 20_699): List<Long> {
+        val mealId = database.mealDao().insertMeal(
+            MealEntity(epochDay = epochDay, loggedAtMillis = 1_000, note = null),
+        )
+        return database.mealDao().insertItems(
+            foodIds.map { foodId ->
+                FoodItemEntity(
+                    mealId = mealId, name = "Greek yoghurt", portion = "150 g",
+                    portionAmount = 150.0, portionUnit = "g", kcal = 150, proteinG = 12,
+                    carbsG = 6, fatG = 8, source = "LABEL", confidence = null, foodId = foodId,
+                )
+            },
+        )
+    }
+
+    private suspend fun inSavedMeal(name: String, foodId: Long) {
+        val meal = (savedMeals.create(name) as MealResult.Built).mealId
+        savedMeals.put(meal, foodId, 1.0, CountedAs.UNITS)
+    }
+
+    /** Every answer [FoodRepository.observeUse] gives from now on, in order. */
+    private fun TestScope.watching(foodId: Long): Channel<FoodUse> {
+        val said = Channel<FoodUse>(Channel.UNLIMITED)
+        backgroundScope.launch { repository.observeUse(foodId).collect { said.send(it) } }
+        return said
+    }
+
+    /** Waits for the answer [wanted] describes; one never given fails the test on runTest's timeout. */
+    private suspend fun Channel<FoodUse>.until(wanted: (FoodUse) -> Boolean): FoodUse {
+        while (true) {
+            val use = receive()
+            if (wanted(use)) return use
+        }
+    }
+
+    @Test
+    fun `a food's use counts every row of it and names the saved meals holding it`() = runTest {
+        val yoghurt = repository.findOrCreate("Greek yoghurt", facts = FoodFacts(per100g = per100g())).food
+        val biscuit = repository.findOrCreate("Oat biscuit", facts = FoodFacts(per100g = per100g())).food
+        logged(yoghurt.id, yoghurt.id, epochDay = 20_698)
+        logged(yoghurt.id, biscuit.id, null)
+        inSavedMeal("Snack plate", yoghurt.id)
+        inSavedMeal("Breakfast bowl", yoghurt.id)
+
+        assertThat(repository.observeUse(yoghurt.id).first())
+            .isEqualTo(FoodUse(logged = 3, savedMeals = listOf("Breakfast bowl", "Snack plate")))
+        assertThat(repository.observeUse(biscuit.id).first())
+            .isEqualTo(FoodUse(logged = 1, savedMeals = emptyList()))
+    }
+
+    @Test
+    fun `a food's use is said again when a row of it is logged`() = runTest {
+        val yoghurt = repository.findOrCreate("Greek yoghurt", facts = FoodFacts(per100g = per100g())).food
+        logged(yoghurt.id)
+        val said = watching(yoghurt.id)
+        said.until { it.logged == 1 }
+
+        logged(yoghurt.id)
+
+        assertThat(said.until { it.logged == 2 }.savedMeals).isEmpty()
+    }
+
+    @Test
+    fun `a food's use is said again when a day's meal holding it goes`() = runTest {
+        val yoghurt = repository.findOrCreate("Greek yoghurt", facts = FoodFacts(per100g = per100g())).food
+        logged(yoghurt.id)
+        val only = logged(yoghurt.id).single()
+        val said = watching(yoghurt.id)
+        said.until { it.logged == 2 }
+
+        // The row was the meal's last, so the meal goes with it.
+        database.mealDao().deleteItem(only)
+
+        assertThat(said.until { it.logged == 1 }).isEqualTo(FoodUse(logged = 1, savedMeals = emptyList()))
+    }
+
+    @Test
+    fun `a food's use is said again when a join moves another food's rows onto it`() = runTest {
+        val kept = repository.findOrCreate("Greek yoghurt", facts = FoodFacts(per100g = per100g())).food
+        val absorbed = repository.findOrCreate("Strained yoghurt", facts = FoodFacts(per100g = per100g())).food
+        logged(kept.id)
+        logged(absorbed.id, absorbed.id)
+        inSavedMeal("Snack plate", absorbed.id)
+        val said = watching(kept.id)
+        said.until { it.logged == 1 }
+
+        assertThat(repository.merge(winnerId = kept.id, loserId = absorbed.id)).isEqualTo(EditResult.Done)
+
+        assertThat(said.until { it.logged == 3 && it.savedMeals.isNotEmpty() })
+            .isEqualTo(FoodUse(logged = 3, savedMeals = listOf("Snack plate")))
+        assertThat(repository.observeUse(absorbed.id).first())
+            .isEqualTo(FoodUse(logged = 0, savedMeals = emptyList()))
     }
 
     // --- Merging ---------------------------------------------------------------------------------------

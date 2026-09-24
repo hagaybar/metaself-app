@@ -15,14 +15,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,22 +34,13 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
-import com.metaself.app.domain.ai.Figure
-import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
-import com.metaself.app.domain.food.FoodField
-import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.MetaSelfScreen
-import com.metaself.app.ui.food.AskBeforeDeleting
 import com.metaself.app.ui.food.FoodWording
-import com.metaself.app.ui.food.ReviewActions
-import com.metaself.app.ui.food.ReviewTheFigures
-import com.metaself.app.ui.food.ReviewedBox
-import com.metaself.app.ui.food.changedBoxColors
-import com.metaself.app.ui.food.changedByReview
+import com.metaself.app.ui.food.PartsLine
+import com.metaself.app.ui.food.SlotSentence
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 
@@ -64,15 +53,18 @@ import com.metaself.app.ui.theme.Spacing
  * [FoodsContent] — the very pairing the split into a reusable list had to preserve — so they are
  * what guards the split, and deleting the screen would delete the guard with it.
  *
- * Renaming, correcting, deleting, hiding and joining two duplicates into one, in one place, because
- * they are one job: he has noticed the list has a duplicate in it, or a wrong number, or a name he
- * has changed his mind about, and he has sat down to fix it.
+ * Finding a food, choosing several, and joining two duplicates into one: what is about more than one
+ * food (D55 §1).
  *
- * **Everything opens in place rather than on a screen of its own.** What he is editing stays next to
- * the foods around it, which is what he needs when the thing he is deciding is whether two entries
- * are the same thing. Deleting a food and joining two ask first, in place too, and the question or
- * the refusal is always drawn where he can see it: in the editor where he pressed Delete, or brought
- * into view from the top of the list (D36).
+ * **A food opens its own page** rather than an editor in place of its row. The editor had grown
+ * taller than the phone — with a review on screen the foods above and below were off screen anyway,
+ * and every refusal had to be pulled down into it because the top of the list was out of sight from
+ * its foot. Keeping it next to the foods around it helped with one job, deciding whether two entries
+ * are the same thing, and that job — joining — stays here: a page's *Join with a duplicate* comes back
+ * to this list to pick, with its search as he left it. Correcting one food's figures is not helped by
+ * its neighbours; it deserves the whole screen (D50's reasoning, for the day's record).
+ *
+ * A join asks first, and the question is brought into view from the top of the list (D36).
  *
  * Two things this screen shows that nothing else can. The first is the count of foods that know
  * nothing but "one portion of it was worth this" — the ones the conversion of his record could say
@@ -87,21 +79,13 @@ fun FoodsScreen(
     onSearch: (String) -> Unit,
     onShowOnlyPortions: (Boolean) -> Unit,
     onShowHidden: (Boolean) -> Unit,
-    onEdit: (Long) -> Unit,
-    onSetForm: (FoodForm) -> Unit,
-    onSave: () -> Unit,
-    onCancelEditing: () -> Unit,
-    onHide: (Long) -> Unit,
-    onUnhide: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
-    onConfirmDeleting: () -> Unit,
-    onCancelDeleting: () -> Unit,
-    onBeginMerging: (Long) -> Unit,
+    onOpen: (Long) -> Unit,
     onMergeInto: (Long) -> Unit,
     onConfirmMerging: () -> Unit,
     onCancelMerging: () -> Unit,
     onDismissRefusal: () -> Unit,
-    review: ReviewActions,
+    onShowAgain: () -> Unit,
+    onDismissHidden: () -> Unit,
     onBeginChoosing: (Long) -> Unit,
     onToggleChosen: (Long) -> Unit,
     onClearChoosing: () -> Unit,
@@ -120,21 +104,13 @@ fun FoodsScreen(
             onSearch = onSearch,
             onShowOnlyPortions = onShowOnlyPortions,
             onShowHidden = onShowHidden,
-            onEdit = onEdit,
-            onSetForm = onSetForm,
-            onSave = onSave,
-            onCancelEditing = onCancelEditing,
-            onHide = onHide,
-            onUnhide = onUnhide,
-            onDelete = onDelete,
-            onConfirmDeleting = onConfirmDeleting,
-            onCancelDeleting = onCancelDeleting,
-            onBeginMerging = onBeginMerging,
+            onOpen = onOpen,
             onMergeInto = onMergeInto,
             onConfirmMerging = onConfirmMerging,
             onCancelMerging = onCancelMerging,
             onDismissRefusal = onDismissRefusal,
-            review = review,
+            onShowAgain = onShowAgain,
+            onDismissHidden = onDismissHidden,
             onBeginChoosing = onBeginChoosing,
             onToggleChosen = onToggleChosen,
             onClearChoosing = onClearChoosing,
@@ -159,21 +135,13 @@ fun FoodsContent(
     onSearch: (String) -> Unit,
     onShowOnlyPortions: (Boolean) -> Unit,
     onShowHidden: (Boolean) -> Unit,
-    onEdit: (Long) -> Unit,
-    onSetForm: (FoodForm) -> Unit,
-    onSave: () -> Unit,
-    onCancelEditing: () -> Unit,
-    onHide: (Long) -> Unit,
-    onUnhide: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
-    onConfirmDeleting: () -> Unit,
-    onCancelDeleting: () -> Unit,
-    onBeginMerging: (Long) -> Unit,
+    onOpen: (Long) -> Unit,
     onMergeInto: (Long) -> Unit,
     onConfirmMerging: () -> Unit,
     onCancelMerging: () -> Unit,
     onDismissRefusal: () -> Unit,
-    review: ReviewActions,
+    onShowAgain: () -> Unit,
+    onDismissHidden: () -> Unit,
     onBeginChoosing: (Long) -> Unit,
     onToggleChosen: (Long) -> Unit,
     onClearChoosing: () -> Unit,
@@ -189,20 +157,30 @@ fun FoodsContent(
     }
 
     // A refusal is not a failure: it names what stands in the way so he can go and deal with it.
-    // An action that threw is a failure, and says so in the same place (ActionRefused).
-    //
-    // While a food is open the sentence is drawn in its editor instead, beside the Save or Delete
-    // that produced it: the editor can be far down the list, and a sentence at the top would be off
-    // screen from there, making the tap look dead. Only when the open food is actually drawn — a
-    // search that has since hidden it leaves nowhere nearer than here.
+    // An action that threw is a failure, and says so in the same place (ActionRefused). Always at
+    // the top: nothing is said in an editor on the list any more (D55).
     val sentence = state.refusal ?: state.failed?.let { stringResource(it.sentence) }
-    val saidInTheEditor = state.editing != null && state.foods.any { it.id == state.editing.foodId }
-    if (!saidInTheEditor) {
-        sentence?.let { SlotSentence(it, onDismissRefusal) }
+    sentence?.let { SlotSentence(it, onDismissRefusal) }
+
+    // A food its page just hid (D55 §6). A food that silently leaves a list it was just in reads as
+    // deleted, so it is said, with the undo hiding has always had: Show again.
+    state.hid?.let { hidden ->
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(
+                text = stringResource(R.string.foods_hidden_notice, hidden.name),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                TextButton(onClick = onShowAgain) { Text(stringResource(R.string.foods_unhide)) }
+                TextButton(onClick = onDismissHidden) {
+                    Text(stringResource(R.string.foods_refusal_dismiss))
+                }
+            }
+        }
     }
 
-    // Two shapes, because there are two ways in. From a food's own editor only the survivor is
-    // known and the other one is still to be picked off the list. From two ticked in the list both
+    // Two shapes, because there are two ways in. From a food's page only the survivor is known and
+    // the other one is still to be picked off the list (D55 §5). From two ticked in the list both
     // are known already, so the list is not a picker at all: it names the pair, says which one
     // survives, and asks. A merge cannot be undone, so the one thing neither shape may do is leave a
     // stray tap on a row able to join the wrong two. Once the other one is known — picked or
@@ -213,7 +191,7 @@ fun FoodsContent(
     // the pick would look like it did nothing, and his next tap on a row would abandon a join he
     // never saw asked about. Everything that does the bringing sits INSIDE this `let`: outside it,
     // an empty column would add a gap to every ordinary Foods screen, and an effect keyed on a null
-    // join would scroll to the top whenever a join ended — away from a food he had just opened.
+    // join would scroll to the top whenever a join ended — away from the row he had just tapped.
     state.merging?.let { merging ->
         val requester = remember { BringIntoViewRequester() }
         Column(
@@ -334,7 +312,7 @@ fun FoodsContent(
 
     // A gesture nothing on screen mentions is a gesture nobody finds. Said once, quietly, and only
     // while there is nothing to say about a choice already made.
-    if (!state.choosing && state.editing == null && state.merging == null) {
+    if (!state.choosing && state.merging == null) {
         Text(
             text = stringResource(R.string.foods_hold_to_choose),
             style = MaterialTheme.typography.bodySmall,
@@ -344,27 +322,7 @@ fun FoodsContent(
 
     Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
         state.foods.forEach { food ->
-            val editing = state.editing?.takeIf { it.foodId == food.id }
-
             when {
-                editing != null -> Editor(
-                    editing = editing,
-                    food = food,
-                    onSetForm = onSetForm,
-                    onSave = onSave,
-                    onCancel = onCancelEditing,
-                    onHide = { onHide(food.id) },
-                    onUnhide = { onUnhide(food.id) },
-                    onDelete = { onDelete(food.id) },
-                    onBeginMerging = { onBeginMerging(food.id) },
-                    deleting = state.deleting?.takeIf { it.food.id == food.id },
-                    onConfirmDelete = onConfirmDeleting,
-                    onKeep = onCancelDeleting,
-                    sentence = sentence,
-                    onDismissSentence = onDismissRefusal,
-                    review = review,
-                )
-
                 // Only while the other food is still to be picked. With both already ticked the
                 // question is "shall I?", not "which?", and every row being a target would mean one
                 // mistaken tap joining the wrong pair irreversibly.
@@ -378,7 +336,7 @@ fun FoodsContent(
                     food = food,
                     chosen = food.id in state.chosen,
                     choosing = state.choosing,
-                    onOpen = { onEdit(food.id) },
+                    onOpen = { onOpen(food.id) },
                     onBeginChoosing = { onBeginChoosing(food.id) },
                     onToggleChosen = { onToggleChosen(food.id) },
                 )
@@ -452,9 +410,9 @@ private fun Chosen(
 /**
  * One food, closed: everything it is, at a glance.
  *
- * Holding it starts choosing; an ordinary tap still opens it to be corrected. That way round because
- * a tap already means "put this right", and choosing that began on a tap would turn every attempt to
- * fix a wrong number into the start of a meal. While choosing, the tap ticks instead.
+ * Holding it starts choosing; an ordinary tap opens its page (D55). That way round because a tap
+ * already means "put this right", and choosing that began on a tap would turn every attempt to fix a
+ * wrong number into the start of a meal. While choosing, the tap ticks instead.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -513,10 +471,15 @@ private fun FoodRow(
 }
 
 /**
- * Everything a closed food says about itself: its name, its brand, the other names it answers to,
- * what it knows, and anything wrong with that. One copy, drawn by the ordinary row and by the row he
+ * Everything a row says about its food: its name, then one summary line — the brand or No brand,
+ * the first way of counting it knows, and what one weighs — then the other names it answers to and
+ * anything wrong with its figures (D55 §1). One copy, drawn by the ordinary row and by the row he
  * picks a duplicate from — the brand and the numbers are what tell two duplicates apart, so the one
  * irreversible decision on this screen must not be made on a bare name.
+ *
+ * The summary is the page's own heading line, from the same function, so the two cannot drift; and
+ * separate texts, never one string, so a Hebrew brand and a Latin figure are not reordered into each
+ * other (#9).
  */
 @Composable
 private fun FoodSummary(
@@ -530,26 +493,17 @@ private fun FoodSummary(
     ) {
         Text(text = food.name, style = MaterialTheme.typography.bodyLarge, color = nameColor)
 
-        FoodWording.brand(food)?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        PartsLine(
+            parts = FoodWording.summary(food),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         // What merging two duplicates leaves behind, and the reason it is worth doing: the other
         // name still finds this food.
         FoodWording.alsoKnownAs(food)?.let {
             Text(
                 text = stringResource(R.string.foods_also_known_as, it),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        FoodWording.whatItKnows(food).forEach {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -598,251 +552,4 @@ private fun MergeCandidate(food: Food, isTheOneKept: Boolean, onPick: () -> Unit
             )
         }
     }
-}
-
-/**
- * One food, open: everything it is, as fields.
- *
- * **A group left empty means the food does not know that**, and clearing one is how he says so. The
- * form allows it because the three facts are optional by design — a form insisting on all of them
- * would quietly reintroduce the idea that a food has a kind, which is exactly what this model
- * removed.
- *
- * Where each stored number came from is shown beside its group, because a number he is about to
- * overwrite is worth knowing the provenance of: a figure off a packet deserves more hesitation than
- * one a model guessed.
- */
-@Composable
-private fun Editor(
-    editing: Editing,
-    food: Food,
-    onSetForm: (FoodForm) -> Unit,
-    onSave: () -> Unit,
-    onCancel: () -> Unit,
-    onHide: () -> Unit,
-    onUnhide: () -> Unit,
-    onDelete: () -> Unit,
-    onBeginMerging: () -> Unit,
-    deleting: Deleting?,
-    onConfirmDelete: () -> Unit,
-    onKeep: () -> Unit,
-    /** The screen's refusal or failure, drawn here rather than at the top while this is open. */
-    sentence: String?,
-    onDismissSentence: () -> Unit,
-    review: ReviewActions,
-) {
-    val form = editing.form
-    val changed = editing.reviewing.changedBoxes
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-        // D48's grouping. Every field here was 4 dp from every other, so the per-100 g four and the
-        // per-portion four — the same four labels — ran together with nothing between them. Each
-        // group is now one block, tight inside, and the blocks are a section apart.
-        verticalArrangement = Arrangement.spacedBy(Spacing.Section),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            Field(
-                value = form.name,
-                onValueChange = { onSetForm(form.copy(name = it)) },
-                label = stringResource(R.string.foods_field_name),
-                error = editing.errorFor(FoodField.NAME),
-            )
-            Field(
-                value = form.brand,
-                onValueChange = { onSetForm(form.copy(brand = it)) },
-                label = stringResource(R.string.foods_field_brand),
-                error = null,
-            )
-            // Putting a real brand on a food changes what it is, so the next plain one starts a new
-            // entry. Correct, and it will look like a duplicate coming back unless it was expected.
-            Text(
-                text = stringResource(R.string.foods_brand_splits),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
-            // A food's facts are kept as typed, decimals included. Said once above both groups, so the
-            // whole-grams rule of Type the numbers is not taken for this form's and a packet's 0.5 g is
-            // not rounded by hand before it is typed (D38).
-            Text(
-                text = stringResource(R.string.food_facts_decimals_kept),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
-        }
-
-        // Beneath the name and brand, above the groups it may suggest figures for (D54 §1). What it
-        // suggests is listed under the button, never in the boxes, until he applies it; then each
-        // box it changed is drawn in the teal accent until he saves, undoes or types in it (§11).
-        ReviewTheFigures(
-            reviewing = editing.reviewing,
-            offered = FoodField.NAME !in editing.errors,
-            unitName = form.unitName,
-            actions = review,
-        )
-
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            FactHeading(
-                title = stringResource(R.string.foods_group_per_100g),
-                origin = food.facts.per100g
-                    ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
-            )
-            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_100G), numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.KCAL) in changed)
-            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN) in changed)
-            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.CARBS) in changed)
-            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.FAT) in changed)
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            FactHeading(
-                title = stringResource(R.string.foods_group_per_unit),
-                origin = food.facts.perUnit
-                    ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
-            )
-            Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), editing.errorFor(FoodField.UNIT_NAME))
-            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_UNIT), numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed)
-            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed)
-            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed)
-            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.FAT) in changed)
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            FactHeading(
-                title = stringResource(R.string.foods_group_weight),
-                origin = food.facts.gramsPerUnit
-                    ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
-            )
-            // Nothing works this out. It is the number that turns one way of counting into the other, so
-            // a wrong one propagates into every future gram-counted log of this food.
-            Text(
-                text = stringResource(R.string.foods_weight_never_guessed),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
-            Field(form.gramsPerUnit, { onSetForm(form.copy(gramsPerUnit = it)) }, stringResource(R.string.foods_field_weight), editing.errorFor(FoodField.WEIGHT), numeric = true)
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            editing.errorFor(FoodField.NOTHING_KNOWN)?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-
-            // Correcting fixes the food from now on. The days already logged keep the numbers they were
-            // logged with, which is his own decision and worth restating where he is about to act on it.
-            Text(
-                text = stringResource(R.string.foods_correction_not_retroactive),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            // A Save refused or an action that threw, said directly above the buttons that did it.
-            sentence?.let { SlotSentence(it, onDismissSentence) }
-
-            // The question takes the buttons' place, so it is where his finger is and exactly one thing
-            // on the editor says Delete (D36).
-            if (deleting is Deleting.Asking) {
-                AskBeforeDeleting(
-                    name = deleting.food.name,
-                    onDelete = onConfirmDelete,
-                    onKeep = onKeep,
-                )
-            } else {
-                // The refusal to delete is said here, directly above the buttons, and not in the slot at
-                // the top of the list: Delete sits at the foot of this editor, the top of the list is off
-                // screen from there, and a refusal he cannot see makes the tap look dead. The buttons
-                // stay, because the sentence tells him to hide it instead and Hide must be in reach.
-                if (deleting is Deleting.Refused) {
-                    Text(
-                        text = deleting.sentence,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                    Button(onClick = onSave) { Text(stringResource(R.string.foods_save)) }
-                    TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                    TextButton(onClick = onBeginMerging) { Text(stringResource(R.string.foods_merge)) }
-                    if (food.hidden) {
-                        TextButton(onClick = onUnhide) { Text(stringResource(R.string.foods_unhide)) }
-                    } else {
-                        TextButton(onClick = onHide) { Text(stringResource(R.string.foods_hide)) }
-                    }
-                    TextButton(onClick = onDelete) { Text(stringResource(R.string.foods_delete)) }
-                }
-            }
-            // Hiding keeps the history pointing here, so every past day still shows this food's current
-            // name. Deleting lets those days fall back to whatever was typed on the day.
-            Text(
-                text = stringResource(R.string.foods_hide_or_delete),
-                style = MaterialTheme.typography.bodySmall,
-                color = MetaSelfInk.two,
-            )
-        }
-    }
-}
-
-/** The screen's one refusal or failure, with the button that takes it down. */
-@Composable
-private fun SlotSentence(sentence: String, onDismiss: () -> Unit) {
-    Text(
-        text = sentence,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.error,
-    )
-    TextButton(onClick = onDismiss) {
-        Text(stringResource(R.string.foods_refusal_dismiss))
-    }
-}
-
-@Composable
-private fun FactHeading(title: String, origin: String?) {
-    Text(text = title, style = MaterialTheme.typography.titleSmall)
-    origin?.let {
-        Text(
-            text = stringResource(R.string.foods_origin, it),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-/**
- * One field of the food editor.
- *
- * [numeric] picks the keyboard. Decimal rather than Number, because a food's facts are kept exactly
- * as typed, decimals included (D38) — a keyboard with no point on it would make the packet's 0.5 g
- * untypable on the one screen that promises to keep it.
- */
-@Composable
-private fun Field(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    error: String?,
-    numeric: Boolean = false,
-    /** The review wrote this box's value and it is not saved yet: drawn and said so (D54 §11). */
-    changed: Boolean = false,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        isError = error != null,
-        supportingText = error?.let { { Text(it) } },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
-        ),
-        colors = if (changed) changedBoxColors() else OutlinedTextFieldDefaults.colors(),
-        modifier = Modifier.fillMaxWidth().changedByReview(changed),
-    )
 }

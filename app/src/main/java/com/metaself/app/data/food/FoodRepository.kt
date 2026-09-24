@@ -2,6 +2,7 @@ package com.metaself.app.data.food
 
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.FoodUse
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -151,6 +152,16 @@ interface FoodRepository {
      * food between the question and the answer.
      */
     suspend fun savedMealsUsing(foodId: Long): List<String>
+
+    /**
+     * Where this food is used: how many logged rows point at it, and the saved meals holding it
+     * (D55 §3). The meals come from the statement [savedMealsUsing] asks, so the page and the delete
+     * refusal name the same ones.
+     *
+     * **Observed, not read once**: a count read once goes stale the first time the record moves
+     * under it — a row deleted from a day, a join onto this food, a meal changed.
+     */
+    fun observeUse(foodId: Long): Flow<FoodUse>
 
     /**
      * Join two foods the owner has decided are one thing.

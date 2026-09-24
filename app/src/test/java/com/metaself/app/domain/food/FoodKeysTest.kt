@@ -275,7 +275,7 @@ class FoodKeysTest {
     @Test
     fun `a real brand keys by the same rule as a name`() {
         assertThat(FoodKeys.brandKey("Dairyco")).isEqualTo("dairyco")
-        assertThat(FoodKeys.brandKey("Ben & Jerry's")).isEqualTo("ben jerrys")
+        assertThat(FoodKeys.brandKey("Bob & Jan's")).isEqualTo("bob jans")
     }
 
     // --- The name as stored to be shown ---------------------------------------------------------

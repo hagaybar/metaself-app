@@ -1,32 +1,15 @@
 package com.metaself.app.ui.screen.foods
 
 import com.google.common.truth.Truth.assertThat
-import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.R
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
 import com.metaself.app.data.food.weighing
-import com.metaself.app.domain.ai.EstimateResult
-import com.metaself.app.domain.ai.Figure
-import com.metaself.app.domain.ai.FigureChange
-import com.metaself.app.domain.ai.FoodReview
-import com.metaself.app.domain.ai.Suggestion
-import com.metaself.app.domain.ai.Verdict
-import com.metaself.app.domain.day.Confidence
-import com.metaself.app.domain.day.Source
-import com.metaself.app.domain.food.FactGroup
-import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
-import com.metaself.app.domain.food.FoodForm
-import com.metaself.app.domain.food.Nutrients
-import com.metaself.app.domain.food.PerHundredGrams
-import com.metaself.app.domain.food.Provenance
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
-import com.metaself.app.ui.food.FormReview
-import com.metaself.app.ui.food.Review
-import com.metaself.app.ui.food.ReviewActions
+import com.metaself.app.ui.screen.food.greekYoghurt
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,7 +17,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 
 /**
- * The screen where the food list is put right.
+ * The food list: finding, choosing and joining (D55 §1). A food opens its own page; what that page
+ * draws is `FoodPageScreenRenderTest`'s.
  *
  * Compose, so JUnit 4 — `org.junit.Test`, never `org.junit.jupiter.api.Test`. The two annotations
  * look identical at the call site and the wrong one produces a test that silently never runs.
@@ -47,27 +31,123 @@ class FoodsScreenRenderTest {
     @After
     fun tearDown() = render.dispose()
 
+    /**
+     * One summary line under the name (D55 §1), in parts: the brand or No brand, the first way of
+     * counting it knows, and what one weighs. The row gives less at a glance than it did: a food that
+     * knows both ways of counting shows per 100 g, not its per-one calories — the page shows all.
+     */
     @Test
-    fun `every food shows what it knows about itself`() {
+    fun `every food shows its name and one summary line`() {
+        val texts = draw(FoodsUiState(foods = listOf(greekYoghurt().copy(id = 1))))
+
+        assertThat(texts).containsAtLeast(
+            "Greek yoghurt",
+            "No brand",
+            "100 kcal per 100 g",
+            "one cup is 150 g",
+        ).inOrder()
+        assertThat(texts).doesNotContain("150 kcal per cup")
+    }
+
+    /** A branded food that knows per one and what one weighs (invented figures and brand). */
+    @Test
+    fun `a branded food counted per one says its brand and per one`() {
         val texts = draw(
             FoodsUiState(
                 foods = listOf(
                     aFood(
                         name = "Protein bar",
-                        facts = FoodFacts(
-                            per100g = aPer100g(kcal = 422.0),
-                            perUnit = aPerUnit("bar", 190.0),
-                            gramsPerUnit = weighing(45.0),
-                        ),
-                    ),
+                        facts = FoodFacts(perUnit = aPerUnit("bar", 190.0), gramsPerUnit = weighing(45.0)),
+                    ).copy(brand = "Examplebrand"),
                 ),
             ),
         )
 
-        assertThat(texts).contains("Protein bar")
-        assertThat(texts).contains("422 kcal per 100 g")
-        assertThat(texts).contains("190 kcal per bar")
-        assertThat(texts).contains("one bar is 45 g")
+        assertThat(texts).containsAtLeast("Protein bar", "Examplebrand", "190 kcal per bar", "one bar is 45 g")
+            .inOrder()
+    }
+
+    // --- A tap (D55 §1) -----------------------------------------------------------------------
+
+    /** A tap opens the food's page; nothing is drawn in place of the row any more. */
+    @Test
+    fun `a tap on a food opens its page and draws nothing in place`() {
+        var opened: Long? = null
+        draw(FoodsUiState(foods = threeFoods()), onOpen = { opened = it })
+
+        render.click("Tomato")
+        val after = render.textsAgain()
+
+        assertThat(opened).isEqualTo(2L)
+        assertThat(after).doesNotContain("Save")
+        assertThat(after).doesNotContain("Name")
+    }
+
+    /** While choosing, a tap ticks — it does not open the page. */
+    @Test
+    fun `while choosing a tap ticks and opens nothing`() {
+        var opened: Long? = null
+        var ticked: Long? = null
+        draw(
+            FoodsUiState(foods = threeFoods(), chosen = setOf(1L)),
+            onOpen = { opened = it },
+            onToggleChosen = { ticked = it },
+        )
+
+        render.click("Tomato")
+
+        assertThat(ticked).isEqualTo(2L)
+        assertThat(opened).isNull()
+    }
+
+    /** While picking a duplicate, a tap picks — it does not open the page. */
+    @Test
+    fun `while picking a duplicate a tap picks and opens nothing`() {
+        val foods = threeFoods()
+        var opened: Long? = null
+        var picked: Long? = null
+        draw(
+            FoodsUiState(foods = foods, merging = Merging(keeping = foods[0])),
+            onOpen = { opened = it },
+            onMergeInto = { picked = it },
+        )
+
+        render.click("Tomato")
+
+        assertThat(picked).isEqualTo(2L)
+        assertThat(opened).isNull()
+    }
+
+    // --- A food hidden from its page (D55 §6) ----------------------------------------------------
+
+    @Test
+    fun `a food hidden from its page is said at the top, with Show again and All right`() {
+        val hidden = greekYoghurt().copy(id = 1, hidden = true)
+        var shown = 0
+        var dismissed = 0
+        val texts = draw(
+            FoodsUiState(foods = threeFoods(), hid = hidden),
+            onShowAgain = { shown++ },
+            onDismissHidden = { dismissed++ },
+        )
+
+        val line = "“Greek yoghurt” is hidden — it is no longer offered when you log something."
+        assertThat(texts).contains(line)
+        assertThat(texts).containsAtLeast("Show again", "All right")
+        assertThat(render.isDrawnBefore(line, "Search your foods")).isTrue()
+
+        render.click("Show again")
+        render.click("All right")
+        assertThat(shown).isEqualTo(1)
+        assertThat(dismissed).isEqualTo(1)
+    }
+
+    @Test
+    fun `no hidden line is drawn when nothing was hidden`() {
+        val texts = draw(FoodsUiState(foods = threeFoods()))
+
+        assertThat(texts.none { it.contains("is hidden —") }).isTrue()
+        assertThat(texts).doesNotContain("Show again")
     }
 
     /** The other name a merge left behind, which is the whole reason merging is worth doing. */
@@ -124,169 +204,6 @@ class FoodsScreenRenderTest {
         )
 
         assertThat(texts.any { it.contains("disagree by about") }).isTrue()
-    }
-
-    // --- The editor ------------------------------------------------------------------------------
-
-    @Test
-    fun `opening a food shows every number it holds, ready to change`() {
-        val food = aFood(
-            name = "Yoghurt",
-            facts = FoodFacts(per100g = aPer100g(kcal = 72.0)),
-        ).copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(
-                foods = listOf(food),
-                editing = Editing(foodId = 1, form = FoodForm.of(food)),
-            ),
-        )
-
-        assertThat(texts).contains("Yoghurt")
-        assertThat(texts).contains("72")
-        assertThat(texts).contains("What 100 g of it are worth")
-        assertThat(texts).contains("What one of it is worth")
-        assertThat(texts).contains("What one of it weighs")
-    }
-
-    /**
-     * Where a number came from, beside the number he is about to overwrite. A figure off a packet
-     * deserves more hesitation than one a model guessed, and only the record can say which it is.
-     */
-    @Test
-    fun `the editor says where each number came from`() {
-        val food = Food(
-            id = 1,
-            name = "Yoghurt",
-            facts = FoodFacts(
-                per100g = PerHundredGrams(
-                    Nutrients(72.0, 4.0, 6.0, 2.0),
-                    Provenance(Source.AI_ESTIMATE, Confidence.LOW, setAtMillis = 0),
-                ),
-            ),
-        )
-
-        val texts = draw(
-            FoodsUiState(foods = listOf(food), editing = Editing(1, FoodForm.of(food))),
-        )
-
-        assertThat(texts.any { it.contains("a rough estimate") }).isTrue()
-    }
-
-    /**
-     * His own decision, restated where he is about to act on it: correcting fixes the food from now
-     * on, and the day that was wrong stays wrong.
-     */
-    @Test
-    fun `the editor says plainly that a correction does not reach backwards`() {
-        val food = aFood().copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(foods = listOf(food), editing = Editing(1, FoodForm.of(food))),
-        )
-
-        assertThat(texts.any { it.contains("Days you have already logged keep the numbers") })
-            .isTrue()
-    }
-
-    /** Nothing computes what one of something weighs, and the screen says so where it is typed. */
-    @Test
-    fun `the editor says that nothing works out what one of it weighs`() {
-        val food = aFood().copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(foods = listOf(food), editing = Editing(1, FoodForm.of(food))),
-        )
-
-        assertThat(texts.any { it.contains("Nothing works this out for you") }).isTrue()
-    }
-
-    /** Putting a brand on a food changes what it is. Said before he does it, not after. */
-    @Test
-    fun `the editor warns that a brand splits a food`() {
-        val food = aFood().copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(foods = listOf(food), editing = Editing(1, FoodForm.of(food))),
-        )
-
-        assertThat(texts.any { it.contains("makes it a different food") }).isTrue()
-    }
-
-    /**
-     * A food's facts are stored as decimals and keep them, so this form says so — the opposite of
-     * the entry editor's whole-grams rule, and as plainly (issue #18, D38). Saying "whole grams"
-     * here would be false, and would teach him to round a packet's 0.5 g by hand on a form that
-     * would have kept it. Said once, above the first group of numbers, covering both groups.
-     */
-    @Test
-    fun `the editor says decimals are kept, and never says whole grams`() {
-        val food = aFood("Yoghurt", FoodFacts(per100g = aPer100g(kcal = 72.0))).copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(foods = listOf(food), editing = Editing(1, FoodForm.of(food))),
-        )
-
-        assertThat(texts.count { it == DECIMALS_KEPT }).isEqualTo(1)
-        assertThat(texts.indexOf(DECIMALS_KEPT))
-            .isLessThan(texts.indexOf("What 100 g of it are worth"))
-        assertThat(texts.none { it.contains("whole grams") }).isTrue()
-    }
-
-    @Test
-    fun `a food that would know nothing at all is refused, with the reason`() {
-        val food = aFood().copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(
-                foods = listOf(food),
-                editing = Editing(
-                    foodId = 1,
-                    form = FoodForm(name = "Tahini"),
-                    showErrors = true,
-                ),
-            ),
-        )
-
-        assertThat(
-            texts.any { it.contains("has to know what 100 g of it are worth") },
-        ).isTrue()
-    }
-
-    /**
-     * 150 g of protein in 100 g of anything was saved before D42 (issue #32). The food form refuses
-     * a group as one answer, so the refusal is the group's, once, under the per-100 g calories box —
-     * where every refusal of that group has always been drawn — and it names every ceiling, since it
-     * has to cover whichever of the four is wrong. The box keeps what he typed.
-     */
-    @Test
-    fun `a per-100 g figure past its ceiling is refused once, under the group's calories box`() {
-        val food = aFood(
-            name = "Yoghurt",
-            facts = FoodFacts(per100g = aPer100g(kcal = 72.0)),
-        ).copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(
-                foods = listOf(food),
-                editing = Editing(
-                    foodId = 1,
-                    form = FoodForm.of(food).copy(proteinPer100g = "150"),
-                    showErrors = true,
-                ),
-            ),
-        )
-
-        val refused = "All four per 100 g (at most 1000 kcal, and 110 g of protein, " +
-            "carbohydrate or fat), or leave them all empty."
-        val group = texts.indexOf("What 100 g of it are worth")
-        val calories = texts.subList(group, texts.size).indexOf("Calories") + group
-        val protein = texts.subList(group, texts.size).indexOf("Protein (g)") + group
-
-        assertThat(texts.filter { it == refused }).hasSize(1)
-        assertThat(texts.indexOf(refused)).isGreaterThan(calories)
-        assertThat(texts.indexOf(refused)).isLessThan(protein)
-        assertThat(texts).contains("150")
     }
 
     // --- Refusals and merging ----------------------------------------------------------------------
@@ -366,114 +283,9 @@ class FoodsScreenRenderTest {
         assertThat(texts).doesNotContain("This is the one that stays")
     }
 
+    /** Nothing is said in an editor on the list any more: a failure is always at the top. */
     @Test
-    fun `hiding is described as the gentler of the two`() {
-        val food = aFood().copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(foods = listOf(food), editing = Editing(1, FoodForm.of(food))),
-        )
-
-        assertThat(texts).contains("Hide")
-        assertThat(texts).contains("Delete")
-        assertThat(texts.any { it.contains("every past day still shows its name") }).isTrue()
-    }
-
-    // --- Deleting asks first (D36, issue #16) ---------------------------------------------------
-
-    /**
-     * The question takes the place of the buttons it came from, so exactly one thing on screen says
-     * Delete — the answer — and no other button in the editor can be pressed past it.
-     */
-    @Test
-    fun `while asking, the editor offers only the answer`() {
-        val yoghurt = aFood(name = "Yoghurt").copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(
-                foods = listOf(yoghurt),
-                editing = Editing(1, FoodForm.of(yoghurt)),
-                deleting = Deleting.Asking(yoghurt),
-            ),
-        )
-
-        assertThat(texts).contains("Delete “Yoghurt”? This cannot be undone.")
-        assertThat(texts).contains("Keep it")
-        assertThat(texts).doesNotContain("Join with a duplicate")
-        assertThat(texts).doesNotContain("Hide")
-        assertThat(texts).doesNotContain("Save")
-    }
-
-    @Test
-    fun `a food not being asked about draws no question`() {
-        val yoghurt = aFood(name = "Yoghurt").copy(id = 1)
-
-        val texts = draw(
-            FoodsUiState(foods = listOf(yoghurt), editing = Editing(1, FoodForm.of(yoghurt))),
-        )
-
-        assertThat(texts.none { it.contains("cannot be undone") }).isTrue()
-        assertThat(texts).contains("Delete")
-    }
-
-    /**
-     * Drawn in the editor, above its buttons, and not in the slot at the top of the list: Delete sits
-     * at the foot of a long editor, and a refusal drawn up there would be off screen — the tap would
-     * look dead. The buttons stay, because the sentence recommends Hide. With the screen-wide refusal
-     * empty, the sentence can only have come from the editor.
-     */
-    @Test
-    fun `a refusal to delete is drawn in the editor, with its buttons still there`() {
-        val yoghurt = aFood(name = "Yoghurt").copy(id = 1)
-        val sentence = "“Vegetable salad” uses this. Change the meal, or hide this instead."
-
-        val texts = draw(
-            FoodsUiState(
-                foods = listOf(yoghurt),
-                editing = Editing(1, FoodForm.of(yoghurt)),
-                deleting = Deleting.Refused(yoghurt, sentence),
-                refusal = null,
-            ),
-        )
-
-        assertThat(texts).contains(sentence)
-        assertThat(texts).contains("Hide")
-        assertThat(texts).contains("Delete")
-        assertThat(texts).contains("Save")
-        assertThat(texts.none { it.contains("cannot be undone") }).isTrue()
-        // The top-of-list refusal's own dismiss button: its presence would mean the wrong slot.
-        assertThat(texts).doesNotContain("All right")
-    }
-
-    /**
-     * A Save or a Delete that threw, on a food far down the list, is said in its editor beside the
-     * buttons he pressed. At the top of the list it would be off screen, and the tap would look dead.
-     */
-    @Test
-    fun `a failure while a food is open is drawn in its editor, not at the top of the list`() {
-        val foods = threeFoods()
-        val olive = foods.last()
-
-        val texts = draw(
-            FoodsUiState(
-                foods = foods,
-                editing = Editing(olive.id, FoodForm.of(olive)),
-                failed = ActionRefused.NOTHING_CHANGED,
-            ),
-        )
-
-        assertThat(texts).contains(NOTHING_CHANGED)
-        // After the rows above the open food, and before the button that failed.
-        assertThat(render.isDrawnBefore("Tomato", NOTHING_CHANGED)).isTrue()
-        assertThat(render.isDrawnBefore(NOTHING_CHANGED, "Save")).isTrue()
-        // Once, and dismissible where it is.
-        assertThat(texts.count { it == NOTHING_CHANGED }).isEqualTo(1)
-        assertThat(texts).contains("All right")
-    }
-
-    /** With nothing open there is nowhere nearer to say it, so it stays at the top. */
-    @Test
-    fun `a failure with no food open is drawn at the top of the list`() {
+    fun `a failure is drawn at the top of the list`() {
         val texts = draw(FoodsUiState(foods = threeFoods(), failed = ActionRefused.NOTHING_CHANGED))
 
         assertThat(texts).contains(NOTHING_CHANGED)
@@ -626,291 +438,28 @@ class FoodsScreenRenderTest {
         assertThat(texts).contains("Clear")
     }
 
-    // --- A review (D54) ---------------------------------------------------------------------------
-
-    /**
-     * D54 §11: what would change is listed in one place, under the verdict — group, figure, old →
-     * new, its reason small — with Apply these changes and Keep mine, and nothing under the groups'
-     * headings or in any box until he applies it.
-     */
-    @Test
-    fun `a review lists what would change under its verdict, with Apply and Keep mine`() {
-        val texts = draw(reviewing(Review.Shown(FoodReview(null, fatTo4, "Fat was low.", emptyList()))))
-
-        val verdict = "Reviewed: 1 suggestion below — Fat was low."
-        val change = "Per biscuit: Fat 1 → 4"
-        assertThat(texts.count { it == change }).isEqualTo(1)
-        assertThat(texts).contains("A reason.")
-        assertThat(render.isDrawnBefore(verdict, change)).isTrue()
-        assertThat(render.isDrawnBefore(change, "A reason.")).isTrue()
-        assertThat(render.isDrawnBefore("A reason.", "Apply these changes")).isTrue()
-        assertThat(render.isDrawnBefore("Apply these changes", "Keep mine")).isTrue()
-        assertThat(render.isDrawnBefore("Keep mine", "What 100 g of it are worth")).isTrue()
-        assertThat(render.fieldTexts()).doesNotContain("4")
-        assertThat(texts).doesNotContain("Use these")
-        assertThat(texts).doesNotContain("Use all")
-        assertThat(texts).doesNotContain("Dismiss")
-    }
-
-    @Test
-    fun `the button says what is sent, and reads Reviewing while it is out`() {
-        val idle = draw(reviewing(null))
-
-        assertThat(idle).contains("Review the figures")
-        assertThat(idle).contains(SENDS)
-        assertThat(render.isDrawnBefore("Review the figures", "What 100 g of it are worth")).isTrue()
-
-        val asking = draw(reviewing(Review.Asking()))
-
-        assertThat(asking).contains("Reviewing…")
-        assertThat(asking).doesNotContain("Review the figures")
-    }
-
-    @Test
-    fun `two groups are listed each on its line, and a note and a set-aside group are said`() {
-        val texts = draw(
-            reviewing(
-                Review.Shown(
-                    FoodReview(
-                        per100g = null,
-                        perUnit = fatTo4,
-                        note = "A short note.",
-                        setAside = listOf(FactGroup.PER_100G),
-                    ),
-                ),
-            ),
-        )
-
-        assertThat(texts).contains("Reviewed: 1 suggestion below — A short note.")
-        assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
-
-        val both = draw(
-            reviewing(
-                Review.Shown(
-                    FoodReview(
-                        per100g = fatTo4.copy(
-                            changes = listOf(FigureChange(Figure.KCAL, 480.0, 470.0, "Another.")),
-                        ),
-                        perUnit = fatTo4,
-                        note = null,
-                        setAside = emptyList(),
-                    ),
-                ),
-            ),
-        )
-
-        assertThat(both).contains("Per 100 g: Calories 480 → 470")
-        assertThat(both).contains("Per biscuit: Fat 1 → 4")
-        assertThat(render.isDrawnBefore("Per 100 g: Calories", "Per biscuit: Fat")).isTrue()
-        assertThat(both.count { it == "Apply these changes" }).isEqualTo(1)
-    }
-
-    @Test
-    fun `a review that changes nothing says so`() {
-        val texts = draw(
-            reviewing(Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true)),
-        )
-
-        assertThat(texts).contains("Reviewed: no changes suggested.")
-        assertThat(texts).doesNotContain("Apply these changes")
-        assertThat(texts).contains("Dismiss")
-    }
-
-    // --- Every outcome ends in a line under the button (D54 §9.4) ----------------------------------
-
-    /**
-     * Whatever the review came to, one plain line says so under the button and its small print
-     * (§10.4), with the model's verdict when it gave one.
-     */
-    @Test
-    fun `every review outcome is said in one line under the button and its small print`() {
-        val outcomes: List<Pair<Review, String>> = listOf(
-            Review.Shown(FoodReview(null, null, "The figures agree.", emptyList()), nothingSuggested = true) to
-                "Reviewed: no changes suggested — The figures agree.",
-            Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true) to
-                "Reviewed: no changes suggested.",
-            // D54 §10.3: nothing proposed, but the model said it found a problem — never "no changes".
-            Review.Shown(
-                FoodReview(null, null, "Per piece does not match per 100 g.", emptyList(), Verdict.PROBLEM_FOUND),
-                nothingSuggested = true,
-            ) to "Reviewed: a problem found — Per piece does not match per 100 g.",
-            Review.Shown(FoodReview(null, null, null, emptyList(), Verdict.PROBLEM_FOUND), nothingSuggested = true) to
-                "Reviewed: a problem found.",
-            Review.Shown(FoodReview(null, fatTo4, "Per piece was off.", emptyList(), Verdict.PROBLEM_FOUND)) to
-                "Reviewed: 1 suggestion below — Per piece was off.",
-            Review.Shown(FoodReview(null, fatTo4, "Fat was low for the piece.", emptyList())) to
-                "Reviewed: 1 suggestion below — Fat was low for the piece.",
-            Review.Shown(FoodReview(fatTo4, fatTo4, null, emptyList())) to
-                "Reviewed: 2 suggestions below.",
-            Review.Shown(
-                FoodReview(null, null, "Per 100 g looks off.", listOf(FactGroup.PER_100G)),
-                unusable = true,
-            ) to "The model's answer arrived, but its suggestions could not be used — Per 100 g looks off.",
-            Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true) to
-                "The model's answer arrived, but its suggestions could not be used.",
-            Review.Shown(FoodReview(null, null, null, emptyList())) to
-                "Reviewed: no suggestions left.",
-            Review.Failed(EstimateResult.NoKey) to
-                "No API key yet. Add one in settings, or type the numbers instead.",
-            Review.Failed(EstimateResult.Unreadable("x")) to
-                "The answer could not be understood. Type the numbers instead.",
-            Review.Failed(null) to COULD_NOT_OPEN,
-        )
-
-        outcomes.forEach { (review, line) ->
-            val texts = draw(reviewing(review))
-
-            assertWithMessage(line).that(texts.count { it == line }).isEqualTo(1)
-            assertWithMessage(line).that(render.isDrawnBefore("Review the figures", line)).isTrue()
-            assertWithMessage(line).that(render.isDrawnBefore(SENDS, line)).isTrue()
-        }
-    }
-
-    /**
-     * D54 §10.4: the small print belongs to the button — it says what pressing it sends — so it
-     * sits directly under it, and what the review came to comes after, together: the line, then
-     * **Dismiss** and **Show the model's answer**.
-     */
-    @Test
-    fun `the small print sits under the button, and the outcome and its buttons come below it`() {
-        val state = reviewing(null).let { state ->
-            state.copy(
-                editing = state.editing!!.copy(
-                    reviewing = FormReview(
-                        review = Review.Shown(
-                            FoodReview(null, null, "Per biscuit is off.", emptyList(), Verdict.PROBLEM_FOUND),
-                            nothingSuggested = true,
-                        ),
-                        modelAnswer = """{"per_100g":null}""",
-                    ),
-                ),
-            )
-        }
-        val line = "Reviewed: a problem found — Per biscuit is off."
-
-        val texts = draw(state)
-
-        assertThat(texts.indexOf(SENDS)).isEqualTo(texts.indexOf("Review the figures") + 1)
-        assertThat(render.isDrawnBefore(SENDS, line)).isTrue()
-        assertThat(render.isDrawnBefore(line, "Dismiss")).isTrue()
-        assertThat(render.isDrawnBefore("Dismiss", "Show the model's answer")).isTrue()
-    }
-
-    /** A failure is said under the button and nowhere else — not again in the slot above Save. */
-    @Test
-    fun `a review's failure is said once, under the button, with a way to take it down`() {
-        val texts = draw(reviewing(Review.Failed(EstimateResult.CeilingReached)))
-
-        val sentence = "You have used today's estimates. Type the numbers, or raise the daily limit in settings."
-        assertThat(texts.count { it == sentence }).isEqualTo(1)
-        assertThat(render.isDrawnBefore(SENDS, sentence)).isTrue()
-        assertThat(texts).contains("Dismiss")
-    }
-
-    /** Before any review there is nothing to say, and nothing is. */
-    @Test
-    fun `no line is drawn before a review, or while one is out`() {
-        listOf(null, Review.Asking()).forEach { review ->
-            val texts = draw(reviewing(review))
-            assertThat(texts.none { it.startsWith("Reviewed") }).isTrue()
-        }
-    }
-
-    /** D54 §8.3: said as what happened, with the group that went, and never as not understood. */
-    @Test
-    fun `an answer whose suggestions could not be used says so, and which`() {
-        val texts = draw(
-            reviewing(
-                Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true),
-            ),
-        )
-
-        assertThat(texts).contains("The model's answer arrived, but its suggestions could not be used.")
-        assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
-        assertThat(texts.joinToString()).doesNotContain("could not be understood")
-    }
-
-    /** D54 §8.4: offered as a text button, even after a failure when no review is on screen. */
-    @Test
-    fun `the model's answer is offered when the editor holds it, and not otherwise`() {
-        val holding = reviewing(null).let { state ->
-            state.copy(
-                editing = state.editing!!.copy(
-                    reviewing = FormReview(modelAnswer = """{"per_100g":null}"""),
-                ),
-            )
-        }
-
-        assertThat(draw(holding)).contains("Show the model's answer")
-        assertThat(draw(reviewing(null))).doesNotContain("Show the model's answer")
-    }
-
-    /**
-     * D54 §11: after Apply these changes, each box the review changed says so to a screen reader,
-     * and a line under the verdict counts them, with Undo. A box it kept says nothing.
-     */
-    @Test
-    fun `after applying, the changed boxes are marked and counted under the verdict`() {
-        val base = reviewing(Review.Shown(FoodReview(null, fatTo4, "Fat was low.", emptyList())))
-        val (form, applied) = base.editing!!.reviewing.apply(base.editing!!.form)
-        val texts = draw(base.copy(editing = base.editing!!.copy(form = form, reviewing = applied)))
-
-        val line = "1 figure changed by the review — not saved yet. Save to keep it, or Undo."
-        assertThat(texts).contains(line)
-        assertThat(render.isDrawnBefore("Reviewed: changes applied — Fat was low.", line)).isTrue()
-        assertThat(render.isDrawnBefore(line, "Undo")).isTrue()
-        assertThat(texts).doesNotContain("Apply these changes")
-        assertThat(render.fieldsSaid(CHANGED)).containsExactly("4")
-    }
-
-    /** An editor with the Oat biscuit open (invented figures) and [review] as its review. */
-    private fun reviewing(review: Review?): FoodsUiState {
-        val food = Food(
-            id = 1,
-            name = "Oat biscuit",
-            facts = FoodFacts(
-                per100g = PerHundredGrams(Nutrients(480.0, 7.0, 62.0, 22.0), Provenance(Source.LABEL, null, 0)),
-                perUnit = aPerUnit("biscuit", 90.0).copy(nutrients = Nutrients(90.0, 1.0, 12.0, 1.0)),
-                gramsPerUnit = weighing(18.0),
-            ),
-        )
-        return FoodsUiState(
-            foods = listOf(food),
-            editing = Editing(1, FoodForm.of(food), reviewing = FormReview(review = review)),
-        )
-    }
-
-    private val fatTo4 = Suggestion(
-        nutrients = Nutrients(90.0, 1.0, 12.0, 4.0),
-        confidence = Confidence.MEDIUM,
-        filled = false,
-        changes = listOf(FigureChange(Figure.FAT, 1.0, 4.0, "A reason.")),
-        reason = null,
-    )
-
-    private fun draw(state: FoodsUiState): List<String> = render.texts {
+    private fun draw(
+        state: FoodsUiState,
+        onOpen: (Long) -> Unit = {},
+        onMergeInto: (Long) -> Unit = {},
+        onToggleChosen: (Long) -> Unit = {},
+        onShowAgain: () -> Unit = {},
+        onDismissHidden: () -> Unit = {},
+    ): List<String> = render.texts {
         FoodsScreen(
             state = state,
             onSearch = {},
             onShowOnlyPortions = {},
             onShowHidden = {},
-            onEdit = {},
-            onSetForm = {},
-            onSave = {},
-            onCancelEditing = {},
-            onHide = {},
-            onUnhide = {},
-            onDelete = {},
-            onConfirmDeleting = {},
-            onCancelDeleting = {},
-            onBeginMerging = {},
-            onMergeInto = {},
+            onOpen = onOpen,
+            onMergeInto = onMergeInto,
             onConfirmMerging = {},
             onCancelMerging = {},
             onDismissRefusal = {},
-            review = ReviewActions.NONE,
+            onShowAgain = onShowAgain,
+            onDismissHidden = onDismissHidden,
             onBeginChoosing = {},
-            onToggleChosen = {},
+            onToggleChosen = onToggleChosen,
             onClearChoosing = {},
             onMakeMeal = {},
             onJoinChosen = {},
@@ -919,26 +468,8 @@ class FoodsScreenRenderTest {
     }
 
     private companion object {
-        /** What a screen reader says of a box the review changed and he has not saved (D54 §11). */
-        const val CHANGED = "changed by the review, not saved"
-
-        /**
-         * Shared by the two food forms: this editor and the builder's. The packet-label form has its
-         * own sentence, "…for this packet…" (D38), because "on this food" is not true there.
-         */
         /** `R.string.action_refused_nothing_changed`, as the phone draws it. */
         const val NOTHING_CHANGED = "That didn't work, and nothing was changed. " +
             "What went wrong is under Settings → Recent problems."
-
-        /** `R.string.action_refused_could_not_open`, as the phone draws it. */
-        const val COULD_NOT_OPEN =
-            "That couldn't be opened. What went wrong is under Settings → Recent problems."
-
-        const val SENDS =
-            "Sends this food's name, brand and figures, and where each came from, to the model, " +
-                "with your key. Nothing else."
-
-        const val DECIMALS_KEPT =
-            "Numbers here can have a decimal point: 0.5 g is kept as 0.5 g on this food."
     }
 }

@@ -7,6 +7,16 @@ import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
 /**
+ * The saved meals that have a food as a part, by name, in name order. Shared by [FoodDao.mealsUsing]
+ * and [FoodDao.observeMealsUsing] so the delete refusal and the food page read one statement.
+ * A saved meal's own hidden stamp is not consulted: a hidden meal would still hold the food.
+ */
+private const val MEALS_USING =
+    "SELECT m.name FROM saved_meals m " +
+        "INNER JOIN saved_meal_components c ON c.savedMealId = m.id " +
+        "WHERE c.foodId = :foodId ORDER BY m.name"
+
+/**
  * Everything the app asks of the food tables.
  *
  * **There is deliberately no `@Update` on [FoodEntity] and no `@Insert` that replaces one.** A
@@ -105,12 +115,27 @@ interface FoodDao {
     fun observeOnlyAPortion(): Flow<List<FoodWithNames>>
 
     /** Which saved meals use this food, for saying why it cannot be deleted. */
-    @Query(
-        "SELECT m.name FROM saved_meals m " +
-            "INNER JOIN saved_meal_components c ON c.savedMealId = m.id " +
-            "WHERE c.foodId = :foodId ORDER BY m.name",
-    )
+    @Query(MEALS_USING)
     suspend fun mealsUsing(foodId: Long): List<String>
+
+    /**
+     * The same meals, observed, for a food's page to say where it is used (D55 §3).
+     *
+     * **One statement with [mealsUsing]**, held in [MEALS_USING], so what the page says and what
+     * Delete then refuses can never disagree about which meals stand in the way.
+     */
+    @Query(MEALS_USING)
+    fun observeMealsUsing(foodId: Long): Flow<List<String>>
+
+    /**
+     * How many logged rows point at this food, on every day (D55 §3).
+     *
+     * Exact, and derived: a row attached to no food is nobody's, and after a join the absorbed food's
+     * rows already point at the food kept (`movePastRows`), so they are counted there. Answered from
+     * `index_food_items_foodId`.
+     */
+    @Query("SELECT COUNT(*) FROM food_items WHERE foodId = :foodId")
+    fun observeLoggedCount(foodId: Long): Flow<Int>
 
     // --- Creating --------------------------------------------------------------------------------
 

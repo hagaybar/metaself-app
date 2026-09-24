@@ -45,6 +45,8 @@ import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.ui.screen.mealbuilder.MealBuilderScreen
 import com.metaself.app.ui.screen.mealbuilder.MealBuilderViewModel
 import com.metaself.app.ui.screen.foods.FoodsViewModel
+import com.metaself.app.ui.screen.food.FoodPageScreen
+import com.metaself.app.ui.screen.food.FoodPageViewModel
 import com.metaself.app.ui.screen.manager.ManagerScreen
 import com.metaself.app.ui.screen.manager.ManagerViewModel
 import com.metaself.app.ui.screen.manager.MealsViewModel
@@ -89,8 +91,26 @@ sealed class Destination(val route: String) {
     }
     data object Repeat : Destination("meal/repeat")
     data object Foods : Destination("foods") {
-        /** With this food's editor already open: where "Give this a portion" goes. */
-        fun editing(foodId: Long): String = "foods?food=$foodId"
+        /**
+         * The pattern the list is registered under: the bare route, and a food to join from (D55
+         * §5). A String, as [Record]'s logging is: `NavType` has no nullable `Long`.
+         */
+        const val registered: String = "foods?joinFrom={joinFrom}"
+
+        /** The list opened picking a duplicate for one food, from a page with no list beneath it. */
+        fun joiningFrom(foodId: Long): String = "foods?joinFrom=$foodId"
+
+        /** True for a back stack entry that is the list, as the back stack names it: by [registered]. */
+        fun isTheList(route: String?): Boolean = route == registered
+    }
+
+    /**
+     * One food's own page (D55), for one food. The id is a required part of the path, as the
+     * record's day is: a page of no particular food is not a thing that can be drawn. Where a row
+     * in My foods and "Give this a portion" go.
+     */
+    data object Food : Destination("food/{foodId}") {
+        fun of(foodId: Long): String = "food/$foodId"
     }
     data object BuildMeal : Destination("meal/build/{mealId}") {
         /** Zero means a meal that does not exist yet: he is starting one. */
@@ -468,7 +488,7 @@ fun MetaSelfNavHost(
             )
         }
 
-        composable(Destination.Repeat.route) {
+        composable(Destination.Repeat.route) { here ->
             val repeatViewModel: RepeatViewModel = hiltViewModel()
             val repeatable by repeatViewModel.state.collectAsStateWithLifecycle()
 
@@ -482,9 +502,13 @@ fun MetaSelfNavHost(
                     navController.navigate(Destination.Describe.withWords(words))
                 },
                 onManageFoods = { navController.navigate(Destination.Foods.route) },
-                // Back from the editor comes back here, with the question still open: the food is
-                // observed, so the portion he gave it is on offer when he returns.
-                onGivePortion = { foodId -> navController.navigate(Destination.Foods.editing(foodId)) },
+                // Straight to the food's own page (D55 §4). Back, or Save, comes back here with the
+                // question still open: the food is observed, so the portion he gave it is on offer
+                // when he returns, and a food hidden, deleted or joined away closes the question.
+                // Once for a double tap: only while this screen is the one in front.
+                onGivePortion = { foodId ->
+                    here.ifResumed { navController.navigate(Destination.Food.of(foodId)) }
+                },
                 onRepeat = { meal ->
                     // Straight to the day being looked at. No model, no network, no waiting.
                     dayViewModel.logSavedMeal(
@@ -614,24 +638,33 @@ fun MetaSelfNavHost(
         // screen's link kept, returning to the day would throw away a half-finished log he stepped
         // out of to fix a duplicate, and would be a back arrow that skips a screen. Design §3.1
         // corrected to match. From the menu this is the day anyway.
-        // Registered with the food to open as an optional argument and still reachable by the bare
-        // route, exactly as the meal builder is. A String for the reason `Destination.Record` gives.
+        //
+        // Registered with a food to join from as an optional argument (D55 §5), still reachable by
+        // the bare route, as the builder's foods are. What a food's page leaves for the list — a food
+        // to join from, a food just hidden — arrives in this entry's own saved state and is carried
+        // to the view model once (TakeFromFoodPage says why it has to be carried).
         composable(
-            route = Destination.Foods.route + "?food={food}",
+            route = Destination.Foods.registered,
             arguments = listOf(
-                navArgument("food") {
+                navArgument(FoodsViewModel.JOIN_FROM) {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
                 },
             ),
-        ) {
+        ) { here ->
             val managerViewModel: ManagerViewModel = hiltViewModel()
             val tab by managerViewModel.tab.collectAsStateWithLifecycle()
             val foodsViewModel: FoodsViewModel = hiltViewModel()
             val foodsState by foodsViewModel.state.collectAsStateWithLifecycle()
             val mealsViewModel: MealsViewModel = hiltViewModel()
             val mealsState by mealsViewModel.state.collectAsStateWithLifecycle()
+
+            TakeFromFoodPage(
+                results = here.savedStateHandle,
+                onJoinFrom = foodsViewModel::beginJoiningFrom,
+                onHidden = foodsViewModel::sayHidden,
+            )
 
             ManagerScreen(
                 tab = tab,
@@ -640,27 +673,21 @@ fun MetaSelfNavHost(
                 onSearch = foodsViewModel::search,
                 onShowOnlyPortions = foodsViewModel::showOnlyPortions,
                 onShowHidden = foodsViewModel::showHidden,
-                onEdit = foodsViewModel::edit,
-                onSetForm = foodsViewModel::setForm,
-                onSave = foodsViewModel::save,
-                onCancelEditing = foodsViewModel::cancelEditing,
-                onHide = foodsViewModel::hide,
-                onUnhide = foodsViewModel::unhide,
-                // Asks, or refuses where he pressed it; only the question's Delete deletes (D36).
-                onDelete = foodsViewModel::askToDelete,
-                onConfirmDeleting = foodsViewModel::confirmDeleting,
-                onCancelDeleting = foodsViewModel::cancelDeleting,
-                onBeginMerging = foodsViewModel::beginMerging,
+                // A food opens its own page (D55). The list stays beneath it with its search, its
+                // filters and its scroll, so Back finds it where it was. Once for a double tap: only
+                // while the list is the screen in front.
+                onOpen = { foodId ->
+                    here.ifResumed {
+                        foodsViewModel.openingAFood()
+                        navController.navigate(Destination.Food.of(foodId))
+                    }
+                },
                 onMergeInto = foodsViewModel::mergeInto,
                 onConfirmMerging = foodsViewModel::confirmJoining,
                 onCancelMerging = foodsViewModel::cancelMerging,
                 onDismissRefusal = foodsViewModel::dismissRefusal,
-                review = ReviewActions(
-                    onReview = foodsViewModel::review,
-                    onApply = foodsViewModel::applyReview,
-                    onUndo = foodsViewModel::undoReview,
-                    onDismiss = foodsViewModel::dismissReview,
-                ),
+                onShowAgain = foodsViewModel::showAgain,
+                onDismissHidden = foodsViewModel::dismissHidden,
                 onBeginChoosing = foodsViewModel::beginChoosing,
                 onToggleChosen = foodsViewModel::toggleChosen,
                 onClearChoosing = foodsViewModel::clearChoosing,
@@ -691,6 +718,63 @@ fun MetaSelfNavHost(
                 onEditMeal = { mealId -> navController.navigate(Destination.BuildMeal.of(mealId)) },
                 onDismissMealsFailure = mealsViewModel::dismissFailure,
                 onBack = { navController.popBackStack() },
+            )
+        }
+
+        // One food's own page (D55). The page never navigates: it says why it is finished, once,
+        // and this leaves it and says so back. Only from this page — the answer that closes it can
+        // land after Back was pressed, when a pop would take the screen underneath with it (the
+        // builder's guard).
+        //
+        // Where it goes is FoodPageExit's decision: back, leaving the list beneath a food to join
+        // from or a food just hidden (§5, §6); or, for a join with no list beneath — he came from
+        // Give this a portion — the list in its place, picking, so Back from there is Add something.
+        composable(
+            route = Destination.Food.route,
+            arguments = listOf(navArgument(FoodPageViewModel.FOOD_ID) { type = NavType.LongType }),
+        ) { here ->
+            val pageViewModel: FoodPageViewModel = hiltViewModel()
+            val page by pageViewModel.state.collectAsStateWithLifecycle()
+
+            LaunchedEffect(page.closing) {
+                val closing = page.closing ?: return@LaunchedEffect
+                if (navController.currentBackStackEntry == here) {
+                    val below = navController.previousBackStackEntry
+                    val listBelow = Destination.Foods.isTheList(below?.destination?.route)
+                    when (val exit = FoodPageExit.of(closing, listBelow)) {
+                        is FoodPageExit.Back -> {
+                            below?.let { entry -> exit.result?.leaveIn(entry.savedStateHandle) }
+                            navController.popBackStack()
+                        }
+                        is FoodPageExit.ToList -> navController.navigate(exit.route) {
+                            popUpTo(here.destination.id) { inclusive = true }
+                        }
+                    }
+                }
+                pageViewModel.closed()
+            }
+
+            FoodPageScreen(
+                state = page,
+                onSetForm = pageViewModel::setForm,
+                onSave = pageViewModel::save,
+                onHide = pageViewModel::hide,
+                onUnhide = pageViewModel::unhide,
+                // Asks, or refuses where he pressed it; only the question's Delete deletes (D36).
+                onDelete = pageViewModel::askToDelete,
+                onConfirmDeleting = pageViewModel::confirmDeleting,
+                onCancelDeleting = pageViewModel::cancelDeleting,
+                onBeginJoining = pageViewModel::beginJoining,
+                onDismissRefusal = pageViewModel::dismissRefusal,
+                review = ReviewActions(
+                    onReview = pageViewModel::review,
+                    onApply = pageViewModel::applyReview,
+                    onUndo = pageViewModel::undoReview,
+                    onDismiss = pageViewModel::dismissReview,
+                ),
+                // Leave it alone and the back arrow: nothing is saved but by Save (§2). A second
+                // press pops nothing, rather than the screen beneath.
+                onBack = { navController.popFrom(here) },
             )
         }
 
