@@ -24,7 +24,6 @@ import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import com.metaself.app.ui.food.FormReview
 import com.metaself.app.ui.food.Review
-import com.metaself.app.ui.propose.ProposalWording
 import kotlinx.coroutines.CompletableDeferred
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.EditRefused
@@ -1480,6 +1479,7 @@ class FoodsViewModelTest {
 
                 assertWithMessage(way).that(viewModel.state.value.failed).isNull()
                 assertWithMessage(way).that(viewModel.state.value.refusal).isNull()
+                assertWithMessage(way).that(viewModel.state.value.editing?.reviewing?.review).isNull()
             }
         }
 
@@ -1561,10 +1561,12 @@ class FoodsViewModelTest {
             viewModel.review()
             advanceUntilIdle()
 
+            // Said under the button it answers (D54 §9.4), not in the slot above Save.
             val state = viewModel.state.value
-            assertThat(state.refusal).isEqualTo(ProposalWording.failure(EstimateResult.CeilingReached))
+            assertThat(state.refusal).isNull()
             assertThat(state.editing!!.form).isEqualTo(opened)
-            assertThat(state.editing!!.reviewing.review).isNull()
+            assertThat(state.editing!!.reviewing.review)
+                .isEqualTo(Review.Failed(EstimateResult.CeilingReached))
         }
 
     /** A review writes nothing, so a thrown one says it could not open — and is not left asking. */
@@ -1584,7 +1586,8 @@ class FoodsViewModelTest {
             advanceUntilIdle()
 
             val state = viewModel.state.value
-            assertThat(state.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+            assertThat(state.failed).isNull()
+            assertThat(state.editing!!.reviewing.review).isEqualTo(Review.Failed(null))
             assertThat(state.editing!!.reviewing.asking).isFalse()
             assertThat(problems.recorded.single().kind).isEqualTo("refused")
         }

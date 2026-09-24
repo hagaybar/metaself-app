@@ -1,5 +1,6 @@
 package com.metaself.app.ui.food
 
+import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.FoodReview
 import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
@@ -28,6 +29,13 @@ sealed interface Review {
         val nothingSuggested: Boolean = false,
         val unusable: Boolean = false,
     ) : Review
+
+    /**
+     * The request failed, said under the button it answers (D54 §9.4) until a new request or
+     * **Dismiss**: in [failure]'s existing words (`ProposalWording.failure`), or — null — as a
+     * review that threw, which could not be opened. Nothing in the form is touched (D8).
+     */
+    data class Failed(val failure: EstimateResult?) : Review
 }
 
 /**
@@ -60,9 +68,8 @@ data class FormReview(
 
     /**
      * The answer has come back. A group he has typed in meanwhile is left out of it. If that leaves
-     * nothing of an answer that did suggest something — no suggestion, no set-aside line, no note —
-     * nothing is shown: "No changes suggested" would not be true. A note keeps it up, as it does
-     * once the answer is shown.
+     * nothing of an answer that did suggest something, it is still shown — never silent (D54 §9.4)
+     * — and said as having no suggestions left: "No changes suggested" would not be true.
      *
      * [raw] is kept to show when the answer proposed nothing or set a group aside; an answer whose
      * suggestions are all on screen speaks for itself.
@@ -72,10 +79,8 @@ data class FormReview(
         val nothingSuggested = answer.per100g == null && answer.perUnit == null &&
             answer.setAside.isEmpty()
         val left = withdrawn.fold(answer) { it, group -> it.without(group) }
-        val nothingLeft = left.per100g == null && left.perUnit == null && left.setAside.isEmpty() &&
-            left.note.isNullOrBlank()
         return copy(
-            review = if (nothingLeft && !nothingSuggested) null else Review.Shown(left, nothingSuggested),
+            review = Review.Shown(left, nothingSuggested),
             modelAnswer = raw?.takeIf { nothingSuggested || answer.setAside.isNotEmpty() },
         )
     }
@@ -88,10 +93,12 @@ data class FormReview(
         copy(review = Review.Shown(answer, unusable = true), modelAnswer = raw)
 
     /**
-     * The request failed, or was dropped: nothing is shown, and what was accepted stays. [raw] is
-     * the reply of one that arrived and could not be read, kept to show.
+     * The request failed: [failure] is said under the button, or — null — that the review threw
+     * and could not be opened. What was accepted stays. [raw] is the reply of one that arrived and
+     * could not be read, kept to show.
      */
-    fun failed(raw: String? = null): FormReview = copy(review = null, modelAnswer = raw)
+    fun failed(failure: EstimateResult?, raw: String? = null): FormReview =
+        copy(review = Review.Failed(failure), modelAnswer = raw)
 
     /**
      * He typed, from [before] to [after]. **Typing in a group withdraws its suggestion**, whether it
@@ -109,7 +116,7 @@ data class FormReview(
         }
         if (touched.isEmpty()) return this
         return when (val now = review) {
-            null -> this
+            null, is Review.Failed -> this
             is Review.Asking -> copy(review = Review.Asking(now.withdrawn + touched))
             is Review.Shown -> copy(review = now.minus(touched))
         }

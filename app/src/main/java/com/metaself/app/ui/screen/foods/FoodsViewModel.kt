@@ -20,7 +20,6 @@ import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.guarded
-import com.metaself.app.ui.propose.ProposalWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -179,9 +178,9 @@ class FoodsViewModel @Inject constructor(
      * stored facts tell each group's origin, and nothing else of it is within reach of the request.
      *
      * Offered only for a name the form would take, and once at a time. **Nothing is written** — not
-     * to the boxes, not to the food — until he accepts a group and saves. A failure is said in the
-     * editor's sentence slot in the estimator's own words and leaves the form as it was (D8). A
-     * review writes nothing, so one that throws says it could not open.
+     * to the boxes, not to the food — until he accepts a group and saves. A failure is said under the
+     * button, in the estimator's own words, and leaves the form as it was (D8, D54 §9.4). A review
+     * writes nothing, so one that throws says it could not open.
      *
      * **An answer that lands after he has moved on is dropped** (`askToDelete`'s rule): each request
      * is numbered, and only the latest one, for an editor still waiting on it, is shown. That holds
@@ -195,16 +194,8 @@ class FoodsViewModel @Inject constructor(
         _editing.value = editing.copy(reviewing = editing.reviewing.asked())
         fun stillWaiting() = asked == reviewsAsked && _editing.value?.foodId == editing.foodId &&
             _editing.value?.reviewing?.asking == true
-        // Set in `finally`, before the guard's handler runs, so a throw is said only where it was
-        // still being waited on — never over the list, or another food.
-        var thrownHere = false
-
-        guarded(problems, onRefused = {
-            if (thrownHere) {
-                _refusal.value = null
-                _failed.value = ActionRefused.COULD_NOT_OPEN
-            }
-        }) {
+        // A throw is logged by the guard and said under the button by `finally` (D54 §9.4).
+        guarded(problems, onRefused = {}) {
             try {
                 val stored = foods.byId(editing.foodId) ?: return@guarded
                 // The form as it stood when he pressed the button.
@@ -227,17 +218,16 @@ class FoodsViewModel @Inject constructor(
                         _editing.value = open.copy(
                             reviewing = open.reviewing.unusable(result.review, result.raw),
                         )
-                    is ReviewResult.Failed -> {
-                        _editing.value = open.copy(reviewing = open.reviewing.failed(result.raw))
-                        _failed.value = null
-                        _refusal.value = ProposalWording.failure(result.failure)
-                    }
+                    // Said under the button it answers, not in the slot above Save (§9.4).
+                    is ReviewResult.Failed ->
+                        _editing.value = open.copy(
+                            reviewing = open.reviewing.failed(result.failure, result.raw),
+                        )
                 }
             } finally {
                 // Thrown, or the food gone: the button must not be left reading Reviewing….
                 if (stillWaiting()) {
-                    thrownHere = true
-                    _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.failed()) }
+                    _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.failed(null)) }
                 }
             }
         }

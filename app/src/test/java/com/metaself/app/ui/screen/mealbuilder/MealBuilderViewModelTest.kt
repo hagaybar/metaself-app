@@ -34,7 +34,6 @@ import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
 import com.metaself.app.ui.food.Review
-import com.metaself.app.ui.propose.ProposalWording
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -721,7 +720,9 @@ class MealBuilderViewModelTest {
         viewModel.reviewNewFood()
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+        // Said under the button it answers (D54 §9.4), not at the top of the builder.
+        assertThat(viewModel.state.value.failed).isNull()
+        assertThat(viewModel.state.value.making!!.reviewing.review).isEqualTo(Review.Failed(null))
         assertThat(viewModel.state.value.making!!.reviewing.asking).isFalse()
     }
 
@@ -763,7 +764,8 @@ class MealBuilderViewModelTest {
             advanceUntilIdle()
 
             val state = viewModel.state.value
-            assertThat(state.refusal).isEqualTo(ProposalWording.failure(EstimateResult.NoKey))
+            assertThat(state.refusal).isNull()
+            assertThat(state.making!!.reviewing.review).isEqualTo(Review.Failed(EstimateResult.NoKey))
             assertThat(state.making!!.form).isEqualTo(FoodForm(name = "Lentil soup", unitName = "bowl"))
             assertThat(state.making!!.reviewing.asking).isFalse()
         }

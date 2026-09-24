@@ -25,7 +25,6 @@ import com.metaself.app.ui.food.MealWording
 import com.metaself.app.ui.food.RetaughtBecause
 import com.metaself.app.ui.food.RetaughtWording
 import com.metaself.app.ui.guarded
-import com.metaself.app.ui.propose.ProposalWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -350,8 +349,8 @@ class MealBuilderViewModel @Inject constructor(
      * empty is sent as unknown.
      *
      * The same rules as My foods' review: offered only for a name the form would take, once at a
-     * time; nothing goes into the boxes until he accepts; a failure is said in the screen's sentence
-     * slot in the estimator's own words, the form untouched; an answer for a panel he has closed —
+     * time; nothing goes into the boxes until he accepts; a failure is said under the button in the
+     * estimator's own words, the form untouched (D54 §9.4); an answer for a panel he has closed —
      * or closed and opened again — is dropped; a throw says it could not open, since nothing was
      * written.
      */
@@ -363,17 +362,9 @@ class MealBuilderViewModel @Inject constructor(
         val waiting = making.copy(reviewing = making.reviewing.asked())
         _making.value = waiting
         fun stillWaiting() = asked == reviewsAsked && _making.value?.reviewing?.asking == true
-        // Set in `finally`, before the guard's handler runs, so a throw is said only while this
-        // panel is still waiting on it — never over the builder once the panel has gone.
-        var thrownHere = false
-
         _failed.value = null
-        guarded(problems, onRefused = {
-            if (thrownHere) {
-                _refusal.value = null
-                _failed.value = ActionRefused.COULD_NOT_OPEN
-            }
-        }) {
+        // A throw is logged by the guard and said under the button by `finally` (D54 §9.4).
+        guarded(problems, onRefused = {}) {
             try {
                 val request = ReviewRequest.of(
                     ReviewProcess.NEW_FOOD,
@@ -394,16 +385,16 @@ class MealBuilderViewModel @Inject constructor(
                         _making.value = open.copy(
                             reviewing = open.reviewing.unusable(result.review, result.raw),
                         )
-                    is ReviewResult.Failed -> {
-                        _making.value = open.copy(reviewing = open.reviewing.failed(result.raw))
-                        _refusal.value = ProposalWording.failure(result.failure)
-                    }
+                    // Said under the button it answers, not at the top of the builder (§9.4).
+                    is ReviewResult.Failed ->
+                        _making.value = open.copy(
+                            reviewing = open.reviewing.failed(result.failure, result.raw),
+                        )
                 }
             } finally {
                 // Thrown: the button must not be left reading Reviewing….
                 if (stillWaiting()) {
-                    thrownHere = true
-                    _making.value = _making.value?.let { it.copy(reviewing = it.reviewing.failed()) }
+                    _making.value = _making.value?.let { it.copy(reviewing = it.reviewing.failed(null)) }
                 }
             }
         }

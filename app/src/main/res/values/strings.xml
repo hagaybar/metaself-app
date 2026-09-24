@@ -308,8 +308,15 @@
     <string name="review_use_these">Use these</string>
     <string name="review_use_all">Use all</string>
     <string name="review_dismiss">Dismiss</string>
-    <string name="review_no_changes">No changes suggested.</string>
-    <string name="review_unusable">The model\'s answer arrived, but its suggestions could not be used.</string>
+    <!-- The line under the button after every review (D54 §9.4). No full stop: the model's note
+         follows after " — ", or the line ends in one. -->
+    <string name="review_no_changes">Reviewed: no changes suggested</string>
+    <plurals name="review_suggestions">
+        <item quantity="one">Reviewed: %1$d suggestion below</item>
+        <item quantity="other">Reviewed: %1$d suggestions below</item>
+    </plurals>
+    <string name="review_none_left">Reviewed: no suggestions left</string>
+    <string name="review_unusable">The model\'s answer arrived, but its suggestions could not be used</string>
     <string name="review_show_answer">Show the model\'s answer</string>
     <string name="review_hide_answer">Hide the model\'s answer</string>
     <string name="review_copy_answer">Copy</string>

@@ -1,6 +1,7 @@
 package com.metaself.app.ui.food
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FigureChange
 import com.metaself.app.domain.ai.FoodReview
@@ -35,13 +36,30 @@ class FormReviewTest {
         reason = null,
     )
 
+    /** D54 §9.4: never silent — an answer that arrived is said, even with nothing of it left. */
     @Test
-    fun `an answer whose every suggestion he has typed over while it was out shows nothing`() {
+    fun `an answer whose every suggestion he has typed over while it was out is still said`() {
         val reviewing = FormReview().asked().typed(form, form.copy(unitName = "cookie"))
 
         val answered = reviewing.answered(FoodReview(null, fatChange, null, emptyList()))
 
-        assertThat(answered.review).isNull()
+        assertThat(answered.review).isEqualTo(Review.Shown(FoodReview(null, null, null, emptyList())))
+    }
+
+    /**
+     * D54 §9.4: a failure is said under the button it answers, in its own words, until a new
+     * request or Dismiss — or, with no failure given, as a review that threw.
+     */
+    @Test
+    fun `a failure is held to be said under the button, until dismissed or asked again`() {
+        val failed = FormReview().asked().failed(EstimateResult.CeilingReached)
+
+        assertThat(failed.review).isEqualTo(Review.Failed(EstimateResult.CeilingReached))
+        assertThat(failed.asking).isFalse()
+        assertThat(failed.typed(form, form.copy(fatPer100g = "21"))).isEqualTo(failed)
+        assertThat(failed.dismissed().review).isNull()
+        assertThat(failed.asked().review).isEqualTo(Review.Asking())
+        assertThat(FormReview().asked().failed(null).review).isEqualTo(Review.Failed(null))
     }
 
     /** As [FormReview.accept] and typing treat a note: it keeps the answer up until dismissed. */
@@ -74,7 +92,7 @@ class FormReviewTest {
         val raw = """{"per_100g":null}"""
         val asked = FormReview().asked()
 
-        assertThat(asked.failed(raw).modelAnswer).isEqualTo(raw)
+        assertThat(asked.failed(EstimateResult.Unreadable("x"), raw).modelAnswer).isEqualTo(raw)
         assertThat(asked.unusable(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), raw).modelAnswer)
             .isEqualTo(raw)
         assertThat(asked.answered(FoodReview(null, null, null, emptyList()), raw).modelAnswer).isEqualTo(raw)
@@ -82,7 +100,7 @@ class FormReviewTest {
             .isEqualTo(raw)
         assertThat(asked.answered(FoodReview(null, fatChange, null, emptyList()), raw).modelAnswer).isNull()
 
-        val offered = asked.failed(raw)
+        val offered = asked.failed(EstimateResult.Unreadable("x"), raw)
         assertThat(offered.asked().modelAnswer).isNull()
         assertThat(offered.dismissed().modelAnswer).isNull()
     }
@@ -127,7 +145,7 @@ class FormReviewTest {
         val rebrandedWhileShown = FormReview().asked().answered(both)
             .typed(form, form.copy(brand = "A brand"))
 
-        assertThat(renamedWhileOut.review).isNull()
+        assertThat(renamedWhileOut.review).isEqualTo(Review.Shown(FoodReview(null, null, null, emptyList())))
         assertThat(rebrandedWhileShown.review).isNull()
     }
 

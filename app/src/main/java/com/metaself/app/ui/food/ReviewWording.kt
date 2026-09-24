@@ -42,6 +42,13 @@ object ReviewWording {
         }
 
     /**
+     * The line a review ends in (D54 §9.4): what it came to, [said] without a full stop, then the
+     * model's [note] after a dash — or a full stop when it gave none.
+     */
+    fun outcome(said: String, note: String?): String =
+        note?.trim()?.takeIf { it.isNotEmpty() }?.let { "$said — $it" } ?: "$said."
+
+    /**
      * The model's answer as **Show the model's answer** draws it (D54 §8.4): pretty-printed when it
      * is JSON, as it came when it is not — a reply that could not be read is shown as it is.
      */
