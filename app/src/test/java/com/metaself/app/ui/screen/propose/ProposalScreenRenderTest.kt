@@ -188,6 +188,49 @@ class ProposalScreenRenderTest {
         assertThat(texts).doesNotContain(CHANGE)
     }
 
+    /**
+     * Every row draws the same Remove, the same amount box, and — opened — the same four worth
+     * boxes, so a screen reader heard two rows' controls by one set of names (public issue #3).
+     * Each now says which row it is for; the words on screen are unchanged.
+     */
+    @Test
+    fun `each row's controls say which row they are for`() {
+        val burger = aProposedItem()
+        val bun = aBun()
+        val state = ProposalUiState.Proposed(
+            rows = listOf(burger, bun).map { proposed ->
+                val item = proposed.toItemToLog()
+                ProposalRow(proposed, item, editingWorth = WorthBoxes.of(item))
+            },
+            note = null,
+        )
+
+        val texts = draw(state)
+
+        assertThat(texts.count { it == "Remove" }).isEqualTo(2)
+        assertThat(texts.count { it == "Calories" }).isEqualTo(2)
+        for (name in listOf("Beef burger", "Hamburger bun")) {
+            assertThat(render.describedCount("Remove $name")).isEqualTo(1)
+            assertThat(render.describedCount("How much of $name")).isEqualTo(1)
+            assertThat(render.describedIsField("How much of $name")).isTrue()
+            assertThat(render.describedCount("Done, for $name")).isEqualTo(1)
+        }
+        assertThat(render.describedCount("Calories per 100 g, for Beef burger")).isEqualTo(1)
+        assertThat(render.describedIsField("Calories per 100 g, for Beef burger")).isTrue()
+        assertThat(render.describedCount("Fat (g) per bun, for Hamburger bun")).isEqualTo(1)
+        // − and + only on the counted row.
+        assertThat(render.describedCount("One less of Hamburger bun")).isEqualTo(1)
+        assertThat(render.describedCount("One more of Hamburger bun")).isEqualTo(1)
+    }
+
+    @Test
+    fun `change on each row says which row it opens`() {
+        draw(proposed(aProposedItem(), aBun()))
+
+        assertThat(render.describedCount("Change, for Beef burger")).isEqualTo(1)
+        assertThat(render.describedCount("Change, for Hamburger bun")).isEqualTo(1)
+    }
+
     /** A typed worth is his, and a typed row says nothing about where it came from (D7a). */
     @Test
     fun `after a change the estimate's origin line is gone`() {

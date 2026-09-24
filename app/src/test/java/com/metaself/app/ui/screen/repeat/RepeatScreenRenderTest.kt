@@ -502,6 +502,32 @@ class RepeatScreenRenderTest {
         assertThat(texts.count { it == "−" }).isEqualTo(1)
     }
 
+    /**
+     * Each part's box, its − and +, and its Remove are drawn once per part; a screen reader heard
+     * every copy by the same word (public issue #3). Each now says which part it is for.
+     */
+    @Test
+    fun `just for today names the part each box and button is for`() {
+        val salad = salad()
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(salad),
+                adjusting = Adjusting(asDefined = salad, rows = salad.components),
+            ),
+        )
+
+        assertThat(texts.count { it == "Remove" }).isEqualTo(2)
+        for (name in listOf("Cucumber", "Olive oil")) {
+            assertThat(render.describedCount("Remove $name")).isEqualTo(1)
+            assertThat(render.describedCount("How much of $name")).isEqualTo(1)
+            assertThat(render.describedIsField("How much of $name")).isTrue()
+        }
+        // − and + only for the counted part.
+        assertThat(render.describedCount("One less of Olive oil")).isEqualTo(1)
+        assertThat(render.describedCount("One more of Olive oil")).isEqualTo(1)
+    }
+
     /** A blank box leaves Log it off and names the part that needs an amount. */
     @Test
     fun `a part with no amount is named and nothing can be logged`() {

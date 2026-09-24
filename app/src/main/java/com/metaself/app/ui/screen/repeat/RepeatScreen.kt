@@ -39,6 +39,7 @@ import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.food.HowItIsCounted
 import com.metaself.app.ui.food.named
 import com.metaself.app.ui.food.namesTogether
+import com.metaself.app.ui.food.saidAs
 import com.metaself.app.ui.portion.AmountBox
 import com.metaself.app.ui.portion.PortionWording
 import com.metaself.app.ui.portion.portionWords
@@ -479,8 +480,13 @@ private fun Adjuster(
                     inGrams = component.countedAs == CountedAs.GRAMS,
                     onText = { onSetAmount(component.id, it) },
                     onStep = { onStep(component.id, it) },
+                    of = component.food.name,
                 )
-                Small(stringResource(R.string.propose_remove)) { onRemove(component.id) }
+                // Drawn once per part: said with the part it takes out (public issue #3).
+                Small(
+                    stringResource(R.string.propose_remove),
+                    said = stringResource(R.string.said_remove, component.food.name),
+                ) { onRemove(component.id) }
             }
         }
 
@@ -617,9 +623,10 @@ private fun describeComponent(component: MealComponent, amount: String): String 
     }
 
 @Composable
-private fun Small(label: String, onClick: () -> Unit) {
+private fun Small(label: String, said: String? = null, onClick: () -> Unit) {
     TextButton(
         onClick = onClick,
+        modifier = Modifier.saidAs(said),
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
     ) {
         Text(text = label, style = MaterialTheme.typography.labelMedium)
