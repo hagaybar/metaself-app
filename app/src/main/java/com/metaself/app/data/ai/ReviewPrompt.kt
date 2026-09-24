@@ -61,9 +61,34 @@ object ReviewPrompt {
           reason is empty. For a group you fill that was null, give one short reason for the group in
           kcal_reason and leave the other reasons empty.
         - Give a confidence for each group you return: LOW, MEDIUM or HIGH.
-        - Add at most one short note overall, or leave it empty.
+        - Always write the note: what you concluded, in one sentence. For example, that the figures
+          are consistent and kept, or what you changed and why. Never leave the note empty.
         - Reply in the language of the food's name.
     """.trimIndent()
+
+    /**
+     * Sent only when both groups and what one weighs are held (D54 §9.2): then the two groups can
+     * be checked against each other, and a disagreement is said rather than passed over. The weight
+     * is still never answered — the schema has nowhere to put it.
+     */
+    private val CROSS_CHECK = """
+        Cross-check: per 100 g, per one and grams_per_unit are all given, so check them against
+        each other. The figures for one should equal the figures per 100 g times grams_per_unit / 100,
+        within label rounding. If they disagree beyond rounding, say so in the note:
+        which group you believe and why. Then propose the corrected figures
+        for the group you do not believe. A LABEL group is still changed only when its own figures
+        are impossible: if a LABEL group merely disagrees with the other group,
+        flag it in the note with the reason and keep its figures.
+        grams_per_unit is given only for this check: never change it, state it or guess it.
+    """.trimIndent()
+
+    /** The instructions for [request]: the cross-check only when there is something to check. */
+    private fun instructions(request: ReviewRequest): String =
+        if (request.per100g != null && request.perUnit != null && request.gramsPerUnit != null) {
+            INSTRUCTIONS + "\n\n" + CROSS_CHECK
+        } else {
+            INSTRUCTIONS
+        }
 
     /** The whole request: the instructions, the one food as JSON, and the reply's schema. */
     fun requestBody(model: String, request: ReviewRequest): String = buildJsonObject {
@@ -73,7 +98,7 @@ object ReviewPrompt {
             add(
                 buildJsonObject {
                     put("role", "system")
-                    put("content", INSTRUCTIONS)
+                    put("content", instructions(request))
                 },
             )
             add(
@@ -166,7 +191,12 @@ object ReviewPrompt {
                     }
                 }
             }
-            putJsonObject("note") { put("type", "string") }
+            // A verdict on every reply (§9.3). Strict structured outputs take no length constraint,
+            // so "never empty" is asked for here and in the instructions, and an empty one is read.
+            putJsonObject("note") {
+                put("type", "string")
+                put("description", "What you concluded, in one sentence. Never empty.")
+            }
         }
     }
 }

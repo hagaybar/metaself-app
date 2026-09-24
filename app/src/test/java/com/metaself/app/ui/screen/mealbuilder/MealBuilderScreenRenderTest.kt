@@ -1,13 +1,16 @@
 package com.metaself.app.ui.screen.mealbuilder
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
+import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.FoodReview
 import com.metaself.app.domain.ai.Suggestion
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.MealComponent
@@ -192,6 +195,42 @@ class MealBuilderScreenRenderTest {
         assertThat(render.isDrawnBefore("What 100 g of it are worth", line)).isTrue()
         assertThat(render.isDrawnBefore("Use these", "What one of it is worth")).isTrue()
         assertThat(render.fieldTexts()).doesNotContain("60")
+    }
+
+    /**
+     * D54 §9.4: in *Make a food* too, a review ends in one line under its button — a failure
+     * included, which was said at the top of the builder, off screen from the panel.
+     */
+    @Test
+    fun `a new food's review outcome is said under its button, a failure included`() {
+        fun drawn(review: Review) = draw(
+            MealBuilderUiState(
+                meal = salad(),
+                making = MakingFood(
+                    form = FoodForm(name = "Lentil soup", unitName = "bowl"),
+                    reviewing = FormReview(review = review),
+                ),
+            ),
+        )
+        val filled = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A reason.")
+        val sends = "Sends this food's name"
+
+        listOf(
+            Review.Shown(FoodReview(filled, null, "A thick soup.", emptyList())) to
+                "Reviewed: 1 suggestion below — A thick soup.",
+            Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true) to
+                "Reviewed: no changes suggested.",
+            Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_UNIT)), unusable = true) to
+                "The model's answer arrived, but its suggestions could not be used.",
+            Review.Failed(EstimateResult.Unreachable) to
+                "Could not reach the model. Type the numbers instead — your words are still here.",
+        ).forEach { (review, line) ->
+            val texts = drawn(review)
+
+            assertWithMessage(line).that(texts.count { it == line }).isEqualTo(1)
+            assertWithMessage(line).that(render.isDrawnBefore("Review the figures", line)).isTrue()
+            assertWithMessage(line).that(render.isDrawnBefore(line, sends)).isTrue()
+        }
     }
 
     @Test

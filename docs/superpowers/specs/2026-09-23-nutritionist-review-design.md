@@ -17,6 +17,9 @@
 > - **2026-09-24, second amendment** — a review keeps what it was told: a figure echoed back
 >   rounded is kept, not changed; how an unusable answer is said, and the model's answer shown on
 >   request; stored figures shown rounded in the editor and kept when their box is untouched (§8).
+> - **2026-09-24, third amendment** — a kept figure is judged at the precision the model wrote it
+>   in; the model cross-checks per one against per 100 g when it can; and every review ends in a
+>   plain line under the button, with the model's one-sentence verdict (§9).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -153,8 +156,8 @@ unit name is not in the reply either: the proposal is always for the unit in the
 - `null` for a group means *leave it as it is*. A reply cannot remove a group.
 - `per_unit` is ignored when the editor names no unit.
 - A figure is compared with the one the group holds using D45's comparison; **equal is kept, exactly
-  as held** — a model echoing 3.25 does not turn a label's 3.25 into 3.3. So is a figure equal to
-  the held one once both are rounded to one decimal (§8.1).
+  as held** — a model echoing 3.25 does not turn a label's 3.25 into 3.3. So is a figure that is
+  the held one written at the model's own precision (§8.1, as amended by §9.1).
 - A figure that differs is a **change** and must carry a non-blank reason — its own, or else the
   group's first non-blank reason (§8.2). A group the form did not know is a **fill** and needs at
   least one non-blank reason. Changed and filled figures are rounded to one decimal place: a guess
@@ -204,7 +207,9 @@ in it, so the form still shows his figures.
   model…*, *The provider refused: …*, *The answer could not be understood…* — and the form is
   untouched (D8: the way on is typing). *Could not be understood* is said only of a reply that was
   not in the shape asked for. An answer that arrived in that shape with every group it changed set
-  aside is not a failure to understand it, and is said under the review button (§8.3).
+  aside is not a failure to understand it, and is said under the review button (§8.3). *(Amended
+  2026-09-24, §9.4: a review's failure is now said under the review button too, not in the sentence
+  slot.)*
 
 ### 5. How it is stored — the owner's rule, and what Save does
 
@@ -382,6 +387,68 @@ it stored as exactly 8.57 — it is taken as untouched, a difference far below a
 guess claims. And in *Make a food*, where nothing is stored, a figure accepted from a review is
 shown to two decimals, so a kept figure he had typed with three or more decimals is written back
 rounded; the group is an estimate by then (§5).
+
+### 9. Amendment, 2026-09-24 (third) — a review always answers
+
+A review came back with every figure echoed — per 100 g at two decimals, per one
+exactly — every reason empty and no note. The screen showed nothing that read as an answer: the
+echo of one per-100 g figure had been taken for a change (§9.1), the group set aside, and the
+reply said as *could not be used* in the captions' small grey type, directly under the button's own
+small print and indistinguishable from it — with no verdict, because the model gave none. What
+follows is settled so that an echo is always an echo, a disagreement inside the food is looked for,
+and every review ends in a line he can read.
+
+**9.1 A kept figure is judged at the model's precision.** §8.1's rule compared both figures at one
+decimal, which fails when the model's two-decimal echo rounds up at one decimal while the held
+figure rounds down — *invented:* 4.848484848484849 g, 1.6 g in a 33 g piece, echoed as 4.85, is
+4.9 against 4.8. A figure the model returns is now **kept, exactly as held**, when any of these holds:
+
+- it equals the held figure by D45's comparison;
+- it is within half a unit of its own last decimal place of the held figure — the decimals read from
+  the JSON number's text as the model wrote it (4.85 is two, 4.0 is one, 5 is none), at most three;
+- it equals the held figure rounded half up one decimal at a time, from three places down to its own
+  (4.8485 → 4.848 → 4.85 → 4.9) — a model rounding its own echo again;
+- the two are equal once both are rounded to one decimal (§8.1's rule, kept: a change is rounded to
+  one decimal, §3, so one that lands on the held figure's tenth could not be shown as a change).
+
+So for the held 4.848484848484849: 4.85, 4.848, 4.9, 4.8 and 5 are kept; 5.0 is a change. The cost:
+a model that writes a figure with fewer decimals can propose less — a whole number within half of
+the held figure is read as the held figure.
+
+**9.2 The two groups are checked against each other.** When the request holds both groups and what
+one weighs, the instructions add: the figures for one should equal the figures per 100 g times
+`grams_per_unit` / 100, within label rounding. If they disagree beyond rounding, the model says so
+in the note — which group it believes and why — and proposes the corrected figures for the group it
+does not believe; a `LABEL` group it still changes only when its own figures are impossible, and a
+label that merely disagrees with the other group is flagged in the note, with the reason, and left
+as it is. What one weighs is still never stated, never changed and never guessed: it is given only to
+check the groups against each other. Without both groups and the weight, the rule is not sent.
+
+**9.3 The note is a verdict, and never empty.** The instructions ask for the note on every reply:
+*what you concluded, in one sentence* — that the figures are consistent and kept, or what was changed
+and why. The schema describes it so (a `description`; strict structured outputs accept no length
+constraint), and an empty note is still read, not refused: the line below appears without it.
+
+**9.4 Every outcome ends in a line under the button.** Directly under **Review the figures**, above
+its small print, in the body's own type and ink (no new colour, badge or icon), the editor says what
+the review came to, and the screen scrolls it into view when the answer arrives:
+
+| Outcome | The line |
+|---|---|
+| Nothing suggested | *Reviewed: no changes suggested — {note}* |
+| Suggestions (N groups with **Use these**) | *Reviewed: N suggestion(s) below — {note}* |
+| Every change set aside (§8.3) | *The model's answer arrived, but its suggestions could not be used — {note}* |
+| Suggestions all withdrawn by his typing, or all used, with the note or a set-aside line left | *Reviewed: no suggestions left — {note}* |
+| A failure (§4) | `ProposalWording.failure`'s sentence, unchanged |
+| The request threw, or the food was gone when it was built | *That couldn't be opened…* (`ActionRefused.COULD_NOT_OPEN`) |
+
+With no note, the line ends at a full stop instead. The set-aside lines, **Use all**, **Dismiss** and
+**Show the model's answer** follow as before; a failure's line is taken down by **Dismiss** or a new
+review. **This moves a review's failure out of the sentence slot** (§4): it is said under the button
+it answers, in both editors, and no longer above Save in My foods or at the top of the meal builder
+— where it was off screen from the button, and a review looked as if it had done nothing. An answer
+whose every suggestion was withdrawn while it was out is no longer silently dropped: it says *no
+suggestions left*.
 
 ---
 

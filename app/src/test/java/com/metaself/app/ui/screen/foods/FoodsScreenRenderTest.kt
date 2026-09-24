@@ -1,11 +1,13 @@
 package com.metaself.app.ui.screen.foods
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.R
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
 import com.metaself.app.data.food.weighing
+import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FigureChange
 import com.metaself.app.domain.ai.FoodReview
@@ -675,7 +677,7 @@ class FoodsScreenRenderTest {
             ),
         )
 
-        assertThat(texts).contains("A short note.")
+        assertThat(texts).contains("Reviewed: 1 suggestion below — A short note.")
         assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
         assertThat(texts).doesNotContain("Use all")
 
@@ -704,8 +706,69 @@ class FoodsScreenRenderTest {
             reviewing(Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true)),
         )
 
-        assertThat(texts).contains("No changes suggested.")
+        assertThat(texts).contains("Reviewed: no changes suggested.")
         assertThat(texts).doesNotContain("Use these")
+    }
+
+    // --- Every outcome ends in a line under the button (D54 §9.4) ----------------------------------
+
+    /**
+     * Whatever the review came to, one plain line says so directly under the button — above its
+     * small print, where the eye already is — with the model's verdict when it gave one.
+     */
+    @Test
+    fun `every review outcome is said in one line directly under the button`() {
+        val outcomes: List<Pair<Review, String>> = listOf(
+            Review.Shown(FoodReview(null, null, "The figures agree.", emptyList()), nothingSuggested = true) to
+                "Reviewed: no changes suggested — The figures agree.",
+            Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true) to
+                "Reviewed: no changes suggested.",
+            Review.Shown(FoodReview(null, fatTo4, "Fat was low for the piece.", emptyList())) to
+                "Reviewed: 1 suggestion below — Fat was low for the piece.",
+            Review.Shown(FoodReview(fatTo4, fatTo4, null, emptyList())) to
+                "Reviewed: 2 suggestions below.",
+            Review.Shown(
+                FoodReview(null, null, "Per 100 g looks off.", listOf(FactGroup.PER_100G)),
+                unusable = true,
+            ) to "The model's answer arrived, but its suggestions could not be used — Per 100 g looks off.",
+            Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true) to
+                "The model's answer arrived, but its suggestions could not be used.",
+            Review.Shown(FoodReview(null, null, null, emptyList())) to
+                "Reviewed: no suggestions left.",
+            Review.Failed(EstimateResult.NoKey) to
+                "No API key yet. Add one in settings, or type the numbers instead.",
+            Review.Failed(EstimateResult.Unreadable("x")) to
+                "The answer could not be understood. Type the numbers instead.",
+            Review.Failed(null) to COULD_NOT_OPEN,
+        )
+
+        outcomes.forEach { (review, line) ->
+            val texts = draw(reviewing(review))
+
+            assertWithMessage(line).that(texts.count { it == line }).isEqualTo(1)
+            assertWithMessage(line).that(render.isDrawnBefore("Review the figures", line)).isTrue()
+            assertWithMessage(line).that(render.isDrawnBefore(line, SENDS)).isTrue()
+        }
+    }
+
+    /** A failure is said under the button and nowhere else — not again in the slot above Save. */
+    @Test
+    fun `a review's failure is said once, under the button, with a way to take it down`() {
+        val texts = draw(reviewing(Review.Failed(EstimateResult.CeilingReached)))
+
+        val sentence = "You have used today's estimates. Type the numbers, or raise the daily limit in settings."
+        assertThat(texts.count { it == sentence }).isEqualTo(1)
+        assertThat(render.isDrawnBefore(sentence, SENDS)).isTrue()
+        assertThat(texts).contains("Dismiss")
+    }
+
+    /** Before any review there is nothing to say, and nothing is. */
+    @Test
+    fun `no line is drawn before a review, or while one is out`() {
+        listOf(null, Review.Asking()).forEach { review ->
+            val texts = draw(reviewing(review))
+            assertThat(texts.none { it.startsWith("Reviewed") }).isTrue()
+        }
     }
 
     /** D54 §8.3: said as what happened, with the group that went, and never as not understood. */
@@ -800,6 +863,10 @@ class FoodsScreenRenderTest {
         /** `R.string.action_refused_nothing_changed`, as the phone draws it. */
         const val NOTHING_CHANGED = "That didn't work, and nothing was changed. " +
             "What went wrong is under Settings → Recent problems."
+
+        /** `R.string.action_refused_could_not_open`, as the phone draws it. */
+        const val COULD_NOT_OPEN =
+            "That couldn't be opened. What went wrong is under Settings → Recent problems."
 
         const val SENDS =
             "Sends this food's name, brand and figures, and where each came from, to the model, " +
