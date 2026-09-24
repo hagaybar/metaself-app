@@ -46,11 +46,12 @@ data class ReviewActions(
 }
 
 /**
- * **Review the figures**; directly under it, once a review has come back, one line saying what it
- * came to, whatever that was, with the model's verdict (§9.4); its one line of small print saying
- * what is sent; then what the review said that belongs to no one group: a group whose suggestion
- * could not be used, **Use all** and **Dismiss** (D54 §1, §4), and **Show the model's answer** when
- * the editor holds it (§8.4). Shared by My foods' editor and the meal builder's *Make a food*.
+ * **Review the figures**; directly under it, its one line of small print saying what is sent; then,
+ * once a review has come back, together below the small print: one line saying what it came to,
+ * whatever that was, with the model's verdict (§9.4, §10.4), then what the review said that belongs
+ * to no one group — a group whose suggestion could not be used, **Use all** and **Dismiss** (D54
+ * §1, §4) — and **Show the model's answer** when the editor holds it (§8.4). Shared by My foods'
+ * editor and the meal builder's *Make a food*.
  *
  * No badge, colour or icon is added to anything for a review — the owner's "no new marks": the
  * outcome is in the body's own ink, everything else in the captions'.
@@ -75,8 +76,9 @@ fun ReviewTheFigures(
                 ),
             )
         }
-        outcome(reviewing.review)?.let { Outcome(it) }
+        // The small print belongs to the button; what the review came to follows it (§10.4).
         Caption(stringResource(R.string.review_sends))
+        outcome(reviewing.review)?.let { Outcome(it) }
 
         when (val review = reviewing.review) {
             is Review.Shown -> Answer(review, unitName, actions)
@@ -114,8 +116,8 @@ private fun outcome(review: Review?): String? = when (review) {
 }
 
 /**
- * The outcome, directly under the button, in the body's own type and ink — not the captions' grey,
- * which is the small print's and reads as more of it. Brought into view when it appears, which is
+ * The outcome, under the button's small print, in the body's own type and ink — not the captions'
+ * grey, which is the small print's and would read as more of it. Brought into view when it appears, which is
  * when an answer arrives: an answer drawn off screen is an answer he never gets.
  */
 @OptIn(ExperimentalFoundationApi::class)

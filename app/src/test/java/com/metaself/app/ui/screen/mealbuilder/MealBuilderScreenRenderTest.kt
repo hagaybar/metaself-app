@@ -229,7 +229,7 @@ class MealBuilderScreenRenderTest {
 
             assertWithMessage(line).that(texts.count { it == line }).isEqualTo(1)
             assertWithMessage(line).that(render.isDrawnBefore("Review the figures", line)).isTrue()
-            assertWithMessage(line).that(render.isDrawnBefore(line, sends)).isTrue()
+            assertWithMessage(line).that(render.isDrawnBefore(sends, line)).isTrue()
         }
     }
 

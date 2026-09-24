@@ -24,8 +24,8 @@
 >   what one weighs, the review proposes correcting the group it believes wrong, even a packet
 >   label, always as a suggestion he accepts or dismisses; a label group standing alone is still
 >   changed only when its own figures are impossible; the model writes in the owner's words; it
->   says whether it found a problem in a field of its own, and the line under the button says so
->   (§10).
+>   says whether it found a problem in a field of its own, and the line under the button says so;
+>   and the button's small print sits directly under it, with the outcome below (§10).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -438,7 +438,7 @@ and why. The schema describes it so (a `description`; strict structured outputs 
 constraint), and an empty note is still read, not refused: the line below appears without it.
 
 **9.4 Every outcome ends in a line under the button.** Directly under **Review the figures**, above
-its small print, in the body's own type and ink (no new colour, badge or icon), the editor says what
+its small print *(amended 2026-09-24, §10.4: below its small print)*, in the body's own type and ink (no new colour, badge or icon), the editor says what
 the review came to, and the screen scrolls it into view when the answer arrives:
 
 | Outcome | The line |
@@ -506,6 +506,13 @@ is now:
 
 The other rows of §9.4 are unchanged. The verdict is not stored and not shown on its own; it
 chooses the words of the line and nothing else.
+
+**10.4 The small print stays with the button; the outcome comes below it.** With the outcome line
+between **Review the figures** and its small print, the small print (*Sends this food's name…*)
+read as part of the answer, and the answer's **Dismiss** and **Show the model's answer** sat apart
+from the line they belong to. The order is now: the button; directly under it, its small print;
+then, together, the outcome line, any *couldn't be used* lines, **Use all** and **Dismiss**, and
+**Show the model's answer**. Same type, ink and scrolling into view as §9.4; both editors.
 
 ---
 

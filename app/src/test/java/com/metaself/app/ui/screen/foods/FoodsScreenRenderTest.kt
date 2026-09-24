@@ -714,11 +714,11 @@ class FoodsScreenRenderTest {
     // --- Every outcome ends in a line under the button (D54 §9.4) ----------------------------------
 
     /**
-     * Whatever the review came to, one plain line says so directly under the button — above its
-     * small print, where the eye already is — with the model's verdict when it gave one.
+     * Whatever the review came to, one plain line says so under the button and its small print
+     * (§10.4), with the model's verdict when it gave one.
      */
     @Test
-    fun `every review outcome is said in one line directly under the button`() {
+    fun `every review outcome is said in one line under the button and its small print`() {
         val outcomes: List<Pair<Review, String>> = listOf(
             Review.Shown(FoodReview(null, null, "The figures agree.", emptyList()), nothingSuggested = true) to
                 "Reviewed: no changes suggested — The figures agree.",
@@ -757,8 +757,38 @@ class FoodsScreenRenderTest {
 
             assertWithMessage(line).that(texts.count { it == line }).isEqualTo(1)
             assertWithMessage(line).that(render.isDrawnBefore("Review the figures", line)).isTrue()
-            assertWithMessage(line).that(render.isDrawnBefore(line, SENDS)).isTrue()
+            assertWithMessage(line).that(render.isDrawnBefore(SENDS, line)).isTrue()
         }
+    }
+
+    /**
+     * D54 §10.4: the small print belongs to the button — it says what pressing it sends — so it
+     * sits directly under it, and what the review came to comes after, together: the line, then
+     * **Dismiss** and **Show the model's answer**.
+     */
+    @Test
+    fun `the small print sits under the button, and the outcome and its buttons come below it`() {
+        val state = reviewing(null).let { state ->
+            state.copy(
+                editing = state.editing!!.copy(
+                    reviewing = FormReview(
+                        review = Review.Shown(
+                            FoodReview(null, null, "Per biscuit is off.", emptyList(), Verdict.PROBLEM_FOUND),
+                            nothingSuggested = true,
+                        ),
+                        modelAnswer = """{"per_100g":null}""",
+                    ),
+                ),
+            )
+        }
+        val line = "Reviewed: a problem found — Per biscuit is off."
+
+        val texts = draw(state)
+
+        assertThat(texts.indexOf(SENDS)).isEqualTo(texts.indexOf("Review the figures") + 1)
+        assertThat(render.isDrawnBefore(SENDS, line)).isTrue()
+        assertThat(render.isDrawnBefore(line, "Dismiss")).isTrue()
+        assertThat(render.isDrawnBefore("Dismiss", "Show the model's answer")).isTrue()
     }
 
     /** A failure is said under the button and nowhere else — not again in the slot above Save. */
@@ -768,7 +798,7 @@ class FoodsScreenRenderTest {
 
         val sentence = "You have used today's estimates. Type the numbers, or raise the daily limit in settings."
         assertThat(texts.count { it == sentence }).isEqualTo(1)
-        assertThat(render.isDrawnBefore(sentence, SENDS)).isTrue()
+        assertThat(render.isDrawnBefore(SENDS, sentence)).isTrue()
         assertThat(texts).contains("Dismiss")
     }
 
