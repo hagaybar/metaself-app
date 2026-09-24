@@ -7,10 +7,12 @@ import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.ai.ApiKeyStore
 import com.metaself.app.data.ai.DataStoreAiSettingsStore
 import com.metaself.app.data.ai.EncryptedApiKeyStore
+import com.metaself.app.data.ai.OpenAiFoodReviewer
 import com.metaself.app.data.ai.OpenAiMealEstimator
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Today
+import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.MealEstimator
 import dagger.Module
 import dagger.Provides
@@ -76,4 +78,14 @@ object AiModule {
         client: OkHttpClient,
         problems: ProblemLog,
     ): MealEstimator = OpenAiMealEstimator(keys, settings, client, problems)
+
+    /** A food's review (D54): the same key, ceiling, client and log as the estimator. */
+    @Provides
+    @Singleton
+    fun provideFoodReviewer(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        problems: ProblemLog,
+    ): FoodReviewer = OpenAiFoodReviewer(keys, settings, client, problems)
 }
