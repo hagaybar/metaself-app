@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.metaself.app.R
 import com.metaself.app.domain.food.CannotCount
@@ -42,9 +43,16 @@ fun HowItIsCounted(
     cannotCount: CannotCount?,
     onCountAs: (CountedAs) -> Unit,
     onGivePortion: (() -> Unit)? = null,
+    /**
+     * The food, when this pair is drawn once per food on one screen: each chip is then said with
+     * the food's name, so two foods' chips are four controls and not two names (public issue #3).
+     */
+    of: String? = null,
 ) {
     val weighLabel = stringResource(R.string.food_in_grams)
     val countLabel = stringResource(R.string.food_in_units, unitName)
+    val weighSaid = of?.let { stringResource(R.string.said_for, weighLabel, it) }
+    val countSaid = of?.let { stringResource(R.string.said_for, countLabel, it) }
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             FilterChip(
@@ -52,12 +60,14 @@ fun HowItIsCounted(
                 onClick = { onCountAs(CountedAs.GRAMS) },
                 enabled = cannotWeigh == null,
                 label = { Text(weighLabel) },
+                modifier = Modifier.saidAs(weighSaid),
             )
             FilterChip(
                 selected = countedAs == CountedAs.UNITS,
                 onClick = { onCountAs(CountedAs.UNITS) },
                 enabled = cannotCount == null,
                 label = { Text(countLabel) },
+                modifier = Modifier.saidAs(countSaid),
             )
         }
         cannotWeigh?.let { reason ->

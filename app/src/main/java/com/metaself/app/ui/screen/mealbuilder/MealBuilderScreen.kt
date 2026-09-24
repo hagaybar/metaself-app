@@ -436,9 +436,18 @@ private fun InMeal(
             horizontalArrangement = Arrangement.spacedBy(Spacing.Tight),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onUp) { Text(stringResource(R.string.builder_up)) }
-            TextButton(onClick = onDown) { Text(stringResource(R.string.builder_down)) }
-            TextButton(onClick = onRemove) { Text(stringResource(R.string.propose_remove)) }
+            // Drawn once per part, so each is said with the part it moves or takes out: two parts'
+            // Remove are two controls to a screen reader, not one name twice (public issue #3).
+            val name = component.food.name
+            TextButton(onClick = onUp, modifier = Modifier.saidAs(stringResource(R.string.said_move_up, name))) {
+                Text(stringResource(R.string.builder_up))
+            }
+            TextButton(onClick = onDown, modifier = Modifier.saidAs(stringResource(R.string.said_move_down, name))) {
+                Text(stringResource(R.string.builder_down))
+            }
+            TextButton(onClick = onRemove, modifier = Modifier.saidAs(stringResource(R.string.said_remove, name))) {
+                Text(stringResource(R.string.propose_remove))
+            }
         }
     }
 }
@@ -477,12 +486,16 @@ private fun Waiting(
 
         // A way of counting this food does not support is shown WITH ITS REASON, never hidden: the
         // owner is owed the reason his own food cannot answer the question, not a shorter list.
+        // Several foods can wait here at once, so every control below is also said with the
+        // food's name — the chips, the box and both buttons (public issue #3).
+        val name = pending.food.name
         HowItIsCounted(
             countedAs = pending.countedAs,
             unitName = pending.unitName,
             cannotWeigh = pending.cannotWeigh,
             cannotCount = pending.cannotCount,
             onCountAs = onCountAs,
+            of = name,
         )
 
         OutlinedTextField(
@@ -494,7 +507,7 @@ private fun Waiting(
             // Decimal, not Number: an amount is read as a decimal and a comma is accepted for
             // the point, so a keyboard with neither would refuse half a bar.
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().saidAs(stringResource(R.string.said_how_much, name)),
         )
         AmountTooMuch(
             tooMuch = pending.amountTooMuch,
@@ -515,11 +528,18 @@ private fun Waiting(
             )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            Button(onClick = onConfirm, enabled = pending.canAdd) {
+            Button(
+                onClick = onConfirm,
+                enabled = pending.canAdd,
+                modifier = Modifier.saidAs(stringResource(R.string.said_put_in, name)),
+            ) {
                 Text(stringResource(R.string.builder_put_it_in))
             }
             // Dropping one touches the meal not at all: nothing was put in it to take out.
-            TextButton(onClick = onDrop) { Text(stringResource(R.string.builder_drop_pending)) }
+            TextButton(
+                onClick = onDrop,
+                modifier = Modifier.saidAs(stringResource(R.string.said_leave_out, name)),
+            ) { Text(stringResource(R.string.builder_drop_pending)) }
         }
     }
 }
