@@ -44,8 +44,10 @@ import com.metaself.app.ui.food.ReviewTheFigures
 import com.metaself.app.ui.food.ReviewedBox
 import com.metaself.app.ui.food.changedBoxColors
 import com.metaself.app.ui.food.changedByReview
+import com.metaself.app.ui.food.figureSaid
 import com.metaself.app.ui.food.named
 import com.metaself.app.ui.food.namesTogether
+import com.metaself.app.ui.food.saidAs
 import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
@@ -642,14 +644,16 @@ private fun NewFood(
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             // Each group's heading is a kicker, as My foods sets it — not small print level with the
             // notes, which left the two groups of four identical labels with nothing between them.
+            // A screen reader could not hear that heading from inside a box, so each box is also
+            // named by its group: "Calories per 100 g", not a second "Calories" (public issue #3).
             Text(
                 text = stringResource(R.string.foods_group_per_100g),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_100G), numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.KCAL) in changed)
-            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN) in changed)
-            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.CARBS) in changed)
-            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.FAT) in changed)
+            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_100G), numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.KCAL) in changed, said = figureSaid(stringResource(R.string.foods_field_kcal), FactGroup.PER_100G, form.unitName))
+            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN) in changed, said = figureSaid(stringResource(R.string.foods_field_protein), FactGroup.PER_100G, form.unitName))
+            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.CARBS) in changed, said = figureSaid(stringResource(R.string.foods_field_carbs), FactGroup.PER_100G, form.unitName))
+            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.FAT) in changed, said = figureSaid(stringResource(R.string.foods_field_fat), FactGroup.PER_100G, form.unitName))
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -658,10 +662,10 @@ private fun NewFood(
                 style = MaterialTheme.typography.titleSmall,
             )
             Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), making.errorFor(FoodField.UNIT_NAME))
-            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_UNIT), numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed)
-            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed)
-            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed)
-            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.FAT) in changed)
+            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_UNIT), numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed, said = figureSaid(stringResource(R.string.foods_field_kcal), FactGroup.PER_UNIT, form.unitName))
+            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed, said = figureSaid(stringResource(R.string.foods_field_protein), FactGroup.PER_UNIT, form.unitName))
+            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed, said = figureSaid(stringResource(R.string.foods_field_carbs), FactGroup.PER_UNIT, form.unitName))
+            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.FAT) in changed, said = figureSaid(stringResource(R.string.foods_field_fat), FactGroup.PER_UNIT, form.unitName))
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -698,6 +702,8 @@ private fun Field(
     numeric: Boolean = false,
     /** The review wrote this box's value and it is not saved yet: drawn and said so (D54 §11). */
     changed: Boolean = false,
+    /** What a screen reader calls the box when its label names another box too (public issue #3). */
+    said: String? = null,
 ) {
     OutlinedTextField(
         value = value,
@@ -710,7 +716,7 @@ private fun Field(
             keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
         ),
         colors = if (changed) changedBoxColors() else OutlinedTextFieldDefaults.colors(),
-        modifier = Modifier.fillMaxWidth().changedByReview(changed),
+        modifier = Modifier.fillMaxWidth().changedByReview(changed).saidAs(said),
     )
 }
 

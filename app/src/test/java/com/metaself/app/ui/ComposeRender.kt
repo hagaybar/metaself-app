@@ -126,6 +126,29 @@ class ComposeRender {
     }
 
     /**
+     * How many nodes of the last render a screen reader names exactly [description].
+     *
+     * One is the answer a repeated control must give (public issue #3): a name said by two nodes
+     * is a name nothing that reads the screen can aim at. Zero says the name never arrived.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun describedCount(description: String): Int = lastNodes.count { node ->
+        description in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+    }
+
+    /**
+     * True when the node a screen reader names [description] is a text field — so the name is on
+     * the box that takes the typing, not on a label beside it.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun describedIsField(description: String): Boolean = lastNodes.any { node ->
+        description in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() &&
+            node.config.contains(SemanticsProperties.EditableText)
+    }
+
+    /**
      * True when the node matching [firstPrefix] is drawn before the one matching [secondPrefix].
      *
      * Order, unlike [rowPitchDp]'s distance, is signed — which is the only thing that can say a

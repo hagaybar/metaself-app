@@ -141,6 +141,37 @@ class MealBuilderScreenRenderTest {
         assertThat(texts).contains("Down")
     }
 
+    // --- Every repeated control names its part (public issue #3) ------------------------------
+
+    /**
+     * The food made on the spot draws its four labels twice, once per group, and the walk that found
+     * this could not aim at a single one of the eight boxes. Each box now has a name of its own.
+     */
+    @Test
+    fun `making a food on the spot names each figure box by its group`() {
+        val texts = draw(
+            MealBuilderUiState(
+                meal = salad(),
+                making = MakingFood(form = FoodForm(name = "Lentil soup", unitName = "bowl")),
+            ),
+        )
+
+        assertThat(texts.count { it == "Calories" }).isEqualTo(2)
+        for (label in listOf("Calories", "Protein (g)", "Carbs (g)", "Fat (g)")) {
+            for (name in listOf("$label per 100 g", "$label per bowl")) {
+                assertWithMessage(name).that(render.describedCount(name)).isEqualTo(1)
+                assertWithMessage(name).that(render.describedIsField(name)).isTrue()
+            }
+        }
+    }
+
+    @Test
+    fun `a food made on the spot with no unit named yet has its boxes said per one`() {
+        draw(MealBuilderUiState(meal = salad(), making = MakingFood()))
+
+        assertThat(render.describedCount("Calories per one")).isEqualTo(1)
+    }
+
     /**
      * Going away to the foods manager to make a missing food and back again would lose the meal
      * being built.
