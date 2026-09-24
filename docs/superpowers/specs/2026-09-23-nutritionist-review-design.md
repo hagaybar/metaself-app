@@ -53,7 +53,8 @@ own amendment to D36.
 **The one control.** A text button, **Review the figures**, in the editor directly beneath the name
 (and brand) and above the three groups, with one line of small print under it:
 
-> *Sends this food's name and figures to the model, with your key. Nothing else.*
+> *Sends this food's name, brand and figures, and where each came from, to the model, with your key.
+> Nothing else.*
 
 It is offered whenever the name is one the form would accept; the figures may be empty (a new food
 with only a name is the plainest case). While the request is out the button reads **Reviewing…**

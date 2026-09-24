@@ -304,7 +304,7 @@
     <!-- A review of a food's figures by the model, on request (D54). -->
     <string name="review_the_figures">Review the figures</string>
     <string name="review_asking">Reviewing…</string>
-    <string name="review_sends">Sends this food\'s name and figures to the model, with your key. Nothing else.</string>
+    <string name="review_sends">Sends this food\'s name, brand and figures, and where each came from, to the model, with your key. Nothing else.</string>
     <string name="review_use_these">Use these</string>
     <string name="review_use_all">Use all</string>
     <string name="review_dismiss">Dismiss</string>

@@ -772,7 +772,9 @@ class FoodsScreenRenderTest {
         const val NOTHING_CHANGED = "That didn't work, and nothing was changed. " +
             "What went wrong is under Settings → Recent problems."
 
-        const val SENDS = "Sends this food's name and figures to the model, with your key. Nothing else."
+        const val SENDS =
+            "Sends this food's name, brand and figures, and where each came from, to the model, " +
+                "with your key. Nothing else."
 
         const val DECIMALS_KEPT =
             "Numbers here can have a decimal point: 0.5 g is kept as 0.5 g on this food."
