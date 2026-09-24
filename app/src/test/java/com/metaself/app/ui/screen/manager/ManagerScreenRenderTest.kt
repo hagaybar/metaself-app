@@ -17,6 +17,7 @@ import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import com.metaself.app.ui.MetaSelfScreen
+import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.screen.foods.FoodsUiState
 import org.junit.After
 import org.junit.Test
@@ -244,6 +245,7 @@ class ManagerScreenRenderTest {
             onConfirmMerging = {},
             onCancelMerging = {},
             onDismissRefusal = {},
+            review = ReviewActions.NONE,
             onBeginChoosing = {},
             onToggleChosen = {},
             onClearChoosing = {},

@@ -380,6 +380,138 @@ class FoodFormTest {
             .isEqualTo(mapOf(FoodField.PER_100G to per100gRefused))
     }
 
+    // --- D54: a group accepted from a review ------------------------------------------------------
+
+    /** D54's invented Oat biscuit, as the form holds it. */
+    private val oatBiscuit = FoodForm(
+        name = "Oat biscuit",
+        kcalPer100g = "480",
+        proteinPer100g = "7",
+        carbsPer100g = "62",
+        fatPer100g = "22",
+        unitName = "biscuit",
+        kcalPerUnit = "90",
+        proteinPerUnit = "1",
+        carbsPerUnit = "12",
+        fatPerUnit = "4",
+        gramsPerUnit = "18",
+    )
+
+    @Test
+    fun `a group accepted from a review is handed over as an estimate with its confidence`() {
+        val facts = oatBiscuit.toFacts(5, estimated = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.MEDIUM)))!!
+
+        assertThat(facts.perUnit!!.provenance)
+            .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 5))
+        assertThat(facts.per100g!!.provenance).isEqualTo(Provenance(Source.TYPED, null, 5))
+        assertThat(facts.gramsPerUnit!!.provenance).isEqualTo(Provenance(Source.TYPED, null, 5))
+    }
+
+    // D54 §5 as amended 2026-09-24: an accepted group is stored as the weaker of an estimate and
+    // where the figures the review kept in it came from. Downgrading is honest; upgrading never is.
+
+    @Test
+    fun `an accepted group that kept figures copied off a past meal stays repeated, with no confidence`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.HIGH, keptFrom = Source.REPEATED)),
+        )!!
+
+        assertThat(facts.perUnit!!.provenance).isEqualTo(Provenance(Source.REPEATED, null, 5))
+    }
+
+    @Test
+    fun `an accepted group that kept figures of unrecognised origin stays unrecognised`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_100G to AcceptedGroup(Confidence.MEDIUM, keptFrom = Source.UNRECOGNISED)),
+        )!!
+
+        assertThat(facts.per100g!!.provenance).isEqualTo(Provenance(Source.UNRECOGNISED, null, 5))
+    }
+
+    @Test
+    fun `an accepted group whose every figure changed is an estimate with the review's confidence`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_100G to AcceptedGroup(Confidence.LOW, keptFrom = null)),
+        )!!
+
+        assertThat(facts.per100g!!.provenance).isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.LOW, 5))
+    }
+
+    @Test
+    fun `an accepted group that kept label figures is an estimate, never a label`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(FactGroup.PER_100G to AcceptedGroup(Confidence.MEDIUM, keptFrom = Source.LABEL)),
+        )!!
+
+        assertThat(facts.per100g!!.provenance)
+            .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 5))
+    }
+
+    /** The weight is never a review's to give (D54 §3), so it is never an estimate here either. */
+    @Test
+    fun `the weight is typed even when both groups were accepted`() {
+        val facts = oatBiscuit.toFacts(
+            5,
+            estimated = mapOf(
+                FactGroup.PER_100G to AcceptedGroup(Confidence.LOW),
+                FactGroup.PER_UNIT to AcceptedGroup(Confidence.LOW),
+            ),
+        )!!
+
+        assertThat(facts.per100g!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(facts.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(facts.gramsPerUnit!!.provenance.source).isEqualTo(Source.TYPED)
+    }
+
+    @Test
+    fun `an accepted group the form no longer holds is not invented`() {
+        val facts = yoghurt.toFacts(5, estimated = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.HIGH)))!!
+
+        assertThat(facts.perUnit).isNull()
+        assertThat(facts.per100g!!.provenance.source).isEqualTo(Source.TYPED)
+    }
+
+    @Test
+    fun `accepting figures fills the four boxes of that group and nothing else`() {
+        val filled = oatBiscuit.with(FactGroup.PER_UNIT, Nutrients(95.0, 1.5, 12.0, 4.0))
+
+        assertThat(filled).isEqualTo(
+            oatBiscuit.copy(
+                kcalPerUnit = "95",
+                proteinPerUnit = "1.5",
+                carbsPerUnit = "12",
+                fatPerUnit = "4",
+            ),
+        )
+        assertThat(oatBiscuit.with(FactGroup.PER_100G, Nutrients(370.0, 30.0, 40.0, 10.0)))
+            .isEqualTo(
+                oatBiscuit.copy(
+                    kcalPer100g = "370",
+                    proteinPer100g = "30",
+                    carbsPer100g = "40",
+                    fatPer100g = "10",
+                ),
+            )
+    }
+
+    /** A new food with only a name and a unit: filling per 100 g leaves the unit box as typed. */
+    @Test
+    fun `filling a group leaves the unit name and the weight as they were`() {
+        val soup = FoodForm(name = "Lentil soup", unitName = "bowl")
+
+        val filled = soup
+            .with(FactGroup.PER_100G, Nutrients(60.0, 4.0, 9.0, 1.0))
+            .with(FactGroup.PER_UNIT, Nutrients(180.0, 12.0, 27.0, 3.0))
+
+        assertThat(filled.unitName).isEqualTo("bowl")
+        assertThat(filled.gramsPerUnit).isEmpty()
+        assertThat(filled.errors()).isEmpty()
+    }
+
     private fun someFacts() = FoodFacts(
         per100g = PerHundredGrams(
             Nutrients(72.0, 4.0, 6.0, 2.0),

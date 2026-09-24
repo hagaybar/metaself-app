@@ -4,17 +4,21 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.food.FormReview
 
 /**
  * A food opened for editing.
  *
  * @property showErrors false until he has tried to save. A form that complains about empty fields
  *   the moment it opens is a form shouting at somebody who has not done anything yet.
+ * @property reviewing a review of this food asked for in this editor, and the groups accepted from
+ *   it (D54). Lives and dies with the editor: Cancel, or opening another food, forgets it.
  */
 data class Editing(
     val foodId: Long,
     val form: FoodForm,
     val showErrors: Boolean = false,
+    val reviewing: FormReview = FormReview(),
 ) {
     val errors: Map<FoodField, String> get() = form.errors()
 

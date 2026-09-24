@@ -49,7 +49,9 @@ enum class Source {
      *
      * It exists so that a row from the future is shown honestly rather than dropped or relabelled.
      * Losing food silently from the record would be worse; calling it TYPED would put a claim on it
-     * that decision D4 exists to prevent. Nothing ever writes this value — only reading produces it.
+     * that decision D4 exists to prevent. Nothing ever writes this value of its own accord — only
+     * reading produces it. The one write carries it forward: a food group accepted from a review
+     * that kept such figures stays this, never lifted to an estimate (D54 §5, amended 2026-09-24).
      */
     UNRECOGNISED,
 }

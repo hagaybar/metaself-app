@@ -4,10 +4,13 @@ import com.metaself.app.domain.amount.BelievableAmount
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.FoodField
+import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Logging
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.food.FormReview
 
 /**
  * A food picked out of the list, and how much of it is going into the meal.
@@ -109,6 +112,26 @@ data class Pending(
 }
 
 /**
+ * A food being made on the spot, in the meal builder's *Make a food* panel.
+ *
+ * Held by the view model rather than remembered by the panel, because a review has to outlive its
+ * request (D54): the answer lands on this form, or is dropped if the panel has gone.
+ *
+ * @property showErrors false until he has pressed Make it, for the reason My foods' editor gives.
+ * @property reviewing a review asked for in this panel, and the groups accepted from it — handed to
+ *   the new food as estimates. Cancel forgets it with the panel.
+ */
+data class MakingFood(
+    val form: FoodForm = FoodForm(),
+    val showErrors: Boolean = false,
+    val reviewing: FormReview = FormReview(),
+) {
+    val errors: Map<FoodField, String> get() = form.errors()
+
+    fun errorFor(field: FoodField): String? = if (showErrors) errors[field] else null
+}
+
+/**
  * What the meal builder is showing.
  *
  * **There is no draft state and no "finish" button.** A half-built salad is simply a meal with fewer
@@ -119,8 +142,9 @@ data class Pending(
  *
  * @property meal null only while a new meal has not been named yet, which is the one thing that has
  *   to happen before anything else can.
- * @property creating a food being made on the spot, because the tahini is not in his list yet and
- *   sending him away to make it would lose the salad he is halfway through.
+ * @property making a food being made on the spot, because the tahini is not in his list yet and
+ *   sending him away to make it would lose the salad he is halfway through. Null while the panel is
+ *   closed.
  * @property pending the foods he chose in the food list, each waiting for an amount. **Not
  *   persisted**: leaving the builder keeps every component already added and forgets the rest,
  *   because a row with no amount is not yet anything the record could hold.
@@ -140,12 +164,15 @@ data class MealBuilderUiState(
     val candidates: List<Food> = emptyList(),
     val adding: Adding? = null,
     val pending: List<Pending> = emptyList(),
-    val creating: Boolean = false,
+    val making: MakingFood? = null,
     val refusal: String? = null,
     val alreadyIn: List<Food> = emptyList(),
     val alreadyWaiting: List<Food> = emptyList(),
     val failed: ActionRefused? = null,
 ) {
+    /** True while *Make a food* is open. */
+    val creating: Boolean get() = making != null
+
     /** True before the meal has a name, which is the only gate in this screen. */
     val needsAName: Boolean get() = meal == null
 

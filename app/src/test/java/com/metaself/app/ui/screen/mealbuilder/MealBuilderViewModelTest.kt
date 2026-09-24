@@ -2,6 +2,7 @@ package com.metaself.app.ui.screen.mealbuilder
 
 import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
@@ -13,14 +14,27 @@ import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
 import com.metaself.app.data.time.Now
+import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.ai.FoodReview
+import com.metaself.app.domain.ai.FoodReviewer
+import com.metaself.app.domain.ai.ReviewProcess
+import com.metaself.app.domain.ai.ReviewRequest
+import com.metaself.app.domain.ai.ReviewResult
+import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.CannotCount
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.MealComponent
+import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
+import com.metaself.app.ui.food.Review
+import com.metaself.app.ui.propose.ProposalWording
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -556,6 +570,226 @@ class MealBuilderViewModelTest {
     // --- issue #13 (D45): the other door that types figures into an existing food ---------------
 
     /** What he types into *make a food*: everything the form needs and nothing it does not. */
+    /** *Make a food*, as the panel does it: open it, type the form, press Make it. */
+    private fun made(viewModel: MealBuilderViewModel, form: FoodForm) {
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(form)
+        viewModel.createFood()
+    }
+
+    // --- A new food can be reviewed before it is made (D54) -----------------------------------------
+    //
+    // Lentil soup is the spec's invented example: a name and the unit "bowl", no figures. The review
+    // fills both groups at LOW.
+
+    @Test
+    fun `a new food's review sends only what the panel holds, as a new food`() = runTest(dispatcher) {
+        val reviewer = FakeFoodReviewer(lentilsFilled())
+        val viewModel = opened(carrying(mealId = 1), withSalad(), reviewer = reviewer)
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        val request = reviewer.requests.single()
+        assertThat(request.process).isEqualTo(ReviewProcess.NEW_FOOD)
+        assertThat(request.name).isEqualTo("Lentil soup")
+        assertThat(request.brand).isEmpty()
+        assertThat(request.unitName).isEqualTo("bowl")
+        assertThat(request.per100g).isNull()
+        assertThat(request.perUnit).isNull()
+        assertThat(request.gramsPerUnit).isNull()
+        assertThat(viewModel.state.value.making!!.form)
+            .isEqualTo(FoodForm(name = "Lentil soup", unitName = "bowl"))
+    }
+
+    @Test
+    fun `both groups filled and accepted reach the new food as estimates`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(cucumber, oil))
+        val viewModel = opened(
+            carrying(mealId = 1),
+            withSalad(),
+            foods,
+            reviewer = FakeFoodReviewer(lentilsFilled()),
+        )
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        viewModel.acceptAllForNewFood()
+        advanceUntilIdle()
+        viewModel.createFood()
+        advanceUntilIdle()
+
+        val made = foods.current.single { it.name == "Lentil soup" }.facts
+        assertThat(made.per100g!!.nutrients).isEqualTo(Nutrients(60.0, 4.0, 9.0, 1.0))
+        assertThat(made.per100g!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(made.per100g!!.provenance.confidence).isEqualTo(Confidence.LOW)
+        assertThat(made.perUnit!!.unitName).isEqualTo("bowl")
+        assertThat(made.perUnit!!.nutrients).isEqualTo(Nutrients(180.0, 12.0, 27.0, 3.0))
+        assertThat(made.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(made.gramsPerUnit).isNull()
+        assertThat(viewModel.state.value.making).isNull()
+        assertThat(viewModel.state.value.adding!!.food.name).isEqualTo("Lentil soup")
+    }
+
+    /**
+     * He never saw that food's figures in the panel, so an accepted estimate does not replace one it
+     * holds better (D54 §5) — and D45's line still says only what was replaced: here, nothing.
+     */
+    @Test
+    fun `a name he already has keeps its typed figures, and nothing is said replaced`() =
+        runTest(dispatcher) {
+            val lentils = aFood(
+                name = "Lentil soup",
+                facts = FoodFacts(per100g = aPer100g(55.0)),
+            ).copy(id = 3)
+            val foods = FakeFoodRepository(listOf(cucumber, oil, lentils))
+            val viewModel = opened(
+                carrying(mealId = 1),
+                withSalad(),
+                foods,
+                reviewer = FakeFoodReviewer(lentilsFilled()),
+            )
+            viewModel.beginCreatingFood()
+            viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+            viewModel.reviewNewFood()
+            advanceUntilIdle()
+            viewModel.acceptAllForNewFood()
+            advanceUntilIdle()
+
+            viewModel.createFood()
+            advanceUntilIdle()
+
+            val held = foods.current.single { it.name == "Lentil soup" }.facts
+            assertThat(held.per100g!!.nutrients.kcal).isEqualTo(55.0)
+            assertThat(held.per100g!!.provenance.source).isEqualTo(Source.TYPED)
+            assertThat(held.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+            assertThat(viewModel.state.value.adding!!.retaughtNotice).isNull()
+        }
+
+    @Test
+    fun `typing in a group of the new food withdraws its suggestion`() = runTest(dispatcher) {
+        val viewModel = opened(
+            carrying(mealId = 1),
+            withSalad(),
+            reviewer = FakeFoodReviewer(lentilsFilled()),
+        )
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl", kcalPerUnit = "2"))
+        advanceUntilIdle()
+
+        val shown = viewModel.state.value.making!!.reviewing.review as Review.Shown
+        assertThat(shown.review.perUnit).isNull()
+        assertThat(shown.review.per100g).isNotNull()
+    }
+
+    @Test
+    fun `an answer that lands after the panel closed is dropped`() = runTest(dispatcher) {
+        val reviewer = FakeFoodReviewer(lentilsFilled()).apply { gate = CompletableDeferred() }
+        val viewModel = opened(carrying(mealId = 1), withSalad(), reviewer = reviewer)
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        viewModel.cancelCreatingFood()
+        viewModel.beginCreatingFood()
+        reviewer.gate!!.complete(Unit)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.making).isEqualTo(MakingFood())
+    }
+
+    @Test
+    fun `a review that throws while the panel waits says it could not be opened`() = runTest(dispatcher) {
+        val throwing = object : FoodReviewer {
+            override suspend fun review(request: ReviewRequest): ReviewResult =
+                throw IllegalStateException("no network stack")
+        }
+        val viewModel = opened(carrying(mealId = 1), withSalad(), reviewer = throwing)
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+        assertThat(viewModel.state.value.making!!.reviewing.asking).isFalse()
+    }
+
+    @Test
+    fun `a review that throws after the panel closed says nothing`() = runTest(dispatcher) {
+        val gate = CompletableDeferred<Unit>()
+        val throwing = object : FoodReviewer {
+            override suspend fun review(request: ReviewRequest): ReviewResult {
+                gate.await()
+                throw IllegalStateException("no network stack")
+            }
+        }
+        val viewModel = opened(carrying(mealId = 1), withSalad(), reviewer = throwing)
+        viewModel.beginCreatingFood()
+        viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+        viewModel.reviewNewFood()
+        advanceUntilIdle()
+
+        viewModel.cancelCreatingFood()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.failed).isNull()
+        assertThat(viewModel.state.value.refusal).isNull()
+    }
+
+    @Test
+    fun `a new food's review with no key says the existing sentence and keeps the panel`() =
+        runTest(dispatcher) {
+            val viewModel = opened(
+                carrying(mealId = 1),
+                withSalad(),
+                reviewer = FakeFoodReviewer(ReviewResult.Failed(EstimateResult.NoKey)),
+            )
+            viewModel.beginCreatingFood()
+            viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+            viewModel.reviewNewFood()
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.refusal).isEqualTo(ProposalWording.failure(EstimateResult.NoKey))
+            assertThat(state.making!!.form).isEqualTo(FoodForm(name = "Lentil soup", unitName = "bowl"))
+            assertThat(state.making!!.reviewing.asking).isFalse()
+        }
+
+    /** Make it on a form that is not yet answerable says why, in the panel, and makes nothing. */
+    @Test
+    fun `making a food the form refuses shows its reasons and makes nothing`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(cucumber, oil))
+        val viewModel = opened(carrying(mealId = 1), withSalad(), foods)
+
+        made(viewModel, FoodForm(name = "Lentil soup"))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.making!!.showErrors).isTrue()
+        assertThat(foods.current).hasSize(2)
+    }
+
+    /** Invented figures, the spec's Lentil soup: both groups filled, LOW. */
+    private fun lentilsFilled() = ReviewResult.Proposed(
+        FoodReview(
+            per100g = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A reason."),
+            perUnit = Suggestion(Nutrients(180.0, 12.0, 27.0, 3.0), Confidence.LOW, true, emptyList(), "A reason."),
+            note = null,
+            setAside = emptyList(),
+        ),
+    )
+
     private fun form(name: String, kcal: String) = FoodForm(
         name = name,
         kcalPer100g = kcal,
@@ -574,7 +808,7 @@ class MealBuilderViewModelTest {
         val foods = FakeFoodRepository(listOf(cucumber, oil))
         val viewModel = opened(carrying(mealId = 1), withSalad(), foods)
 
-        viewModel.createFood(form("Cucumber", kcal = "25"))
+        made(viewModel, form("Cucumber", kcal = "25"))
         advanceUntilIdle()
 
         assertThat(foods.current.single { it.name == "Cucumber" }.facts.per100g!!.nutrients.kcal)
@@ -592,7 +826,7 @@ class MealBuilderViewModelTest {
         val foods = FakeFoodRepository(listOf(cucumber, oil))
         val viewModel = opened(carrying(mealId = 1), withSalad(), foods)
 
-        viewModel.createFood(form("Kohlrabi", kcal = "27"))
+        made(viewModel, form("Kohlrabi", kcal = "27"))
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.adding!!.food.name).isEqualTo("Kohlrabi")
@@ -749,8 +983,7 @@ class MealBuilderViewModelTest {
             val problems = RecordingProblemLog()
             val viewModel = opened(carrying(mealId = 1), withSalad(), foods, problems)
 
-            viewModel.beginCreatingFood()
-            viewModel.createFood(form("Kohlrabi", kcal = "27"))
+            made(viewModel, form("Kohlrabi", kcal = "27"))
             advanceUntilIdle()
 
             assertThat(viewModel.state.value.failed).isEqualTo(ActionRefused.NOTHING_CHANGED)
@@ -1000,8 +1233,9 @@ class MealBuilderViewModelTest {
         meals: SavedMealRepository,
         foods: FoodRepository = FakeFoodRepository(listOf(cucumber, oil)),
         problems: ProblemLog = ProblemLog.NONE,
+        reviewer: FoodReviewer = FakeFoodReviewer(),
     ): MealBuilderViewModel {
-        val viewModel = MealBuilderViewModel(meals, foods, Now { 1_000 }, problems, savedState)
+        val viewModel = MealBuilderViewModel(meals, foods, Now { 1_000 }, problems, reviewer, savedState)
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
         return viewModel

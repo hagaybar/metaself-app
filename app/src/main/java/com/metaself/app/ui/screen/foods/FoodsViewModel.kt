@@ -8,12 +8,19 @@ import com.metaself.app.data.food.EditRefused
 import com.metaself.app.data.food.EditResult
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.time.Now
+import com.metaself.app.domain.ai.FoodReviewer
+import com.metaself.app.domain.ai.ReviewProcess
+import com.metaself.app.domain.ai.ReviewRequest
+import com.metaself.app.domain.ai.ReviewResult
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.guarded
+import com.metaself.app.ui.propose.ProposalWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -48,6 +55,7 @@ class FoodsViewModel @Inject constructor(
     private val foods: FoodRepository,
     private val now: Now,
     private val problems: ProblemLog,
+    private val reviewer: FoodReviewer,
     savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
@@ -58,6 +66,9 @@ class FoodsViewModel @Inject constructor(
     private val _chosen = MutableStateFlow<Set<Long>>(emptySet())
     private val _deleting = MutableStateFlow<Deleting?>(null)
     private val _failed = MutableStateFlow<ActionRefused?>(null)
+
+    /** How many reviews have been asked for, so only the latest one's answer is ever shown. */
+    private var reviewsAsked = 0
 
     val state: StateFlow<FoodsUiState> = combine(
         // Every food, hidden ones included: this is the screen where hiding is undone, and a food
@@ -156,8 +167,92 @@ class FoodsViewModel @Inject constructor(
      * was refused.
      */
     fun setForm(form: FoodForm) {
-        _editing.value = _editing.value?.copy(form = form)
+        _editing.value = _editing.value?.let { editing ->
+            // Typing in a group withdraws its suggestion, arrived or still out (D54 §4).
+            editing.copy(form = form, reviewing = editing.reviewing.typed(editing.form, form))
+        }
         _deleting.value = null
+    }
+
+    /**
+     * **Review the figures** (D54): this one food, as the form stands, is sent to the model — its
+     * stored facts tell each group's origin, and nothing else of it is within reach of the request.
+     *
+     * Offered only for a name the form would take, and once at a time. **Nothing is written** — not
+     * to the boxes, not to the food — until he accepts a group and saves. A failure is said in the
+     * editor's sentence slot in the estimator's own words and leaves the form as it was (D8). A
+     * review writes nothing, so one that throws says it could not open.
+     *
+     * **An answer that lands after he has moved on is dropped** (`askToDelete`'s rule): each request
+     * is numbered, and only the latest one, for an editor still waiting on it, is shown. That holds
+     * for one that throws too: its sentence is said only while this editor is still waiting on it.
+     */
+    fun review() {
+        val editing = _editing.value ?: return
+        if (editing.reviewing.asking || FoodField.NAME in editing.errors) return
+        dismissRefusal()
+        val asked = ++reviewsAsked
+        _editing.value = editing.copy(reviewing = editing.reviewing.asked())
+        fun stillWaiting() = asked == reviewsAsked && _editing.value?.foodId == editing.foodId &&
+            _editing.value?.reviewing?.asking == true
+        // Set in `finally`, before the guard's handler runs, so a throw is said only where it was
+        // still being waited on — never over the list, or another food.
+        var thrownHere = false
+
+        guarded(problems, onRefused = {
+            if (thrownHere) {
+                _refusal.value = null
+                _failed.value = ActionRefused.COULD_NOT_OPEN
+            }
+        }) {
+            try {
+                val stored = foods.byId(editing.foodId) ?: return@guarded
+                // The form as it stood when he pressed the button.
+                val request = ReviewRequest.of(
+                    ReviewProcess.EXISTING_FOOD,
+                    editing.form,
+                    stored.facts,
+                    editing.reviewing.accepted,
+                )
+                val result = reviewer.review(request)
+                if (!stillWaiting()) return@guarded
+                val open = _editing.value ?: return@guarded
+                when (result) {
+                    is ReviewResult.Proposed ->
+                        _editing.value = open.copy(reviewing = open.reviewing.answered(result.review))
+                    is ReviewResult.Failed -> {
+                        _editing.value = open.copy(reviewing = open.reviewing.failed())
+                        _failed.value = null
+                        _refusal.value = ProposalWording.failure(result.failure)
+                    }
+                }
+            } finally {
+                // Thrown, or the food gone: the button must not be left reading Reviewing….
+                if (stillWaiting()) {
+                    thrownHere = true
+                    _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.failed()) }
+                }
+            }
+        }
+    }
+
+    /** **Use these**: the group's four suggested figures into its boxes, accepted as an estimate. */
+    fun acceptGroup(group: FactGroup) {
+        val editing = _editing.value ?: return
+        val (form, reviewing) = editing.reviewing.accept(group, editing.form) ?: return
+        _editing.value = editing.copy(form = form, reviewing = reviewing)
+    }
+
+    /** **Use all**: every group with a suggestion, as [acceptGroup]. */
+    fun acceptAll() {
+        val editing = _editing.value ?: return
+        val (form, reviewing) = editing.reviewing.acceptAll(editing.form)
+        _editing.value = editing.copy(form = form, reviewing = reviewing)
+    }
+
+    /** **Dismiss**: what is left of the review goes; what he accepted stays accepted. */
+    fun dismissReview() {
+        _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.dismissed()) }
     }
 
     fun cancelEditing() {
@@ -184,7 +279,9 @@ class FoodsViewModel @Inject constructor(
         }
         act(ActionRefused.NOTHING_CHANGED) {
             val form = editing.form
-            val facts = form.toFacts(now()) ?: return@act
+            // A group accepted from a review goes as an estimate, or weaker, even if he then changed
+            // a figure in it (D54 §5); the repository leaves any group whose figures did not change alone.
+            val facts = form.toFacts(now(), estimated = editing.reviewing.accepted) ?: return@act
             val brand = form.brand.takeIf { it.isNotBlank() }
             when (val saved = foods.saveForm(editing.foodId, form.name, brand, facts)) {
                 is EditResult.Refused -> refuse(saved.why)

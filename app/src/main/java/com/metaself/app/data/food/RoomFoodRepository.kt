@@ -3,6 +3,7 @@ package com.metaself.app.data.food
 import androidx.room.withTransaction
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.time.Now
+import com.metaself.app.domain.food.Correction
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
@@ -269,14 +270,23 @@ class RoomFoodRepository @Inject constructor(
                 }
             }
 
-            // Clear first, then write, so that a correction can genuinely REMOVE a number. The
-            // guarded statements only ever raise what is known; the owner's own hand is the one
-            // thing allowed to lower it, because the ranking exists to protect him from a guess,
-            // not from himself.
-            dao.clearPer100g(foodId, moment)
-            dao.clearPerUnit(foodId, moment)
-            dao.clearGramsPerUnit(foodId, moment)
-            offerEvery(foodId, facts, moment)
+            // Group by group (D54): a group whose figures did not change gets no statement at all,
+            // so it keeps its source, confidence and date. One that was emptied is cleared. One
+            // that changed is cleared and then written, so a correction can genuinely replace or
+            // REMOVE a number: the guarded statements only ever raise what is known, and the
+            // owner's own hand — what he typed or accepted — is the one thing allowed to lower it,
+            // because the ranking exists to protect him from a guess, not from himself. Planned
+            // from the same read the refusal above used, inside this transaction.
+            val plan = Correction.plan(stored?.facts, facts)
+            if (plan.per100g != Correction.Keep) dao.clearPer100g(foodId, moment)
+            if (plan.perUnit != Correction.Keep) dao.clearPerUnit(foodId, moment)
+            if (plan.gramsPerUnit != Correction.Keep) dao.clearGramsPerUnit(foodId, moment)
+            offerEach(
+                foodId,
+                (plan.per100g as? Correction.Replace)?.fact,
+                (plan.perUnit as? Correction.Replace)?.fact,
+                (plan.gramsPerUnit as? Correction.Replace)?.fact,
+            ) { moment }
             EditResult.Done
         }
 

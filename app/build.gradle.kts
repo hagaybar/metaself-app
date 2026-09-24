@@ -16,7 +16,7 @@ android {
         applicationId = "com.metaself.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 90
+        versionCode = 91
 
         // The barcode reader ships a native model for every processor Android runs on. Only one of
         // them is a phone: arm64 is every Android handset of the last decade, and the x86 pair
@@ -27,7 +27,7 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-        versionName = "0.45.0"
+        versionName = "0.46.0"
 
         vectorDrawables {
             useSupportLibrary = true

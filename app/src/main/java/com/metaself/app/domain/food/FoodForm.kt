@@ -30,9 +30,14 @@ enum class FoodField {
  * are optional by design and a form that insisted on all of them would quietly reintroduce the idea
  * that a food has a kind.
  *
- * **Everything typed here is [Source.TYPED].** It is the owner's own hand, which is the whole reason
- * a correction is not subject to the ranking that protects him from a guess: the ranking exists to
- * stop a model overwriting him, not to stop him overwriting a model.
+ * **Everything typed here is [Source.TYPED]** — with one exception, D54: a group he accepted from a
+ * review is handed over as [Source.AI_ESTIMATE] with that review's confidence, even if he then
+ * changed a figure in it, because it is still a mix with a guess in it and a mixed group is labelled
+ * by its weakest member (D4) — which is the source of the figures the review kept instead, where that
+ * ranks below an estimate ([AcceptedGroup.provenance]). What one weighs is never accepted from anything and is always typed.
+ * The rest is the owner's own hand, which is the whole reason a correction is not subject to the
+ * ranking that protects him from a guess: the ranking exists to stop a model overwriting him, not to
+ * stop him overwriting a model.
  */
 data class FoodForm(
     val name: String = "",
@@ -127,35 +132,27 @@ data class FoodForm(
      *
      * @param setAtMillis when he stated them, for showing beside the number later. Never for
      *   choosing between two sources: that is by rank and never by date.
+     * @param estimated the groups he accepted from a review this session (D54). Each is handed over
+     *   labelled by its weakest member ([AcceptedGroup.provenance]); every other group, and the
+     *   weight always, as typed.
      */
-    fun toFacts(setAtMillis: Long): FoodFacts? {
+    fun toFacts(setAtMillis: Long, estimated: Map<FactGroup, AcceptedGroup> = emptyMap()): FoodFacts? {
         if (errors().isNotEmpty()) return null
         val typed = Provenance(Source.TYPED, confidence = null, setAtMillis = setAtMillis)
+        fun provenanceOf(group: FactGroup): Provenance =
+            estimated[group]?.provenance(setAtMillis) ?: typed
         return runCatching {
             FoodFacts(
                 per100g = if (wantsPer100g) {
-                    PerHundredGrams(
-                        Nutrients(
-                            number(kcalPer100g, KCAL_PER_100G)!!,
-                            number(proteinPer100g, MACRO_PER_100G)!!,
-                            number(carbsPer100g, MACRO_PER_100G)!!,
-                            number(fatPer100g, MACRO_PER_100G)!!,
-                        ),
-                        typed,
-                    )
+                    PerHundredGrams(per100gFigures()!!, provenanceOf(FactGroup.PER_100G))
                 } else {
                     null
                 },
                 perUnit = if (wantsPerUnit) {
                     PerUnit(
                         FoodKeys.displayName(unitName),
-                        Nutrients(
-                            number(kcalPerUnit, KCAL_PER_UNIT)!!,
-                            number(proteinPerUnit, MACRO_PER_UNIT)!!,
-                            number(carbsPerUnit, MACRO_PER_UNIT)!!,
-                            number(fatPerUnit, MACRO_PER_UNIT)!!,
-                        ),
-                        typed,
+                        perUnitFigures()!!,
+                        provenanceOf(FactGroup.PER_UNIT),
                     )
                 } else {
                     null
@@ -169,6 +166,45 @@ data class FoodForm(
                 },
             )
         }.getOrNull()
+    }
+
+    /** The four per-100 g figures, or null while the group is empty, half filled or refused. */
+    fun per100gFigures(): Nutrients? = figures(per100gJudged)
+
+    /**
+     * The four per-one figures, or null while the group is empty, half filled or refused — or names
+     * no unit, since "90 kcal" of nothing is not a figure.
+     */
+    fun perUnitFigures(): Nutrients? = if (unitName.isBlank()) null else figures(perUnitJudged)
+
+    /** What one weighs, or null while the box is empty or refused. */
+    fun weightFigure(): Double? = number(gramsPerUnit, GRAMS)?.takeIf { it > 0.0 }
+
+    /** The unit name as Save stores it, or null when none is named. */
+    fun unitNameAsSaved(): String? = runCatching { FoodKeys.displayName(unitName) }.getOrNull()
+
+    /**
+     * The four boxes of [group] filled with [nutrients] — never the unit name, never the weight —
+     * written as a stored figure is written into the form (D54: accepting a review's suggestion).
+     */
+    fun with(group: FactGroup, nutrients: Nutrients): FoodForm = when (group) {
+        FactGroup.PER_100G -> copy(
+            kcalPer100g = nutrients.kcal.asTyped(),
+            proteinPer100g = nutrients.proteinG.asTyped(),
+            carbsPer100g = nutrients.carbsG.asTyped(),
+            fatPer100g = nutrients.fatG.asTyped(),
+        )
+        FactGroup.PER_UNIT -> copy(
+            kcalPerUnit = nutrients.kcal.asTyped(),
+            proteinPerUnit = nutrients.proteinG.asTyped(),
+            carbsPerUnit = nutrients.carbsG.asTyped(),
+            fatPerUnit = nutrients.fatG.asTyped(),
+        )
+    }
+
+    private fun figures(judged: List<Pair<String, Double>>): Nutrients? {
+        val read = judged.map { (typed, most) -> number(typed, most) ?: return null }
+        return runCatching { Nutrients(read[0], read[1], read[2], read[3]) }.getOrNull()
     }
 
     companion object {

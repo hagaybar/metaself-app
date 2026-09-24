@@ -6,8 +6,13 @@ import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
 import com.metaself.app.data.food.weighing
+import com.metaself.app.domain.ai.Figure
+import com.metaself.app.domain.ai.FigureChange
+import com.metaself.app.domain.ai.FoodReview
+import com.metaself.app.domain.ai.Suggestion
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
@@ -16,6 +21,9 @@ import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.Provenance
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
+import com.metaself.app.ui.food.FormReview
+import com.metaself.app.ui.food.Review
+import com.metaself.app.ui.food.ReviewActions
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -615,6 +623,116 @@ class FoodsScreenRenderTest {
         assertThat(texts).contains("Clear")
     }
 
+    // --- A review (D54) ---------------------------------------------------------------------------
+
+    /**
+     * The suggestion is drawn beside the figures it would change — under the per-one heading and not
+     * under per 100 g — and nothing of it is in any box until he accepts.
+     */
+    @Test
+    fun `a review's change is drawn under the group it would change and in no box`() {
+        val texts = draw(reviewing(Review.Shown(FoodReview(null, fatTo4, null, emptyList()))))
+
+        val line = "Fat 1 → 4 g — A reason."
+        assertThat(texts).contains(line)
+        assertThat(texts.count { it == "Use these" }).isEqualTo(1)
+        assertThat(render.isDrawnBefore("What 100 g of it are worth", "What one of it is worth"))
+            .isTrue()
+        assertThat(render.isDrawnBefore("What one of it is worth", line)).isTrue()
+        assertThat(render.isDrawnBefore("What one of it is worth", "Use these")).isTrue()
+        assertThat(render.isDrawnBefore("Use these", "What one of it weighs")).isTrue()
+        assertThat(render.fieldTexts()).doesNotContain("4")
+        assertThat(texts).doesNotContain("Use all")
+        assertThat(texts).contains("Dismiss")
+    }
+
+    @Test
+    fun `the button says what is sent, and reads Reviewing while it is out`() {
+        val idle = draw(reviewing(null))
+
+        assertThat(idle).contains("Review the figures")
+        assertThat(idle).contains(SENDS)
+        assertThat(render.isDrawnBefore("Review the figures", "What 100 g of it are worth")).isTrue()
+
+        val asking = draw(reviewing(Review.Asking()))
+
+        assertThat(asking).contains("Reviewing…")
+        assertThat(asking).doesNotContain("Review the figures")
+    }
+
+    @Test
+    fun `two suggestions offer Use all, and a note and a set-aside group are said under the button`() {
+        val texts = draw(
+            reviewing(
+                Review.Shown(
+                    FoodReview(
+                        per100g = null,
+                        perUnit = fatTo4,
+                        note = "A short note.",
+                        setAside = listOf(FactGroup.PER_100G),
+                    ),
+                ),
+            ),
+        )
+
+        assertThat(texts).contains("A short note.")
+        assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
+        assertThat(texts).doesNotContain("Use all")
+
+        val both = draw(
+            reviewing(
+                Review.Shown(
+                    FoodReview(
+                        per100g = fatTo4.copy(
+                            changes = listOf(FigureChange(Figure.KCAL, 480.0, 470.0, "Another.")),
+                        ),
+                        perUnit = fatTo4,
+                        note = null,
+                        setAside = emptyList(),
+                    ),
+                ),
+            ),
+        )
+
+        assertThat(both.count { it == "Use these" }).isEqualTo(2)
+        assertThat(both).contains("Use all")
+    }
+
+    @Test
+    fun `a review that changes nothing says so`() {
+        val texts = draw(
+            reviewing(Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true)),
+        )
+
+        assertThat(texts).contains("No changes suggested.")
+        assertThat(texts).doesNotContain("Use these")
+    }
+
+    /** An editor with the Oat biscuit open (invented figures) and [review] as its review. */
+    private fun reviewing(review: Review?): FoodsUiState {
+        val food = Food(
+            id = 1,
+            name = "Oat biscuit",
+            facts = FoodFacts(
+                per100g = PerHundredGrams(Nutrients(480.0, 7.0, 62.0, 22.0), Provenance(Source.LABEL, null, 0)),
+                perUnit = aPerUnit("biscuit", 90.0).copy(nutrients = Nutrients(90.0, 1.0, 12.0, 1.0)),
+                gramsPerUnit = weighing(18.0),
+            ),
+        )
+        return FoodsUiState(
+            foods = listOf(food),
+            editing = Editing(1, FoodForm.of(food), reviewing = FormReview(review = review)),
+        )
+    }
+
+    private val fatTo4 = Suggestion(
+        nutrients = Nutrients(90.0, 1.0, 12.0, 4.0),
+        confidence = Confidence.MEDIUM,
+        filled = false,
+        changes = listOf(FigureChange(Figure.FAT, 1.0, 4.0, "A reason.")),
+        reason = null,
+    )
+
     private fun draw(state: FoodsUiState): List<String> = render.texts {
         FoodsScreen(
             state = state,
@@ -635,6 +753,7 @@ class FoodsScreenRenderTest {
             onConfirmMerging = {},
             onCancelMerging = {},
             onDismissRefusal = {},
+            review = ReviewActions.NONE,
             onBeginChoosing = {},
             onToggleChosen = {},
             onClearChoosing = {},
@@ -652,6 +771,10 @@ class FoodsScreenRenderTest {
         /** `R.string.action_refused_nothing_changed`, as the phone draws it. */
         const val NOTHING_CHANGED = "That didn't work, and nothing was changed. " +
             "What went wrong is under Settings → Recent problems."
+
+        const val SENDS =
+            "Sends this food's name, brand and figures, and where each came from, to the model, " +
+                "with your key. Nothing else."
 
         const val DECIMALS_KEPT =
             "Numbers here can have a decimal point: 0.5 g is kept as 0.5 g on this food."

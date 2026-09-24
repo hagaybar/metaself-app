@@ -3,6 +3,29 @@ package com.metaself.app.ui.screen.foods
 import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import com.metaself.app.data.ai.FakeFoodReviewer
+import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.ai.Figure
+import com.metaself.app.domain.ai.FigureChange
+import com.metaself.app.domain.ai.FoodReview
+import com.metaself.app.domain.ai.FoodReviewer
+import com.metaself.app.domain.ai.ReviewProcess
+import com.metaself.app.domain.ai.ReviewRequest
+import com.metaself.app.domain.ai.ReviewResult
+import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.AcceptedGroup
+import com.metaself.app.domain.food.FactGroup
+import com.metaself.app.domain.food.GramsPerUnit
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
+import com.metaself.app.ui.food.FormReview
+import com.metaself.app.ui.food.Review
+import com.metaself.app.ui.propose.ProposalWording
+import kotlinx.coroutines.CompletableDeferred
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.EditRefused
 import com.metaself.app.data.food.FakeFoodRepository
@@ -967,7 +990,7 @@ class FoodsViewModelTest {
     fun `opened for one food, its editor is open and in view`() = runTest(dispatcher) {
         val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice"), aFood(name = "Tahini")))
         val viewModel =
-            FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, SavedStateHandle(mapOf("food" to "2")))
+            FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, FakeFoodReviewer(), SavedStateHandle(mapOf("food" to "2")))
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
 
@@ -987,12 +1010,12 @@ class FoodsViewModelTest {
         runTest(dispatcher) {
             val foods = FakeFoodRepository(listOf(aFood(name = "Apple"), aFood(name = "Rice")))
             val saved = SavedStateHandle(mapOf("food" to "2"))
-            val first = FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, saved)
+            val first = FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, FakeFoodReviewer(), saved)
             backgroundScope.launch { first.state.collect { } }
             advanceUntilIdle()
             assertThat(first.state.value.editing?.foodId).isEqualTo(2L)
 
-            val recreated = FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, saved)
+            val recreated = FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, FakeFoodReviewer(), saved)
             backgroundScope.launch { recreated.state.collect { } }
             advanceUntilIdle()
 
@@ -1005,7 +1028,7 @@ class FoodsViewModelTest {
     fun `opened for a food that is not there, nothing is open`() = runTest(dispatcher) {
         val foods = FakeFoodRepository(listOf(aFood(name = "Apple")))
         val viewModel =
-            FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, SavedStateHandle(mapOf("food" to "9")))
+            FoodsViewModel(foods, Now { 1_000 }, ProblemLog.NONE, FakeFoodReviewer(), SavedStateHandle(mapOf("food" to "9")))
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
 
@@ -1104,7 +1127,7 @@ class FoodsViewModelTest {
             foods.readsFail = true
             val problems = RecordingProblemLog()
             val viewModel =
-                FoodsViewModel(foods, Now { 1_000 }, problems, SavedStateHandle(mapOf("food" to "1")))
+                FoodsViewModel(foods, Now { 1_000 }, problems, FakeFoodReviewer(), SavedStateHandle(mapOf("food" to "1")))
             backgroundScope.launch { viewModel.state.collect { } }
             advanceUntilIdle()
 
@@ -1140,6 +1163,408 @@ class FoodsViewModelTest {
             assertThat(viewModel.state.value.refusal).isNotNull()
             assertThat(viewModel.state.value.failed).isNull()
         }
+
+    // --- Asking for a review (D54) ---------------------------------------------------------------
+    //
+    // The Oat biscuit is the spec's invented example: per 100 g off a label, per biscuit and its
+    // weight typed. The review keeps per 100 g and changes the biscuit's fat from 1 to 4 g.
+
+    @Test
+    fun `a review sends the untouched groups with their sources and a retyped one as typed`() =
+        runTest(dispatcher) {
+            val reviewer = FakeFoodReviewer(fatChanged())
+            val viewModel = watched(FakeFoodRepository(listOf(oatBiscuit())), reviewer = reviewer)
+            viewModel.edit(1)
+            advanceUntilIdle()
+
+            viewModel.review()
+            advanceUntilIdle()
+
+            val first = reviewer.requests.single()
+            assertThat(first.process).isEqualTo(ReviewProcess.EXISTING_FOOD)
+            assertThat(first.name).isEqualTo("Oat biscuit")
+            assertThat(first.per100g!!.source).isEqualTo(Source.LABEL)
+            assertThat(first.perUnit!!.source).isEqualTo(Source.TYPED)
+            assertThat(first.unitName).isEqualTo("biscuit")
+
+            viewModel.dismissReview()
+            viewModel.setForm(viewModel.state.value.editing!!.form.copy(kcalPer100g = "470"))
+            viewModel.review()
+            advanceUntilIdle()
+
+            assertThat(reviewer.requests.last().per100g!!.source).isEqualTo(Source.TYPED)
+        }
+
+    @Test
+    fun `nothing is written to the boxes until he accepts`() = runTest(dispatcher) {
+        val viewModel = watched(
+            FakeFoodRepository(listOf(oatBiscuit())),
+            reviewer = FakeFoodReviewer(fatChanged()),
+        )
+        viewModel.edit(1)
+        advanceUntilIdle()
+        val opened = viewModel.state.value.editing!!.form
+
+        viewModel.review()
+        advanceUntilIdle()
+
+        val editing = viewModel.state.value.editing!!
+        assertThat(editing.form).isEqualTo(opened)
+        val shown = editing.reviewing.review as Review.Shown
+        assertThat(shown.review.perUnit!!.changes.single().to).isEqualTo(4.0)
+        assertThat(shown.review.per100g).isNull()
+    }
+
+    @Test
+    fun `accepting per biscuit fills its four boxes, and Save stores only that group as an estimate`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(oatBiscuit()))
+            val viewModel = watched(foods, reviewer = FakeFoodReviewer(fatChanged()))
+            viewModel.edit(1)
+            advanceUntilIdle()
+            viewModel.review()
+            advanceUntilIdle()
+
+            viewModel.acceptGroup(FactGroup.PER_UNIT)
+            advanceUntilIdle()
+
+            val form = viewModel.state.value.editing!!.form
+            assertThat(listOf(form.kcalPerUnit, form.proteinPerUnit, form.carbsPerUnit, form.fatPerUnit))
+                .containsExactly("90", "1", "12", "4").inOrder()
+            assertThat(form.unitName).isEqualTo("biscuit")
+            assertThat(form.gramsPerUnit).isEqualTo("18")
+            assertThat(viewModel.state.value.editing!!.reviewing.review).isNull()
+
+            viewModel.save()
+            advanceUntilIdle()
+
+            val saved = foods.current.single().facts
+            assertThat(saved.perUnit!!.nutrients.fatG).isEqualTo(4.0)
+            assertThat(saved.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+            assertThat(saved.perUnit!!.provenance.confidence).isEqualTo(Confidence.MEDIUM)
+            assertThat(saved.per100g!!.provenance.source).isEqualTo(Source.LABEL)
+            assertThat(saved.gramsPerUnit!!.provenance.source).isEqualTo(Source.TYPED)
+        }
+
+    /** Still a mix with a guess in it (D54 §5): labelled by its weakest member. */
+    @Test
+    fun `a figure changed after accepting still saves the group as an estimate`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(oatBiscuit()))
+            val viewModel = watched(foods, reviewer = FakeFoodReviewer(fatChanged()))
+            viewModel.edit(1)
+            advanceUntilIdle()
+            viewModel.review()
+            advanceUntilIdle()
+            viewModel.acceptGroup(FactGroup.PER_UNIT)
+            advanceUntilIdle()
+            viewModel.setForm(viewModel.state.value.editing!!.form.copy(kcalPerUnit = "95"))
+
+            viewModel.save()
+            advanceUntilIdle()
+
+            val perUnit = foods.current.single().facts.perUnit!!
+            assertThat(perUnit.nutrients.kcal).isEqualTo(95.0)
+            assertThat(perUnit.nutrients.fatG).isEqualTo(4.0)
+            assertThat(perUnit.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        }
+
+    @Test
+    fun `typing in a group withdraws its suggestion and leaves the other`() = runTest(dispatcher) {
+        val viewModel = watched(
+            FakeFoodRepository(listOf(oatBiscuit())),
+            reviewer = FakeFoodReviewer(bothChanged()),
+        )
+        viewModel.edit(1)
+        advanceUntilIdle()
+        viewModel.review()
+        advanceUntilIdle()
+
+        viewModel.setForm(viewModel.state.value.editing!!.form.copy(fatPerUnit = "2"))
+        advanceUntilIdle()
+
+        val shown = viewModel.state.value.editing!!.reviewing.review as Review.Shown
+        assertThat(shown.review.perUnit).isNull()
+        assertThat(shown.review.per100g).isNotNull()
+    }
+
+    @Test
+    fun `typing in a group while the review is out withdraws what comes back for it`() =
+        runTest(dispatcher) {
+            val reviewer = FakeFoodReviewer(bothChanged()).apply { gate = CompletableDeferred() }
+            val viewModel = watched(FakeFoodRepository(listOf(oatBiscuit())), reviewer = reviewer)
+            viewModel.edit(1)
+            advanceUntilIdle()
+            viewModel.review()
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.editing!!.reviewing.asking).isTrue()
+
+            viewModel.setForm(viewModel.state.value.editing!!.form.copy(kcalPer100g = "470"))
+            reviewer.gate!!.complete(Unit)
+            advanceUntilIdle()
+
+            val shown = viewModel.state.value.editing!!.reviewing.review as Review.Shown
+            assertThat(shown.review.per100g).isNull()
+            assertThat(shown.review.perUnit).isNotNull()
+        }
+
+    @Test
+    fun `while a review is out, asking again sends nothing`() = runTest(dispatcher) {
+        val reviewer = FakeFoodReviewer(fatChanged()).apply { gate = CompletableDeferred() }
+        val viewModel = watched(FakeFoodRepository(listOf(oatBiscuit())), reviewer = reviewer)
+        viewModel.edit(1)
+        advanceUntilIdle()
+
+        viewModel.review()
+        advanceUntilIdle()
+        viewModel.review()
+        advanceUntilIdle()
+
+        assertThat(reviewer.requests).hasSize(1)
+    }
+
+    @Test
+    fun `Dismiss takes down what is left and keeps what was accepted`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(oatBiscuit()))
+        val viewModel = watched(foods, reviewer = FakeFoodReviewer(bothChanged()))
+        viewModel.edit(1)
+        advanceUntilIdle()
+        viewModel.review()
+        advanceUntilIdle()
+
+        viewModel.acceptGroup(FactGroup.PER_UNIT)
+        viewModel.dismissReview()
+        advanceUntilIdle()
+
+        val editing = viewModel.state.value.editing!!
+        assertThat(editing.reviewing.review).isNull()
+        assertThat(editing.reviewing.accepted)
+            .containsExactly(FactGroup.PER_UNIT, AcceptedGroup(Confidence.MEDIUM))
+        assertThat(editing.form.kcalPer100g).isEqualTo("480")
+
+        viewModel.save()
+        advanceUntilIdle()
+
+        val saved = foods.current.single().facts
+        assertThat(saved.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(saved.per100g!!.provenance.source).isEqualTo(Source.LABEL)
+    }
+
+    @Test
+    fun `Use all accepts every group with a suggestion`() = runTest(dispatcher) {
+        val viewModel = watched(
+            FakeFoodRepository(listOf(oatBiscuit())),
+            reviewer = FakeFoodReviewer(bothChanged()),
+        )
+        viewModel.edit(1)
+        advanceUntilIdle()
+        viewModel.review()
+        advanceUntilIdle()
+
+        viewModel.acceptAll()
+        advanceUntilIdle()
+
+        val editing = viewModel.state.value.editing!!
+        assertThat(editing.form.kcalPer100g).isEqualTo("470")
+        assertThat(editing.form.fatPerUnit).isEqualTo("4")
+        assertThat(editing.reviewing.accepted.keys)
+            .containsExactly(FactGroup.PER_100G, FactGroup.PER_UNIT)
+    }
+
+    @Test
+    fun `Cancel forgets the review and everything accepted`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(oatBiscuit()))
+        val viewModel = watched(foods, reviewer = FakeFoodReviewer(fatChanged()))
+        viewModel.edit(1)
+        advanceUntilIdle()
+        viewModel.review()
+        advanceUntilIdle()
+        viewModel.acceptGroup(FactGroup.PER_UNIT)
+
+        viewModel.cancelEditing()
+        viewModel.edit(1)
+        advanceUntilIdle()
+
+        val editing = viewModel.state.value.editing!!
+        assertThat(editing.reviewing).isEqualTo(FormReview())
+        assertThat(editing.form.fatPerUnit).isEqualTo("1")
+        assertThat(foods.current.single()).isEqualTo(oatBiscuit().copy(id = 1))
+    }
+
+    /** `askToDelete`'s rule: an answer for an editor he has left is not put back on screen. */
+    @Test
+    fun `an answer that lands after the editor closed or another food opened is dropped`() =
+        runTest(dispatcher) {
+            val ways: List<Pair<String, (FoodsViewModel) -> Unit>> = listOf(
+                "closed" to { it.cancelEditing() },
+                "another food" to { it.edit(2) },
+                "closed and opened again" to { it.cancelEditing(); it.edit(1) },
+            )
+            ways.forEach { (way, move) ->
+                val reviewer = FakeFoodReviewer(fatChanged()).apply { gate = CompletableDeferred() }
+                val viewModel = watched(
+                    FakeFoodRepository(listOf(oatBiscuit(), aFood(name = "Tahini"))),
+                    reviewer = reviewer,
+                )
+                viewModel.edit(1)
+                advanceUntilIdle()
+                viewModel.review()
+                advanceUntilIdle()
+
+                move(viewModel)
+                reviewer.gate!!.complete(Unit)
+                advanceUntilIdle()
+
+                assertWithMessage(way).that(viewModel.state.value.editing?.reviewing?.review).isNull()
+                assertWithMessage(way).that(viewModel.state.value.refusal).isNull()
+            }
+        }
+
+    /** The same rule for a review that throws: its sentence belongs to an editor he has left. */
+    @Test
+    fun `a review that throws after the editor closed or another food opened says nothing`() =
+        runTest(dispatcher) {
+            val ways: List<Pair<String, (FoodsViewModel) -> Unit>> = listOf(
+                "closed" to { it.cancelEditing() },
+                "another food" to { it.edit(2) },
+                "closed and opened again" to { it.cancelEditing(); it.edit(1) },
+            )
+            ways.forEach { (way, move) ->
+                val gate = CompletableDeferred<Unit>()
+                val throwing = object : FoodReviewer {
+                    override suspend fun review(request: ReviewRequest): ReviewResult {
+                        gate.await()
+                        throw IllegalStateException("no network stack")
+                    }
+                }
+                val viewModel = watched(
+                    FakeFoodRepository(listOf(oatBiscuit(), aFood(name = "Tahini"))),
+                    reviewer = throwing,
+                )
+                viewModel.edit(1)
+                advanceUntilIdle()
+                viewModel.review()
+                advanceUntilIdle()
+
+                move(viewModel)
+                gate.complete(Unit)
+                advanceUntilIdle()
+
+                assertWithMessage(way).that(viewModel.state.value.failed).isNull()
+                assertWithMessage(way).that(viewModel.state.value.refusal).isNull()
+            }
+        }
+
+    @Test
+    fun `a review that changes nothing says so`() = runTest(dispatcher) {
+        val viewModel = watched(FakeFoodRepository(listOf(oatBiscuit())), reviewer = FakeFoodReviewer())
+        viewModel.edit(1)
+        advanceUntilIdle()
+
+        viewModel.review()
+        advanceUntilIdle()
+
+        val shown = viewModel.state.value.editing!!.reviewing.review as Review.Shown
+        assertThat(shown.nothingSuggested).isTrue()
+    }
+
+    /** D8: the way on is typing, and the form is exactly as he left it. */
+    @Test
+    fun `a review past the day's allowance says the existing sentence and leaves the form alone`() =
+        runTest(dispatcher) {
+            val viewModel = watched(
+                FakeFoodRepository(listOf(oatBiscuit())),
+                reviewer = FakeFoodReviewer(ReviewResult.Failed(EstimateResult.CeilingReached)),
+            )
+            viewModel.edit(1)
+            advanceUntilIdle()
+            val opened = viewModel.state.value.editing!!.form
+
+            viewModel.review()
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.refusal).isEqualTo(ProposalWording.failure(EstimateResult.CeilingReached))
+            assertThat(state.editing!!.form).isEqualTo(opened)
+            assertThat(state.editing!!.reviewing.review).isNull()
+        }
+
+    /** A review writes nothing, so a thrown one says it could not open — and is not left asking. */
+    @Test
+    fun `a review that throws says it could not be opened and can be asked again`() =
+        runTest(dispatcher) {
+            val problems = RecordingProblemLog()
+            val throwing = object : FoodReviewer {
+                override suspend fun review(request: ReviewRequest): ReviewResult =
+                    throw IllegalStateException("no network stack")
+            }
+            val viewModel = watched(FakeFoodRepository(listOf(oatBiscuit())), problems, throwing)
+            viewModel.edit(1)
+            advanceUntilIdle()
+
+            viewModel.review()
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.failed).isEqualTo(ActionRefused.COULD_NOT_OPEN)
+            assertThat(state.editing!!.reviewing.asking).isFalse()
+            assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        }
+
+    @Test
+    fun `a review is not asked for a food with no name the form would take`() = runTest(dispatcher) {
+        val reviewer = FakeFoodReviewer()
+        val viewModel = watched(FakeFoodRepository(listOf(oatBiscuit())), reviewer = reviewer)
+        viewModel.edit(1)
+        advanceUntilIdle()
+        viewModel.setForm(viewModel.state.value.editing!!.form.copy(name = "  "))
+
+        viewModel.review()
+        advanceUntilIdle()
+
+        assertThat(reviewer.requests).isEmpty()
+    }
+
+    /** Invented figures: the spec's Oat biscuit (D54). */
+    private fun oatBiscuit() = aFood(
+        name = "Oat biscuit",
+        facts = FoodFacts(
+            per100g = PerHundredGrams(Nutrients(480.0, 7.0, 62.0, 22.0), Provenance(Source.LABEL, null, 0)),
+            perUnit = PerUnit("biscuit", Nutrients(90.0, 1.0, 12.0, 1.0), Provenance(Source.TYPED, null, 0)),
+            gramsPerUnit = GramsPerUnit(18.0, Provenance(Source.TYPED, null, 0)),
+        ),
+    )
+
+    /** Per biscuit's fat 1 → 4 with its reason, the rest kept (D54 §3's invented example). */
+    private fun fatChanged() = ReviewResult.Proposed(
+        FoodReview(per100g = null, perUnit = biscuitSuggestion(), note = null, setAside = emptyList()),
+    )
+
+    /** As [fatChanged], and per 100 g's calories 480 → 470 too — invented, to have two groups. */
+    private fun bothChanged() = ReviewResult.Proposed(
+        FoodReview(
+            per100g = Suggestion(
+                nutrients = Nutrients(470.0, 7.0, 62.0, 22.0),
+                confidence = Confidence.LOW,
+                filled = false,
+                changes = listOf(FigureChange(Figure.KCAL, 480.0, 470.0, "The macros give about 470.")),
+                reason = null,
+            ),
+            perUnit = biscuitSuggestion(),
+            note = null,
+            setAside = emptyList(),
+        ),
+    )
+
+    private fun biscuitSuggestion() = Suggestion(
+        nutrients = Nutrients(90.0, 1.0, 12.0, 4.0),
+        confidence = Confidence.MEDIUM,
+        filled = false,
+        changes = listOf(
+            FigureChange(Figure.FAT, 1.0, 4.0, "18 g of a food with 22 g of fat per 100 g holds about 4 g."),
+        ),
+        reason = null,
+    )
 
     /** The fake, with a switch that makes its writes — or its lookups — throw. */
     private class Failing(val inner: FakeFoodRepository) : FoodRepository by inner {
@@ -1186,8 +1611,9 @@ class FoodsViewModelTest {
     private fun TestScope.watched(
         foods: FoodRepository,
         problems: ProblemLog = ProblemLog.NONE,
+        reviewer: FoodReviewer = FakeFoodReviewer(),
     ): FoodsViewModel {
-        val viewModel = FoodsViewModel(foods, Now { 1_000 }, problems)
+        val viewModel = FoodsViewModel(foods, Now { 1_000 }, problems, reviewer)
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
         return viewModel

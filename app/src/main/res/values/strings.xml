@@ -301,6 +301,17 @@
     <string name="foods_group_per_100g">What 100 g of it are worth</string>
     <string name="foods_group_per_unit">What one of it is worth</string>
     <string name="foods_group_weight">What one of it weighs</string>
+    <!-- A review of a food's figures by the model, on request (D54). -->
+    <string name="review_the_figures">Review the figures</string>
+    <string name="review_asking">Reviewing…</string>
+    <string name="review_sends">Sends this food\'s name, brand and figures, and where each came from, to the model, with your key. Nothing else.</string>
+    <string name="review_use_these">Use these</string>
+    <string name="review_use_all">Use all</string>
+    <string name="review_dismiss">Dismiss</string>
+    <string name="review_no_changes">No changes suggested.</string>
+    <string name="review_set_aside_per_100g">Its suggestion for per 100 g couldn\'t be used.</string>
+    <string name="review_set_aside_per_unit">Its suggestion for per %1$s couldn\'t be used.</string>
+    <string name="review_one">one</string>
     <!-- Shared by the food editor and the meal builder's new-food form: the two that store a
          food's facts as decimals and keep them. The opposite of entry_whole_numbers, because each
          sentence must be true of the form it sits on (D38). "Decimal point", not "comma". The

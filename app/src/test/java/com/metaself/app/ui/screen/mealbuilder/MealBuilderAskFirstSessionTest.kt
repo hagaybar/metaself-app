@@ -9,6 +9,7 @@ import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ComposeSession
+import com.metaself.app.ui.food.ReviewActions
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -114,8 +115,10 @@ class MealBuilderAskFirstSessionTest {
                 onChangePart = {},
                 onChangeFood = {},
                 onBeginCreatingFood = {},
+                onSetNewFood = {},
                 onCreateFood = {},
                 onCancelCreatingFood = {},
+                newFoodReview = ReviewActions.NONE,
                 onDelete = { deleted++ },
                 onDismissRefusal = {},
                 onBack = { wentBack++ },

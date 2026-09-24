@@ -1,0 +1,41 @@
+package com.metaself.app.ui.food
+
+import com.metaself.app.domain.ai.Figure
+import com.metaself.app.domain.ai.FigureChange
+import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.Rate
+import com.metaself.app.domain.portion.Portions
+import com.metaself.app.ui.propose.ProposalWording
+
+/**
+ * The lines a review's suggestion is drawn as, under the heading of the group it would change
+ * (D54 §4). Figures are written as everywhere else — whole when whole, one decimal otherwise.
+ */
+object ReviewWording {
+
+    /** "Fat 1 → 4 g — {reason}": one changed figure, from what the box holds, and why. */
+    fun change(change: FigureChange): String {
+        val (name, unit) = when (change.figure) {
+            Figure.KCAL -> "Calories" to "kcal"
+            Figure.PROTEIN -> "Protein" to "g"
+            Figure.CARBS -> "Carbs" to "g"
+            Figure.FAT -> "Fat" to "g"
+        }
+        return "$name ${Portions.format(change.from)} → ${Portions.format(change.to)} $unit — " +
+            change.reason
+    }
+
+    /**
+     * What is drawn for a group's suggestion: one line per changed figure, or — for a group the
+     * form did not know — one line, "Suggested: 60 kcal · P 4 · C 9 · F 1 — {reason}".
+     */
+    fun lines(suggestion: Suggestion): List<String> =
+        if (suggestion.filled) {
+            // The basis is the heading above the line, so which one is passed changes nothing drawn.
+            val figures = ProposalWording.worthFigures(Rate(suggestion.nutrients, Per.HUNDRED))
+            listOf("Suggested: $figures — ${suggestion.reason.orEmpty()}")
+        } else {
+            suggestion.changes.map(::change)
+        }
+}

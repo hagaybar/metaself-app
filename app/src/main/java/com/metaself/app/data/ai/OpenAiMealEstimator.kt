@@ -6,29 +6,29 @@ import com.metaself.app.domain.ai.MealEstimator
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import java.io.IOException
 
 /**
  * The one implementation behind [MealEstimator].
  *
  * Everything interesting happens somewhere else: what is sent is [EstimatePrompt], what comes back
- * is [EstimateResponse], and both are pure. This class is the network and nothing else, which is
- * why it is short and why swapping the provider (D2) is an afternoon.
+ * is [EstimateResponse], and both are pure; the call itself is [OpenAiCall], shared with a food's
+ * review. This class is D34's second ask and the problem log, which is why it is short and why
+ * swapping the provider (D2) is an afternoon.
  *
  * The base URL is a parameter so a test can point it at a local server. **No test in this project
  * makes a real network call.**
  */
 class OpenAiMealEstimator(
-    private val keys: ApiKeyStore,
+    keys: ApiKeyStore,
     private val settings: AiSettingsStore,
-    private val client: OkHttpClient,
+    client: OkHttpClient,
     private val problems: ProblemLog = ProblemLog.NONE,
-    private val baseUrl: String = OPENAI_URL,
+    baseUrl: String = OPENAI_URL,
 ) : MealEstimator {
+
+    /** The key, the ceiling, the POST, the counting and the failures — shared with a review (D54). */
+    private val call = OpenAiCall(keys, settings, client, baseUrl)
 
     override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
         withContext(Dispatchers.IO) { estimating(description, moreDetail).alsoRecorded() }
@@ -72,66 +72,16 @@ class OpenAiMealEstimator(
         moreDetail: String?,
         missingAmounts: List<String>,
     ): EstimateResult =
-        withContext(Dispatchers.IO) {
-            val key = keys.key.first()
-            if (key.isNullOrBlank()) return@withContext EstimateResult.NoKey
-
-            val current = settings.settings.first()
-            if (current.remainingToday <= 0) return@withContext EstimateResult.CeilingReached
-
-            val body = EstimatePrompt.requestBody(
-                current.model,
-                description,
-                moreDetail,
-                missingAmounts = missingAmounts,
-            )
-            val request = Request.Builder()
-                .url(baseUrl)
-                .addHeader("Authorization", "Bearer $key")
-                .post(body.toRequestBody(JSON))
-                .build()
-
-            try {
-                client.newCall(request).execute().use { response ->
-                    val text = response.body?.string().orEmpty()
-                    // Counted only when a call actually happened — a refusal still cost money and
-                    // still spends allowance; an unreachable server did neither.
-                    settings.recordCall()
-
-                    if (!response.isSuccessful) {
-                        EstimateResult.Refused(refusalOf(response.code, text))
-                    } else {
-                        EstimateResponse.parse(text)
-                    }
-                }
-            } catch (expected: IOException) {
-                EstimateResult.Unreachable
-            } catch (unexpected: Exception) {
-                // Decision D8: the failure mode of a habit app is the day it refuses to work — and
-                // a crash is the loudest possible refusal. Nothing may escape this seam.
-                //
-                // The first Test button press crashed on a SecurityException, because the app had
-                // no INTERNET permission and a SecurityException is not an IOException. The
-                // permission is the fix for that particular bug; this is the fix for the class of
-                // bug, and it is the one that matters.
-                EstimateResult.Refused(
-                    unexpected.message ?: unexpected::class.simpleName ?: "something went wrong",
-                )
+        when (
+            val outcome = call.send { model ->
+                EstimatePrompt.requestBody(model, description, moreDetail, missingAmounts = missingAmounts)
             }
+        ) {
+            is OpenAiCall.Outcome.Body -> EstimateResponse.parse(outcome.text)
+            is OpenAiCall.Outcome.Failed -> outcome.failure
         }
 
-    /**
-     * The provider's own words where they are usable, and the status where they are not.
-     *
-     * Their message is more useful than anything this app could invent — "incorrect API key" tells
-     * the owner exactly what to fix — but it is their text, shown as theirs.
-     */
-    private fun refusalOf(code: Int, body: String): String =
-        Regex(""""message"\s*:\s*"([^"]{0,200})"""").find(body)?.groupValues?.get(1)
-            ?: "the provider answered $code"
-
     companion object {
-        const val OPENAI_URL = "https://api.openai.com/v1/chat/completions"
-        private val JSON = "application/json; charset=utf-8".toMediaType()
+        const val OPENAI_URL = OpenAiCall.OPENAI_URL
     }
 }

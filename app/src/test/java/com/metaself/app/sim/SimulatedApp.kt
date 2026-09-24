@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.backup.BackupOutcome
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.day.InMemoryMealRepository
@@ -25,6 +26,7 @@ import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.movement.DayMovement
 import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.ui.screen.foods.FoodsViewModel
 import com.metaself.app.ui.screen.manager.ManagerScreen
@@ -351,7 +353,7 @@ private fun ManagerHere(
     // would forget which tab is in front between one press and the next.
     val managerViewModel = remember { ManagerViewModel() }
     val foodsViewModel =
-        remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, savedState) }
+        remember { FoodsViewModel(world.foods, world.now, ProblemLog.NONE, FakeFoodReviewer(), savedState) }
     val mealsViewModel = remember { MealsViewModel(world.savedMeals, ProblemLog.NONE) }
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()
@@ -379,6 +381,12 @@ private fun ManagerHere(
         onConfirmMerging = foodsViewModel::confirmJoining,
         onCancelMerging = foodsViewModel::cancelMerging,
         onDismissRefusal = foodsViewModel::dismissRefusal,
+        review = ReviewActions(
+            onReview = foodsViewModel::review,
+            onAccept = foodsViewModel::acceptGroup,
+            onAcceptAll = foodsViewModel::acceptAll,
+            onDismiss = foodsViewModel::dismissReview,
+        ),
         onBeginChoosing = foodsViewModel::beginChoosing,
         onToggleChosen = foodsViewModel::toggleChosen,
         onClearChoosing = foodsViewModel::clearChoosing,
@@ -406,6 +414,7 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
             foods = world.foods,
             now = world.now,
             problems = ProblemLog.NONE,
+            reviewer = FakeFoodReviewer(),
             savedState = savedStateFor(here),
         )
     }
@@ -431,8 +440,15 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
         onChangePart = builderViewModel::beginChanging,
         onChangeFood = builderViewModel::beginChangingFood,
         onBeginCreatingFood = builderViewModel::beginCreatingFood,
+        onSetNewFood = builderViewModel::setNewFoodForm,
         onCreateFood = builderViewModel::createFood,
         onCancelCreatingFood = builderViewModel::cancelCreatingFood,
+        newFoodReview = ReviewActions(
+            onReview = builderViewModel::reviewNewFood,
+            onAccept = builderViewModel::acceptNewFoodGroup,
+            onAcceptAll = builderViewModel::acceptAllForNewFood,
+            onDismiss = builderViewModel::dismissNewFoodReview,
+        ),
         // Gone back from once the meal is gone, as the nav host does.
         onDelete = { builderViewModel.delete(onDeleted = goBack) },
         onDismissRefusal = builderViewModel::dismissRefusal,

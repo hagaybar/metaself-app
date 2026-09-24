@@ -38,12 +38,16 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AskBeforeDeleting
 import com.metaself.app.ui.food.FoodWording
+import com.metaself.app.ui.food.GroupSuggestion
+import com.metaself.app.ui.food.ReviewActions
+import com.metaself.app.ui.food.ReviewTheFigures
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 
@@ -93,6 +97,7 @@ fun FoodsScreen(
     onConfirmMerging: () -> Unit,
     onCancelMerging: () -> Unit,
     onDismissRefusal: () -> Unit,
+    review: ReviewActions,
     onBeginChoosing: (Long) -> Unit,
     onToggleChosen: (Long) -> Unit,
     onClearChoosing: () -> Unit,
@@ -125,6 +130,7 @@ fun FoodsScreen(
             onConfirmMerging = onConfirmMerging,
             onCancelMerging = onCancelMerging,
             onDismissRefusal = onDismissRefusal,
+            review = review,
             onBeginChoosing = onBeginChoosing,
             onToggleChosen = onToggleChosen,
             onClearChoosing = onClearChoosing,
@@ -163,6 +169,7 @@ fun FoodsContent(
     onConfirmMerging: () -> Unit,
     onCancelMerging: () -> Unit,
     onDismissRefusal: () -> Unit,
+    review: ReviewActions,
     onBeginChoosing: (Long) -> Unit,
     onToggleChosen: (Long) -> Unit,
     onClearChoosing: () -> Unit,
@@ -351,6 +358,7 @@ fun FoodsContent(
                     onKeep = onCancelDeleting,
                     sentence = sentence,
                     onDismissSentence = onDismissRefusal,
+                    review = review,
                 )
 
                 // Only while the other food is still to be picked. With both already ticked the
@@ -617,6 +625,7 @@ private fun Editor(
     /** The screen's refusal or failure, drawn here rather than at the top while this is open. */
     sentence: String?,
     onDismissSentence: () -> Unit,
+    review: ReviewActions,
 ) {
     val form = editing.form
     Column(
@@ -658,12 +667,22 @@ private fun Editor(
             )
         }
 
+        // Beneath the name and brand, above the groups it may suggest figures for (D54 §1). What it
+        // suggests is drawn under each group's heading, never in the boxes, until he accepts it.
+        ReviewTheFigures(
+            reviewing = editing.reviewing,
+            offered = FoodField.NAME !in editing.errors,
+            unitName = form.unitName,
+            actions = review,
+        )
+
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             FactHeading(
                 title = stringResource(R.string.foods_group_per_100g),
                 origin = food.facts.per100g
                     ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
             )
+            GroupSuggestion(editing.reviewing, FactGroup.PER_100G, review.onAccept)
             Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_100G), numeric = true)
             Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
             Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
@@ -676,6 +695,7 @@ private fun Editor(
                 origin = food.facts.perUnit
                     ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
             )
+            GroupSuggestion(editing.reviewing, FactGroup.PER_UNIT, review.onAccept)
             Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), editing.errorFor(FoodField.UNIT_NAME))
             Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), editing.errorFor(FoodField.PER_UNIT), numeric = true)
             Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)

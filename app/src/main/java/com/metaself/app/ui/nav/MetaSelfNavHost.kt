@@ -29,6 +29,7 @@ import com.metaself.app.R
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.weight.WeightReading
 import com.metaself.app.ui.day.DayWording
+import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.weight.WeightWording
 import com.metaself.app.ui.screen.day.DayPager
 import com.metaself.app.ui.screen.day.DayUiState
@@ -581,8 +582,15 @@ fun MetaSelfNavHost(
                 onChangePart = builderViewModel::beginChanging,
                 onChangeFood = builderViewModel::beginChangingFood,
                 onBeginCreatingFood = builderViewModel::beginCreatingFood,
+                onSetNewFood = builderViewModel::setNewFoodForm,
                 onCreateFood = builderViewModel::createFood,
                 onCancelCreatingFood = builderViewModel::cancelCreatingFood,
+                newFoodReview = ReviewActions(
+                    onReview = builderViewModel::reviewNewFood,
+                    onAccept = builderViewModel::acceptNewFoodGroup,
+                    onAcceptAll = builderViewModel::acceptAllForNewFood,
+                    onDismiss = builderViewModel::dismissNewFoodReview,
+                ),
                 // Left only once the meal is gone, so a delete that fails stays on screen to say so.
                 // And only from this screen: the delete answers later, and Back may have been
                 // pressed in between, when a pop would take the screen underneath with it.
@@ -647,6 +655,12 @@ fun MetaSelfNavHost(
                 onConfirmMerging = foodsViewModel::confirmJoining,
                 onCancelMerging = foodsViewModel::cancelMerging,
                 onDismissRefusal = foodsViewModel::dismissRefusal,
+                review = ReviewActions(
+                    onReview = foodsViewModel::review,
+                    onAccept = foodsViewModel::acceptGroup,
+                    onAcceptAll = foodsViewModel::acceptAll,
+                    onDismiss = foodsViewModel::dismissReview,
+                ),
                 onBeginChoosing = foodsViewModel::beginChoosing,
                 onToggleChosen = foodsViewModel::toggleChosen,
                 onClearChoosing = foodsViewModel::clearChoosing,

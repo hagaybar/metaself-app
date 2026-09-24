@@ -1,6 +1,7 @@
 package com.metaself.app.data.food
 
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.food.Correction
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodKeys
@@ -153,10 +154,29 @@ class FakeFoodRepository(initial: List<Food> = emptyList()) : FoodRepository {
         return EditResult.Done
     }
 
-    /** The owner's own hand, so it replaces rather than being offered against the ranking. */
+    /**
+     * The owner's own hand, by the real repository's plan (D54): a changed group replaces what was
+     * there whatever its rank, an emptied one goes, and an unchanged one keeps the provenance it had
+     * — so a view model test sees the source the real one stores.
+     */
     override suspend fun correct(foodId: Long, facts: FoodFacts): EditResult {
-        replace(foodId) { it.copy(facts = facts) }
+        replace(foodId) { food ->
+            val plan = Correction.plan(food.facts, facts)
+            food.copy(
+                facts = FoodFacts(
+                    per100g = applied(plan.per100g, food.facts.per100g),
+                    perUnit = applied(plan.perUnit, food.facts.perUnit),
+                    gramsPerUnit = applied(plan.gramsPerUnit, food.facts.gramsPerUnit),
+                ),
+            )
+        }
         return EditResult.Done
+    }
+
+    private fun <T> applied(step: Correction.Step<T>, held: T?): T? = when (step) {
+        Correction.Keep -> held
+        Correction.Clear -> null
+        is Correction.Replace -> step.fact
     }
 
     /** All or nothing, as the real one: a refusal puts every food back as it was. */

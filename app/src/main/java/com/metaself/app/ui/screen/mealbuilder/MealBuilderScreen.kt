@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
@@ -35,7 +36,10 @@ import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.food.AskBeforeDeleting
 import com.metaself.app.ui.food.FoodWording
+import com.metaself.app.ui.food.GroupSuggestion
 import com.metaself.app.ui.food.HowItIsCounted
+import com.metaself.app.ui.food.ReviewActions
+import com.metaself.app.ui.food.ReviewTheFigures
 import com.metaself.app.ui.food.named
 import com.metaself.app.ui.food.namesTogether
 import com.metaself.app.ui.portion.portionWords
@@ -78,8 +82,10 @@ fun MealBuilderScreen(
     onChangePart: (Long) -> Unit,
     onChangeFood: (Long) -> Unit,
     onBeginCreatingFood: () -> Unit,
-    onCreateFood: (FoodForm) -> Unit,
+    onSetNewFood: (FoodForm) -> Unit,
+    onCreateFood: () -> Unit,
     onCancelCreatingFood: () -> Unit,
+    newFoodReview: ReviewActions,
     onDelete: () -> Unit,
     onDismissRefusal: () -> Unit,
     onBack: () -> Unit,
@@ -234,8 +240,14 @@ fun MealBuilderScreen(
             return@MetaSelfScreen
         }
 
-        if (state.creating) {
-            NewFood(onCreate = onCreateFood, onCancel = onCancelCreatingFood)
+        state.making?.let { making ->
+            NewFood(
+                making = making,
+                onSetForm = onSetNewFood,
+                onCreate = onCreateFood,
+                onCancel = onCancelCreatingFood,
+                review = newFoodReview,
+            )
             return@MetaSelfScreen
         }
 
@@ -579,12 +591,22 @@ private fun HowMuchOfIt(
     }
 }
 
-/** A food made without leaving the meal, through the same door as every other. */
+/**
+ * A food made without leaving the meal, through the same door as every other.
+ *
+ * Its form lives in the view model ([MakingFood]) rather than in a `remember`, because a review
+ * asked for here has to outlive its request (D54). The review is drawn by the same pieces as My
+ * foods' editor draws it — the button under the name, each suggestion under its group's heading.
+ */
 @Composable
-private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
-    var form by remember { mutableStateOf(FoodForm()) }
-    var showErrors by remember { mutableStateOf(false) }
-    val errors = form.errors()
+private fun NewFood(
+    making: MakingFood,
+    onSetForm: (FoodForm) -> Unit,
+    onCreate: () -> Unit,
+    onCancel: () -> Unit,
+    review: ReviewActions,
+) {
+    val form = making.form
 
     // Grouped as My foods' editor is (D48): each group one block, tight inside, a section apart.
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
@@ -593,7 +615,7 @@ private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
                 text = stringResource(R.string.builder_make_a_food),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Field(form.name, { form = form.copy(name = it) }, stringResource(R.string.foods_field_name), errors[FoodField.NAME].takeIf { showErrors })
+            Field(form.name, { onSetForm(form.copy(name = it)) }, stringResource(R.string.foods_field_name), making.errorFor(FoodField.NAME))
             // The same food form as My foods, so the same true sentence: decimals are kept here (D38).
             Text(
                 text = stringResource(R.string.food_facts_decimals_kept),
@@ -602,6 +624,13 @@ private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
             )
         }
 
+        ReviewTheFigures(
+            reviewing = making.reviewing,
+            offered = FoodField.NAME !in making.errors,
+            unitName = form.unitName,
+            actions = review,
+        )
+
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             // Each group's heading is a kicker, as My foods sets it — not small print level with the
             // notes, which left the two groups of four identical labels with nothing between them.
@@ -609,10 +638,11 @@ private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
                 text = stringResource(R.string.foods_group_per_100g),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Field(form.kcalPer100g, { form = form.copy(kcalPer100g = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_100G].takeIf { showErrors }, numeric = true)
-            Field(form.proteinPer100g, { form = form.copy(proteinPer100g = it) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-            Field(form.carbsPer100g, { form = form.copy(carbsPer100g = it) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-            Field(form.fatPer100g, { form = form.copy(fatPer100g = it) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+            GroupSuggestion(making.reviewing, FactGroup.PER_100G, review.onAccept)
+            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_100G), numeric = true)
+            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
+            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
+            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -620,28 +650,25 @@ private fun NewFood(onCreate: (FoodForm) -> Unit, onCancel: () -> Unit) {
                 text = stringResource(R.string.foods_group_per_unit),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Field(form.unitName, { form = form.copy(unitName = it) }, stringResource(R.string.foods_field_unit), errors[FoodField.UNIT_NAME].takeIf { showErrors })
-            Field(form.kcalPerUnit, { form = form.copy(kcalPerUnit = it) }, stringResource(R.string.foods_field_kcal), errors[FoodField.PER_UNIT].takeIf { showErrors }, numeric = true)
-            Field(form.proteinPerUnit, { form = form.copy(proteinPerUnit = it) }, stringResource(R.string.foods_field_protein), null, numeric = true)
-            Field(form.carbsPerUnit, { form = form.copy(carbsPerUnit = it) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
-            Field(form.fatPerUnit, { form = form.copy(fatPerUnit = it) }, stringResource(R.string.foods_field_fat), null, numeric = true)
+            GroupSuggestion(making.reviewing, FactGroup.PER_UNIT, review.onAccept)
+            Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), making.errorFor(FoodField.UNIT_NAME))
+            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_UNIT), numeric = true)
+            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true)
+            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true)
+            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            if (showErrors) {
-                errors[FoodField.NOTHING_KNOWN]?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
+            making.errorFor(FoodField.NOTHING_KNOWN)?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Button(
-                    onClick = { if (errors.isEmpty()) onCreate(form) else showErrors = true },
-                ) {
+                Button(onClick = onCreate) {
                     Text(stringResource(R.string.builder_make_it))
                 }
                 TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
