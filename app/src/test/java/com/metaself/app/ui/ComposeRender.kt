@@ -7,6 +7,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.ViewRootForTest
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -124,6 +125,24 @@ class ComposeRender {
         node.config.getOrNull(SemanticsActions.OnClick)?.action?.invoke()
             ?: error("the node named \"$description\" has nothing to click")
     }
+
+    /**
+     * The role a screen reader is told the node matching [prefix] has — a button, a checkbox — or
+     * null when it is told none.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun roleOf(prefix: String): Role? =
+        nodeStartingWith(prefix).config.getOrNull(SemanticsProperties.Role)
+
+    /**
+     * What a screen reader says pressing the node matching [prefix] will do ("double-tap to ..."),
+     * or null when the node names no action.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun clickLabelOf(prefix: String): String? =
+        nodeStartingWith(prefix).config.getOrNull(SemanticsActions.OnClick)?.label
 
     /**
      * How many nodes of the last render a screen reader names exactly [description].

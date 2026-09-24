@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
@@ -58,8 +59,11 @@ import java.util.Locale
  * misses, a new food IS the right outcome, which is why every empty state here falls through to
  * describing instead of stopping. The words typed into the search go with him (see [onDescribe]).
  *
- * A whole row logs the meal exactly as it was, which is the common case and stays one tap. What it
- * holds is shown item by item, with each portion: repeating a two-portion row used to say only the
+ * A tap on a meal's row opens it for the day, in place — its parts and their amounts, with Log it
+ * and Leave it alone — and writes nothing (public issue #21). It used to log the meal the moment it
+ * was touched, while the same-looking row on the manager opens it: one gesture, two meanings, one of
+ * them a write he took for navigation. Log it on a meal left as it was logs exactly what that tap
+ * did. What it holds is shown item by item, with each portion: repeating a two-portion row used to say only the
  * meal's name and its total, with no way to see that the quantity had carried. A number you cannot see is
  * a number you cannot trust. A part the app cannot cost — shown with a "?" — is skipped when the
  * meal is logged, not guessed at.
@@ -68,8 +72,8 @@ import java.util.Locale
  * amount is the one thing the app will not fill in for him (D4). The note above both tabs says which
  * is which (D37) — it once said "One tap logs it" of both.
  *
- * Adjust opens the meal in place. Not a screen of its own, so that what he is changing stays next
- * to the other meals he might have picked instead.
+ * The meal opens in place, not on a screen of its own, so that what he is changing stays next to
+ * the other meals he might have picked instead.
  */
 @Composable
 fun RepeatScreen(
@@ -79,7 +83,6 @@ fun RepeatScreen(
     /** Something on this list is wrong, or is a duplicate: the place to put it right. */
     onManageFoods: () -> Unit,
     onGivePortion: (foodId: Long) -> Unit,
-    onRepeat: (SavedMeal) -> Unit,
     /** Start a new meal, or open one to change for good. */
     onBuildMeal: () -> Unit,
     onEditMeal: (Long) -> Unit,
@@ -314,8 +317,7 @@ fun RepeatScreen(
                 if (adjusting == null) {
                     BuiltMeal(
                         meal = meal,
-                        onLog = { onRepeat(meal) },
-                        onAdjust = { onBeginAdjusting(index) },
+                        onOpen = { onBeginAdjusting(index) },
                         onEdit = { onEditMeal(meal.id) },
                     )
                 } else {
@@ -346,22 +348,26 @@ fun RepeatScreen(
 }
 
 /**
- * One meal the owner built. The row logs it; the buttons open it for today only, or for good.
+ * One meal the owner built. The row opens it for today only; Change it opens it for good.
  *
- * "Just for today" is a small word beside a large target on purpose: logging the meal as it was built
- * is the ordinary way in, and it must not become the slower of the two.
+ * The row writes nothing (public issue #21): logging is the press on Log it once it is open. A
+ * screen reader hears the row as a button that opens that meal, and Change it with the meal's name,
+ * so each row's two controls are two controls and not one word said once per meal (public issue #3).
  */
 @Composable
 private fun BuiltMeal(
     meal: SavedMeal,
-    onLog: () -> Unit,
-    onAdjust: () -> Unit,
+    onOpen: () -> Unit,
     onEdit: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onLog)
+            .clickable(
+                onClickLabel = stringResource(R.string.said_open_for_today, meal.name),
+                role = Role.Button,
+                onClick = onOpen,
+            )
             .padding(vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
     ) {
@@ -409,13 +415,12 @@ private fun BuiltMeal(
                 ),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            Row {
-                TextButton(onClick = onAdjust) {
-                    Text(stringResource(R.string.repeat_adjust))
-                }
-                TextButton(onClick = onEdit) {
-                    Text(stringResource(R.string.repeat_meal_edit))
-                }
+            val change = stringResource(R.string.repeat_meal_edit)
+            TextButton(
+                onClick = onEdit,
+                modifier = Modifier.saidAs(stringResource(R.string.said_for, change, meal.name)),
+            ) {
+                Text(change)
             }
         }
     }
@@ -459,6 +464,16 @@ private fun Adjuster(
             style = MaterialTheme.typography.bodySmall,
             color = MetaSelfInk.two,
         )
+
+        if (adjusting.isEmpty) {
+            // An empty meal opens too — Put something in is how a part goes in for today — but it
+            // says so, and Log it stays off below (public issue #21).
+            Text(
+                text = stringResource(R.string.repeat_meal_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         adjusting.rows.forEach { component ->
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -516,7 +531,9 @@ private fun Adjuster(
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
-            Button(onClick = onLog, enabled = blocked == null, modifier = Modifier.fillMaxWidth()) {
+            // Off, too, when there is nothing it could put on the day: an empty meal, or one none of
+            // whose parts can be costed.
+            Button(onClick = onLog, enabled = adjusting.canLog, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.repeat_adjust_log))
             }
             TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {

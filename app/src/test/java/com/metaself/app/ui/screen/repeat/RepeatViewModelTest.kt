@@ -12,6 +12,7 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
+import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
@@ -91,6 +92,64 @@ class RepeatViewModelTest {
         assertThat(viewModel.state.value.adjusting!!.rows.first().amount).isEqualTo(200.0)
         // The definition is untouched: tomorrow's salad still has 100 g of cucumber in it.
         assertThat(meals.current.single().components.first().amount).isEqualTo(100.0)
+    }
+
+    /**
+     * A tap on a meal used to log it at once, as `LoggedMeal(toLoggableItems(meal), meal.id,
+     * adjusted = false)`. It now opens the meal, and Log it is the write (public issue #21). Opened
+     * and logged untouched, it must be that same value exactly — the same items, the same meal, and
+     * not marked as changed for the day.
+     */
+    @Test
+    fun `a meal opened and logged unchanged is logged exactly as a tap used to log it`() =
+        runTest(dispatcher) {
+            val salad = salad()
+            val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(salad)))
+
+            viewModel.beginAdjusting(0)
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.adjusting!!.canLog).isTrue()
+            assertThat(viewModel.adjusted()).isEqualTo(
+                LoggedMeal(
+                    items = SavedMeals.toLoggableItems(salad),
+                    savedMealId = salad.id,
+                    adjusted = false,
+                ),
+            )
+        }
+
+    /** An empty meal opens, and nothing about it can be logged: nothing that happened is empty. */
+    @Test
+    fun `an empty meal opened cannot be logged`() = runTest(dispatcher) {
+        val viewModel = watched(
+            savedMeals = FakeSavedMealRepository(listOf(SavedMeal(id = 1, name = "Salad"))),
+        )
+
+        viewModel.beginAdjusting(0)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.adjusting).isNotNull()
+        assertThat(viewModel.state.value.adjusting!!.canLog).isFalse()
+        assertThat(viewModel.adjusted()).isNull()
+    }
+
+    /** A meal none of whose parts can be costed has nothing to log either, so Log it is off. */
+    @Test
+    fun `a meal whose parts cannot be costed cannot be logged`() = runTest(dispatcher) {
+        // Known only per 100 g, and logged in pieces: nothing says what one piece weighs.
+        val uncounted = aFood("Bread", FoodFacts(per100g = aPer100g(250.0))).copy(id = 3)
+        val meal = SavedMeal(
+            id = 1,
+            name = "Toast",
+            components = listOf(MealComponent(10, uncounted, 2.0, CountedAs.UNITS, position = 0)),
+        )
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(meal)))
+
+        viewModel.beginAdjusting(0)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.adjusting!!.canLog).isFalse()
     }
 
     // --- A typed amount for each part, just for today (D53 §6) ----------------------------------
