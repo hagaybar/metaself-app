@@ -8,8 +8,14 @@ import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.time.Now
+import com.metaself.app.domain.ai.FoodReviewer
+import com.metaself.app.domain.ai.ReviewProcess
+import com.metaself.app.domain.ai.ReviewRequest
+import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.domain.food.ReplacedFacts
@@ -19,6 +25,7 @@ import com.metaself.app.ui.food.MealWording
 import com.metaself.app.ui.food.RetaughtBecause
 import com.metaself.app.ui.food.RetaughtWording
 import com.metaself.app.ui.guarded
+import com.metaself.app.ui.propose.ProposalWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -64,6 +71,7 @@ class MealBuilderViewModel @Inject constructor(
     private val foods: FoodRepository,
     private val now: Now,
     private val problems: ProblemLog,
+    private val reviewer: FoodReviewer,
     savedState: SavedStateHandle,
 ) : ViewModel() {
 
@@ -86,20 +94,23 @@ class MealBuilderViewModel @Inject constructor(
     private val _typedName = MutableStateFlow("")
     private val _query = MutableStateFlow("")
     private val _adding = MutableStateFlow<Adding?>(null)
-    private val _creating = MutableStateFlow(false)
+    private val _making = MutableStateFlow<MakingFood?>(null)
     private val _refusal = MutableStateFlow<String?>(null)
     private val _meal = MutableStateFlow<com.metaself.app.domain.food.SavedMeal?>(null)
     private val _pending = MutableStateFlow<List<Pending>>(emptyList())
     private val _failed = MutableStateFlow<ActionRefused?>(null)
+
+    /** How many reviews have been asked for, so only the latest one's answer is ever shown. */
+    private var reviewsAsked = 0
 
     val state: StateFlow<MealBuilderUiState> = combine(
         _meal,
         foods.observeOffered(),
         _query,
         _adding,
-        combine(_typedName, _creating, _refusal, _pending, _failed) { name, creating, refusal,
+        combine(_typedName, _making, _refusal, _pending, _failed) { name, making, refusal,
             pending, failed ->
-            Aside(name, creating, refusal, pending, failed)
+            Aside(name, making, refusal, pending, failed)
         },
     ) { meal, ownFoods, query, adding, aside ->
         val inMeal = meal?.components.orEmpty().map { it.food }
@@ -122,7 +133,7 @@ class MealBuilderViewModel @Inject constructor(
             alreadyWaiting = if (query.isBlank()) emptyList() else FoodSearch.matching(waiting, query),
             adding = adding,
             pending = aside.pending,
-            creating = aside.creating,
+            making = aside.making,
             refusal = aside.refusal,
             failed = aside.failed,
         )
@@ -318,11 +329,86 @@ class MealBuilderViewModel @Inject constructor(
     // --- Making a food on the spot -------------------------------------------------------------
 
     fun beginCreatingFood() {
-        _creating.value = true
+        _making.value = MakingFood()
     }
 
+    /** Cancel: the panel goes, and with it anything typed, reviewed or accepted in it. */
     fun cancelCreatingFood() {
-        _creating.value = false
+        _making.value = null
+    }
+
+    /** He is typing in *Make a food*. Typing in a group withdraws its suggestion (D54 §4). */
+    fun setNewFoodForm(form: FoodForm) {
+        _making.value = _making.value?.let { making ->
+            making.copy(form = form, reviewing = making.reviewing.typed(making.form, form))
+        }
+    }
+
+    /**
+     * **Review the figures** for a food not yet made (D54): the panel's form as it stands, as a new
+     * food — there is no stored food, so every group he typed is sent as typed, and a group he left
+     * empty is sent as unknown.
+     *
+     * The same rules as My foods' review: offered only for a name the form would take, once at a
+     * time; nothing goes into the boxes until he accepts; a failure is said in the screen's sentence
+     * slot in the estimator's own words, the form untouched; an answer for a panel he has closed —
+     * or closed and opened again — is dropped; a throw says it could not open, since nothing was
+     * written.
+     */
+    fun reviewNewFood() {
+        val making = _making.value ?: return
+        if (making.reviewing.asking || FoodField.NAME in making.errors) return
+        dismissRefusal()
+        val asked = ++reviewsAsked
+        val waiting = making.copy(reviewing = making.reviewing.asked())
+        _making.value = waiting
+        fun stillWaiting() = asked == reviewsAsked && _making.value?.reviewing?.asking == true
+
+        act({ ActionRefused.COULD_NOT_OPEN }) {
+            try {
+                val request = ReviewRequest.of(
+                    ReviewProcess.NEW_FOOD,
+                    making.form,
+                    stored = null,
+                    accepted = making.reviewing.accepted,
+                )
+                val result = reviewer.review(request)
+                if (!stillWaiting()) return@act
+                val open = _making.value ?: return@act
+                when (result) {
+                    is ReviewResult.Proposed ->
+                        _making.value = open.copy(reviewing = open.reviewing.answered(result.review))
+                    is ReviewResult.Failed -> {
+                        _making.value = open.copy(reviewing = open.reviewing.failed())
+                        _refusal.value = ProposalWording.failure(result.failure)
+                    }
+                }
+            } finally {
+                // Thrown: the button must not be left reading Reviewing….
+                if (stillWaiting()) {
+                    _making.value = _making.value?.let { it.copy(reviewing = it.reviewing.failed()) }
+                }
+            }
+        }
+    }
+
+    /** **Use these** in *Make a food*: the group's suggested figures into its boxes, accepted. */
+    fun acceptNewFoodGroup(group: FactGroup) {
+        val making = _making.value ?: return
+        val (form, reviewing) = making.reviewing.accept(group, making.form) ?: return
+        _making.value = making.copy(form = form, reviewing = reviewing)
+    }
+
+    /** **Use all** in *Make a food*. */
+    fun acceptAllForNewFood() {
+        val making = _making.value ?: return
+        val (form, reviewing) = making.reviewing.acceptAll(making.form)
+        _making.value = making.copy(form = form, reviewing = reviewing)
+    }
+
+    /** **Dismiss** in *Make a food*: what is left goes; what he accepted stays accepted. */
+    fun dismissNewFoodReview() {
+        _making.value = _making.value?.let { it.copy(reviewing = it.reviewing.dismissed()) }
     }
 
     /**
@@ -331,9 +417,19 @@ class MealBuilderViewModel @Inject constructor(
      * The same one door everything else goes through, so a food made mid-salad is indistinguishable
      * afterwards from one made by eating it — and the identity rule catches it if the thing he is
      * making already exists under another spelling.
+     *
+     * A group accepted from a review goes as an estimate (D54 §5). If the name is one he already
+     * has, those estimates are only offered to it: he never saw that food's figures here, so an
+     * estimate does not replace one it holds better, and D45's line says only what was replaced.
      */
-    fun createFood(form: FoodForm) {
-        val facts = form.toFacts(now()) ?: return
+    fun createFood() {
+        val making = _making.value ?: return
+        if (making.errors.isNotEmpty()) {
+            _making.value = making.copy(showErrors = true)
+            return
+        }
+        val form = making.form
+        val facts = form.toFacts(now(), estimated = making.reviewing.accepted) ?: return
         // One transaction, and nothing read after it: a failure made no food.
         act({ ActionRefused.NOTHING_CHANGED }) {
             val made = foods.findOrCreate(
@@ -341,7 +437,7 @@ class MealBuilderViewModel @Inject constructor(
                 brand = form.brand.takeIf { it.isNotBlank() },
                 facts = facts,
             )
-            _creating.value = false
+            _making.value = null
             _adding.value = Adding(
                 food = made.food,
                 countedAs = defaultFor(made.food),
@@ -441,7 +537,7 @@ class MealBuilderViewModel @Inject constructor(
     /** The five things that are not the meal itself, as one value, because `combine` takes five. */
     private data class Aside(
         val typedName: String,
-        val creating: Boolean,
+        val making: MakingFood?,
         val refusal: String?,
         val pending: List<Pending>,
         val failed: ActionRefused?,

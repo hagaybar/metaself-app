@@ -4,12 +4,20 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
+import com.metaself.app.domain.ai.FoodReview
+import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.MealComponent
+import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
+import com.metaself.app.ui.food.FormReview
+import com.metaself.app.ui.food.Review
+import com.metaself.app.ui.food.ReviewActions
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -148,12 +156,42 @@ class MealBuilderScreenRenderTest {
      */
     @Test
     fun `making a food on the spot says decimals are kept, before anything is typed`() {
-        val texts = draw(MealBuilderUiState(meal = salad(), creating = true))
+        val texts = draw(MealBuilderUiState(meal = salad(), making = MakingFood()))
 
         assertThat(texts).contains(DECIMALS_KEPT)
         assertThat(texts.indexOf(DECIMALS_KEPT))
             .isLessThan(texts.indexOf("What 100 g of it are worth"))
         assertThat(texts.none { it.contains("whole grams") }).isTrue()
+    }
+
+    /**
+     * *Make a food* offers the review once it has a name, and draws a filled group's suggestion under
+     * that group's heading — the same pieces as My foods' editor (D54). Figures invented.
+     */
+    @Test
+    fun `making a food on the spot offers a review and draws what it suggests under its group`() {
+        val nameless = draw(MealBuilderUiState(meal = salad(), making = MakingFood()))
+        assertThat(nameless).doesNotContain("Review the figures")
+
+        val filled = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A reason.")
+        val texts = draw(
+            MealBuilderUiState(
+                meal = salad(),
+                making = MakingFood(
+                    form = FoodForm(name = "Lentil soup", unitName = "bowl"),
+                    reviewing = FormReview(
+                        review = Review.Shown(FoodReview(filled, null, null, emptyList())),
+                    ),
+                ),
+            ),
+        )
+
+        val line = "Suggested: 60 kcal · P 4 · C 9 · F 1 — A reason."
+        assertThat(texts).contains("Review the figures")
+        assertThat(texts).contains(line)
+        assertThat(render.isDrawnBefore("What 100 g of it are worth", line)).isTrue()
+        assertThat(render.isDrawnBefore("Use these", "What one of it is worth")).isTrue()
+        assertThat(render.fieldTexts()).doesNotContain("60")
     }
 
     @Test
@@ -690,8 +728,10 @@ class MealBuilderScreenRenderTest {
             onChangePart = { changedPart = it },
             onChangeFood = { changedFood = it },
             onBeginCreatingFood = {},
+            onSetNewFood = {},
             onCreateFood = {},
             onCancelCreatingFood = {},
+            newFoodReview = ReviewActions.NONE,
             onDelete = {},
             onDismissRefusal = {},
             onBack = {},

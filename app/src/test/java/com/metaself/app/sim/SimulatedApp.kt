@@ -414,6 +414,7 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
             foods = world.foods,
             now = world.now,
             problems = ProblemLog.NONE,
+            reviewer = FakeFoodReviewer(),
             savedState = savedStateFor(here),
         )
     }
@@ -439,8 +440,15 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
         onChangePart = builderViewModel::beginChanging,
         onChangeFood = builderViewModel::beginChangingFood,
         onBeginCreatingFood = builderViewModel::beginCreatingFood,
+        onSetNewFood = builderViewModel::setNewFoodForm,
         onCreateFood = builderViewModel::createFood,
         onCancelCreatingFood = builderViewModel::cancelCreatingFood,
+        newFoodReview = ReviewActions(
+            onReview = builderViewModel::reviewNewFood,
+            onAccept = builderViewModel::acceptNewFoodGroup,
+            onAcceptAll = builderViewModel::acceptAllForNewFood,
+            onDismiss = builderViewModel::dismissNewFoodReview,
+        ),
         // Gone back from once the meal is gone, as the nav host does.
         onDelete = { builderViewModel.delete(onDeleted = goBack) },
         onDismissRefusal = builderViewModel::dismissRefusal,

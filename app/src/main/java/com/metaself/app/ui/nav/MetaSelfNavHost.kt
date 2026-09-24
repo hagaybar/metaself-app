@@ -582,8 +582,15 @@ fun MetaSelfNavHost(
                 onChangePart = builderViewModel::beginChanging,
                 onChangeFood = builderViewModel::beginChangingFood,
                 onBeginCreatingFood = builderViewModel::beginCreatingFood,
+                onSetNewFood = builderViewModel::setNewFoodForm,
                 onCreateFood = builderViewModel::createFood,
                 onCancelCreatingFood = builderViewModel::cancelCreatingFood,
+                newFoodReview = ReviewActions(
+                    onReview = builderViewModel::reviewNewFood,
+                    onAccept = builderViewModel::acceptNewFoodGroup,
+                    onAcceptAll = builderViewModel::acceptAllForNewFood,
+                    onDismiss = builderViewModel::dismissNewFoodReview,
+                ),
                 // Left only once the meal is gone, so a delete that fails stays on screen to say so.
                 // And only from this screen: the delete answers later, and Back may have been
                 // pressed in between, when a pop would take the screen underneath with it.
