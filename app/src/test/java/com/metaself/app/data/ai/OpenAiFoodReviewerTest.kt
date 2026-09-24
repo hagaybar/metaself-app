@@ -146,11 +146,13 @@ class OpenAiFoodReviewerTest {
         )
         server.enqueue(MockResponse().setBody(reply("""{"per_100g":"$NAME"}""")))
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        server.enqueue(MockResponse().setBody(reply(UNUSABLE)))
 
-        repeat(3) { reviewer(problems = log).review(REQUEST) }
+        repeat(4) { reviewer(problems = log).review(REQUEST) }
 
-        assertThat(log.problems.map { it.kind })
-            .containsExactly("review refused", "review unreadable", "review unreachable").inOrder()
+        assertThat(log.problems.map { it.kind }).containsExactly(
+            "review refused", "review unreadable", "review unreachable", "review unusable",
+        ).inOrder()
         assertThat(log.problems.first().detail).isEqualTo("the provider answered 400")
         log.problems.forEach { problem ->
             assertThat(problem.kind).doesNotContain(NAME)
@@ -248,6 +250,11 @@ class OpenAiFoodReviewerTest {
             perUnit = HeldGroup(Nutrients(90.0, 1.0, 12.0, 1.0), Source.TYPED, null),
             gramsPerUnit = HeldWeight(18.0, Source.TYPED),
         )
+
+        /** A change to per 100 g with no reason anywhere in the group, and the name in its note. */
+        const val UNUSABLE = """{"per_100g":{"kcal":500,"protein_g":7,"carbs_g":62,"fat_g":22,
+            "kcal_reason":"","protein_reason":"","carbs_reason":"","fat_reason":"",
+            "confidence":"LOW"},"per_unit":null,"note":"$NAME"}"""
 
         const val ONE_CHANGE = """{"per_100g":null,"note":"","per_unit":{"kcal":90,"protein_g":1,
             "carbs_g":12,"fat_g":4,"kcal_reason":"","protein_reason":"","carbs_reason":"",

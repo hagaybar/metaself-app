@@ -55,6 +55,39 @@ class FormReviewTest {
     }
 
     @Test
+    fun `an answer whose every suggestion was set aside is shown as unusable, with what went`() {
+        val answer = FoodReview(null, null, null, listOf(FactGroup.PER_100G))
+
+        val reviewing = FormReview().asked().unusable(answer)
+
+        assertThat(reviewing.review).isEqualTo(Review.Shown(answer, unusable = true))
+        assertThat(reviewing.asking).isFalse()
+    }
+
+    /**
+     * D54 §8.4: the model's answer is offered when there is something to explain — an answer that
+     * could not be read or used, that proposed nothing, or that set a group aside — and not when
+     * the suggestions are on screen to speak for themselves. A new request or Dismiss takes it down.
+     */
+    @Test
+    fun `the model's answer is kept to show only when the review did not simply work`() {
+        val raw = """{"per_100g":null}"""
+        val asked = FormReview().asked()
+
+        assertThat(asked.failed(raw).modelAnswer).isEqualTo(raw)
+        assertThat(asked.unusable(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), raw).modelAnswer)
+            .isEqualTo(raw)
+        assertThat(asked.answered(FoodReview(null, null, null, emptyList()), raw).modelAnswer).isEqualTo(raw)
+        assertThat(asked.answered(FoodReview(null, fatChange, null, listOf(FactGroup.PER_100G)), raw).modelAnswer)
+            .isEqualTo(raw)
+        assertThat(asked.answered(FoodReview(null, fatChange, null, emptyList()), raw).modelAnswer).isNull()
+
+        val offered = asked.failed(raw)
+        assertThat(offered.asked().modelAnswer).isNull()
+        assertThat(offered.dismissed().modelAnswer).isNull()
+    }
+
+    @Test
     fun `an answer that changed nothing is shown as that until dismissed`() {
         val answered = FormReview().asked().answered(FoodReview(null, null, null, emptyList()))
 

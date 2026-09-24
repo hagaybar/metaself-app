@@ -122,6 +122,34 @@ class ReviewResponseTest {
         assertThat(review.per100g).isNull()
     }
 
+    /**
+     * A scanned food's per-100 g figures are a serving's scaled, so they are stored as long
+     * doubles — here an invented 70 g serving of 6 g protein, 9 g carbohydrate and 4 g fat. A model
+     * echoing them back rounds them, to two decimals or one, and gives no reason, because it
+     * changed nothing. That is kept, not a change without a reason (D54 as amended 2026-09-24).
+     */
+    @Test
+    fun `a held figure the model echoes rounded is kept, not a change without a reason`() {
+        val request = OAT_BISCUIT.copy(
+            per100g = HeldGroup(
+                Nutrients(100.0, 8.571428571428571, 12.857142857142858, 5.714285714285714),
+                Source.LABEL,
+                null,
+            ),
+            perUnit = HeldGroup(Nutrients(95.0, 4.25, 6.3, 3.35), Source.LABEL, null),
+        )
+
+        val result = ReviewResponse.parse(
+            reply(
+                per100g = group(100, "8.57", "12.9", "5.7", confidence = "HIGH"),
+                perUnit = group(95, "4.3", "6.3", "3.4", confidence = "HIGH"),
+            ),
+            request,
+        )
+
+        assertThat(proposed(result)).isEqualTo(FoodReview(null, null, null, emptyList()))
+    }
+
     /** The spec's invented impossible label: 120 kcal against macros worth about 370. */
     @Test
     fun `a label can be contradicted, with its reason`() {
@@ -277,6 +305,29 @@ class ReviewResponseTest {
     }
 
     @Test
+    fun `a change with no reason of its own borrows the group's first reason`() {
+        val review = proposed(
+            ReviewResponse.parse(
+                reply(
+                    per100g = group(
+                        470, 8, 62, 22,
+                        proteinReason = "the macros give about 470 kcal with 8 g of protein",
+                        confidence = "MEDIUM",
+                    ),
+                    perUnit = null,
+                ),
+                OAT_BISCUIT,
+            ),
+        )
+
+        assertThat(review.setAside).isEmpty()
+        assertThat(review.per100g!!.changes).containsExactly(
+            FigureChange(Figure.KCAL, 480.0, 470.0, "the macros give about 470 kcal with 8 g of protein"),
+            FigureChange(Figure.PROTEIN, 7.0, 8.0, "the macros give about 470 kcal with 8 g of protein"),
+        ).inOrder()
+    }
+
+    @Test
     fun `a figure past D42's ceiling for its basis sets the group aside`() {
         // Per 100 g: at most 1000 kcal and 110 g. Per one: at most 5000 kcal and 500 g.
         val past100g = ReviewResponse.parse(
@@ -293,7 +344,7 @@ class ReviewResponseTest {
         )
 
         assertThat(proposed(past100g).setAside).containsExactly(FactGroup.PER_100G)
-        assertThat(pastUnit).isInstanceOf(ReviewResult.Failed::class.java)
+        assertThat(pastUnit).isInstanceOf(ReviewResult.Unusable::class.java)
         assertThat(proposed(atUnit).perUnit!!.nutrients).isEqualTo(Nutrients(5000.0, 1.0, 12.0, 500.0))
     }
 
@@ -314,19 +365,37 @@ class ReviewResponseTest {
         }
     }
 
+    /**
+     * The answer arrived in the shape asked for; what it suggested could not be used. That is not
+     * "could not be understood" (D54 §8.3), so it is its own result, carrying what was set aside.
+     */
     @Test
-    fun `when every group that changed is set aside the reply is unreadable`() {
+    fun `when every group that changed is set aside the answer arrived but is unusable`() {
         val result = ReviewResponse.parse(
             reply(
                 per100g = group(500, 7, 62, 22, confidence = "HIGH"),
                 perUnit = group(90, 1, 12, 1),
+                note = "A note.",
             ),
             OAT_BISCUIT,
         )
 
-        assertThat(result).isInstanceOf(ReviewResult.Failed::class.java)
-        assertThat((result as ReviewResult.Failed).failure)
-            .isInstanceOf(EstimateResult.Unreadable::class.java)
+        assertThat((result as ReviewResult.Unusable).review)
+            .isEqualTo(FoodReview(null, null, "A note.", listOf(FactGroup.PER_100G)))
+    }
+
+    // --- The model's answer, shown on request (D54 §8.4) ------------------------------------------
+
+    @Test
+    fun `every answer carries the model's reply as it came, and a garbled one the whole body`() {
+        val content = """{"per_100g":null,"per_unit":null,"note":""}"""
+        val unusable = reply(per100g = group(500, 7, 62, 22), perUnit = null)
+
+        assertThat(ReviewResponse.parse(envelope(content), OAT_BISCUIT).raw).isEqualTo(content)
+        assertThat(ReviewResponse.parse(unusable, OAT_BISCUIT).raw).contains("\"kcal\":500")
+        assertThat(ReviewResponse.parse(envelope("not json either"), OAT_BISCUIT).raw)
+            .isEqualTo("not json either")
+        assertThat(ReviewResponse.parse("not json", OAT_BISCUIT).raw).isEqualTo("not json")
     }
 
     // --- The rest --------------------------------------------------------------------------------
@@ -353,10 +422,8 @@ class ReviewResponseTest {
             OAT_BISCUIT,
         )
 
-        assertThat(result).isEqualTo(
-            ReviewResult.Proposed(
-                FoodReview(per100g = null, perUnit = null, note = "Consistent.", setAside = emptyList()),
-            ),
+        assertThat(proposed(result)).isEqualTo(
+            FoodReview(per100g = null, perUnit = null, note = "Consistent.", setAside = emptyList()),
         )
     }
 

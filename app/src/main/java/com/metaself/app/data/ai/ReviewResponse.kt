@@ -32,13 +32,16 @@ import kotlin.math.roundToLong
  * - `null` for a group means leave it as it is; a reply cannot remove a group.
  * - `per_unit` is ignored when the editor names no unit.
  * - A figure equal to the one held (D45's comparison) is kept **exactly as held**: a model echoing
- *   3.25 does not turn a label's 3.25 into 3.3. So is one that only rounds back to it.
+ *   3.25 does not turn a label's 3.25 into 3.3. So is one equal to it once both are rounded to one
+ *   decimal: 8.57 or 8.6 given back for a held 8.571428571428571 is an echo, not a change.
  * - A figure that differs is a change, rounded to one decimal place — a guess claims no finer
- *   precision — and must carry a non-blank reason. A group the form did not know is a fill, rounded
- *   the same way, and needs at least one non-blank reason.
+ *   precision — and carries a reason: its own, or else the first non-blank reason in its group. A
+ *   group the form did not know is a fill, rounded the same way, and needs at least one non-blank
+ *   reason.
  * - **A group is set aside whole, never repaired**, when a figure is missing, not finite, negative
- *   or past D42's ceiling for its basis, or when a change or fill has no reason. If every group
- *   that changed was set aside, the reply is unreadable.
+ *   or past D42's ceiling for its basis, or when a change or fill has no reason anywhere in its
+ *   group. If every group that changed was set aside, the answer is [ReviewResult.Unusable] —
+ *   it arrived and was read; what it suggested could not be used.
  */
 object ReviewResponse {
 
@@ -59,11 +62,25 @@ object ReviewResponse {
         data object SetAside : Read
     }
 
-    fun parse(body: String, request: ReviewRequest): ReviewResult = runCatching {
-        val content = json.parseToJsonElement(body)
-            .jsonObject["choices"]!!.jsonArray
-            .first().jsonObject["message"]!!.jsonObject["content"]!!
-            .jsonPrimitive.content
+    fun parse(body: String, request: ReviewRequest): ReviewResult {
+        val content = runCatching {
+            json.parseToJsonElement(body)
+                .jsonObject["choices"]!!.jsonArray
+                .first().jsonObject["message"]!!.jsonObject["content"]!!
+                .jsonPrimitive.content
+        }.getOrNull()
+        // What *Show the model's answer* shows (D54 §8.4): the content, or the body when there is none.
+        val raw = content ?: body
+        return runCatching { answer(content!!, request) }.getOrElse {
+            ReviewResult.Failed(
+                EstimateResult.Unreadable("the reply was not in the shape this app asked for"),
+                raw,
+            )
+        }
+    }
+
+    /** The message's [content], read against what was asked; it is also what goes as the raw reply. */
+    private fun answer(content: String, request: ReviewRequest): ReviewResult {
         val payload = json.parseToJsonElement(content).jsonObject
 
         // Both groups are required by the schema; one that is absent is not the shape asked for.
@@ -95,13 +112,11 @@ object ReviewResponse {
             setAside = setAside,
         )
 
-        if (setAside.isNotEmpty() && review.per100g == null && review.perUnit == null) {
-            ReviewResult.Failed(EstimateResult.Unreadable("no suggestion in the reply could be used"))
+        return if (setAside.isNotEmpty() && review.per100g == null && review.perUnit == null) {
+            ReviewResult.Unusable(review, content)
         } else {
-            ReviewResult.Proposed(review)
+            ReviewResult.Proposed(review, content)
         }
-    }.getOrElse {
-        ReviewResult.Failed(EstimateResult.Unreadable("the reply was not in the shape this app asked for"))
     }
 
     /**
@@ -140,16 +155,19 @@ object ReviewResponse {
         val holds = listOf(
             held.nutrients.kcal, held.nutrients.proteinG, held.nutrients.carbsG, held.nutrients.fatG,
         )
+        // A change with no reason of its own borrows the group's first: models often explain two
+        // linked changes once. Only a change with no reason anywhere in the group sets it aside.
+        val groupReason = reasons.firstOrNull { it.isNotEmpty() }
         val changes = mutableListOf<FigureChange>()
         val result = FIGURES.indices.map { i ->
             val was = holds[i]
             val given = figures[i]
             val rounded = toOneDecimal(given)
-            if (ReplacedFacts.sameFigure(was, given) || ReplacedFacts.sameFigure(was, rounded)) {
+            if (kept(was, given)) {
                 was
             } else {
-                if (reasons[i].isEmpty()) return Read.SetAside
-                changes += FigureChange(FIGURES[i].first, was, rounded, reasons[i])
+                val reason = reasons[i].ifEmpty { groupReason ?: return Read.SetAside }
+                changes += FigureChange(FIGURES[i].first, was, rounded, reason)
                 rounded
             }
         }
@@ -170,6 +188,17 @@ object ReviewResponse {
     private fun JsonObject.figure(field: String, most: Double): Double? =
         this[field]?.jsonPrimitive?.contentOrNull?.toDoubleOrNull()
             ?.takeIf { BelievableAmount.isBelievable(it, most) }
+
+    /**
+     * The model kept [was] when it gave it back as held, as held to D45's nine significant
+     * figures, or as held once both are rounded to one decimal: a food whose figures are a
+     * serving's scaled holds 8.571428571428571, and a model echoing it writes 8.57 or 8.6 with no
+     * reason, because it changed nothing (D54 as amended 2026-09-24). Read as a change, that
+     * missing reason would set the whole group aside.
+     */
+    private fun kept(was: Double, given: Double): Boolean =
+        ReplacedFacts.sameFigure(was, given) ||
+            ReplacedFacts.sameFigure(toOneDecimal(was), toOneDecimal(given))
 
     private fun toOneDecimal(value: Double): Double = (value * 10).roundToLong() / 10.0
 

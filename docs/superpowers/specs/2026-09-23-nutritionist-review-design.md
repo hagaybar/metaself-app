@@ -14,6 +14,9 @@
 >   model, only when the owner asks for it, and the privacy page says so.
 > - **2026-09-24, amendment** — the weakest-member rule read literally: an accepted group is stored
 >   as the weaker of `AI_ESTIMATE` and the source of the figures the model kept in it (§5).
+> - **2026-09-24, second amendment** — a review keeps what it was told: a figure echoed back
+>   rounded is kept, not changed; how an unusable answer is said, and the model's answer shown on
+>   request; stored figures shown rounded in the editor and kept when their box is untouched (§8).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -150,15 +153,18 @@ unit name is not in the reply either: the proposal is always for the unit in the
 - `null` for a group means *leave it as it is*. A reply cannot remove a group.
 - `per_unit` is ignored when the editor names no unit.
 - A figure is compared with the one the group holds using D45's comparison; **equal is kept, exactly
-  as held** — a model echoing 3.25 does not turn a label's 3.25 into 3.3.
-- A figure that differs is a **change** and must carry a non-blank reason. A group the form did not
-  know is a **fill** and needs at least one non-blank reason. Changed and filled figures are rounded
-  to one decimal place: a guess claims no finer precision.
+  as held** — a model echoing 3.25 does not turn a label's 3.25 into 3.3. So is a figure equal to
+  the held one once both are rounded to one decimal (§8.1).
+- A figure that differs is a **change** and must carry a non-blank reason — its own, or else the
+  group's first non-blank reason (§8.2). A group the form did not know is a **fill** and needs at
+  least one non-blank reason. Changed and filled figures are rounded to one decimal place: a guess
+  claims no finer precision.
 - **A group is set aside, whole, not repaired**, when any figure is missing, not finite, negative or
   past D42's ceiling for its basis (per 100 g: 1000 kcal and 110 g; per one: 5000 kcal and 500 g),
-  or when a change or fill has no reason. That group stays as it was and the screen says one line:
-  *Its suggestion for per 100 g couldn't be used.* If every group that changed is set aside, the reply
-  is `Unreadable`.
+  or when a change or fill has no reason anywhere in its group. That group stays as it was and the
+  screen says one line: *Its suggestion for per 100 g couldn't be used.* If every group that changed
+  is set aside, the answer is *unusable* — arrived and read, with nothing to accept — and is said as
+  that, not as a failure to understand it (§8.3).
 - A reply that changes nothing is a real answer: *No changes suggested.*
 
 *Invented example, continuing §2:* the reply keeps per 100 g exactly (a label, and consistent), and
@@ -196,7 +202,9 @@ in it, so the form still shows his figures.
 - A failure is said in the editor's own sentence slot, above Save, in `ProposalWording.failure`'s
   existing words — *No API key yet…*, *You have used today's estimates…*, *Could not reach the
   model…*, *The provider refused: …*, *The answer could not be understood…* — and the form is
-  untouched (D8: the way on is typing).
+  untouched (D8: the way on is typing). *Could not be understood* is said only of a reply that was
+  not in the shape asked for. An answer that arrived in that shape with every group it changed set
+  aside is not a failure to understand it, and is said under the review button (§8.3).
 
 ### 5. How it is stored — the owner's rule, and what Save does
 
@@ -309,6 +317,71 @@ estimation* to:
 > **OpenAI** — meal descriptions are sent for estimation, and a food you ask to have reviewed is sent
 > for review, using *your own* API key. Their terms and pricing apply to you directly, and any cost
 > is yours.
+
+### 8. Amendment, 2026-09-24 — a review keeps what it was told
+
+A food scanned from a packet holds its per-100 g figures as a serving's scaled, so they are stored as
+long doubles — *invented:* 8.571428571428571 g of protein, from 6 g in a 70 g serving. Reviewing such
+a food ended in *The answer could not be understood*: the model echoed 8.57, the reader took the
+echo for a change, a change with no reason set the group aside, and with every group set aside the
+reply was read as unreadable. What follows is settled so that cannot happen, and so that when an
+answer cannot be used he is told so honestly and can see it.
+
+**8.1 An echo is kept.** A figure the model returns is **kept, exactly as held**, when it equals the
+held figure by D45's comparison, or when the two are equal once **both** are rounded to one decimal
+(half up). 8.57 or 8.6 for a held 8.571428571428571 is kept; so is 7.3 for a held 7.25. A figure
+that differs at the first decimal is still a change. The cost: a change smaller than half a tenth
+that also rounds to the held tenth cannot be proposed — below the precision a suggestion claims
+(§3) anyway.
+
+**8.2 A change may borrow its group's reason.** A change whose own reason is blank takes the first
+non-blank reason in its group — models explain two linked changes once. A group is set aside for want
+of a reason only when a change in it has no reason anywhere in the group, which is the fill's rule
+(§3) applied to changes. The cost: a borrowed reason may explain a sibling figure rather than this
+one; it is still the model's own words about the group, shown beside the figure.
+
+**8.3 An unusable answer says what happened.** When the answer arrived in the shape asked for and
+every group it changed was set aside, the result is its own (`ReviewResult.Unusable`), not
+`Unreadable`. Under the review button, in the captions' ink, the editor says:
+
+> *The model's answer arrived, but its suggestions could not be used.*
+
+followed by the answer's note, if any, and the existing *Its suggestion for … couldn't be used.* line
+for each group set aside, with **Dismiss**. Nothing goes in the sentence slot above Save, and the
+form is untouched. *The answer could not be understood* stays for a reply not in the asked shape. The
+problem log records it as `review unusable`, by its kind alone — none of the answer, which can
+hold the food's name (§6).
+
+**8.4 Show the model's answer.** After a review whose reply could not be read, could not be used,
+proposed nothing, or set a group aside, the editor offers one more text button under the review
+button: **Show the model's answer**. It shows the reply as it came — the message's content, or the
+whole body when there is no content to find — pretty-printed when it is JSON, in selectable text,
+with **Copy** to put it on the clipboard; pressed again (**Hide the model's answer**) it folds away. It
+is not offered when every suggestion is on screen, since those speak for themselves. A new review
+or **Dismiss** takes it down; closing the editor forgets it. Both editors, My foods' and *Make a
+food*.
+
+**It is shown, never kept.** The reply travels from the reviewer to the editor's state and is drawn;
+it is never saved with the food, never written to the problem log, and never sent anywhere. That is
+the problem log's promise — it records what failed, never what you ate — kept for a text that can
+hold the food's name. What leaves the screen is what he copies himself.
+
+**8.5 Stored figures are shown rounded, and an untouched box keeps the stored figure.** The food
+editor shows a stored figure with **at most two decimals, trailing zeros trimmed** — 8.57 for a
+stored 8.571428571428571, 72 for 72.0, 8.5 for 8.5. The same form fills the boxes when a suggestion
+is accepted. Nothing is lost by it, because of one rule (`FoodForm.figure`), used by Save
+(`FoodForm.toFacts` with the stored facts) and by what a review is told (`FormOrigins`,
+`ReviewRequest.of`): **a box whose text is exactly the shown form of the stored figure is the stored
+figure**. So opening a food and saving it untouched hands the repository the stored doubles; §5's
+comparison finds the group unchanged, and no statement touches it — figures, source and confidence
+stay as they were, never relabelled `TYPED`. Any other text is read as typed, including the same
+number written another way (8.570), which is his own number. What one weighs follows the same rule.
+
+The costs: he cannot type the shown rounding itself (8.57) over a stored 8.571428571428571 and have
+it stored as exactly 8.57 — it is taken as untouched, a difference far below anything a label or a
+guess claims. And in *Make a food*, where nothing is stored, a figure accepted from a review is
+shown to two decimals, so a kept figure he had typed with three or more decimals is written back
+rounded; the group is an estimate by then (§5).
 
 ---
 

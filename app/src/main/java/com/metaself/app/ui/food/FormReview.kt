@@ -20,8 +20,14 @@ sealed interface Review {
      *
      * @property nothingSuggested the answer itself changed nothing, which is a real answer and is
      *   said: *No changes suggested.*
+     * @property unusable the answer arrived, and every group it changed was set aside: said as
+     *   that, above its set-aside lines — never as an answer that could not be understood (§8.3).
      */
-    data class Shown(val review: FoodReview, val nothingSuggested: Boolean = false) : Review
+    data class Shown(
+        val review: FoodReview,
+        val nothingSuggested: Boolean = false,
+        val unusable: Boolean = false,
+    ) : Review
 }
 
 /**
@@ -36,24 +42,32 @@ sealed interface Review {
  *   where the figures it kept came from, so Save can label it by its weakest member. Kept
  *   when he then types in the group — it is still a mix with a guess in it (D54 §5) — and when he
  *   dismisses what is left of the review.
+ * @property modelAnswer the model's reply as it came, offered by **Show the model's answer** after a
+ *   review that could not be read or used, proposed nothing, or set a group aside (§8.4). Held
+ *   here to be shown and nothing else: it is never saved, and never written to the problem log.
+ *   A new request or **Dismiss** takes it down.
  */
 data class FormReview(
     val review: Review? = null,
     val accepted: Map<FactGroup, AcceptedGroup> = emptyMap(),
+    val modelAnswer: String? = null,
 ) {
     /** True while a request is out, when the button reads *Reviewing…* and does nothing. */
     val asking: Boolean get() = review is Review.Asking
 
     /** A request has gone. Whatever was shown is taken down; what was accepted stays accepted. */
-    fun asked(): FormReview = copy(review = Review.Asking())
+    fun asked(): FormReview = copy(review = Review.Asking(), modelAnswer = null)
 
     /**
      * The answer has come back. A group he has typed in meanwhile is left out of it. If that leaves
      * nothing of an answer that did suggest something — no suggestion, no set-aside line, no note —
      * nothing is shown: "No changes suggested" would not be true. A note keeps it up, as it does
      * once the answer is shown.
+     *
+     * [raw] is kept to show when the answer proposed nothing or set a group aside; an answer whose
+     * suggestions are all on screen speaks for itself.
      */
-    fun answered(answer: FoodReview): FormReview {
+    fun answered(answer: FoodReview, raw: String? = null): FormReview {
         val withdrawn = (review as? Review.Asking)?.withdrawn.orEmpty()
         val nothingSuggested = answer.per100g == null && answer.perUnit == null &&
             answer.setAside.isEmpty()
@@ -62,11 +76,22 @@ data class FormReview(
             left.note.isNullOrBlank()
         return copy(
             review = if (nothingLeft && !nothingSuggested) null else Review.Shown(left, nothingSuggested),
+            modelAnswer = raw?.takeIf { nothingSuggested || answer.setAside.isNotEmpty() },
         )
     }
 
-    /** The request failed, or was dropped: nothing is shown, and what was accepted stays. */
-    fun failed(): FormReview = copy(review = null)
+    /**
+     * The answer arrived and nothing in it could be used (`ReviewResult.Unusable`): it is shown as
+     * that, with what was set aside and its note, until dismissed. Nothing to accept.
+     */
+    fun unusable(answer: FoodReview, raw: String? = null): FormReview =
+        copy(review = Review.Shown(answer, unusable = true), modelAnswer = raw)
+
+    /**
+     * The request failed, or was dropped: nothing is shown, and what was accepted stays. [raw] is
+     * the reply of one that arrived and could not be read, kept to show.
+     */
+    fun failed(raw: String? = null): FormReview = copy(review = null, modelAnswer = raw)
 
     /**
      * He typed, from [before] to [after]. **Typing in a group withdraws its suggestion**, whether it
@@ -111,7 +136,7 @@ data class FormReview(
         }
 
     /** **Dismiss**: whatever is left is taken down; groups already accepted stay accepted. */
-    fun dismissed(): FormReview = copy(review = null)
+    fun dismissed(): FormReview = copy(review = null, modelAnswer = null)
 
     /**
      * The answer without [groups]. Once nothing is left to act on — no suggestion, no set-aside

@@ -1246,6 +1246,34 @@ class FoodsViewModelTest {
             assertThat(saved.gramsPerUnit!!.provenance.source).isEqualTo(Source.TYPED)
         }
 
+    /**
+     * D54 §8.5: a label's long-double figures open rounded, and Save on the untouched editor keeps
+     * them exactly, with their source — no relabelling as typed. Invented figures.
+     */
+    @Test
+    fun `saving a food whose figures opened rounded keeps them exactly, and their source`() =
+        runTest(dispatcher) {
+            val scanned = aFood(
+                name = "Seeded cracker",
+                facts = FoodFacts(
+                    per100g = PerHundredGrams(
+                        Nutrients(100.0, 8.571428571428571, 12.857142857142858, 5.714285714285714),
+                        Provenance(Source.LABEL, null, 0),
+                    ),
+                ),
+            )
+            val foods = FakeFoodRepository(listOf(scanned))
+            val viewModel = watched(foods)
+            viewModel.edit(1)
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.editing!!.form.proteinPer100g).isEqualTo("8.57")
+
+            viewModel.save()
+            advanceUntilIdle()
+
+            assertThat(foods.current.single().facts.per100g).isEqualTo(scanned.facts.per100g)
+        }
+
     /** Still a mix with a guess in it (D54 §5): labelled by its weakest member. */
     @Test
     fun `a figure changed after accepting still saves the group as an estimate`() =
@@ -1467,6 +1495,56 @@ class FoodsViewModelTest {
         val shown = viewModel.state.value.editing!!.reviewing.review as Review.Shown
         assertThat(shown.nothingSuggested).isTrue()
     }
+
+    /** D54 §8.3: an answer that arrived and could not be used says so, not "could not be understood". */
+    @Test
+    fun `an answer whose every suggestion was set aside is said as unusable, not as a failure`() =
+        runTest(dispatcher) {
+            val answer = FoodReview(null, null, null, listOf(FactGroup.PER_100G))
+            val viewModel = watched(
+                FakeFoodRepository(listOf(oatBiscuit())),
+                reviewer = FakeFoodReviewer(ReviewResult.Unusable(answer)),
+            )
+            viewModel.edit(1)
+            advanceUntilIdle()
+
+            viewModel.review()
+            advanceUntilIdle()
+
+            val state = viewModel.state.value
+            assertThat(state.refusal).isNull()
+            assertThat(state.editing!!.reviewing.review).isEqualTo(Review.Shown(answer, unusable = true))
+        }
+
+    /**
+     * D54 §8.4: the model's answer reaches the editor to be shown on request — and is only shown.
+     * The problem log records what failed, never what was sent or said, and nothing is added to it.
+     */
+    @Test
+    fun `the model's answer reaches the editor after an unreadable or unusable review, and is not logged`() =
+        runTest(dispatcher) {
+            val raw = """{"per_100g":{"kcal":500},"note":"Oat biscuit"}"""
+            listOf(
+                ReviewResult.Failed(EstimateResult.Unreadable("not the shape"), raw),
+                ReviewResult.Unusable(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), raw),
+            ).forEach { answer ->
+                val problems = RecordingProblemLog()
+                val viewModel = watched(
+                    FakeFoodRepository(listOf(oatBiscuit())),
+                    problems,
+                    FakeFoodReviewer(answer),
+                )
+                viewModel.edit(1)
+                advanceUntilIdle()
+
+                viewModel.review()
+                advanceUntilIdle()
+
+                assertWithMessage("$answer").that(viewModel.state.value.editing!!.reviewing.modelAnswer)
+                    .isEqualTo(raw)
+                assertWithMessage("$answer").that(problems.recorded).isEmpty()
+            }
+        }
 
     /** D8: the way on is typing, and the form is exactly as he left it. */
     @Test

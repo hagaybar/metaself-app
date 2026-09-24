@@ -309,6 +309,10 @@
     <string name="review_use_all">Use all</string>
     <string name="review_dismiss">Dismiss</string>
     <string name="review_no_changes">No changes suggested.</string>
+    <string name="review_unusable">The model\'s answer arrived, but its suggestions could not be used.</string>
+    <string name="review_show_answer">Show the model\'s answer</string>
+    <string name="review_hide_answer">Hide the model\'s answer</string>
+    <string name="review_copy_answer">Copy</string>
     <string name="review_set_aside_per_100g">Its suggestion for per 100 g couldn\'t be used.</string>
     <string name="review_set_aside_per_unit">Its suggestion for per %1$s couldn\'t be used.</string>
     <string name="review_one">one</string>

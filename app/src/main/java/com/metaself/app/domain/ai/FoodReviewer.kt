@@ -70,7 +70,7 @@ data class ReviewRequest(
                     HeldGroup(figures, origin.source, origin.confidence)
                 }
 
-            val weight = form.weightFigure()
+            val weight = form.weightFigure(stored?.gramsPerUnit?.grams)
             val weightOrigin = origins.gramsPerUnit
             return ReviewRequest(
                 process = process,
@@ -78,9 +78,9 @@ data class ReviewRequest(
                 brand = form.brand.trim()
                     .takeIf { it.isNotEmpty() && FoodKeys.brandKey(it) != FoodKeys.NO_BRAND_KEY }
                     .orEmpty(),
-                per100g = held(form.per100gFigures(), origins.per100g),
+                per100g = held(form.per100gFigures(stored?.per100g?.nutrients), origins.per100g),
                 unitName = form.unitName.trim(),
-                perUnit = held(form.perUnitFigures(), origins.perUnit),
+                perUnit = held(form.perUnitFigures(stored?.perUnit?.nutrients), origins.perUnit),
                 gramsPerUnit = if (weight == null || weightOrigin == null) {
                     null
                 } else {
@@ -142,13 +142,27 @@ data class FoodReview(
  *
  * A failure is one of [EstimateResult]'s, so the editor says it in `ProposalWording.failure`'s
  * existing sentences and there is one closed set of failures for everything that asks the model.
+ *
+ * [raw] is the model's reply as it came — the message's content, or the whole body when there is
+ * no content to find — for **Show the model's answer** (D54 §8.4). Null when no reply arrived. It
+ * is shown on screen and nowhere else: never stored, never logged, since it can hold the food's
+ * name.
  */
 sealed interface ReviewResult {
 
-    data class Proposed(val review: FoodReview) : ReviewResult
+    val raw: String?
+
+    data class Proposed(val review: FoodReview, override val raw: String? = null) : ReviewResult
+
+    /**
+     * The answer arrived in the shape asked for, and every group it changed was set aside, so there
+     * is nothing to accept (D54 §8.3). Not a failure to understand it, and not said as one: the
+     * editor says the answer could not be used, with [review]'s set-aside lines and note.
+     */
+    data class Unusable(val review: FoodReview, override val raw: String? = null) : ReviewResult
 
     /** [failure] is NoKey, CeilingReached, Unreachable, Refused or Unreadable — never a proposal. */
-    data class Failed(val failure: EstimateResult) : ReviewResult {
+    data class Failed(val failure: EstimateResult, override val raw: String? = null) : ReviewResult {
         init {
             require(failure !is EstimateResult.Proposed && failure !is EstimateResult.AmountMissing) {
                 "a review fails for want of a key, allowance, network, permission or sense; not $failure"

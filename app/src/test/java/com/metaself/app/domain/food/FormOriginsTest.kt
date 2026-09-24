@@ -31,6 +31,23 @@ class FormOriginsTest {
     private fun origin(source: Source, confidence: Confidence? = null) =
         FormOrigins.Origin(source, confidence)
 
+    /**
+     * D54 §8.5: a stored figure opens rounded (8.57 for an invented 8.571428571428571); the box
+     * left as it opened is still the stored figure, so the group is told as stored.
+     */
+    @Test
+    fun `an untouched group whose figures open rounded is told as stored`() {
+        val scanned = stored.copy(
+            per100g = PerHundredGrams(
+                Nutrients(100.0, 8.571428571428571, 12.857142857142858, 5.714285714285714),
+                label,
+            ),
+        )
+        val form = FoodForm.of(Food(name = "Seeded cracker", facts = scanned))
+
+        assertThat(FormOrigins.of(scanned, form, emptyMap()).per100g).isEqualTo(origin(Source.LABEL))
+    }
+
     @Test
     fun `an untouched food is told as stored`() {
         val origins = FormOrigins.of(stored, untouched, accepted = emptyMap())

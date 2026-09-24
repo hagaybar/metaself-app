@@ -65,4 +65,11 @@ class ReviewWordingTest {
             "Fat 9 → 10 g — Rounded.",
         ).inOrder()
     }
+
+    @Test
+    fun `the model's answer is shown pretty-printed when it is JSON, and as it came otherwise`() {
+        assertThat(ReviewWording.modelAnswer("""{"per_100g":null,"note":"Consistent."}"""))
+            .isEqualTo("{\n    \"per_100g\": null,\n    \"note\": \"Consistent.\"\n}")
+        assertThat(ReviewWording.modelAnswer("not json")).isEqualTo("not json")
+    }
 }

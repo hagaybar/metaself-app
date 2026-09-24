@@ -708,6 +708,35 @@ class FoodsScreenRenderTest {
         assertThat(texts).doesNotContain("Use these")
     }
 
+    /** D54 §8.3: said as what happened, with the group that went, and never as not understood. */
+    @Test
+    fun `an answer whose suggestions could not be used says so, and which`() {
+        val texts = draw(
+            reviewing(
+                Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true),
+            ),
+        )
+
+        assertThat(texts).contains("The model's answer arrived, but its suggestions could not be used.")
+        assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
+        assertThat(texts.joinToString()).doesNotContain("could not be understood")
+    }
+
+    /** D54 §8.4: offered as a text button, even after a failure when no review is on screen. */
+    @Test
+    fun `the model's answer is offered when the editor holds it, and not otherwise`() {
+        val holding = reviewing(null).let { state ->
+            state.copy(
+                editing = state.editing!!.copy(
+                    reviewing = FormReview(modelAnswer = """{"per_100g":null}"""),
+                ),
+            )
+        }
+
+        assertThat(draw(holding)).contains("Show the model's answer")
+        assertThat(draw(reviewing(null))).doesNotContain("Show the model's answer")
+    }
+
     /** An editor with the Oat biscuit open (invented figures) and [review] as its review. */
     private fun reviewing(review: Review?): FoodsUiState {
         val food = Food(

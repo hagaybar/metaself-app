@@ -219,9 +219,16 @@ class FoodsViewModel @Inject constructor(
                 val open = _editing.value ?: return@guarded
                 when (result) {
                     is ReviewResult.Proposed ->
-                        _editing.value = open.copy(reviewing = open.reviewing.answered(result.review))
+                        _editing.value = open.copy(
+                            reviewing = open.reviewing.answered(result.review, result.raw),
+                        )
+                    // Arrived, and nothing in it could be used: said as that, not as a failure.
+                    is ReviewResult.Unusable ->
+                        _editing.value = open.copy(
+                            reviewing = open.reviewing.unusable(result.review, result.raw),
+                        )
                     is ReviewResult.Failed -> {
-                        _editing.value = open.copy(reviewing = open.reviewing.failed())
+                        _editing.value = open.copy(reviewing = open.reviewing.failed(result.raw))
                         _failed.value = null
                         _refusal.value = ProposalWording.failure(result.failure)
                     }
@@ -281,7 +288,11 @@ class FoodsViewModel @Inject constructor(
             val form = editing.form
             // A group accepted from a review goes as an estimate, or weaker, even if he then changed
             // a figure in it (D54 §5); the repository leaves any group whose figures did not change alone.
-            val facts = form.toFacts(now(), estimated = editing.reviewing.accepted) ?: return@act
+            // A box still showing a stored figure as it opened, rounded, saves the stored figure,
+            // so an untouched group is found unchanged and kept, source and all (D54 §8.5).
+            val stored = foods.byId(editing.foodId)?.facts
+            val facts = form.toFacts(now(), estimated = editing.reviewing.accepted, stored = stored)
+                ?: return@act
             val brand = form.brand.takeIf { it.isNotBlank() }
             when (val saved = foods.saveForm(editing.foodId, form.name, brand, facts)) {
                 is EditResult.Refused -> refuse(saved.why)
