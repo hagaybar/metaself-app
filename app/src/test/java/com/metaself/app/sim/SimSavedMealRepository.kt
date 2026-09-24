@@ -1,9 +1,12 @@
 package com.metaself.app.sim
 
+import com.metaself.app.data.food.CountingClock
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.MealNameTaken
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
+import com.metaself.app.data.food.SavedMealsOfFoods
+import com.metaself.app.data.time.Now
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.MealComponent
@@ -11,6 +14,7 @@ import com.metaself.app.domain.food.SavedMeal
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 /**
@@ -37,7 +41,21 @@ import kotlinx.coroutines.flow.map
  * existing fake's two load-bearing behaviours: a name is taken or it is not, and the same food goes in
  * once — putting it in again changes the amount rather than adding a second row.
  */
-class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealRepository {
+class SimSavedMealRepository(
+    private val foods: FakeFoodRepository,
+    private var now: Now = CountingClock(),
+) : SavedMealRepository, SavedMealsOfFoods {
+
+    /** Put this store on [clock], the one the rest of the walk is stamped from. */
+    fun onClock(clock: Now) = apply { now = clock }
+
+    private var loggings: Flow<Map<Long, Long>> = flowOf(emptyMap())
+
+    /**
+     * Wire in the day: saved meal id → the latest `loggedAtMillis` of a meal logged from it, which the
+     * offered list's order joins against.
+     */
+    fun linkedTo(latestLoggings: Flow<Map<Long, Long>>) = apply { loggings = latestLoggings }
 
     private val meals = MutableStateFlow(emptyList<SavedMeal>())
     private var nextMealId = 1L
@@ -65,13 +83,17 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
      * the same defect this class was written to fix, one layer deeper.
      */
     override fun observeOffered(): Flow<List<SavedMeal>> =
-        combine(meals, foods.observeAll()) { all, current ->
+        combine(meals, foods.observeAll(), loggings) { all, current, latest ->
             all.filterNot { it.hidden }
                 .map { it.refreshed(current) }
-                // Newest change first, as the database orders them. Left unsorted, the list came out
-                // in creation order and nothing ever moved to the top, so a walk would report that
-                // editing a meal does not bring it to the front — when the app says it does.
-                .sortedByDescending { it.updatedAtMillis }
+                // `SavedMealDao.observeOffered`: the later of its last change and its last logging,
+                // newest first, then id. Left unsorted, the list came out in creation order and
+                // nothing ever moved to the top, so a walk would report that editing a meal does not
+                // bring it to the front — when the app says it does.
+                .sortedWith(
+                    compareByDescending<SavedMeal> { maxOf(it.updatedAtMillis, latest[it.id] ?: 0L) }
+                        .thenByDescending { it.id },
+                )
         }
 
     override suspend fun byId(id: Long): SavedMeal? =
@@ -81,9 +103,10 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
     private fun SavedMeal.refreshed(current: List<com.metaself.app.domain.food.Food>): SavedMeal {
         val byId = current.associateBy { it.id }
         return copy(
-            components = components.mapNotNull { component ->
-                // A food that has gone entirely takes its component with it, which is what the
-                // database's cascade does rather than leaving a component pointing at nothing.
+            components = components.sortedBy { it.position }.mapNotNull { component ->
+                // A part whose food does not read back is dropped, as `toDomain` drops it. The
+                // database never lets a food a part points at be deleted (`RESTRICT`), and the food
+                // stand-in refuses it too, so this is a food reading as nothing, not a cascade.
                 byId[component.food.id]?.let { component.copy(food = it) }
             },
         )
@@ -94,10 +117,12 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
         meals.value.firstOrNull { FoodKeys.nameKey(it.name) == key }?.let {
             return MealResult.NameTaken(MealNameTaken(it.id))
         }
+        val moment = now()
         val made = SavedMeal(
             id = nextMealId++,
             name = FoodKeys.displayName(name),
-            updatedAtMillis = tick(),
+            createdAtMillis = moment,
+            updatedAtMillis = moment,
         )
         meals.value = meals.value + made
         return MealResult.Built(made.id)
@@ -125,12 +150,13 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
     /**
      * Puts a food in, looked up in the food repository rather than in a map somebody had to prime.
      *
-     * A food that genuinely is not there is still dropped, because there is nothing to put; that case
-     * is a real one the database would refuse too. What has changed is that a food the walk created a
-     * moment ago is now findable, which it never was before.
+     * A food that genuinely is not there is refused as the database refuses it — the foreign key
+     * fails and Room throws — rather than dropped in silence, which would look like the app
+     * accepting it. What has changed is that a food the walk created a moment ago is findable.
+     * A new part goes after the last one (`nextPosition`: the highest position plus one).
      */
     override suspend fun put(mealId: Long, foodId: Long, amount: Double, countedAs: CountedAs) {
-        val food = foods.byId(foodId) ?: return
+        val food = foods.byId(foodId) ?: throw IllegalStateException("FOREIGN KEY constraint failed")
         replace(mealId) { meal ->
             val existing = meal.components.firstOrNull { it.food.id == foodId }
             if (existing == null) {
@@ -140,7 +166,7 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
                         food = food,
                         amount = amount,
                         countedAs = countedAs,
-                        position = meal.components.size,
+                        position = (meal.components.maxOfOrNull { it.position } ?: -1) + 1,
                     ),
                 )
             } else {
@@ -163,11 +189,13 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
         }
     }
 
+    /** Each part named gets its place in the list; a part not named keeps the place it had. */
     override suspend fun reorder(mealId: Long, componentIdsInOrder: List<Long>) {
         replace(mealId) { meal ->
             meal.copy(
-                components = componentIdsInOrder.mapIndexedNotNull { at, id ->
-                    meal.components.firstOrNull { it.id == id }?.copy(position = at)
+                components = meal.components.map { part ->
+                    val at = componentIdsInOrder.indexOf(part.id)
+                    if (at < 0) part else part.copy(position = at)
                 },
             )
         }
@@ -181,14 +209,33 @@ class SimSavedMealRepository(private val foods: FakeFoodRepository) : SavedMealR
         meals.value = meals.value.filterNot { it.id == mealId }
     }
 
-    /** Every change stamps the meal, because the list is ordered by when it was last touched. */
-    private fun replace(id: Long, change: (SavedMeal) -> SavedMeal) {
-        meals.value = meals.value.map {
-            if (it.id == id) change(it).copy(id = id, updatedAtMillis = tick()) else it
+    /** `MEALS_USING` for every food: hidden meals included, in name order. */
+    override fun observeMealsUsing(): Flow<Map<Long, List<String>>> = meals.map { all ->
+        all.flatMap { meal -> meal.components.map { it.food.id to meal.name } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, names) -> names.sorted() }
+    }
+
+    override suspend fun mealsHoldingBoth(winnerId: Long, loserId: Long): List<String> =
+        meals.value.filter { meal ->
+            meal.components.any { it.food.id == winnerId } && meal.components.any { it.food.id == loserId }
+        }.map { it.name }
+
+    /**
+     * `FoodDao.moveMealComponents`: each part pointing at the absorbed food points at the one kept,
+     * with its amount, its way of counting and its place — and the meal is not touched.
+     */
+    override suspend fun moveMealComponents(winnerId: Long, loserId: Long) {
+        val kept = foods.byId(winnerId) ?: return
+        meals.value = meals.value.map { meal ->
+            meal.copy(components = meal.components.map { if (it.food.id == loserId) it.copy(food = kept) else it })
         }
     }
 
-    private var clock = 1L
-
-    private fun tick(): Long = clock++
+    /** Every change stamps the meal, because the list is ordered by when it was last touched. */
+    private fun replace(id: Long, change: (SavedMeal) -> SavedMeal) {
+        meals.value = meals.value.map {
+            if (it.id == id) change(it).copy(id = id, updatedAtMillis = now()) else it
+        }
+    }
 }

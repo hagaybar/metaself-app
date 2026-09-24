@@ -1,5 +1,6 @@
 package com.metaself.app.data.food
 
+import com.metaself.app.data.time.Now
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.amount.ItemToLog
 import com.metaself.app.domain.amount.Per
@@ -626,7 +627,8 @@ class LoggedFoodsTest {
 
     @Test
     fun `a described item teaches its food the worth itself`() = runTest {
-        val foods = FakeFoodRepository()
+        // A figure is dated when it is written, as the database dates it; this clock reads 0.
+        val foods = FakeFoodRepository(now = Now { 0 })
         val described = butter()
         val row = described.toFoodItem()!!
         assertThat(row.kcal).isEqualTo(50)

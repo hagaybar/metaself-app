@@ -1,6 +1,7 @@
 package com.metaself.app.data.day
 
 import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.LoggedRowsOfFoods
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
 import kotlinx.coroutines.flow.Flow
@@ -56,7 +57,7 @@ class InMemoryMealRepository(
      */
     private val foods: FoodRepository? = null,
     private val mealTitles: Flow<Map<Long, String>>? = null,
-) : MealRepository {
+) : MealRepository, LoggedRowsOfFoods {
 
     /*
      * The two id counters, standing in for `sqlite_sequence`. Declared BEFORE `state`: property
@@ -107,6 +108,47 @@ class InMemoryMealRepository(
                 )
             }
         }
+    }
+
+    /**
+     * What the food list's order joins against: the latest `loggedAtMillis` of a meal holding a row
+     * that points at each food — `FoodDao.observeOffered`'s subquery.
+     */
+    override fun observeLatestLogging(): Flow<Map<Long, Long>> = state.map { meals ->
+        buildMap {
+            meals.forEach { meal ->
+                meal.items.mapNotNull { it.foodId }.forEach { id ->
+                    put(id, maxOf(get(id) ?: Long.MIN_VALUE, meal.loggedAtMillis))
+                }
+            }
+        }
+    }
+
+    /** How many rows point at each food — `FoodDao.observeLoggedCount`, for every food at once. */
+    override fun observeRowCounts(): Flow<Map<Long, Int>> = state.map { meals ->
+        meals.flatMap { it.items }.mapNotNull { it.foodId }.groupingBy { it }.eachCount()
+    }
+
+    /** `FoodDao.movePastRows`: a join repoints the absorbed food's rows, touching nothing else. */
+    override suspend fun movePastRows(winnerId: Long, loserId: Long) = repoint(loserId, winnerId)
+
+    /** `ON DELETE SET NULL`: a deleted food's rows keep their name and numbers and point nowhere. */
+    override suspend fun detachRowsOf(foodId: Long) = repoint(foodId, null)
+
+    private fun repoint(from: Long, to: Long?) {
+        state.value = state.value.map { meal ->
+            meal.copy(items = meal.items.map { if (it.foodId == from) it.copy(foodId = to) else it })
+        }
+    }
+
+    /**
+     * The same for saved meals: the latest `loggedAtMillis` of a meal logged from each —
+     * `SavedMealDao.observeOffered`'s subquery.
+     */
+    fun observeLatestLoggingOfSavedMeals(): Flow<Map<Long, Long>> = state.map { meals ->
+        meals.filter { it.savedMealId != null }
+            .groupBy { it.savedMealId!! }
+            .mapValues { (_, logged) -> logged.maxOf { it.loggedAtMillis } }
     }
 
     override fun observeLoggedDays(): Flow<Set<Long>> =

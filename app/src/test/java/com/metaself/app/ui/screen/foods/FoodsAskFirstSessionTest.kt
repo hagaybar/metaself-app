@@ -152,10 +152,14 @@ class FoodsAskFirstSessionTest {
      * Yoghurt first and its Hebrew duplicate last, with twenty foods between them. The fake keeps the
      * order it was given and an empty search keeps the list's order, so the duplicate is at the foot.
      */
+    /**
+     * Stamped newest first in the order written, because the list is ordered by the last edit as the
+     * database orders it: Yoghurt at the top, the Hebrew name at the far end.
+     */
     private fun longList(): List<Food> =
-        listOf(aFood(name = "Yoghurt")) +
-            (1..20).map { aFood(name = "Food %02d".format(it)) } +
-            listOf(aFood(name = "יוגורט"))
+        listOf(aFood(name = "Yoghurt", updatedAtMillis = 100)) +
+            (1..20).map { aFood(name = "Food %02d".format(it), updatedAtMillis = 100L - it) } +
+            listOf(aFood(name = "יוגורט", updatedAtMillis = 0))
 
     /** Every food whose page was opened from the list, in order. */
     private val opened = mutableListOf<Long>()

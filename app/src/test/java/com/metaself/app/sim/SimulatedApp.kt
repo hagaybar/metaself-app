@@ -9,6 +9,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.backup.BackupOutcome
@@ -48,6 +51,7 @@ import com.metaself.app.ui.screen.record.RecordUiState
 import com.metaself.app.ui.screen.repeat.RepeatScreen
 import com.metaself.app.ui.screen.repeat.RepeatViewModel
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Everything the walked app stores, in memory, for one walk.
@@ -74,9 +78,26 @@ class World(
     ),
     val weights: InMemoryWeightRepository = InMemoryWeightRepository(),
     val profiles: FakeProfileRepository = FakeProfileRepository(aProfile()),
-    /** Fixed, so nothing in a transcript changes between runs for want of a clock. */
-    val now: Now = Now { FIXED_MOMENT },
-    val today: Today = Today { FIXED_DAY },
+    /**
+     * The one clock every stand-in and view model is stamped from: the machine's own, as on a phone,
+     * never reading the same moment twice so no two edits tie by accident.
+     *
+     * **Why not a fixed moment, which would make every transcript identical.** The day stamps a
+     * logging with `System.currentTimeMillis()` directly (`DayViewModel.writeMeal`), not with an
+     * injected clock, and Robolectric does not intercept that call — measured: it returns the real
+     * time. Against a fixed walk clock every logging therefore landed on a date other than the day it
+     * was logged onto, so the day called every one of them "Time not known", and every logging sorted
+     * above every edit. A walk reported both as the app's. On the machine's clock, the day, the
+     * stamps and the loggings are one timeline, as they are on a phone.
+     *
+     * The cost: times of day in a transcript are the time the walk ran. What the walk DOES does not
+     * change with them.
+     */
+    val now: Now = MachineClock(),
+    /** The machine's date, for the same reason as [now]: the day a logging is stamped on. */
+    val today: Today = Today { LocalDate.now() },
+    /** The machine's hour, so the day's sentences agree with the times beside them. */
+    val currentHour: CurrentHour = CurrentHour { LocalTime.now().hour },
     /**
      * Where the walk begins.
      *
@@ -96,6 +117,12 @@ class World(
     var goBack: () -> Unit = {}
         internal set
 
+    init {
+        // One clock and one database: each store reads what the real queries join against.
+        foods.onClock(now).linkedTo(rows = dayMeals, meals = savedMeals)
+        savedMeals.onClock(now).linkedTo(dayMeals.observeLatestLoggingOfSavedMeals())
+    }
+
     val loggedFoods = LoggedFoods(foods)
 
     /** Nothing is backed up during a walk, and nothing counts steps. */
@@ -107,11 +134,13 @@ class World(
         override suspend fun history(from: LocalDate, to: LocalDate) = emptyList<DayMovement>()
     }
 
-    private companion object {
-        /** 2026-09-17T09:00:00Z. Any fixed instant would do; this one is simply fixed. */
-        const val FIXED_MOMENT = 1_789_722_000_000L
-        val FIXED_DAY: LocalDate = LocalDate.of(2026, 9, 17)
-    }
+}
+
+/** The machine's clock, never reading the same millisecond twice. See [World.now]. */
+class MachineClock : Now {
+    private var last = Long.MIN_VALUE
+
+    override fun invoke(): Long = maxOf(System.currentTimeMillis(), last + 1).also { last = it }
 }
 
 /** Where the walk currently is. A stack, because Back is a real way out and often the only one. */
@@ -163,14 +192,19 @@ sealed interface Where {
 fun SimulatedApp(world: World) {
     val stack = remember { mutableStateListOf(world.start) }
     // What the nav host keeps for each entry on its back stack and this shell must keep too, by the
-    // entry's place in the stack: the list's view models and the saved state a page's result is left
-    // in, and every `rememberSaveable` — the list's scroll among them — so Back finds the list where
-    // it was (D55 §1). Dropped as the entry leaves the stack, as the nav host drops them.
-    val lists = remember { mutableMapOf<Int, ManagerEntry>() }
+    // entry's place in the stack: EVERY screen's view models, the saved state a page's result is left
+    // in, and every `rememberSaveable` — the list's scroll among them — so Back finds a screen as it
+    // was left (D55 §1): its tab, its search, its filters, what was ticked. Dropped, and the view
+    // models cleared, as the entry leaves the stack, as the nav host drops them.
+    //
+    // Only the manager's were kept before (public issue #6, item 2); every other screen built its
+    // view model in a `remember`, which dies the moment another screen is drawn over it, so Back
+    // found "Add something" on its first tab with its search emptied — which the app does not do.
+    val entries = remember { mutableMapOf<Int, Entry>() }
     val saveable = rememberSaveableStateHolder()
     val leave: () -> Unit = {
         val top = stack.lastIndex
-        lists.remove(top)
+        entries.remove(top)?.store?.clear()
         saveable.removeState(saveKey(top, stack[top]))
         stack.removeAt(top)
     }
@@ -191,32 +225,33 @@ fun SimulatedApp(world: World) {
             currentYear = CurrentYear { world.today().year },
             automaticBackup = world.backups,
             steps = world.steps,
-            currentHour = CurrentHour { NINE_IN_THE_MORNING },
+            currentHour = world.currentHour,
             loggedFoods = world.loggedFoods,
             problems = ProblemLog.NONE,
         )
     }
 
     val at = stack.lastIndex
+    val entry = entries.getOrPut(at) { Entry() }
     saveable.SaveableStateProvider(saveKey(at, stack[at])) {
         when (val here = stack.last()) {
             is Where.Today -> TodayHere(dayViewModel, stack)
-            is Where.AddSomething -> AddSomethingHere(world, dayViewModel, stack, goBack)
+            is Where.AddSomething -> AddSomethingHere(world, entry, dayViewModel, stack, goBack)
             is Where.TypingTheNumbers -> TypingTheNumbersHere(dayViewModel, goBack)
-            is Where.Manager ->
-                ManagerHere(lists.getOrPut(at) { ManagerEntry(world, here.joinFrom) }, stack, goBack)
+            is Where.Manager -> ManagerHere(world, entry, here, stack, goBack)
             is Where.FoodPage -> FoodPageHere(
                 world = world,
+                entry = entry,
                 here = here,
                 // The entry beneath, as the nav host reads `previousBackStackEntry`.
-                listBelow = lists[at - 1]?.takeIf { stack.getOrNull(at - 1) is Where.Manager },
+                listBelow = entries[at - 1]?.takeIf { stack.getOrNull(at - 1) is Where.Manager },
                 goBack = goBack,
                 replaceWith = { where ->
                     leave()
                     stack.add(where)
                 },
             )
-            is Where.BuildingMeal -> BuildingMealHere(world, here, goBack)
+            is Where.BuildingMeal -> BuildingMealHere(world, entry, here, goBack)
             is Where.Record -> RecordHere(dayViewModel, here, goBack)
         }
     }
@@ -229,21 +264,24 @@ fun SimulatedApp(world: World) {
 private fun saveKey(at: Int, where: Where): String = "$at $where"
 
 /**
- * One manager on the stack: its three view models, held for as long as it is on the stack as the nav
- * host's back stack entry holds them, and [results] — the entry's own saved state, where a food's page
- * leaves what it has to tell the list (`NavBackStackEntry.savedStateHandle`).
- *
- * [joinFrom] reaches the list's view model the way the route's argument does, in its own saved state.
+ * One entry on the stack, as the nav host's `NavBackStackEntry` holds it: a view model store, so each
+ * screen's view models live exactly as long as the entry and are cleared when it is popped, and
+ * [results] — the entry's own saved state, where a food's page leaves what it has to tell the list
+ * beneath it (`NavBackStackEntry.savedStateHandle`).
  */
-private class ManagerEntry(world: World, joinFrom: Long?) {
-    val manager = ManagerViewModel()
-    val foods = FoodsViewModel(
-        world.foods,
-        ProblemLog.NONE,
-        SavedStateHandle(joinFrom?.let { mapOf(FoodsViewModel.JOIN_FROM to it.toString()) } ?: emptyMap()),
-    )
-    val meals = MealsViewModel(world.savedMeals, ProblemLog.NONE)
+private class Entry {
+    val store = ViewModelStore()
     val results = SavedStateHandle()
+
+    /** This entry's one [VM], made by [make] the first time it is asked for, as `hiltViewModel()`. */
+    inline fun <reified VM : ViewModel> viewModel(crossinline make: () -> VM): VM =
+        ViewModelProvider(
+            store,
+            object : ViewModelProvider.Factory {
+                @Suppress("UNCHECKED_CAST")
+                override fun <T : ViewModel> create(modelClass: Class<T>): T = make() as T
+            },
+        )[VM::class.java]
 }
 
 /**
@@ -312,7 +350,11 @@ private fun RecordHere(dayViewModel: DayViewModel, here: Where.Record, goBack: (
     val state by dayViewModel.state.collectAsStateWithLifecycle()
     val canUndo by dayViewModel.canUndo.collectAsStateWithLifecycle()
     val ready = state as? DayUiState.Ready ?: return
-    if (ready.epochDay != here.epochDay) return
+    // As the nav host: the day moved from under this route, so the only honest thing is to go back.
+    if (ready.epochDay != here.epochDay) {
+        LaunchedEffect(here.epochDay) { goBack() }
+        return
+    }
 
     RecordScreen(
         state = RecordUiState.of(ready, dayViewModel.calendarToday.value),
@@ -346,11 +388,12 @@ private fun RecordHere(dayViewModel: DayViewModel, here: Where.Record, goBack: (
 @Composable
 private fun AddSomethingHere(
     world: World,
+    entry: Entry,
     dayViewModel: DayViewModel,
     stack: MutableList<Where>,
     goBack: () -> Unit,
 ) {
-    val repeatViewModel = remember { RepeatViewModel(world.foods, world.savedMeals) }
+    val repeatViewModel = entry.viewModel { RepeatViewModel(world.foods, world.savedMeals) }
     val state by repeatViewModel.state.collectAsStateWithLifecycle()
 
     RepeatScreen(
@@ -391,15 +434,29 @@ private fun AddSomethingHere(
     )
 }
 
+/**
+ * The manager. [Where.Manager.joinFrom] reaches the list's view model the way the route's argument
+ * does, in its own saved state.
+ */
 @Composable
 private fun ManagerHere(
-    entry: ManagerEntry,
+    world: World,
+    entry: Entry,
+    here: Where.Manager,
     stack: MutableList<Where>,
     goBack: () -> Unit,
 ) {
-    val managerViewModel = entry.manager
-    val foodsViewModel = entry.foods
-    val mealsViewModel = entry.meals
+    val managerViewModel = entry.viewModel { ManagerViewModel() }
+    val foodsViewModel = entry.viewModel {
+        FoodsViewModel(
+            world.foods,
+            ProblemLog.NONE,
+            SavedStateHandle(
+                here.joinFrom?.let { mapOf(FoodsViewModel.JOIN_FROM to it.toString()) } ?: emptyMap(),
+            ),
+        )
+    }
+    val mealsViewModel = entry.viewModel { MealsViewModel(world.savedMeals, ProblemLog.NONE) }
 
     val tab by managerViewModel.tab.collectAsStateWithLifecycle()
     val foodsState by foodsViewModel.state.collectAsStateWithLifecycle()
@@ -456,12 +513,13 @@ private fun ManagerHere(
 @Composable
 private fun FoodPageHere(
     world: World,
+    entry: Entry,
     here: Where.FoodPage,
-    listBelow: ManagerEntry?,
+    listBelow: Entry?,
     goBack: () -> Unit,
     replaceWith: (Where) -> Unit,
 ) {
-    val pageViewModel = remember(here) {
+    val pageViewModel = entry.viewModel {
         FoodPageViewModel(
             foods = world.foods,
             now = world.now,
@@ -506,8 +564,8 @@ private fun FoodPageHere(
 }
 
 @Composable
-private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () -> Unit) {
-    val builderViewModel = remember(here) {
+private fun BuildingMealHere(world: World, entry: Entry, here: Where.BuildingMeal, goBack: () -> Unit) {
+    val builderViewModel = entry.viewModel {
         MealBuilderViewModel(
             meals = world.savedMeals,
             foods = world.foods,
@@ -562,8 +620,6 @@ private fun BuildingMealHere(world: World, here: Where.BuildingMeal, goBack: () 
  * back stack entry. Getting this wrong would not fail loudly — it would quietly open a new meal
  * every time and the walk would never be able to edit one.
  */
-private const val NINE_IN_THE_MORNING = 9
-
 private fun savedStateFor(here: Where.BuildingMeal) = SavedStateHandle(
     buildMap<String, Any?> {
         put("mealId", here.mealId.toString())
