@@ -1,6 +1,7 @@
 package com.metaself.app.data.ai
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FigureChange
@@ -143,6 +144,63 @@ class ReviewResponseTest {
             reply(
                 per100g = group(100, "8.57", "12.9", "5.7", confidence = "HIGH"),
                 perUnit = group(95, "4.3", "6.3", "3.4", confidence = "HIGH"),
+            ),
+            request,
+        )
+
+        assertThat(proposed(result)).isEqualTo(FoodReview(null, null, null, emptyList()))
+    }
+
+    /**
+     * A kept figure is judged at the precision the model wrote it in (D54 §8.1 as amended
+     * 2026-09-24). Invented: 1.6 g of carbohydrate in a 33 g piece is 4.848484848484849 g per
+     * 100 g. Its two-decimal echo, 4.85, is 4.9 at one decimal while the held figure is 4.8 there —
+     * so comparing both at one decimal took an echo for a change.
+     */
+    @Test
+    fun `a figure is kept when it is the held one written at the model's own precision`() {
+        val request = OAT_BISCUIT.copy(
+            per100g = HeldGroup(Nutrients(100.0, 9.0, 4.848484848484849, 6.0), Source.LABEL, null),
+        )
+        fun carbsGiven(carbs: String) = ReviewResponse.parse(
+            reply(
+                per100g = group(100, 9, carbs, 6, carbsReason = "a reason", confidence = "HIGH"),
+                perUnit = null,
+            ),
+            request,
+        )
+
+        listOf("4.85", "4.848", "4.9", "4.8", "5").forEach { given ->
+            assertWithMessage(given).that(proposed(carbsGiven(given)).per100g).isNull()
+        }
+        val changed = proposed(carbsGiven("5.0")).per100g!!
+        assertThat(changed.changes)
+            .containsExactly(FigureChange(Figure.CARBS, 4.848484848484849, 5.0, "a reason"))
+    }
+
+    /**
+     * The shape of an answer that echoed every figure back, rounded, with every reason empty: a
+     * piece of 33 g (invented) whose per-100 g figures are its own scaled, and per-one figures
+     * given back exactly. It changed nothing, so it is an answer with nothing to suggest — not an
+     * answer whose suggestions could not be used.
+     */
+    @Test
+    fun `an answer that echoes every figure back rounded suggests nothing`() {
+        val request = OAT_BISCUIT.copy(
+            per100g = HeldGroup(
+                Nutrients(100.0, 9.090909090909092, 4.848484848484849, 6.0606060606060606),
+                Source.LABEL,
+                null,
+            ),
+            unitName = "piece",
+            perUnit = HeldGroup(Nutrients(45.0, 3.15, 2.2, 2.85), Source.LABEL, null),
+            gramsPerUnit = HeldWeight(33.0, Source.LABEL),
+        )
+
+        val result = ReviewResponse.parse(
+            reply(
+                per100g = group(100, "9.09", "4.85", "6.06", confidence = "HIGH"),
+                perUnit = group(45, "3.15", "2.2", "2.85", confidence = "HIGH"),
             ),
             request,
         )

@@ -21,6 +21,8 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.math.BigDecimal
+import java.math.RoundingMode
 import kotlin.math.roundToLong
 
 /**
@@ -32,8 +34,9 @@ import kotlin.math.roundToLong
  * - `null` for a group means leave it as it is; a reply cannot remove a group.
  * - `per_unit` is ignored when the editor names no unit.
  * - A figure equal to the one held (D45's comparison) is kept **exactly as held**: a model echoing
- *   3.25 does not turn a label's 3.25 into 3.3. So is one equal to it once both are rounded to one
- *   decimal: 8.57 or 8.6 given back for a held 8.571428571428571 is an echo, not a change.
+ *   3.25 does not turn a label's 3.25 into 3.3. So is one that is the held figure written at the
+ *   model's own precision — 8.57 or 8.6 given back for a held 8.571428571428571 is an echo, not a
+ *   change ([kept]).
  * - A figure that differs is a change, rounded to one decimal place — a guess claims no finer
  *   precision — and carries a reason: its own, or else the first non-blank reason in its group. A
  *   group the form did not know is a fill, rounded the same way, and needs at least one non-blank
@@ -133,6 +136,8 @@ object ReviewResponse {
             val most = if (field == "kcal") kcalMost else macroMost
             group.figure(field, most) ?: return Read.SetAside
         }
+        // How many decimals the model wrote each figure with: the precision it is judged at.
+        val decimals = FIGURES.map { (_, field, _) -> decimalsOf(group.getValue(field).jsonPrimitive.content) }
         val reasons = FIGURES.map { (_, _, field) ->
             group[field]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
         }
@@ -163,7 +168,7 @@ object ReviewResponse {
             val was = holds[i]
             val given = figures[i]
             val rounded = toOneDecimal(given)
-            if (kept(was, given)) {
+            if (kept(was, given, decimals[i])) {
                 was
             } else {
                 val reason = reasons[i].ifEmpty { groupReason ?: return Read.SetAside }
@@ -190,15 +195,41 @@ object ReviewResponse {
             ?.takeIf { BelievableAmount.isBelievable(it, most) }
 
     /**
-     * The model kept [was] when it gave it back as held, as held to D45's nine significant
-     * figures, or as held once both are rounded to one decimal: a food whose figures are a
-     * serving's scaled holds 8.571428571428571, and a model echoing it writes 8.57 or 8.6 with no
-     * reason, because it changed nothing (D54 as amended 2026-09-24). Read as a change, that
-     * missing reason would set the whole group aside.
+     * The model kept [was] when what it [given] back is [was] written at the model's own precision
+     * — the [decimals] it wrote the figure with (D54 §8.1 as amended 2026-09-24). A food whose
+     * figures are a serving's scaled holds 4.848484848484849; a model echoing it writes 4.85, or
+     * 4.9, or 4.8, with no reason, because it changed nothing. Read as a change, that missing reason
+     * would set the whole group aside. Kept, exactly as held, when any of these holds:
+     *
+     * - equal by D45's nine significant figures;
+     * - within half a unit of the given figure's last decimal place (4.85 for 4.8485);
+     * - equal to the held figure rounded half up one decimal at a time, from three places down to
+     *   the given figure's (4.8485 → 4.848 → 4.85 → 4.9): a model rounding its own echo again;
+     * - equal to it once both are rounded to one decimal: a change is rounded to one decimal
+     *   (§3), so one that lands on the held figure's tenth could not be shown as a change.
      */
-    private fun kept(was: Double, given: Double): Boolean =
-        ReplacedFacts.sameFigure(was, given) ||
-            ReplacedFacts.sameFigure(toOneDecimal(was), toOneDecimal(given))
+    private fun kept(was: Double, given: Double, decimals: Int): Boolean {
+        if (ReplacedFacts.sameFigure(was, given)) return true
+        if (ReplacedFacts.sameFigure(toOneDecimal(was), toOneDecimal(given))) return true
+        val held = BigDecimal(was.toString())
+        val written = BigDecimal(given.toString())
+        val halfAUnit = BigDecimal.ONE.movePointLeft(decimals).divide(BigDecimal(2))
+        if ((written - held).abs() <= halfAUnit) return true
+        var stepped = held.setScale(MOST_DECIMALS, RoundingMode.HALF_UP)
+        for (places in MOST_DECIMALS - 1 downTo decimals) {
+            stepped = stepped.setScale(places, RoundingMode.HALF_UP)
+        }
+        return stepped.compareTo(written) == 0
+    }
+
+    /**
+     * The decimals a figure was written with, from the JSON number's own text: "4.85" is 2, "4.0"
+     * is 1, "5" is 0. Capped at [MOST_DECIMALS] — nothing finer is anybody's precision.
+     */
+    private fun decimalsOf(text: String): Int =
+        (text.toBigDecimalOrNull()?.scale() ?: 0).coerceIn(0, MOST_DECIMALS)
+
+    private const val MOST_DECIMALS = 3
 
     private fun toOneDecimal(value: Double): Double = (value * 10).roundToLong() / 10.0
 
