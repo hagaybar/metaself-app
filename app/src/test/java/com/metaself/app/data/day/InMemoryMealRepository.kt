@@ -124,6 +124,23 @@ class InMemoryMealRepository(
         }
     }
 
+    /** How many rows point at each food — `FoodDao.observeLoggedCount`, for every food at once. */
+    override fun observeRowCounts(): Flow<Map<Long, Int>> = state.map { meals ->
+        meals.flatMap { it.items }.mapNotNull { it.foodId }.groupingBy { it }.eachCount()
+    }
+
+    /** `FoodDao.movePastRows`: a join repoints the absorbed food's rows, touching nothing else. */
+    override suspend fun movePastRows(winnerId: Long, loserId: Long) = repoint(loserId, winnerId)
+
+    /** `ON DELETE SET NULL`: a deleted food's rows keep their name and numbers and point nowhere. */
+    override suspend fun detachRowsOf(foodId: Long) = repoint(foodId, null)
+
+    private fun repoint(from: Long, to: Long?) {
+        state.value = state.value.map { meal ->
+            meal.copy(items = meal.items.map { if (it.foodId == from) it.copy(foodId = to) else it })
+        }
+    }
+
     /**
      * The same for saved meals: the latest `loggedAtMillis` of a meal logged from each —
      * `SavedMealDao.observeOffered`'s subquery.

@@ -112,7 +112,7 @@ class World(
 
     init {
         // One clock and one database: each store reads what the real queries join against.
-        foods.onClock(now).linkedTo(rows = dayMeals)
+        foods.onClock(now).linkedTo(rows = dayMeals, meals = savedMeals)
         savedMeals.onClock(now).linkedTo(dayMeals.observeLatestLoggingOfSavedMeals())
     }
 
