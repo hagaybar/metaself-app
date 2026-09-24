@@ -12,6 +12,7 @@ import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FigureChange
 import com.metaself.app.domain.ai.FoodReview
 import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.FactGroup
@@ -723,6 +724,15 @@ class FoodsScreenRenderTest {
                 "Reviewed: no changes suggested — The figures agree.",
             Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true) to
                 "Reviewed: no changes suggested.",
+            // D54 §10.3: nothing proposed, but the model said it found a problem — never "no changes".
+            Review.Shown(
+                FoodReview(null, null, "Per piece does not match per 100 g.", emptyList(), Verdict.PROBLEM_FOUND),
+                nothingSuggested = true,
+            ) to "Reviewed: a problem found — Per piece does not match per 100 g.",
+            Review.Shown(FoodReview(null, null, null, emptyList(), Verdict.PROBLEM_FOUND), nothingSuggested = true) to
+                "Reviewed: a problem found.",
+            Review.Shown(FoodReview(null, fatTo4, "Per piece was off.", emptyList(), Verdict.PROBLEM_FOUND)) to
+                "Reviewed: 1 suggestion below — Per piece was off.",
             Review.Shown(FoodReview(null, fatTo4, "Fat was low for the piece.", emptyList())) to
                 "Reviewed: 1 suggestion below — Fat was low for the piece.",
             Review.Shown(FoodReview(fatTo4, fatTo4, null, emptyList())) to

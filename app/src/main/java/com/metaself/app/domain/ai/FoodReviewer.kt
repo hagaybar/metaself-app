@@ -119,17 +119,33 @@ data class Suggestion(
 )
 
 /**
+ * What the model concluded about the food as a whole, in its own required field (D54 §10.3) —
+ * read from there, never out of the note's prose, so the line under the button cannot say
+ * "no changes suggested" over a note that names a problem.
+ */
+enum class Verdict {
+    /** The model found nothing wrong. */
+    CONSISTENT,
+
+    /** The model found something wrong, missing or contradictory, whether or not it proposed a fix. */
+    PROBLEM_FOUND,
+}
+
+/**
  * A review's answer, a group at a time. A group with nothing to show — kept exactly, left alone, or
  * set aside — is null.
  *
  * @property setAside the groups whose suggestion could not be used (D54 §3), each said on screen in
  *   one line; the group stays as it was.
+ * @property verdict what the model concluded (§10.3). [ReviewResponse] always sets it from the
+ *   reply; the default is for a review built by hand.
  */
 data class FoodReview(
     val per100g: Suggestion?,
     val perUnit: Suggestion?,
     val note: String?,
     val setAside: List<FactGroup>,
+    val verdict: Verdict = Verdict.CONSISTENT,
 ) {
     fun suggestionFor(group: FactGroup): Suggestion? = when (group) {
         FactGroup.PER_100G -> per100g

@@ -26,6 +26,9 @@ import kotlinx.serialization.json.putJsonObject
  * shows optional values as a union with null — its own recursive-schema example is exactly
  * `"next": {"anyOf": [{"$ref": ...}, {"type": "null"}]}` under `strict`.
  *
+ * The reply's `verdict` (D54 §10.3) is a required enum, `consistent` or `problem_found`, so
+ * whether the model found a problem is never read out of the note's prose.
+ *
  * **The schema has no weight field and no unit name**, so a reply cannot carry a guess at what one
  * piece weighs whatever the model makes of the instructions.
  */
@@ -63,6 +66,9 @@ object ReviewPrompt {
         - Give a confidence for each group you return: LOW, MEDIUM or HIGH.
         - Always write the note: what you concluded, in one sentence. For example, that the figures
           are consistent and kept, or what you changed and why. Never leave the note empty.
+        - Give the verdict: "consistent" only when you found nothing wrong, missing or contradictory;
+          "problem_found" when you found anything wrong, missing or contradictory, whether or not you
+          propose corrected figures.
         - Reply in the language of the food's name.
     """.trimIndent()
 
@@ -203,7 +209,7 @@ object ReviewPrompt {
     private val SCHEMA: JsonObject = buildJsonObject {
         put("type", "object")
         put("additionalProperties", false)
-        putJsonArray("required") { add("per_100g"); add("per_unit"); add("note") }
+        putJsonArray("required") { add("per_100g"); add("per_unit"); add("note"); add("verdict") }
         putJsonObject("properties") {
             listOf("per_100g", "per_unit").forEach { group ->
                 putJsonObject(group) {
@@ -218,6 +224,10 @@ object ReviewPrompt {
             putJsonObject("note") {
                 put("type", "string")
                 put("description", "What you concluded, in one sentence. Never empty.")
+            }
+            putJsonObject("verdict") {
+                put("type", "string")
+                putJsonArray("enum") { add("consistent"); add("problem_found") }
             }
         }
     }

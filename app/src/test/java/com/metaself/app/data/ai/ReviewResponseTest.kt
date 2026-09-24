@@ -12,6 +12,7 @@ import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.FactGroup
@@ -485,6 +486,42 @@ class ReviewResponseTest {
         )
     }
 
+    /**
+     * D54 §10.3: the verdict is read from its own field. A reply that proposes nothing but says it
+     * found a problem is read as that — the case where a note named a problem under "no changes
+     * suggested". Anything but "consistent", its absence included, is a problem found: the headline
+     * may say nothing is wrong only when the model said so.
+     */
+    @Test
+    fun `the verdict is read from its field, and only consistent reads as consistent`() {
+        val problem = proposed(
+            ReviewResponse.parse(
+                reply(
+                    per100g = group(480, 7, 62, 22),
+                    perUnit = null,
+                    note = "Per biscuit does not match per 100 g.",
+                    verdict = "problem_found",
+                ),
+                OAT_BISCUIT,
+            ),
+        )
+        assertThat(problem.per100g).isNull()
+        assertThat(problem.perUnit).isNull()
+        assertThat(problem.verdict).isEqualTo(Verdict.PROBLEM_FOUND)
+
+        val consistent = proposed(
+            ReviewResponse.parse(reply(per100g = null, perUnit = null, verdict = "consistent"), OAT_BISCUIT),
+        )
+        assertThat(consistent.verdict).isEqualTo(Verdict.CONSISTENT)
+
+        listOf(null, "", "fine", "CONSISTENT ").forEach { said ->
+            val read = proposed(
+                ReviewResponse.parse(reply(per100g = null, perUnit = null, verdict = said), OAT_BISCUIT),
+            )
+            assertWithMessage("$said").that(read.verdict).isEqualTo(Verdict.PROBLEM_FOUND)
+        }
+    }
+
     @Test
     fun `null for a group means leave it, and cannot remove it`() {
         val review = proposed(ReviewResponse.parse(reply(per100g = null, perUnit = null), OAT_BISCUIT))
@@ -545,10 +582,16 @@ class ReviewResponseTest {
             """"carbs_reason":${JsonPrimitive(carbsReason)},"fat_reason":${JsonPrimitive(fatReason)},""" +
             """"confidence":"$confidence"}"""
 
-    private fun reply(per100g: String?, perUnit: String?, note: String = ""): String =
+    private fun reply(
+        per100g: String?,
+        perUnit: String?,
+        note: String = "",
+        verdict: String? = "consistent",
+    ): String =
         envelope(
             """{"per_100g":${per100g ?: "null"},"per_unit":${perUnit ?: "null"},""" +
-                """"note":${JsonPrimitive(note)}}""",
+                """"note":${JsonPrimitive(note)}""" +
+                (verdict?.let { ""","verdict":${JsonPrimitive(it)}""" } ?: "") + "}",
         )
 
     private fun envelope(content: String): String =

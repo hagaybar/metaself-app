@@ -25,6 +25,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import com.metaself.app.R
+import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.propose.ProposalWording
@@ -102,6 +103,9 @@ private fun outcome(review: Review?): String? = when (review) {
         val said = when {
             review.unusable -> stringResource(R.string.review_unusable)
             suggestions > 0 -> pluralStringResource(R.plurals.review_suggestions, suggestions, suggestions)
+            // "No changes suggested" only when the model said the food is consistent (§10.3).
+            review.nothingSuggested && review.review.verdict == Verdict.PROBLEM_FOUND ->
+                stringResource(R.string.review_problem_found)
             review.nothingSuggested -> stringResource(R.string.review_no_changes)
             else -> stringResource(R.string.review_none_left)
         }

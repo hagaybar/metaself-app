@@ -392,6 +392,28 @@ class ReviewPromptTest {
             .isEqualTo("What you concluded, in one sentence. Never empty.")
     }
 
+    /**
+     * D54 §10.3: whether the review found a problem is not read out of the note's prose — the model
+     * says it in a required field with two values, so the headline can never say "no changes
+     * suggested" over a note that names a problem.
+     */
+    @Test
+    fun `the reply carries a required verdict, consistent or problem_found`() {
+        val body = ReviewPrompt.requestBody("a-model", request())
+        val schema = Json.parseToJsonElement(body).jsonObject["response_format"]!!.jsonObject
+            .getValue("json_schema").jsonObject.getValue("schema").jsonObject
+
+        assertThat(requiredOf(schema)).contains("verdict")
+        val verdict = schema.getValue("properties").jsonObject.getValue("verdict").jsonObject
+        assertThat(verdict["type"]!!.jsonPrimitive.content).isEqualTo("string")
+        assertThat(verdict["enum"]!!.jsonArray.map { it.jsonPrimitive.content })
+            .containsExactly("consistent", "problem_found").inOrder()
+
+        val system = systemMessage(body)
+        assertThat(system).contains("\"consistent\" only when you found nothing wrong")
+        assertThat(system).contains("\"problem_found\" when you found anything wrong")
+    }
+
     @Test
     fun `Hebrew survives being sent`() {
         val body = ReviewPrompt.requestBody("a-model", request(name = "עוגיית שיבולת שועל"))
@@ -413,8 +435,8 @@ class ReviewPromptTest {
         assertThat(schema["type"]!!.jsonPrimitive.content).isEqualTo("object")
         assertThat(schema["additionalProperties"]!!.jsonPrimitive.content).isEqualTo("false")
         assertThat(schema["properties"]!!.jsonObject.keys)
-            .containsExactly("per_100g", "per_unit", "note")
-        assertThat(requiredOf(schema)).containsExactly("per_100g", "per_unit", "note")
+            .containsExactly("per_100g", "per_unit", "note", "verdict")
+        assertThat(requiredOf(schema)).containsExactly("per_100g", "per_unit", "note", "verdict")
 
         listOf("per_100g", "per_unit").forEach { group ->
             val options = schema["properties"]!!.jsonObject[group]!!.jsonObject["anyOf"]!!.jsonArray

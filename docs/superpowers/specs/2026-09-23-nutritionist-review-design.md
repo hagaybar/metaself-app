@@ -23,7 +23,9 @@
 > - **2026-09-24, fourth amendment** — when per one and per 100 g contradict each other through
 >   what one weighs, the review proposes correcting the group it believes wrong, even a packet
 >   label, always as a suggestion he accepts or dismisses; a label group standing alone is still
->   changed only when its own figures are impossible; the model writes in the owner's words (§10).
+>   changed only when its own figures are impossible; the model writes in the owner's words; it
+>   says whether it found a problem in a field of its own, and the line under the button says so
+>   (§10).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -148,6 +150,7 @@ Pinned by a `strict` JSON schema, every field required, each group nullable:
 | `per_100g` | `null`, or `{kcal, protein_g, carbs_g, fat_g, kcal_reason, protein_reason, carbs_reason, fat_reason, confidence}` — numbers, decimals allowed; reasons strings; confidence `LOW`/`MEDIUM`/`HIGH`. |
 | `per_unit` | The same shape, or `null`. |
 | `note` | One short note, or `""`. |
+| `verdict` | `"consistent"` or `"problem_found"` — what the model concluded (added 2026-09-24, §10.3). |
 
 (Nullability is `anyOf: [{the object}, {"type": "null"}]`, which strict structured outputs accept.)
 
@@ -440,7 +443,7 @@ the review came to, and the screen scrolls it into view when the answer arrives:
 
 | Outcome | The line |
 |---|---|
-| Nothing suggested | *Reviewed: no changes suggested — {note}* |
+| Nothing suggested | *Reviewed: no changes suggested — {note}* — only when the verdict is `consistent`; otherwise *Reviewed: a problem found — {note}* (§10.3) |
 | Suggestions (N groups with **Use these**) | *Reviewed: N suggestion(s) below — {note}* |
 | Every change set aside (§8.3) | *The model's answer arrived, but its suggestions could not be used — {note}* |
 | Suggestions all withdrawn by his typing, or all used, with the note or a set-aside line left | *Reviewed: no suggestions left — {note}* |
@@ -484,6 +487,25 @@ biscuit*), never a field name such as `per_unit`, `per_100g`, `grams_per_unit` o
 and never *the figures for one*. With no unit named, only *per 100 g* is given. The cross-check
 (§9.2) speaks of the unit by its name too — *the figures per cup should equal…* — since a model
 mirrors the words it is given.
+
+**10.3 Whether a problem was found is its own field.** The same answer proposed nothing and its note
+named a problem, and the line read *Reviewed: no changes suggested — {a note naming a problem}*,
+which is not true. Rather than reading the note's prose, the strict schema gains a required
+`verdict`, an enum of `"consistent"` and `"problem_found"`, and the instructions say: *consistent*
+only when nothing was found wrong, missing or contradictory; *problem_found* when anything was,
+whether or not corrected figures are proposed. It is read strictly the other way round: only
+`"consistent"` is consistent, and anything else — a missing verdict included — is a problem found,
+so the line may say nothing is wrong only when the model said so. The line under the button (§9.4)
+is now:
+
+| Outcome | The line |
+|---|---|
+| Suggestions (N groups with **Use these**), whatever the verdict | *Reviewed: N suggestion(s) below — {note}* |
+| Nothing suggested, verdict `problem_found` | *Reviewed: a problem found — {note}* |
+| Nothing suggested, verdict `consistent` | *Reviewed: no changes suggested — {note}* |
+
+The other rows of §9.4 are unchanged. The verdict is not stored and not shown on its own; it
+chooses the words of the line and nothing else.
 
 ---
 
