@@ -168,6 +168,46 @@ class EstimateResponseTest {
     }
 
     /**
+     * The model answers in the language it was asked in, units included. Grams and millilitres
+     * written in Hebrew — plural, abbreviated, marked with an apostrophe or with the Hebrew geresh
+     * and gershayim — are grams and millilitres, and a per-100 worth of them is kept (issue #1).
+     */
+    @Test
+    fun `per 100 of grams or millilitres written in Hebrew is kept`() {
+        val units = listOf("גרמים", "גר", "גר'", "ג׳", "מ״ל", "מ\"ל", "מיליליטר")
+        val reply = units.mapIndexed { i, unit -> item(name = "פריט $i", unit = unit) }
+            .joinToString(",")
+
+        val piece = item(name = "מלפפון", unit = "יחידה", figuresPer = "1", amount = "1")
+
+        val items = proposed("$reply,$piece")
+
+        assertThat(items.map { it.unit }).containsExactlyElementsIn(units + "יחידה").inOrder()
+    }
+
+    /**
+     * A per-100 worth of kilograms, litres or cups still cannot be costed: nothing here multiplies
+     * by 1000 or knows what a cup weighs (D4). Dropped and named, as before.
+     */
+    @Test
+    fun `per 100 of kilograms, litres or cups is still dropped and named`() {
+        val result = EstimateResponse.parse(
+            replyWith(
+                items(
+                    item(name = "Rice", unit = "קילו", amount = "1") + "," +
+                        item(name = "Milk", unit = "ליטר", amount = "1") + "," +
+                        item(name = "Quinoa", unit = "כוס", amount = "1") + "," +
+                        item(name = "Bread"),
+                ),
+            ),
+        )
+
+        val proposal = (result as EstimateResult.Proposed).proposal
+        assertThat(proposal.items.map { it.name }).containsExactly("Bread")
+        assertThat(proposal.dropped).containsExactly("Rice", "Milk", "Quinoa").inOrder()
+    }
+
+    /**
      * It used to be clamped to 0. A figure below nothing is not a food's figure, and a zero put in
      * its place is a number nobody stated (D4), so the item goes as a missing figure does.
      */
@@ -321,9 +361,12 @@ class EstimateResponseTest {
         carbs: String = "0",
         fat: String = "20",
         confidence: String = "MEDIUM",
-    ): String = """{"name":"$name","detail":"$detail","amount":$amount,"unit":"$unit",
+    ): String = """{"name":"$name","detail":"$detail","amount":$amount,"unit":"${quoted(unit)}",
         "figures_per":"$figuresPer","kcal":$kcal,"protein_g":$protein,"carbs_g":$carbs,
         "fat_g":$fat,"confidence":"$confidence"}"""
+
+    /** A unit as it sits inside a JSON string: a Hebrew double mark typed as `"` is escaped. */
+    private fun quoted(unit: String): String = unit.replace("\"", "\\\"")
 
     private fun replyWith(content: String): String =
         """{"choices":[{"message":{"content":${JsonPrimitive(content)}}}]}"""
