@@ -18,7 +18,6 @@ import com.metaself.app.data.backup.BackupOutcome
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
-import com.metaself.app.data.food.CountingClock
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.movement.StepAccess
@@ -52,6 +51,7 @@ import com.metaself.app.ui.screen.record.RecordUiState
 import com.metaself.app.ui.screen.repeat.RepeatScreen
 import com.metaself.app.ui.screen.repeat.RepeatViewModel
 import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Everything the walked app stores, in memory, for one walk.
@@ -79,21 +79,25 @@ class World(
     val weights: InMemoryWeightRepository = InMemoryWeightRepository(),
     val profiles: FakeProfileRepository = FakeProfileRepository(aProfile()),
     /**
-     * The one clock every stand-in and view model is stamped from, so "most recent first" compares
-     * like with like, as on a phone.
+     * The one clock every stand-in and view model is stamped from: the machine's own, as on a phone,
+     * never reading the same moment twice so no two edits tie by accident.
      *
-     * It starts at a fixed moment and counts one millisecond per reading, so nothing in a transcript
-     * changes between runs for want of a clock and no two edits tie by accident. A fixed clock made
-     * every edit tie, and the lists then fell back to their id order.
+     * **Why not a fixed moment, which would make every transcript identical.** The day stamps a
+     * logging with `System.currentTimeMillis()` directly (`DayViewModel.writeMeal`), not with an
+     * injected clock, and Robolectric does not intercept that call — measured: it returns the real
+     * time. Against a fixed walk clock every logging therefore landed on a date other than the day it
+     * was logged onto, so the day called every one of them "Time not known", and every logging sorted
+     * above every edit. A walk reported both as the app's. On the machine's clock, the day, the
+     * stamps and the loggings are one timeline, as they are on a phone.
      *
-     * **One thing it cannot reach.** The day stamps a logging with `System.currentTimeMillis()`
-     * directly (`DayViewModel.writeMeal`), not with this clock, and Robolectric does not intercept
-     * that call. So in a walk every logging carries the real time of the run, which is later than
-     * every edit stamped here: a food or a meal logged in a walk stays above one edited after it,
-     * where on a phone the edit would bring the other to the top.
+     * The cost: times of day in a transcript are the time the walk ran. What the walk DOES does not
+     * change with them.
      */
-    val now: Now = CountingClock(FIXED_MOMENT),
-    val today: Today = Today { FIXED_DAY },
+    val now: Now = MachineClock(),
+    /** The machine's date, for the same reason as [now]: the day a logging is stamped on. */
+    val today: Today = Today { LocalDate.now() },
+    /** The machine's hour, so the day's sentences agree with the times beside them. */
+    val currentHour: CurrentHour = CurrentHour { LocalTime.now().hour },
     /**
      * Where the walk begins.
      *
@@ -130,11 +134,13 @@ class World(
         override suspend fun history(from: LocalDate, to: LocalDate) = emptyList<DayMovement>()
     }
 
-    private companion object {
-        /** 2026-09-17T09:00:00Z. Any fixed instant would do; this one is simply fixed. */
-        const val FIXED_MOMENT = 1_789_722_000_000L
-        val FIXED_DAY: LocalDate = LocalDate.of(2026, 9, 17)
-    }
+}
+
+/** The machine's clock, never reading the same millisecond twice. See [World.now]. */
+class MachineClock : Now {
+    private var last = Long.MIN_VALUE
+
+    override fun invoke(): Long = maxOf(System.currentTimeMillis(), last + 1).also { last = it }
 }
 
 /** Where the walk currently is. A stack, because Back is a real way out and often the only one. */
@@ -219,7 +225,7 @@ fun SimulatedApp(world: World) {
             currentYear = CurrentYear { world.today().year },
             automaticBackup = world.backups,
             steps = world.steps,
-            currentHour = CurrentHour { NINE_IN_THE_MORNING },
+            currentHour = world.currentHour,
             loggedFoods = world.loggedFoods,
             problems = ProblemLog.NONE,
         )
@@ -614,8 +620,6 @@ private fun BuildingMealHere(world: World, entry: Entry, here: Where.BuildingMea
  * back stack entry. Getting this wrong would not fail loudly — it would quietly open a new meal
  * every time and the walk would never be able to edit one.
  */
-private const val NINE_IN_THE_MORNING = 9
-
 private fun savedStateFor(here: Where.BuildingMeal) = SavedStateHandle(
     buildMap<String, Any?> {
         put("mealId", here.mealId.toString())
