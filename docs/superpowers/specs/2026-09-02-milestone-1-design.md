@@ -645,6 +645,9 @@ growing to match — unless the words were right and the app wrong.**
 - **Add something** says what each list does: *Tap a meal and it goes on the day you are on, as you
   built it. Tap a food and it asks how much first. Nothing is sent anywhere.* Logging a food is not
   made one tap: an amount is the one thing the app will not fill in for him (D4).
+  **AMENDED 2026-09-24, public issue #21 (from 0.48.0):** a meal's tap now opens it, so the meal half
+  reads *Tap a meal to open it: Log it puts it on the day you are on, as it is or changed for
+  today.* — the words changed to what the app now does (see step 9).
 - **The meal builder** says that what is *in* the meal is kept as he goes, and that a food picked but
   not yet put in is not there when he comes back: *Nothing to save. What is in the meal is kept as
   you go, so you can leave and come back. A food you have picked but not put in yet is not in the
@@ -1580,6 +1583,15 @@ It stays here as a dropped step rather than being deleted, because the reasoning
 meal re-logged in one tap, sending nothing. *Verdict:* one tap logs it as it was; the refinement in
 step 9a added the portions to the list and the ability to change the amount first.
 
+> **AMENDED 2026-09-24, public issue #21 (from 0.48.0).** On *Add something*, a tap on a saved
+> meal's row no longer logs it: it opens the meal's one-day view in place — its parts and amounts,
+> with *Log it* and *Leave it alone* — and writes nothing. Logging is the press on *Log it*; left
+> untouched, that logs exactly what the tap used to (the same items, the same meal, not marked as
+> changed for the day). The separate *Adjust* button is gone, since the tap does its job; *Change it*
+> still opens the meal builder. The manager's *My meals* rows already opened on a tap, so on both
+> screens a tap on a meal opens it and never writes to the day. An empty meal still opens, and its
+> *Log it* is off.
+
 **Step 10 — The streak and the counts. DONE, 2026-09-04.** All derived from the record: current run
 of logged days, lifetime days logged, days in the last 30. Today's over-target warning colour was
 already in place from step 3 and already limited to today. *Verdict:* filling in a skipped day
@@ -1614,7 +1626,8 @@ nothing downstream could scale it. The list now shows every item's portion; `Foo
 amount and unit beside the words; database version 3 adds the columns and backfills the rows already
 there by parsing what they were written as, leaving anything unparseable unadjustable rather than
 guessed. Adjusting happens in place on the repeat screen with the same controls the model's
-proposals use. One tap still logs a meal exactly as it was. *Verdict:* the arithmetic and the
+proposals use. One tap still logs a meal exactly as it was. *(Amended 2026-09-24, public issue
+#21: from 0.48.0 the tap opens the meal and *Log it* logs it — see step 9.)* *Verdict:* the arithmetic and the
 migration are tested and green on CI; whether a real repeated meal comes back adjustable is the
 part only a phone check can confirm.
 
