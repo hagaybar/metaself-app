@@ -40,8 +40,6 @@ import com.metaself.app.ui.screen.settings.SettingsScreen
 import com.metaself.app.ui.screen.propose.ProposalScreen
 import com.metaself.app.ui.screen.record.RecordScreen
 import com.metaself.app.ui.screen.record.RecordUiState
-import com.metaself.app.domain.food.SavedMeals
-import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.ui.screen.mealbuilder.MealBuilderScreen
 import com.metaself.app.ui.screen.mealbuilder.MealBuilderViewModel
 import com.metaself.app.ui.screen.foods.FoodsViewModel
@@ -509,17 +507,6 @@ fun MetaSelfNavHost(
                 onGivePortion = { foodId ->
                     here.ifResumed { navController.navigate(Destination.Food.of(foodId)) }
                 },
-                onRepeat = { meal ->
-                    // Straight to the day being looked at. No model, no network, no waiting.
-                    dayViewModel.logSavedMeal(
-                        LoggedMeal(
-                            items = SavedMeals.toLoggableItems(meal),
-                            savedMealId = meal.id,
-                            adjusted = false,
-                        ),
-                    )
-                    navController.popBackStack()
-                },
                 onBuildMeal = { navController.navigate(Destination.BuildMeal.of(0)) },
                 onEditMeal = { mealId -> navController.navigate(Destination.BuildMeal.of(mealId)) },
                 // Picking a food no longer logs it: it asks how much, because the food is one entry
@@ -539,6 +526,9 @@ fun MetaSelfNavHost(
                 onStepComponent = repeatViewModel::stepComponent,
                 onRemoveComponent = repeatViewModel::removeComponent,
                 onCancelAdjusting = repeatViewModel::cancelAdjusting,
+                // The only way this screen logs a meal: a tap on its row opens it, and this is the
+                // press that writes (public issue #21). Straight to the day being looked at. No
+                // model, no network, no waiting.
                 onLogAdjusted = {
                     repeatViewModel.adjusted()?.let(dayViewModel::logSavedMeal)
                     navController.popBackStack()

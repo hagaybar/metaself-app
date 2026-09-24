@@ -26,12 +26,10 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.movement.DayMovement
-import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.nav.FoodPageExit
 import com.metaself.app.ui.nav.TakeFromFoodPage
-import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.ui.screen.foods.FoodsViewModel
 import com.metaself.app.ui.screen.food.FoodPageScreen
 import com.metaself.app.ui.screen.food.FoodPageViewModel
@@ -360,16 +358,6 @@ private fun AddSomethingHere(
         onDescribe = {},
         onManageFoods = { stack.add(Where.Manager()) },
         onGivePortion = { foodId -> stack.add(Where.FoodPage(foodId)) },
-        onRepeat = { meal ->
-            dayViewModel.logSavedMeal(
-                LoggedMeal(
-                    items = SavedMeals.toLoggableItems(meal),
-                    savedMealId = meal.id,
-                    adjusted = false,
-                ),
-            )
-            goBack()
-        },
         onBuildMeal = { stack.add(Where.BuildingMeal(mealId = 0)) },
         onEditMeal = { mealId -> stack.add(Where.BuildingMeal(mealId = mealId)) },
         onPickFood = repeatViewModel::beginChoosing,

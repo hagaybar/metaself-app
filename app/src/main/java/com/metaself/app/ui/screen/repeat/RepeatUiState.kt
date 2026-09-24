@@ -77,6 +77,15 @@ data class Adjusting(
     val adjusted: Boolean get() = SavedMeals.wasAdjusted(asDefined, rows)
 
     val isEmpty: Boolean get() = rows.isEmpty()
+
+    /**
+     * True when Log it would put something on the day: no part is blocked, and at least one part
+     * can be costed. An empty meal, or one none of whose parts can be costed, opens but cannot be
+     * logged — a meal with nothing in it is not a thing that happened (public issue #21).
+     */
+    val canLog: Boolean
+        get() = blockedBy == null &&
+            SavedMeals.toLoggableItems(asDefined.copy(components = rows)).isNotEmpty()
 }
 
 /**

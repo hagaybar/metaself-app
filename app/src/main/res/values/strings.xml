@@ -216,7 +216,7 @@
     <string name="repeat_none">Nothing to repeat yet. Anything you log will appear here.</string>
     <string name="repeat_tab_none">Nothing on this list yet.</string>
     <string name="repeat_describe_instead">Describe “%1$s” instead</string>
-    <string name="repeat_note">Tap a meal and it goes on the day you are on, as you built it. Tap a food and it asks how much first. Nothing is sent anywhere.</string>
+    <string name="repeat_note">Tap a meal to open it: Log it puts it on the day you are on, as it is or changed for today. Tap a food and it asks how much first. Nothing is sent anywhere.</string>
     <string name="repeat_tab_foods">My foods</string>
     <string name="repeat_tab_meals">My meals</string>
     <string name="repeat_search">Search what you have eaten</string>
@@ -225,7 +225,6 @@
     <string name="repeat_no_match_in_meals">None of your meals matches “%1$s”.</string>
     <string name="repeat_found_in_foods">Found in your foods — show them</string>
     <string name="repeat_found_in_meals">Found in your meals — show them</string>
-    <string name="repeat_adjust">Adjust</string>
     <string name="repeat_adjust_log">Log it</string>
     <string name="repeat_adjust_cancel">Leave it alone</string>
     <!-- Leaves the one-day adjuster's "Put something in" step without adding anything (issue #10). -->
@@ -579,6 +578,8 @@
     <string name="said_one_more">One more of %1$s</string>
     <!-- %1$s is the control's own label, %2$s the food: "Weigh it, for Pizza". -->
     <string name="said_for">%1$s, for %2$s</string>
+    <!-- What pressing a saved meal's row on Add something does. %1$s is the meal (public issue #21). -->
+    <string name="said_open_for_today">Open %1$s for today</string>
     <!-- A food form's figure box. %1$s is the box's label; %2$s the unit the food is counted in. -->
     <string name="said_per_100g">%1$s per 100 g</string>
     <string name="said_per_unit">%1$s per %2$s</string>

@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.repeat
 
+import androidx.compose.ui.semantics.Role
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
@@ -40,6 +41,18 @@ class RepeatScreenRenderTest {
 
     /** Whether the adjuster's "Put it in" was pressed. */
     private var putIn = false
+
+    /** The meal index a row's tap asked to open for the day, or null if none was. */
+    private var beganAdjusting: Int? = null
+
+    /** The meal "Change it" asked to open on the builder, or null if none was. */
+    private var editing: Long? = null
+
+    /** Whether the adjuster's "Log it" was pressed. */
+    private var loggedAdjusted = false
+
+    /** Whether the adjuster's "Leave it alone" was pressed. */
+    private var cancelledAdjusting = false
 
     @After
     fun tearDown() = render.dispose()
@@ -198,15 +211,17 @@ class RepeatScreenRenderTest {
     }
 
     /**
-     * The note sits above both lists, and it used to say "One tap logs it" of both. True of a meal:
-     * a tap puts it on the day as he built it. Not of a food: a tap asks how much first, because the
-     * amount is the one thing the app will not fill in for him (D4). The note now says each (D37).
+     * The note sits above both lists, and it used to say "One tap logs it" of both. A food's tap
+     * asks how much first, because the amount is the one thing the app will not fill in for him
+     * (D4); since public issue #21 a meal's tap opens it, and Log it is what puts it on the day. The
+     * note says each (D37), and no longer that a tap alone puts a meal on the day.
      */
     @Test
-    fun `the note says a meal is one tap and a food asks how much first`() {
+    fun `the note says a meal opens and a food asks how much first`() {
         val onMeals = draw(RepeatUiState(tab = RepeatTab.MEALS, meals = listOf(salad())))
         assertThat(onMeals).contains(REPEAT_NOTE)
         assertThat(onMeals.none { it.contains("One tap logs it") }).isTrue()
+        assertThat(onMeals.none { it.contains("goes on the day you are on, as you built it") }).isTrue()
 
         val onFoods = draw(
             RepeatUiState(tab = RepeatTab.FOODS, foods = someFoods(), meals = listOf(salad())),
@@ -222,10 +237,102 @@ class RepeatScreenRenderTest {
         assertThat(texts.any { it.contains("Nothing is sent anywhere") }).isTrue()
     }
 
+    // --- A tap on a meal opens it; only Log it writes (public issue #21) ------------------------
+
+    /**
+     * The row used to log the meal the moment it was touched, while the same-looking row on the
+     * manager opens it. A tap on a meal now opens it for the day, on both screens, and writes
+     * nothing: the only way this screen has of logging a meal is the adjuster's Log it.
+     */
     @Test
-    fun `a meal he built can be opened for one day only`() {
-        assertThat(draw(RepeatUiState(tab = RepeatTab.MEALS, meals = listOf(salad()))))
-            .contains("Adjust")
+    fun `tapping a meal opens it for one day only`() {
+        val soup = salad().copy(id = 2, name = "Lentil soup")
+        draw(RepeatUiState(tab = RepeatTab.MEALS, meals = listOf(salad(), soup)))
+
+        render.click("Lentil soup")
+
+        assertThat(beganAdjusting).isEqualTo(1)
+        assertThat(loggedAdjusted).isFalse()
+        assertThat(editing).isNull()
+    }
+
+    /** The tap does what Adjust did, so the button is gone rather than left as a second way. */
+    @Test
+    fun `there is no separate Adjust button`() {
+        val texts = draw(RepeatUiState(tab = RepeatTab.MEALS, meals = listOf(salad())))
+
+        assertThat(texts.none { it.startsWith("Adjust") }).isTrue()
+    }
+
+    /** Change it still goes to the builder, for that meal, and is said with its meal's name. */
+    @Test
+    fun `change it still opens the meal on the builder`() {
+        val soup = salad().copy(id = 2, name = "Lentil soup")
+        val texts = draw(RepeatUiState(tab = RepeatTab.MEALS, meals = listOf(salad(), soup)))
+
+        assertThat(texts.count { it == "Change it" }).isEqualTo(2)
+        assertThat(render.describedCount("Change it, for Vegetable salad")).isEqualTo(1)
+        assertThat(render.describedCount("Change it, for Lentil soup")).isEqualTo(1)
+
+        render.clickDescribed("Change it, for Lentil soup")
+
+        assertThat(editing).isEqualTo(2L)
+        assertThat(beganAdjusting).isNull()
+    }
+
+    /**
+     * A screen reader hears the row as a button that opens, and which meal it opens — two rows are
+     * two controls, not one action said twice (public issue #3).
+     */
+    @Test
+    fun `a meal's row is a button that says which meal it opens`() {
+        val soup = salad().copy(id = 2, name = "Lentil soup")
+        draw(RepeatUiState(tab = RepeatTab.MEALS, meals = listOf(salad(), soup)))
+
+        assertThat(render.roleOf("Vegetable salad")).isEqualTo(Role.Button)
+        assertThat(render.clickLabelOf("Vegetable salad")).isEqualTo("Open Vegetable salad for today")
+        assertThat(render.clickLabelOf("Lentil soup")).isEqualTo("Open Lentil soup for today")
+    }
+
+    /** Opened, Log it is the write and Leave it alone closes it writing nothing. */
+    @Test
+    fun `an opened meal is logged by Log it, and Leave it alone logs nothing`() {
+        val salad = salad()
+        val state = RepeatUiState(
+            tab = RepeatTab.MEALS,
+            meals = listOf(salad),
+            adjusting = Adjusting(asDefined = salad, rows = salad.components),
+        )
+
+        draw(state)
+        render.click("Leave it alone")
+        assertThat(cancelledAdjusting).isTrue()
+        assertThat(loggedAdjusted).isFalse()
+
+        draw(state)
+        assertThat(render.isEnabled("Log it")).isTrue()
+        render.click("Log it")
+        assertThat(loggedAdjusted).isTrue()
+    }
+
+    /**
+     * An empty meal still opens — "Put something in" is how a part goes in for today — but it says
+     * it is empty, and Log it stays off: a meal with nothing in it is not a thing that happened.
+     */
+    @Test
+    fun `an empty meal opened says so and cannot be logged`() {
+        val empty = SavedMeal(id = 1, name = "Salad")
+        val texts = draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(empty),
+                adjusting = Adjusting(asDefined = empty, rows = empty.components),
+            ),
+        )
+
+        assertThat(texts.any { it.startsWith("Nothing in it yet") }).isTrue()
+        assertThat(texts).contains("Put something in")
+        assertThat(render.isEnabled("Log it")).isFalse()
     }
 
     /**
@@ -895,9 +1002,8 @@ class RepeatScreenRenderTest {
             onDescribe = { words -> describedWith = words },
             onManageFoods = {},
             onGivePortion = { foodId -> portionFor = foodId },
-            onRepeat = {},
             onBuildMeal = {},
-            onEditMeal = {},
+            onEditMeal = { mealId -> editing = mealId },
             onPickFood = {},
             onCountAs = {},
             onSetAmount = {},
@@ -905,12 +1011,12 @@ class RepeatScreenRenderTest {
             onLogChosen = {},
             onShowTab = { tab -> shownTab = tab },
             onSearch = {},
-            onBeginAdjusting = {},
+            onBeginAdjusting = { index -> beganAdjusting = index },
             onSetComponentAmount = onSetComponentAmount,
             onStepComponent = onStepComponent,
             onRemoveComponent = {},
-            onCancelAdjusting = {},
-            onLogAdjusted = {},
+            onCancelAdjusting = { cancelledAdjusting = true },
+            onLogAdjusted = { loggedAdjusted = true },
             onBeginAddingToMeal = { beganAdding = true },
             onSearchToAdd = {},
             onStopAddingToMeal = {},
@@ -925,7 +1031,7 @@ class RepeatScreenRenderTest {
 
     private companion object {
         const val REPEAT_NOTE =
-            "Tap a meal and it goes on the day you are on, as you built it. Tap a food and it asks " +
-                "how much first. Nothing is sent anywhere."
+            "Tap a meal to open it: Log it puts it on the day you are on, as it is or changed " +
+                "for today. Tap a food and it asks how much first. Nothing is sent anywhere."
     }
 }
