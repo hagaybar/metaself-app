@@ -127,6 +127,22 @@ class DayViewModelTest {
     }
 
     @Test
+    fun `every way of logging stamps the row with the app's clock, not the machine's`() = runTest {
+        // A moment far from the machine's own, so a stamp read from the machine cannot pass by luck.
+        val moment = atTime(TEST_EPOCH_DAY, 7, 42)
+        val meals = FakeMealRepository()
+        val viewModel = viewModel(mealRepository = meals, now = Now { moment })
+
+        viewModel.log(anItem(name = "Typed"))
+        viewModel.logMeal(listOf(ToLog(anItem(name = "Described"))))
+        viewModel.logScanned(anItem(name = "Scanned"), aPacket())
+        viewModel.logSavedMeal(LoggedMeal(items = listOf(anItem(name = "Saved")), savedMealId = 1, adjusted = false))
+        advanceUntilIdle()
+
+        assertThat(meals.logged.map { it.loggedAtMillis }).containsExactly(moment, moment, moment, moment)
+    }
+
+    @Test
     fun `deleting an item asks the store to delete it`() = runTest {
         val meals = FakeMealRepository()
         val viewModel = viewModel(mealRepository = meals)
