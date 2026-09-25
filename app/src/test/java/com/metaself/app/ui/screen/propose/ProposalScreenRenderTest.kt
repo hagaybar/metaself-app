@@ -103,12 +103,12 @@ class ProposalScreenRenderTest {
         assertThat(render.isEnabled("Save this meal")).isFalse()
     }
 
-    /** Millilitres are not grams: the ceiling is said without a unit rather than as "g". */
+    /** Millilitres are not grams: the ceiling is said in ml, never as "g" (D56). */
     @Test
     fun `an amount of millilitres past the ceiling does not call them grams`() {
         val texts = draw(proposed(aProposedItem(name = "Juice", amount = 6000.0, unit = "ml")))
 
-        assertThat(texts).contains("At most 5000 at a time.")
+        assertThat(texts).contains("At most 5000 ml at a time.")
         assertThat(texts).doesNotContain("At most 5000 g at a time.")
     }
 

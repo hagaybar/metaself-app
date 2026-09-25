@@ -4,6 +4,7 @@ import androidx.compose.ui.semantics.Role
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
+import com.metaself.app.domain.day.Source
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.food.aPerUnit
@@ -11,6 +12,9 @@ import com.metaself.app.data.food.weighing
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.MealComponent
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
@@ -817,6 +821,63 @@ class RepeatScreenRenderTest {
         assertThat(texts).contains("Weigh it: nothing knows what one slice weighs")
     }
 
+    // --- A food counted in millilitres (D56) ----------------------------------------------------
+
+    /** Millilitres are measured out, not counted: the chip says so, and 200 of them is an amount. */
+    @Test
+    fun `a food counted in ml is chosen in ml, and 200 of them is an amount`() {
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(oatDrink),
+                choosing = Choosing(index = 0, food = oatDrink, countedAs = CountedAs.UNITS, amount = "200"),
+            ),
+        )
+
+        assertThat(texts).contains("In ml")
+        assertThat(texts).doesNotContain("Count ml")
+        // 200 ml at an invented 57 kcal per 100 ml.
+        assertThat(texts).contains("114 kcal")
+        assertThat(texts.none { it.startsWith("At most") }).isTrue()
+    }
+
+    @Test
+    fun `too many ml says the ceiling in ml`() {
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(oatDrink),
+                choosing = Choosing(index = 0, food = oatDrink, countedAs = CountedAs.UNITS, amount = "5001"),
+            ),
+        )
+
+        assertThat(texts).contains("At most 5000 ml at a time.")
+    }
+
+    /** A part counted in ml has its box, and no − or +: one ml more is not a step anyone takes. */
+    @Test
+    fun `a part counted in ml is typed in the adjuster, not stepped`() {
+        val meal = SavedMeal(
+            id = 1,
+            name = "Breakfast",
+            components = listOf(
+                MealComponent(30, oatDrink, 250.0, CountedAs.UNITS, position = 0),
+                MealComponent(31, slicedBread, 2.0, CountedAs.UNITS, position = 1),
+            ),
+        )
+        draw(
+            RepeatUiState(
+                tab = RepeatTab.MEALS,
+                meals = listOf(meal),
+                adjusting = Adjusting(asDefined = meal, rows = meal.components),
+            ),
+        )
+
+        assertThat(render.describedCount("How much of Oat drink")).isEqualTo(1)
+        assertThat(render.describedCount("One more of Oat drink")).isEqualTo(0)
+        assertThat(render.describedCount("One less of Oat drink")).isEqualTo(0)
+        // The slice is still stepped.
+        assertThat(render.describedCount("One more of Bread")).isEqualTo(1)
+    }
+
     /**
      * A food with no named portion: counting is off, it looks off, the reason names the option it
      * belongs to, and the way to fix it is offered on the spot rather than three screens away.
@@ -962,6 +1023,18 @@ class RepeatScreenRenderTest {
     private val slicedBread =
         aFood("Bread", FoodFacts(perUnit = aPerUnit("slice", 80.0))).copy(id = 4)
     private val weighedCucumber = aFood("Cucumber", FoodFacts(per100g = aPer100g(16.0))).copy(id = 1)
+
+    /** Counted in ml, stored per ml as D53 §3 stores it (D56). Invented: 57 kcal per 100 ml. */
+    private val oatDrink = aFood(
+        "Oat drink",
+        FoodFacts(
+            perUnit = PerUnit(
+                "ml",
+                Nutrients(0.57, 0.029, 0.047, 0.036),
+                Provenance(Source.LABEL, null, setAtMillis = 0),
+            ),
+        ),
+    ).copy(id = 5)
 
     /** One part, the stew, counted in the app's own portion. */
     private fun stewNight(portions: Double) = SavedMeal(

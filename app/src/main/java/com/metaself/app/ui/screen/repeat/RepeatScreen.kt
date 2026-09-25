@@ -30,6 +30,7 @@ import com.metaself.app.R
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
@@ -482,20 +483,23 @@ private fun Adjuster(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 // The amount the meal has for it, typed over for today (D53 §6), in the part's own
-                // unit; − and + for a counted part. The worth is the food's and is not edited here.
+                // unit; − and + for a counted part, never for millilitres, which are measured (D56).
+                // The worth is the food's and is not edited here.
+                val millilitres = PerHundredMillilitres.inMillilitres(component.countedAs, component.food.facts)
                 AmountBox(
                     text = adjusting.amountText(component),
                     unitWords = unitWord(
                         usableAmount(component, adjusting.amountText(component)),
                         PortionWording.unitOf(component),
                     ),
-                    counted = component.countedAs == CountedAs.UNITS,
+                    counted = component.countedAs == CountedAs.UNITS && !millilitres,
                     tooMuch = adjusting.amountTooMuch(component),
-                    most = BelievableAmount.amountEaten(component.countedAs),
+                    most = BelievableAmount.amountEaten(component.countedAs, component.food.facts),
                     inGrams = component.countedAs == CountedAs.GRAMS,
                     onText = { onSetAmount(component.id, it) },
                     onStep = { onStep(component.id, it) },
                     of = component.food.name,
+                    inMillilitres = millilitres,
                 )
                 // Drawn once per part: said with the part it takes out (public issue #3).
                 Small(
@@ -759,6 +763,7 @@ private fun HowMuch(
             tooMuch = choosing.amountTooMuch,
             most = choosing.most,
             countedAs = choosing.countedAs,
+            inMillilitres = choosing.inMillilitres,
         )
 
         choosing.preview?.let { numbers ->

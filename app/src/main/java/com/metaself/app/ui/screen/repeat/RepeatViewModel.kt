@@ -6,6 +6,7 @@ import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.MealComponent
@@ -247,6 +248,8 @@ class RepeatViewModel @Inject constructor(
         val current = _adjusting.value ?: return
         val component = current.rows.firstOrNull { it.id == componentId } ?: return
         if (component.countedAs != CountedAs.UNITS) return
+        // Millilitres are measured, not stepped by one (D56); the screen draws no − or + for them.
+        if (PerHundredMillilitres.inMillilitres(component.countedAs, component.food.facts)) return
         val now = current.amountText(component).trim().replace(',', '.').ifEmpty { "0" }
             .toBigDecimalOrNull() ?: return
         val next = now + by.toBigDecimal()

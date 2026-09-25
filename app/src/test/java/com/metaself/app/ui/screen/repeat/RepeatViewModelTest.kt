@@ -305,6 +305,26 @@ class RepeatViewModelTest {
         assertThat(adjusting.amountText(adjusting.rows[0])).isEqualTo("100")
     }
 
+    /** Millilitres are measured, not counted: a part counted in ml is not stepped either (D56). */
+    @Test
+    fun `a part counted in ml is not stepped`() = runTest(dispatcher) {
+        // Invented: 45 kcal per 100 ml, stored per ml.
+        val drink = aFood("Oat drink", FoodFacts(perUnit = aPerUnit("ml", 0.45))).copy(id = 3)
+        val meal = SavedMeal(
+            id = 1,
+            name = "Breakfast",
+            components = listOf(MealComponent(12, drink, 200.0, CountedAs.UNITS, position = 0)),
+        )
+        val viewModel = watched(savedMeals = FakeSavedMealRepository(listOf(meal)))
+        viewModel.beginAdjusting(0)
+
+        viewModel.stepComponent(12, +1)
+        advanceUntilIdle()
+
+        val adjusting = viewModel.state.value.adjusting!!
+        assertThat(adjusting.amountText(adjusting.rows[0])).isEqualTo("200")
+    }
+
     /**
      * A one-day adjustment may ADD, not only remove and rescale — and what is added reaches the
      * day's record with its own numbers, and marks the day's row as adjusted.

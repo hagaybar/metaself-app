@@ -8,6 +8,7 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Logging
 import com.metaself.app.domain.food.MealComponent
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.domain.portion.Portions
@@ -56,7 +57,7 @@ data class Adjusting(
     /** True only for a number past the part's ceiling (D42), which its box says out loud. */
     fun amountTooMuch(component: MealComponent): Boolean =
         typedAmount(component)?.let {
-            BelievableAmount.isTooMuch(it, BelievableAmount.amountEaten(component.countedAs))
+            BelievableAmount.isTooMuch(it, BelievableAmount.amountEaten(component.countedAs, component.food.facts))
         } == true
 
     /**
@@ -90,11 +91,12 @@ data class Adjusting(
 
 /**
  * [text] as an amount of [component], or null when it is not one: above nothing and within the
- * ceiling for how the part is counted (D42) — 5000 g, or 100 of them.
+ * ceiling for how the part is counted (D42) — 5000 g or ml (D56), or 100 of them.
  */
 internal fun usableAmount(component: MealComponent, text: String): Double? =
     text.trim().replace(',', '.').toDoubleOrNull()?.takeIf {
-        it > 0.0 && BelievableAmount.isBelievable(it, BelievableAmount.amountEaten(component.countedAs))
+        it > 0.0 &&
+            BelievableAmount.isBelievable(it, BelievableAmount.amountEaten(component.countedAs, component.food.facts))
     }
 
 /** Which of the two lists is in front. */
@@ -120,8 +122,11 @@ data class Choosing(
     val countedAs: CountedAs,
     val amount: String = "",
 ) {
-    /** The ceiling on how much of it, by how he is counting: 5000 g, or 100 of them (D42). */
-    val most: Double get() = BelievableAmount.amountEaten(countedAs)
+    /** The ceiling on how much of it, by how he is counting: 5000 g or ml, or 100 of them (D42, D56). */
+    val most: Double get() = BelievableAmount.amountEaten(countedAs, food.facts)
+
+    /** True when the amount is a number of millilitres: typed, never stepped by one (D56). */
+    val inMillilitres: Boolean get() = PerHundredMillilitres.inMillilitres(countedAs, food.facts)
 
     /**
      * The amount to log: above nothing and not past [most] (D42, issue #32). Past it there is no

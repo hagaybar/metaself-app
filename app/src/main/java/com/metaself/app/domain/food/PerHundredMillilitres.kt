@@ -31,6 +31,13 @@ object PerHundredMillilitres {
     /** Whether a food whose unit box reads [unitName] is counted in millilitres. */
     fun applies(unitName: String?): Boolean = unitName != null && Portions.isMillilitres(unitName)
 
+    /**
+     * Whether an amount of the food whose [facts] these are, counted [countedAs], is a number of
+     * millilitres: measured out, typed rather than stepped by one, and capped as a measure (D56).
+     */
+    fun inMillilitres(countedAs: CountedAs, facts: FoodFacts): Boolean =
+        countedAs == CountedAs.UNITS && applies(facts.perUnit?.unitName)
+
     /** A stored per-ml figure as it is shown and typed: per 100 ml. */
     fun shown(perMl: Double): Double =
         if (!perMl.isFinite()) {
