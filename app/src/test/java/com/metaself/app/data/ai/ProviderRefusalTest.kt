@@ -61,6 +61,21 @@ class ProviderRefusalTest {
     }
 
     @Test
+    fun `with no param and nothing quoted, a known parameter named in the message is found`() {
+        assertThat(ProviderRefusal.parse(Refusals.EFFORT_UNRECOGNISED)!!.parameter).isEqualTo("reasoning_effort")
+        val body = Refusals.EFFORT_UNRECOGNISED.replace("reasoning_effort", "max_completion_tokens")
+        assertThat(ProviderRefusal.parse(body)!!.parameter).isEqualTo("max_completion_tokens")
+    }
+
+    @Test
+    fun `a refusal of the schema is read as about the reply format`() {
+        listOf(Refusals.SCHEMA_INVALID, Refusals.SCHEMA_INVALID_CODED).forEach {
+            assertThat(ProviderRefusal.parse(it)!!.parameter).isEqualTo("response_format")
+        }
+        assertThat(ProviderRefusal.parse(Refusals.SCHEMA_INVALID_CODED)!!.code).isEqualTo("invalid_json_schema")
+    }
+
+    @Test
     fun `an unknown refusal names no parameter`() {
         val refusal = ProviderRefusal.parse(Refusals.UNKNOWN)!!
 

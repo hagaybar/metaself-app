@@ -10,8 +10,8 @@ import kotlinx.serialization.json.jsonObject
  * The provider's error object from a refused request, read for what it says was wrong (D57 §3).
  *
  * The structured fields decide. The message is read only where they are silent: [parameter] falls
- * back to the first request parameter the message quotes, and [supportedValues] is read from the
- * message's *"Supported values are: …"*, which no structured field carries.
+ * back to the first request parameter the message quotes, or else names, and [supportedValues] is
+ * read from the message's *"Supported values are: …"*, which no structured field carries.
  *
  * @property type the error's `type`, such as `invalid_request_error`.
  * @property code the error's `code`, such as `unsupported_parameter` or `unsupported_value`.
@@ -57,9 +57,19 @@ data class ProviderRefusal(
         private fun JsonObject.text(name: String): String? =
             (this[name] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
 
-        /** The first known request parameter the message quotes. */
+        /**
+         * The first known request parameter the message quotes or, failing that, the first it names
+         * unquoted — *"Unrecognized request argument supplied: reasoning_effort"*.
+         */
         private fun parameterIn(message: String): String? =
             QUOTED.findAll(message).map { it.groupValues[1] }.firstOrNull { it in KNOWN_PARAMETERS }
+                ?: KNOWN_PARAMETERS
+                    .mapNotNull { name -> wordIn(message, name)?.let { at -> at to name } }
+                    .minByOrNull { it.first }?.second
+
+        /** Where [name] stands in [message] as a whole word, or null. */
+        private fun wordIn(message: String, name: String): Int? =
+            Regex("""(?<![A-Za-z0-9_])${Regex.escape(name)}(?![A-Za-z0-9_])""").find(message)?.range?.first
 
         /** The quoted values after *"Supported values are:"*. */
         private fun supportedIn(message: String): List<String> {

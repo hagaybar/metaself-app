@@ -3,8 +3,9 @@ package com.metaself.app.data.ai
 /**
  * What to send instead, after a refusal (D57 §3). Pure.
  *
- * One rule per parameter the app sends; anything else — a token limit, which the app never sends, a
- * key, a quota, a code this does not know — has no fix, and the refusal is shown as it came.
+ * One rule per parameter the app sends. A refusal of the app's own schema, and anything else — a
+ * token limit, which the app never sends, a key, a quota, a code this does not know — has no fix,
+ * and the refusal is shown as it came.
  */
 object RequestFix {
 
@@ -33,7 +34,11 @@ object RequestFix {
 
             "reasoning_effort" -> effortCandidates(sent, refusal)
 
-            "response_format" -> if (sent.strictFormat) listOf(sent.copy(strictFormat = false)) else emptyList()
+            "response_format" -> if (sent.strictFormat && refusesTheFormat(refusal)) {
+                listOf(sent.copy(strictFormat = false))
+            } else {
+                emptyList()
+            }
 
             else -> emptyList()
         }.distinct().filter { it != sent }
@@ -50,6 +55,22 @@ object RequestFix {
                 sent.copy(reasoningEffort = null),
             )
         }
+    }
+
+    /**
+     * Whether the model refuses the strict format itself — *"'response_format' of type
+     * 'json_schema' is not supported with this model"* — rather than the app's schema in it.
+     *
+     * A refusal of the schema (*"Invalid schema for response_format …"*, `invalid_json_schema`) is
+     * the app's own mistake, true of every model: learning `json_object` from it would be remembered
+     * for the model and never undone, so it is shown as a refusal instead.
+     */
+    private fun refusesTheFormat(refusal: ProviderRefusal): Boolean {
+        val message = refusal.message.orEmpty().lowercase()
+        if (refusal.code == "invalid_json_schema" || "invalid schema" in message) return false
+        val unsupported = "not supported" in message || "unsupported" in message ||
+            refusal.code == "unsupported_value" || refusal.code == "unsupported_parameter"
+        return unsupported && "json_schema" in message
     }
 
     /** Whether the value sent is what is refused, rather than the parameter. */

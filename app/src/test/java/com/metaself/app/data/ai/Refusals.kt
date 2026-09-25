@@ -16,6 +16,15 @@ object Refusals {
 
     const val RESPONSE_FORMAT = """{"error":{"message":"Invalid parameter: 'response_format' of type 'json_schema' is not supported with this model.","type":"invalid_request_error","param":"response_format","code":null}}"""
 
+    /** The app's own schema refused — true of every model, and nothing to learn from. */
+    const val SCHEMA_INVALID = """{"error":{"message":"Invalid schema for response_format 'food_review': In context=(), 'required' is required to be supplied and to be an array including every key in properties. Missing 'note'.","type":"invalid_request_error","param":"response_format","code":null}}"""
+
+    /** The same, with the code the provider gives it. */
+    const val SCHEMA_INVALID_CODED = """{"error":{"message":"Invalid schema for response_format 'meal_estimate': schema must be a JSON Schema of 'type: \"object\"', got 'type: \"array\"'.","type":"invalid_request_error","param":"response_format","code":"invalid_json_schema"}}"""
+
+    /** An argument the model does not know, named without quotes and with no `param`. */
+    const val EFFORT_UNRECOGNISED = """{"error":{"message":"Unrecognized request argument supplied: reasoning_effort","type":"invalid_request_error","param":null,"code":null}}"""
+
     const val UNKNOWN = """{"error":{"message":"The model 'an-invented-model' does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}"""
 
     /** A value refused with no list of accepted ones, and no `param`: only the message says which. */

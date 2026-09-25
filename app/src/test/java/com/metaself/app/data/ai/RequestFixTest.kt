@@ -64,6 +64,19 @@ class RequestFixTest {
         assertThat(fix(reasoning.copy(strictFormat = false), Refusals.RESPONSE_FORMAT)).isEmpty()
     }
 
+    /** Learning json_object from this would be remembered for the model and never undone. */
+    @Test
+    fun `a refusal of the app's own schema is never learned from`() {
+        assertThat(fix(reasoning, Refusals.SCHEMA_INVALID)).isEmpty()
+        assertThat(fix(reasoning, Refusals.SCHEMA_INVALID_CODED)).isEmpty()
+    }
+
+    @Test
+    fun `an unrecognised reasoning argument is dropped like an unsupported one`() {
+        assertThat(fix(reasoning, Refusals.EFFORT_UNRECOGNISED).first())
+            .isEqualTo(RequestProfile(temperature = true, reasoningEffort = null))
+    }
+
     @Test
     fun `a token limit, which is never sent, and an unknown refusal have nothing to fix`() {
         assertThat(fix(deterministic, Refusals.MAX_TOKENS)).isEmpty()
