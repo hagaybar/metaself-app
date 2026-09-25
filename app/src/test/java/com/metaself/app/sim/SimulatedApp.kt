@@ -28,6 +28,7 @@ import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.InMemoryWeightRepository
+import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.DayMovement
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.ui.food.ReviewActions
@@ -50,8 +51,9 @@ import com.metaself.app.ui.screen.record.RecordScreen
 import com.metaself.app.ui.screen.record.RecordUiState
 import com.metaself.app.ui.screen.repeat.RepeatScreen
 import com.metaself.app.ui.screen.repeat.RepeatViewModel
+import java.time.Instant
 import java.time.LocalDate
-import java.time.LocalTime
+import java.time.ZoneId
 
 /**
  * Everything the walked app stores, in memory, for one walk.
@@ -79,25 +81,20 @@ class World(
     val weights: InMemoryWeightRepository = InMemoryWeightRepository(),
     val profiles: FakeProfileRepository = FakeProfileRepository(aProfile()),
     /**
-     * The one clock every stand-in and view model is stamped from: the machine's own, as on a phone,
-     * never reading the same moment twice so no two edits tie by accident.
+     * The one clock every stand-in and view model is stamped from: fixed, so two runs of the same
+     * walk write the same transcript, and counting, never reading the same moment twice, so no two
+     * edits tie by accident.
      *
-     * **Why not a fixed moment, which would make every transcript identical.** The day stamps a
-     * logging with `System.currentTimeMillis()` directly (`DayViewModel.writeMeal`), not with an
-     * injected clock, and Robolectric does not intercept that call — measured: it returns the real
-     * time. Against a fixed walk clock every logging therefore landed on a date other than the day it
-     * was logged onto, so the day called every one of them "Time not known", and every logging sorted
-     * above every edit. A walk reported both as the app's. On the machine's clock, the day, the
-     * stamps and the loggings are one timeline, as they are on a phone.
-     *
-     * The cost: times of day in a transcript are the time the walk ran. What the walk DOES does not
-     * change with them.
+     * It starts on [today] at a fixed local time, so the day, the stamps and the loggings are one
+     * timeline, as on a phone. That holds only because the day stamps a logging with this injected
+     * clock (public issue #47); while it read the machine's clock instead, a fixed walk clock filed
+     * every logging on a different date from its stamp.
      */
-    val now: Now = MachineClock(),
-    /** The machine's date, for the same reason as [now]: the day a logging is stamped on. */
-    val today: Today = Today { LocalDate.now() },
-    /** The machine's hour, so the day's sentences agree with the times beside them. */
-    val currentHour: CurrentHour = CurrentHour { LocalTime.now().hour },
+    val now: WalkClock = WalkClock(),
+    /** The walk clock's date: the day a logging is filed on, and the day it is stamped on. */
+    val today: Today = Today { WalkClock.DAY },
+    /** The walk clock's hour, so the day's sentences agree with the times beside them. */
+    val currentHour: CurrentHour = CurrentHour { now.latest().atZone(ZoneId.systemDefault()).hour },
     /**
      * Where the walk begins.
      *
@@ -136,11 +133,29 @@ class World(
 
 }
 
-/** The machine's clock, never reading the same millisecond twice. See [World.now]. */
-class MachineClock : Now {
-    private var last = Long.MIN_VALUE
+/**
+ * The walk's clock: a fixed start, one second later at every reading. See [World.now].
+ *
+ * A second per reading keeps the times in a transcript close to the start while still ordering
+ * every edit; a walk would need tens of thousands of readings to leave its day.
+ */
+class WalkClock : Now {
+    private var last = START - STEP
 
-    override fun invoke(): Long = maxOf(System.currentTimeMillis(), last + 1).also { last = it }
+    override fun invoke(): Long = (last + STEP).also { last = it }
+
+    /** The last moment read, without reading another: what time it is "now" for a sentence. */
+    fun latest(): Instant = Instant.ofEpochMilli(maxOf(last, START))
+
+    companion object {
+        /** The shared test day (TEST_EPOCH_DAY). Any fixed day would do; this one is the fixtures'. */
+        val DAY: LocalDate = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
+
+        /** 09:00 on [DAY], in the zone the day reads its times in. */
+        val START: Long = DAY.atTime(9, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+        const val STEP = 1_000L
+    }
 }
 
 /** Where the walk currently is. A stack, because Back is a real way out and often the only one. */

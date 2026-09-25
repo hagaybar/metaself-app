@@ -109,12 +109,13 @@ class DayViewModel @Inject constructor(
     private val foods: FoodRepository,
     private val today: Today,
     /**
-     * The moment, for the measured window alone.
+     * The moment: for the measured window, for the stamp on every logging, and for the daily copy.
      *
      * A stretch is open until the fast completes, so whether last night has a verdict yet depends
-     * on what time it is now — a question a day number cannot answer. Injected rather than read
-     * here for the reason [Today] and [CurrentHour] are: a clock read inside a calculation is what
-     * makes the calculation untestable.
+     * on what time it is now — a question a day number cannot answer. A logging's stamp decides
+     * when on its day it was eaten, so it must come from the same clock as the day it is filed on
+     * (public issue #47). Injected rather than read here for the reason [Today] and [CurrentHour]
+     * are: a clock read inside a calculation is what makes the calculation untestable.
      */
     private val now: Now,
     private val currentYear: CurrentYear,
@@ -675,7 +676,7 @@ class DayViewModel @Inject constructor(
      * got its priorities backwards.
      */
     private fun takeTheDailyCopy() {
-        quietly { automaticBackup.runIfDue(today(), System.currentTimeMillis()) }
+        quietly { automaticBackup.runIfDue(today(), now()) }
     }
 
     /**
@@ -1207,7 +1208,7 @@ class DayViewModel @Inject constructor(
         return meals.log(
             Meal(
                 epochDay = selectedDay.value,
-                loggedAtMillis = System.currentTimeMillis(),
+                loggedAtMillis = now(),
                 items = attached.items,
             ),
         )
@@ -1246,7 +1247,7 @@ class DayViewModel @Inject constructor(
             meals.log(
                 Meal(
                     epochDay = selectedDay.value,
-                    loggedAtMillis = System.currentTimeMillis(),
+                    loggedAtMillis = now(),
                     items = listOf(attached.item),
                 ),
             )
@@ -1278,7 +1279,7 @@ class DayViewModel @Inject constructor(
             meals.log(
                 Meal(
                     epochDay = selectedDay.value,
-                    loggedAtMillis = System.currentTimeMillis(),
+                    loggedAtMillis = now(),
                     items = attached.items,
                     savedMealId = meal.savedMealId,
                     savedMealAdjusted = meal.adjusted,
@@ -1632,7 +1633,7 @@ class DayViewModel @Inject constructor(
             meals.log(
                 Meal(
                     epochDay = epochDay,
-                    loggedAtMillis = System.currentTimeMillis(),
+                    loggedAtMillis = now(),
                     items = listOf(attached.item),
                 ),
             )

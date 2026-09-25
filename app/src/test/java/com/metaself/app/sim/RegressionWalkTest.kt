@@ -57,7 +57,8 @@ class RegressionWalkTest {
         assertThat(logged.items.sumOf { it.kcal }).isEqualTo(40 + 160 + 250)
 
         // Every logging falls on the day it was logged onto — the walk's day and the stamps are one
-        // clock. On a fixed walk clock they were not, and the day called every logging untimed.
+        // clock. While the day stamped loggings from the machine's clock they were not, and the day
+        // called every logging untimed (public issue #47).
         world.dayMeals.current.forEach { meal ->
             val on = Instant.ofEpochMilli(meal.loggedAtMillis).atZone(ZoneId.systemDefault()).toLocalDate()
             assertThat(on.toEpochDay()).isEqualTo(meal.epochDay)
