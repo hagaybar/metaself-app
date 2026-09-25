@@ -213,6 +213,21 @@ class MealBuilderScreenRenderTest {
         }
     }
 
+    /** D56: a unit box naming the millilitre makes the per-one group per 100 ml, heading and boxes. */
+    @Test
+    fun `a food made on the spot in ml is worth per 100 ml`() {
+        val texts = draw(
+            MealBuilderUiState(
+                meal = salad(),
+                making = MakingFood(form = FoodForm(name = "Oat drink", unitName = "ml")),
+            ),
+        )
+
+        assertThat(texts).contains("What 100 ml of it are worth")
+        assertThat(texts).doesNotContain("What one of it is worth")
+        assertThat(render.describedCount("Calories per 100 ml")).isEqualTo(1)
+    }
+
     @Test
     fun `a food made on the spot with no unit named yet has its boxes said per one`() {
         draw(MealBuilderUiState(meal = salad(), making = MakingFood()))

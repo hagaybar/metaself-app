@@ -143,4 +143,16 @@ class FoodWordingTest {
         assertThat(FoodWording.summary(tray)).contains("${FoodWording.grouped(1_204.0)} kcal per tray")
         assertThat(FoodWording.summary(tray)).contains("1,204 kcal per tray")
     }
+
+    /** D56. Invented: a carton's 57 kcal per 100 ml, stored per ml as D53 §3 stores it. */
+    @Test
+    fun `a food counted in ml says what 100 ml of it are worth`() {
+        val drink = Food(
+            name = "Oat drink",
+            facts = FoodFacts(perUnit = PerUnit("ml", Nutrients(0.57, 0.029, 0.047, 0.036), label())),
+        )
+
+        assertThat(FoodWording.summary(drink)).contains("57 kcal per 100 ml")
+        assertThat(FoodWording.whatItKnows(drink)).containsExactly("57 kcal per 100 ml")
+    }
 }

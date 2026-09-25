@@ -53,6 +53,20 @@ fun lentilSoup() = Food(
     ),
 )
 
+/**
+ * Counted in millilitres, off a carton (D56): stored per one ml, as D53 §3 stores a per-100 ml
+ * worth. Invented figures — 57 kcal · P 2.9 · C 4.7 · F 3.6 per 100 ml.
+ */
+fun oatDrink() = Food(
+    name = "Oat drink",
+    facts = FoodFacts(perUnit = PerUnit("ml", Nutrients(0.57, 0.029, 0.047, 0.036), label())),
+)
+
+/** [oatDrink] with what one ml weighs typed in before D56 stopped asking. Invented: 1.03 g. */
+fun oatDrinkWithAWeight() = oatDrink().copy(
+    facts = oatDrink().facts.copy(gramsPerUnit = GramsPerUnit(1.03, typed())),
+)
+
 /** Per bun, typed, and hidden. */
 fun hamburgerBun() = Food(
     name = "Hamburger bun",
