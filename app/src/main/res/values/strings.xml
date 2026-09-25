@@ -536,7 +536,13 @@
     <string name="settings_key_privacy">It is stored encrypted on this phone, is excluded from Android\'s backup, and never leaves except as the header of a request to OpenAI.</string>
     <string name="settings_model_title">Model</string>
     <string name="settings_model_field">Model name</string>
-    <string name="settings_model_note">Change this when a newer or cheaper one appears; you do not need a new version of the app.</string>
+    <string name="settings_model_note">Change this when a newer or cheaper one appears, and press Save the model; you do not need a new version of the app.</string>
+    <string name="settings_model_save">Save the model</string>
+    <!-- Said once Save has stored the name. -->
+    <string name="settings_model_saved">Saved: %1$s</string>
+    <string name="settings_model_use_default">Use the default (%1$s)</string>
+    <!-- Beside Test it, while the box holds a name that is not saved. -->
+    <string name="settings_model_not_saved">Not saved yet — Test it uses %1$s</string>
     <string name="settings_ceiling_title">Estimates per day</string>
     <string name="settings_ceiling_field">How many</string>
     <string name="settings_ceiling_note">A ceiling on how many times a day the app may ask the model. It bounds a runaway loop; it is not a security measure.</string>

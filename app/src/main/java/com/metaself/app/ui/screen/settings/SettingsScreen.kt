@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.data.ai.EstimatePrompt
 import com.metaself.app.domain.reminder.Reminder
 import com.metaself.app.domain.window.MeasuredWindow
 import com.metaself.app.domain.window.WindowRule
@@ -100,7 +101,13 @@ fun SettingsScreen(
     var typedKey by remember { mutableStateOf("") }
     var typedOffUser by remember(state.offUsername) { mutableStateOf(state.offUsername) }
     var typedOffPassword by remember { mutableStateOf("") }
-    var typedModel by remember(state.model) { mutableStateOf(state.model) }
+    // The model's box is his while he edits it: it follows the stored name only until he types,
+    // and again once he saves. Keyed to the stored name, a box he had just cleared read back as
+    // the default and snapped to it under his thumb.
+    var modelEdited by rememberSaveable { mutableStateOf(false) }
+    var typedModelText by rememberSaveable { mutableStateOf(state.model) }
+    val typedModel = if (modelEdited) typedModelText else state.model
+    var modelSavedAs by rememberSaveable { mutableStateOf<String?>(null) }
     var typedCeiling by remember(state.dailyCeiling) {
         mutableStateOf(state.dailyCeiling.toString())
     }
@@ -646,13 +653,43 @@ fun SettingsScreen(
             OutlinedTextField(
                 value = typedModel,
                 onValueChange = {
-                    typedModel = it
-                    onSetModel(it)
+                    typedModelText = it
+                    modelEdited = true
+                    modelSavedAs = null
                 },
                 label = { Text(stringResource(R.string.settings_model_field)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            // Stored only by Save, and never blank: a blank name would read back as the default.
+            val wanted = typedModel.trim()
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Button(
+                    onClick = {
+                        onSetModel(wanted)
+                        // The box keeps what was saved, trimmed, while the store catches up.
+                        typedModelText = wanted
+                        modelSavedAs = wanted
+                    },
+                    enabled = wanted.isNotEmpty() && wanted != state.model,
+                ) { Text(stringResource(R.string.settings_model_save)) }
+                if (wanted.isEmpty() && state.model != EstimatePrompt.DEFAULT_MODEL) {
+                    TextButton(
+                        onClick = {
+                            onSetModel(EstimatePrompt.DEFAULT_MODEL)
+                            typedModelText = EstimatePrompt.DEFAULT_MODEL
+                            modelEdited = true
+                            modelSavedAs = EstimatePrompt.DEFAULT_MODEL
+                        },
+                    ) { Text(stringResource(R.string.settings_model_use_default, EstimatePrompt.DEFAULT_MODEL)) }
+                }
+            }
+            modelSavedAs?.takeIf { it == state.model && it == wanted }?.let { saved ->
+                Text(
+                    text = stringResource(R.string.settings_model_saved, saved),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             Text(
                 text = stringResource(R.string.settings_model_note),
                 style = MaterialTheme.typography.bodySmall,
@@ -704,6 +741,14 @@ fun SettingsScreen(
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             Button(onClick = onTest, enabled = state.hasKey && !state.testing) {
                 Text(stringResource(R.string.settings_test))
+            }
+            // Test it asks the SAVED model; a different name still in the box is not it yet.
+            if (typedModel.trim() != state.model) {
+                Text(
+                    text = stringResource(R.string.settings_model_not_saved, state.model),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MetaSelfInk.two,
+                )
             }
 
             if (state.testing) {
