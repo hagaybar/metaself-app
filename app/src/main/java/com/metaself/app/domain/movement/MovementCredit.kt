@@ -46,7 +46,10 @@ enum class MovementSource {
     /** The band's own figure for the day's non-resting energy, which beat the step count. */
     ACTIVE_CALORIES,
 
-    /** What the owner's typed workouts cost, by the MET table, which beat both the other readings. */
+    /**
+     * What the owner's typed workouts cost, by the MET table or his own figure, which beat both the
+     * other readings.
+     */
     TYPED_WORKOUT,
 }
 

@@ -23,6 +23,7 @@ class WorkoutTest {
     fun `without a distance there is no pace`() {
         assertThat(run(minutes = 30, distanceM = null).paceSecondsPerKm).isNull()
         assertThat(run(minutes = 30, distanceM = 0).paceSecondsPerKm).isNull()
+        assertThat(run(minutes = 0, distanceM = 5_000).paceSecondsPerKm).isNull()
     }
 
     /** Stored as strings (D4's pattern); a value nobody recognises reads back as such, never crashes. */

@@ -74,6 +74,26 @@ class MetEstimateTest {
         assertThat(kcal(WorkoutKind.OTHER, Effort.HARD, minutes = 30)).isEqualTo(260)
     }
 
+    /**
+     * The rows are chosen by "at least this fast". Six miles an hour is 9,656.064 m in the hour:
+     * one metre short takes the 5.5 mph row (9.0 MET, 8 × 80 = 640), one metre over takes the
+     * 6 mph row (9.3 MET, 8.3 × 80 = 664).
+     */
+    @Test
+    fun `a speed row applies from its threshold up`() {
+        assertThat(kcal(WorkoutKind.RUN, minutes = 60, distanceM = 9_656)).isEqualTo(640)
+        assertThat(kcal(WorkoutKind.RUN, minutes = 60, distanceM = 9_657)).isEqualTo(664)
+    }
+
+    /**
+     * 16,764 m in 125 min is exactly 5 mph, which floating point renders as 4.999…9. It takes the
+     * 5 mph row (8.5 MET): 7.5 × 80 × 125 / 60 = 1,250.
+     */
+    @Test
+    fun `a speed exactly on a threshold takes that row`() {
+        assertThat(kcal(WorkoutKind.RUN, minutes = 125, distanceM = 16_764)).isEqualTo(1_250)
+    }
+
     @Test
     fun `nothing costs nothing`() {
         assertThat(kcal(WorkoutKind.RUN, minutes = 0)).isEqualTo(0)

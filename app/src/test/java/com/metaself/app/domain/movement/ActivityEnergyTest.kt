@@ -4,10 +4,11 @@ import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
 /**
- * D12b: one number per day, the larger of two readings, never their sum.
+ * D12b and D60: one number per day, the largest of three readings, never their sum.
  *
  * A band records a long walk twice — as steps and as calories — and adding them would pay for that
- * walk twice, which is the error the whole surplus-only design exists to prevent.
+ * walk twice, which is the error the whole surplus-only design exists to prevent. A workout typed
+ * by hand is the third reading, for the same reason.
  */
 class ActivityEnergyTest {
 

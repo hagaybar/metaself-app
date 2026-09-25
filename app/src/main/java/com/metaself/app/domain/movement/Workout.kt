@@ -1,11 +1,11 @@
 package com.metaself.app.domain.movement
 
-import com.metaself.app.domain.day.Source
 import kotlin.math.roundToInt
 
 /**
- * What a workout was. Stored as a string, never an ordinal (the same reason as a food's [Source]):
- * an ordinal is meaningless the moment somebody reorders the enum.
+ * What a workout was. Stored as a string, never an ordinal (the same reason as a food's
+ * [com.metaself.app.domain.day.Source]): an ordinal is meaningless the moment somebody reorders
+ * the enum.
  */
 enum class WorkoutKind {
     RUN, WALK, CYCLE, SWIM, STRENGTH, OTHER,
@@ -15,7 +15,7 @@ enum class WorkoutKind {
 
     companion object {
         fun parse(stored: String?): WorkoutKind =
-            entries.firstOrNull { it.name == stored && it != UNRECOGNISED } ?: UNRECOGNISED
+            entries.firstOrNull { it.name == stored } ?: UNRECOGNISED
     }
 }
 

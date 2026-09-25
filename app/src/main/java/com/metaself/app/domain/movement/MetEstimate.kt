@@ -24,6 +24,7 @@ object MetEstimate {
     private data class SpeedRow(val atLeastMph: Double, val code: Int, val met: Double)
 
     private const val METRES_PER_MILE = 1_609.344
+    private const val SPEED_TOLERANCE_MPH = 1e-9
 
     fun netKcal(
         kind: WorkoutKind,
@@ -47,7 +48,10 @@ object MetEstimate {
             else -> return null
         }
         val mph = (metres / METRES_PER_MILE) / (minutes / 60.0)
-        val chosen = table.last { mph >= it.atLeastMph }
+        // A speed that is exactly a threshold can come out a hair under it in floating point —
+        // 16,764 m in 125 min is 5 mph and evaluates to 4.999…9 — and would then take the row below.
+        // The tolerance is far smaller than any speed a person can tell apart.
+        val chosen = table.last { mph + SPEED_TOLERANCE_MPH >= it.atLeastMph }
         return Row(chosen.code, chosen.met)
     }
 
