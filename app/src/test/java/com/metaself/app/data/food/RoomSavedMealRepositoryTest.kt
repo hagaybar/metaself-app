@@ -398,7 +398,7 @@ class RoomSavedMealRepositoryTest {
     /** Re-taught and then refused: the food he had goes back to what it held. */
     @Test
     fun `a refusal after a food was re-taught puts the food's facts back`() = runTest {
-        val before = PerHundredGrams(Nutrients(200.0, 5.0, 30.0, 6.0), Provenance(Source.AI_ESTIMATE, null, 1_000))
+        val before = PerHundredGrams(Nutrients(200.0, 5.0, 30.0, 6.0), Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 1_000))
         val his = foods.findOrCreate("Pasta", facts = FoodFacts(per100g = before)).food
         // Taught when kept with nothing in the way — so the refusal below has something to undo.
         keeper().keep("First lunch", listOf(pasta))
