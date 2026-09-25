@@ -10,12 +10,14 @@ import com.metaself.app.data.ai.DataStoreAiSettingsStore
 import com.metaself.app.data.ai.DataStoreRequestProfileStore
 import com.metaself.app.data.ai.EncryptedApiKeyStore
 import com.metaself.app.data.ai.OpenAiFoodReviewer
+import com.metaself.app.data.ai.OpenAiMealConversation
 import com.metaself.app.data.ai.OpenAiMealEstimator
 import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.ai.FoodReviewer
+import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
 import dagger.Module
 import dagger.Provides
@@ -85,6 +87,17 @@ object AiModule {
         profiles: RequestProfileStore,
         problems: ProblemLog,
     ): MealEstimator = OpenAiMealEstimator(keys, settings, client, profiles, problems)
+
+    /** A conversation about a meal (D58): the same key, ceiling, client, profiles and log. */
+    @Provides
+    @Singleton
+    fun provideMealConversationAsker(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        profiles: RequestProfileStore,
+        problems: ProblemLog,
+    ): MealConversationAsker = OpenAiMealConversation(keys, settings, client, profiles, problems)
 
     /** A food's review (D54): the same key, ceiling, client, profiles and log as the estimator. */
     @Provides

@@ -44,3 +44,31 @@ sealed interface StepResult {
 
     data class Failed(val failure: EstimateResult) : StepResult
 }
+
+/**
+ * Asks the model the requests a conversation is made of (D58 §3). Each call is one request (with
+ * D57's learning retries, and D34's second ask where it applies), counted against the day's
+ * ceiling; which one to make is [MealConversation]'s decision, never this.
+ */
+interface MealConversationAsker {
+
+    /** The first request: an estimate, or the first question. */
+    suspend fun open(description: String): StepResult
+
+    /** A step: the next question, or none. [cap] is the most questions offered in all. */
+    suspend fun next(description: String, asked: List<Asked>, cap: Int): StepResult
+
+    /**
+     * The final analysis. [deep] asks for more thinking where the model takes it (D58 §8), false on
+     * the day's last request (§12.4); [moreDetail] is his *Ask again* sentence (§5.1).
+     */
+    suspend fun finish(
+        description: String,
+        asked: List<Asked>,
+        moreDetail: String? = null,
+        deep: Boolean = true,
+    ): EstimateResult
+
+    /** How many requests the day's ceiling still allows. */
+    suspend fun remainingToday(): Int
+}
