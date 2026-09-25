@@ -82,7 +82,7 @@ data class FoodForm(
         )
 
     /**
-     * True when the unit box, as it stands, names the millilitre in any spelling: the per-one boxes
+     * True when the unit box, as it stands and as Save would store it, names the millilitre: the per-one boxes
      * are then typed and shown per 100 ml, and stored per one ml (D56).
      */
     val perHundredMl: Boolean get() = PerHundredMillilitres.applies(unitName)

@@ -28,8 +28,15 @@ object PerHundredMillilitres {
     /** Past a double's noise and short of any figure a label or a person states. */
     private const val SHOWN_DIGITS = 15
 
-    /** Whether a food whose unit box reads [unitName] is counted in millilitres. */
-    fun applies(unitName: String?): Boolean = unitName != null && Portions.isMillilitres(unitName)
+    /**
+     * Whether a food whose unit box reads [unitName] is counted in millilitres — judged on the name
+     * as Save stores it ([FoodKeys.displayName]: invisible marks stripped, full-width letters folded),
+     * so the boxes' scale and the stored unit can never disagree. A pasted "ml" with a
+     * right-to-left mark is stored as "ml", and is per 100 ml here too.
+     */
+    fun applies(unitName: String?): Boolean =
+        unitName != null &&
+            runCatching { FoodKeys.displayName(unitName) }.getOrNull()?.let(Portions::isMillilitres) == true
 
     /**
      * Whether an amount of the food whose [facts] these are, counted [countedAs], is a number of

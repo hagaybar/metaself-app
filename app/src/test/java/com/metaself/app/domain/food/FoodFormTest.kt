@@ -617,6 +617,24 @@ class FoodFormTest {
         assertThat(FoodForm.of(drink(noisy)).perUnitFigures(stored.perUnit!!.nutrients)).isEqualTo(noisy)
     }
 
+    /** A pasted right-to-left mark after "ml" is stripped by Save, so the boxes are per 100 ml too. */
+    @Test
+    fun `a unit stored as ml is per 100 ml even with an invisible mark typed`() {
+        val form = FoodForm(
+            name = "Oat drink",
+            unitName = "ml‏",
+            kcalPerUnit = "57",
+            proteinPerUnit = "2.9",
+            carbsPerUnit = "4.7",
+            fatPerUnit = "3.6",
+        )
+
+        val perUnit = form.toFacts(setAtMillis = 0)!!.perUnit!!
+        assertThat(perUnit.unitName).isEqualTo("ml")
+        assertThat(perUnit.nutrients).isEqualTo(perMl)
+        assertThat(FoodForm.of(drink(perUnit.nutrients)).kcalPerUnit).isEqualTo("57")
+    }
+
     @Test
     fun `the Hebrew millilitre is per 100 ml too`() {
         val form = FoodForm.of(drink(perMl, unit = "מ\"ל"))

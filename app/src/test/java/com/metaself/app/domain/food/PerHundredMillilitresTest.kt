@@ -19,6 +19,18 @@ class PerHundredMillilitresTest {
         assertThat(PerHundredMillilitres.applies(null)).isFalse()
     }
 
+    /**
+     * The unit is judged as Save stores it (`FoodKeys.displayName`): a pasted invisible mark or a
+     * full-width spelling is the millilitre once stored, so it is per 100 ml in the boxes too.
+     */
+    @Test
+    fun `a unit that is the millilitre once stored applies`() {
+        assertThat(PerHundredMillilitres.applies("ml‏")).isTrue()
+        assertThat(PerHundredMillilitres.applies("‎ml")).isTrue()
+        assertThat(PerHundredMillilitres.applies("ｍｌ")).isTrue()
+        assertThat(PerHundredMillilitres.applies("‏")).isFalse()
+    }
+
     @Test
     fun `shown is a decimal point shift, with no float artefact`() {
         // 0.57 * 100 is 56.99999999999999 in floating point, and 0.036 * 100 is 3.5999999999999996.
