@@ -41,7 +41,7 @@ class OpenAiCallTest {
         val settings = FakeSettings()
         server.enqueue(MockResponse().setBody("""{"choices":[]}"""))
 
-        val outcome = call(settings = settings).send { model -> """{"model":"$model"}""" }
+        val outcome = call(settings = settings).send { model, _ -> """{"model":"$model"}""" }
 
         assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Body("""{"choices":[]}"""))
         assertThat(settings.calls).isEqualTo(1)
@@ -53,7 +53,7 @@ class OpenAiCallTest {
             server.enqueue(MockResponse().setBody("{}"))
 
             call(settings = FakeSettings(AiSettings(model = "a-model")))
-                .send { model -> """{"model":"$model"}""" }
+                .send { model, _ -> """{"model":"$model"}""" }
 
             val sent = server.takeRequest()
             assertThat(sent.getHeader("Authorization")).isEqualTo("Bearer a-key")
@@ -68,7 +68,7 @@ class OpenAiCallTest {
         val settings = FakeSettings()
         var built = false
 
-        val outcome = call(key = " ", settings = settings).send { built = true; "{}" }
+        val outcome = call(key = " ", settings = settings).send { _, _ -> built = true; "{}" }
 
         assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.NoKey))
         assertThat(built).isFalse()
@@ -80,7 +80,7 @@ class OpenAiCallTest {
     fun `at the ceiling nothing is sent or counted`() = runTest {
         val settings = FakeSettings(AiSettings(dailyCeiling = 2, usedToday = 2))
 
-        val outcome = call(settings = settings).send { "{}" }
+        val outcome = call(settings = settings).send { _, _ -> "{}" }
 
         assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.CeilingReached))
         assertThat(server.requestCount).isEqualTo(0)
@@ -96,7 +96,7 @@ class OpenAiCallTest {
                 .setBody("""{"error":{"message":"Incorrect API key provided"}}"""),
         )
 
-        val outcome = call(settings = settings).send { "{}" }
+        val outcome = call(settings = settings).send { _, _ -> "{}" }
 
         assertThat(outcome)
             .isEqualTo(
@@ -109,7 +109,7 @@ class OpenAiCallTest {
     fun `a refusal without words says the status`() = runTest {
         server.enqueue(MockResponse().setResponseCode(429).setBody("""{"error":{}}"""))
 
-        assertThat(call().send { "{}" })
+        assertThat(call().send { _, _ -> "{}" })
             .isEqualTo(
                 OpenAiCall.Outcome.Failed(EstimateResult.Refused("the provider answered 429"), status = 429),
             )
@@ -120,7 +120,7 @@ class OpenAiCallTest {
         val settings = FakeSettings()
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
 
-        val outcome = call(settings = settings).send { "{}" }
+        val outcome = call(settings = settings).send { _, _ -> "{}" }
 
         assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable))
         assertThat(settings.calls).isEqualTo(0)
@@ -133,7 +133,7 @@ class OpenAiCallTest {
             .addInterceptor { throw SecurityException("Permission denied (missing INTERNET?)") }
             .build()
 
-        val outcome = call(client = throwing).send { "{}" }
+        val outcome = call(client = throwing).send { _, _ -> "{}" }
 
         assertThat(outcome).isEqualTo(
             OpenAiCall.Outcome.Failed(EstimateResult.Refused("Permission denied (missing INTERNET?)")),
@@ -156,6 +156,7 @@ class OpenAiCallTest {
         keys = FakeKeys(key),
         settings = settings,
         client = client,
+        profiles = FakeRequestProfileStore(),
         baseUrl = server.url("/v1/chat/completions").toString(),
     )
 

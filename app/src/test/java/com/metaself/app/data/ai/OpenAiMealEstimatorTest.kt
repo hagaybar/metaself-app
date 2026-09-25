@@ -204,6 +204,7 @@ class OpenAiMealEstimatorTest {
             keys = FakeKeys("a-key"),
             settings = FakeSettings(),
             client = throwing,
+            profiles = FakeRequestProfileStore(),
             baseUrl = server.url("/v1/chat/completions").toString(),
         ).estimate("risotto")
 
@@ -219,6 +220,7 @@ class OpenAiMealEstimatorTest {
         keys = FakeKeys(key),
         settings = settings,
         client = OkHttpClient(),
+        profiles = FakeRequestProfileStore(),
         problems = problems,
         baseUrl = server.url("/v1/chat/completions").toString(),
     )

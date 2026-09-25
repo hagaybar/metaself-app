@@ -23,12 +23,13 @@ class OpenAiMealEstimator(
     keys: ApiKeyStore,
     private val settings: AiSettingsStore,
     client: OkHttpClient,
+    profiles: RequestProfileStore,
     private val problems: ProblemLog = ProblemLog.NONE,
     baseUrl: String = OPENAI_URL,
 ) : MealEstimator {
 
     /** The key, the ceiling, the POST, the counting and the failures — shared with a review (D54). */
-    private val call = OpenAiCall(keys, settings, client, baseUrl)
+    private val call = OpenAiCall(keys, settings, client, profiles, baseUrl)
 
     override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
         withContext(Dispatchers.IO) { estimating(description, moreDetail).alsoRecorded() }
@@ -74,8 +75,8 @@ class OpenAiMealEstimator(
         missingAmounts: List<String>,
     ): EstimateResult =
         when (
-            val outcome = call.send { model ->
-                EstimatePrompt.requestBody(model, description, moreDetail, missingAmounts = missingAmounts)
+            val outcome = call.send { model, profile ->
+                EstimatePrompt.requestBody(model, description, moreDetail, missingAmounts, profile)
             }
         ) {
             is OpenAiCall.Outcome.Body -> EstimateResponse.parse(outcome.text)

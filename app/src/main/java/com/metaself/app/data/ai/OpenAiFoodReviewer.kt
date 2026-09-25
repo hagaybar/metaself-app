@@ -22,14 +22,17 @@ class OpenAiFoodReviewer(
     keys: ApiKeyStore,
     settings: AiSettingsStore,
     client: OkHttpClient,
+    profiles: RequestProfileStore,
     private val problems: ProblemLog = ProblemLog.NONE,
     baseUrl: String = OpenAiCall.OPENAI_URL,
 ) : FoodReviewer {
 
-    private val call = OpenAiCall(keys, settings, client, baseUrl)
+    private val call = OpenAiCall(keys, settings, client, profiles, baseUrl)
 
     override suspend fun review(request: ReviewRequest): ReviewResult =
-        when (val outcome = call.send { model -> ReviewPrompt.requestBody(model, request) }) {
+        when (
+            val outcome = call.send { model, profile -> ReviewPrompt.requestBody(model, request, profile) }
+        ) {
             is OpenAiCall.Outcome.Body -> ReviewResponse.parse(outcome.text, request).alsoRecorded(null)
             is OpenAiCall.Outcome.Failed -> ReviewResult.Failed(outcome.failure).alsoRecorded(outcome.status)
         }
