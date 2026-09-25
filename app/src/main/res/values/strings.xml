@@ -362,7 +362,11 @@
     <string name="foods_field_protein">Protein (g)</string>
     <string name="foods_field_carbs">Carbs (g)</string>
     <string name="foods_field_fat">Fat (g)</string>
-    <string name="foods_field_unit">One what? A bar, a slice, an egg</string>
+    <!-- Public issue #5: names ml, since typing it here is how a food is counted in millilitres (D56).
+         No longer than the label it replaced, so it fits where that one did. -->
+    <string name="foods_field_unit">One what? A slice, an egg, or ml</string>
+    <!-- Public issue #5: beneath the unit box while the per-one boxes are empty; writes "ml" in it. -->
+    <string name="foods_count_in_ml">Count it in ml</string>
     <string name="foods_field_weight">Grams</string>
     <string name="foods_brand_splits">Giving this a brand makes it a different food, so the next unbranded one starts a new entry.</string>
     <string name="foods_correction_not_retroactive">Fixing this changes the food from now on. Days you have already logged keep the numbers they were logged with.</string>

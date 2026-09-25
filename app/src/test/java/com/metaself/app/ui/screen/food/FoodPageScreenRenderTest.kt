@@ -1,5 +1,9 @@
 package com.metaself.app.ui.screen.food
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.data.food.aFood
@@ -448,6 +452,78 @@ class FoodPageScreenRenderTest {
         assertThat(texts.any { it.startsWith("What one of it weighs, in grams") }).isTrue()
     }
 
+    // --- Counting it in ml in one tap (public issue #5) -----------------------------------------
+
+    /** Per 100 g only, no unit named: the per-one boxes are empty, so the switch is offered. */
+    @Test
+    fun `a food with empty per one boxes offers counting it in ml`() {
+        val texts = draw(opened(lentilSoup()))
+
+        assertThat(texts).contains(COUNT_IN_ML)
+        assertThat(texts).contains(UNIT_LABEL)
+    }
+
+    @Test
+    fun `a unit other than ml with empty boxes offers it too`() {
+        val soup = lentilSoup().copy(id = 1)
+        val texts = draw(
+            FoodPageUiState(food = soup, editing = Editing(foodId = 1, form = FoodForm.of(soup).copy(unitName = "bar"))),
+        )
+
+        assertThat(texts).contains(COUNT_IN_ML)
+    }
+
+    @Test
+    fun `pressing it names ml in the unit box and the group becomes per 100 ml`() {
+        val soup = lentilSoup().copy(id = 1)
+        render.texts {
+            var form by remember { mutableStateOf(FoodForm.of(soup)) }
+            FoodPageScreen(
+                state = FoodPageUiState(food = soup, editing = Editing(foodId = 1, form = form)),
+                onSetForm = { form = it },
+                onSave = {},
+                onHide = {},
+                onUnhide = {},
+                onDelete = {},
+                onConfirmDeleting = {},
+                onCancelDeleting = {},
+                onBeginJoining = {},
+                onDismissRefusal = {},
+                review = ReviewActions.NONE,
+                onBack = {},
+            )
+        }
+
+        render.click(COUNT_IN_ML)
+        val after = render.textsAgain()
+
+        assertThat(after).contains("What 100 ml of it are worth")
+        assertThat(after).doesNotContain("What one of it is worth")
+        assertThat(render.fieldTexts()).contains("ml")
+        assertThat(after).doesNotContain(COUNT_IN_ML)
+        // The per 100 g figures are not touched.
+        assertThat(after).containsAtLeast("90", "5", "12", "2").inOrder()
+    }
+
+    @Test
+    fun `a food already counted in ml is not offered it`() {
+        val texts = draw(opened(oatDrink()))
+
+        assertThat(texts).doesNotContain(COUNT_IN_ML)
+    }
+
+    /**
+     * Figures typed per bun would silently become per 100 ml under a new unit, so with the per-one
+     * boxes filled the switch is not offered; the unit box's label still says ml can be typed.
+     */
+    @Test
+    fun `a food whose per one boxes hold figures is not offered it`() {
+        val texts = draw(opened(hamburgerBun().copy(hidden = false)))
+
+        assertThat(texts).doesNotContain(COUNT_IN_ML)
+        assertThat(texts).contains(UNIT_LABEL)
+    }
+
     private fun opened(food: Food, use: FoodUse? = null): FoodPageUiState {
         val stored = food.copy(id = 1)
         return FoodPageUiState(
@@ -475,6 +551,12 @@ class FoodPageScreenRenderTest {
     }
 
     private companion object {
+        /** `R.string.foods_count_in_ml`. */
+        const val COUNT_IN_ML = "Count it in ml"
+
+        /** `R.string.foods_field_unit`. */
+        const val UNIT_LABEL = "One what? A slice, an egg, or ml"
+
         /** `R.string.foods_weight_not_asked_ml`. */
         const val WEIGHT_NOT_ASKED_ML =
             "What a millilitre weighs depends on what is poured, so it is not asked of a food " +

@@ -693,6 +693,24 @@ class FoodFormTest {
         assertThat(filled.perUnitFigures()).isEqualTo(perMl)
     }
 
+    /**
+     * The one-tap switch to ml (#5) is offered only while the per-one boxes are empty: a figure
+     * already typed per bar would silently become per 100 ml if the unit changed under it.
+     */
+    @Test
+    fun `the switch to ml is offered only when the per one boxes are empty and the unit is not ml`() {
+        val blank = FoodForm(name = "Oat drink")
+
+        assertThat(blank.offersMillilitres).isTrue()
+        assertThat(blank.copy(unitName = "bar").offersMillilitres).isTrue()
+        assertThat(blank.copy(unitName = "ml").offersMillilitres).isFalse()
+        assertThat(blank.copy(unitName = " ML ").offersMillilitres).isFalse()
+        assertThat(blank.copy(unitName = "bar", kcalPerUnit = "190").offersMillilitres).isFalse()
+        assertThat(blank.copy(fatPerUnit = "3").offersMillilitres).isFalse()
+        // The per 100 g group and the weight are not what changes meaning, so they do not matter.
+        assertThat(blank.copy(kcalPer100g = "57", gramsPerUnit = "40").offersMillilitres).isTrue()
+    }
+
     private fun someFacts() = FoodFacts(
         per100g = PerHundredGrams(
             Nutrients(72.0, 4.0, 6.0, 2.0),

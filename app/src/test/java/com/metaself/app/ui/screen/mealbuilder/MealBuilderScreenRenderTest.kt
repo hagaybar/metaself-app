@@ -1,5 +1,9 @@
 package com.metaself.app.ui.screen.mealbuilder
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.data.food.aFood
@@ -226,6 +230,58 @@ class MealBuilderScreenRenderTest {
         assertThat(texts).contains("What 100 ml of it are worth")
         assertThat(texts).doesNotContain("What one of it is worth")
         assertThat(render.describedCount("Calories per 100 ml")).isEqualTo(1)
+    }
+
+    // --- Counting it in ml in one tap (public issue #5) -----------------------------------------
+
+    @Test
+    fun `a food made on the spot offers counting it in ml while its per one boxes are empty`() {
+        val empty = draw(MealBuilderUiState(meal = salad(), making = MakingFood()))
+        assertThat(empty).contains(COUNT_IN_ML)
+        assertThat(empty).contains(UNIT_LABEL)
+
+        val bar = draw(
+            MealBuilderUiState(meal = salad(), making = MakingFood(form = FoodForm(name = "Oat bar", unitName = "bar"))),
+        )
+        assertThat(bar).contains(COUNT_IN_ML)
+    }
+
+    @Test
+    fun `pressing it on the spot names ml and the group becomes per 100 ml`() {
+        render.texts {
+            var form by remember { mutableStateOf(FoodForm(name = "Oat drink", kcalPer100g = "57")) }
+            drawing(MealBuilderUiState(meal = salad(), making = MakingFood(form = form)), onSetNewFood = { form = it })
+        }
+
+        render.click(COUNT_IN_ML)
+        val after = render.textsAgain()
+
+        assertThat(after).contains("What 100 ml of it are worth")
+        assertThat(render.fieldTexts()).containsAtLeast("Oat drink", "57", "ml").inOrder()
+        assertThat(after).doesNotContain(COUNT_IN_ML)
+    }
+
+    @Test
+    fun `a food made on the spot already in ml is not offered it`() {
+        val texts = draw(
+            MealBuilderUiState(meal = salad(), making = MakingFood(form = FoodForm(name = "Oat drink", unitName = "ml"))),
+        )
+
+        assertThat(texts).doesNotContain(COUNT_IN_ML)
+    }
+
+    /** A figure typed per bar would silently become per 100 ml, so the switch stands aside. */
+    @Test
+    fun `a food made on the spot with a per one figure typed is not offered it`() {
+        val texts = draw(
+            MealBuilderUiState(
+                meal = salad(),
+                making = MakingFood(form = FoodForm(name = "Oat bar", unitName = "bar", kcalPerUnit = "190")),
+            ),
+        )
+
+        assertThat(texts).doesNotContain(COUNT_IN_ML)
+        assertThat(texts).contains(UNIT_LABEL)
     }
 
     @Test
@@ -863,7 +919,7 @@ class MealBuilderScreenRenderTest {
     private var changedFood: Long? = null
 
     @androidx.compose.runtime.Composable
-    private fun drawing(state: MealBuilderUiState) {
+    private fun drawing(state: MealBuilderUiState, onSetNewFood: (FoodForm) -> Unit = {}) {
         MealBuilderScreen(
             state = state,
             onSetName = {},
@@ -884,7 +940,7 @@ class MealBuilderScreenRenderTest {
             onChangePart = { changedPart = it },
             onChangeFood = { changedFood = it },
             onBeginCreatingFood = {},
-            onSetNewFood = {},
+            onSetNewFood = onSetNewFood,
             onCreateFood = {},
             onCancelCreatingFood = {},
             newFoodReview = ReviewActions.NONE,
@@ -895,6 +951,12 @@ class MealBuilderScreenRenderTest {
     }
 
     private companion object {
+
+        /** `R.string.foods_count_in_ml`. */
+        const val COUNT_IN_ML = "Count it in ml"
+
+        /** `R.string.foods_field_unit`, shared with My foods' editor. */
+        const val UNIT_LABEL = "One what? A slice, an egg, or ml"
 
         /**
          * Shared by the two food forms: this one and My foods' editor. The packet-label form has its

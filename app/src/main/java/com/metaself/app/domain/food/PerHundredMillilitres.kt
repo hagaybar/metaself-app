@@ -25,6 +25,9 @@ object PerHundredMillilitres {
     /** What the per-one group is "per" for a food counted in millilitres. */
     const val PER = "100 ml"
 
+    /** The spelling the form's one-tap switch writes into the unit box (public issue #5). */
+    const val UNIT = "ml"
+
     /** Past a double's noise and short of any figure a label or a person states. */
     private const val SHOWN_DIGITS = 15
 

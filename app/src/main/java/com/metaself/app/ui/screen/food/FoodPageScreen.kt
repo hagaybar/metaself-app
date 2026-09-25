@@ -22,6 +22,7 @@ import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodUse
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AskBeforeDeleting
+import com.metaself.app.ui.food.CountInMillilitres
 import com.metaself.app.ui.food.FactHeading
 import com.metaself.app.ui.food.Field
 import com.metaself.app.ui.food.figureSaid
@@ -210,6 +211,8 @@ private fun Page(
                     ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
             )
             Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), editing.errorFor(FoodField.UNIT_NAME))
+            // One tap to ml, offered only while no per-one figure would change meaning (#5).
+            CountInMillilitres(form, onSetForm)
             FourFigures(
                 group = FactGroup.PER_UNIT,
                 unitName = form.unitName,
