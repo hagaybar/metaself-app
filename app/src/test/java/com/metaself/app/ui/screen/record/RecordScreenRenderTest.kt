@@ -157,6 +157,33 @@ class RecordScreenRenderTest {
     }
 
     /** VACUOUS ON THE DAY once the rows went: the day draws no badge for anything. */
+    /**
+     * D7a as amended by D58 (§12.9): the list still prints no source, but a model's estimated amount
+     * reads as one — ≈ on the screen, "about" to a screen reader.
+     */
+    @Test
+    fun `an estimated amount is drawn with about, and spoken as about`() {
+        val quinoa = anItem(
+            name = "Quinoa", portion = "70 g", portionAmount = 70.0, portionUnit = "g",
+            kcal = 84, proteinG = 3, carbsG = 15, fatG = 1,
+            source = Source.AI_ESTIMATE, confidence = Confidence.MEDIUM,
+        )
+
+        val texts = record(listOf(aMeal(items = listOf(quinoa))))
+
+        assertThat(texts).contains("84 kcal · P 3 · C 15 · F 1 · ≈70 g")
+        assertThat(texts).contains("84 kcal · P 3 · C 15 · F 1 · about 70 g")
+    }
+
+    @Test
+    fun `an amount he typed carries no mark`() {
+        val typed = anItem(name = "Quinoa", portion = "70 g", portionAmount = 70.0, portionUnit = "g", kcal = 84)
+
+        val texts = record(listOf(aMeal(items = listOf(typed))))
+
+        assertThat(texts.any { it.contains("≈") || it.contains("about 70") }).isFalse()
+    }
+
     @Test
     fun `a typed item wears no badge`() {
         val texts = record(listOf(aMeal(items = listOf(anItem(source = Source.TYPED)))))

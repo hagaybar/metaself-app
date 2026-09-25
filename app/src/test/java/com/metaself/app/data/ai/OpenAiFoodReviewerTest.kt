@@ -136,11 +136,18 @@ class OpenAiFoodReviewerTest {
     }
 
     @Test
-    fun `a dropped connection is unreachable, and not counted`() = runTest {
+    fun `a server that cannot be reached is unreachable, and not counted`() = runTest {
         val settings = FakeSettings()
-        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        val nowhere = server.url("/v1/chat/completions").toString()
+        server.shutdown()
 
-        val result = reviewer(settings = settings).review(REQUEST)
+        val result = OpenAiFoodReviewer(
+            keys = FakeKeys("a-key"),
+            settings = settings,
+            client = OkHttpClient(),
+            profiles = FakeRequestProfileStore(),
+            baseUrl = nowhere,
+        ).review(REQUEST)
 
         assertThat(result).isEqualTo(ReviewResult.Failed(EstimateResult.Unreachable()))
         assertThat(settings.calls).isEqualTo(0)

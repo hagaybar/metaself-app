@@ -10,10 +10,12 @@ import kotlinx.serialization.json.putJsonObject
 /**
  * What leaves the phone.
  *
- * The only place in this app that sends anything anywhere, which is why it is a pure function with
- * its own tests. Decision D16 promises that exactly the meal description leaves and nothing else —
- * not the owner's body, his numbers, his history or the date — and a promise that is not tested is
- * a hope. `NOTHING about the owner is sent` is that test.
+ * One of the few places in this app that say what is sent — with [ConversationPrompt] for a meal
+ * worked out in conversation (D58) and [ReviewPrompt] for a food's review — which is why each is a
+ * pure function with its own tests. Decision D16 promises that exactly the meal description leaves
+ * (and, since D58, his answers to the app's questions about it) and nothing else — not the owner's
+ * body, his numbers, his history or the date — and a promise that is not tested is a hope.
+ * `NOTHING about the owner is sent` is that test.
  *
  * The reply is pinned with a schema rather than asked for politely. Both models tried while this
  * was designed answered in ranges, volunteered fields nobody had asked for, and one gave a total
@@ -40,7 +42,8 @@ object EstimatePrompt {
      */
     const val DEFAULT_MODEL = "gpt-4o-mini"
 
-    private val INSTRUCTIONS = """
+    /** The everyday estimate's rules; a conversation's first request carries them too (D58 §3.1). */
+    internal val INSTRUCTIONS = """
         You estimate the nutrition of a meal from a short description.
 
         Rules:
@@ -121,6 +124,36 @@ object EstimatePrompt {
         return ChatRequest.body(model, profile, messages, schemaName = "meal_estimate", schema = SCHEMA)
     }
 
+    /** One item of an answer; a conversation's answers use it exactly (D58 §4). */
+    internal val ITEM_SCHEMA: JsonObject = buildJsonObject {
+        put("type", "object")
+        put("additionalProperties", false)
+        putJsonArray("required") {
+            add("name"); add("detail"); add("amount"); add("unit"); add("figures_per")
+            add("kcal"); add("protein_g"); add("carbs_g"); add("fat_g")
+            add("confidence")
+        }
+        putJsonObject("properties") {
+            putJsonObject("name") { put("type", "string") }
+            putJsonObject("detail") { put("type", "string") }
+            putJsonObject("amount") { put("type", "number") }
+            putJsonObject("unit") { put("type", "string") }
+            putJsonObject("figures_per") {
+                put("type", "string")
+                putJsonArray("enum") { add("100"); add("1") }
+            }
+            // Numbers, not integers: a worth keeps its decimals (D53 §1).
+            putJsonObject("kcal") { put("type", "number") }
+            putJsonObject("protein_g") { put("type", "number") }
+            putJsonObject("carbs_g") { put("type", "number") }
+            putJsonObject("fat_g") { put("type", "number") }
+            putJsonObject("confidence") {
+                put("type", "string")
+                putJsonArray("enum") { add("LOW"); add("MEDIUM"); add("HIGH") }
+            }
+        }
+    }
+
     private val SCHEMA: JsonObject = buildJsonObject {
         put("type", "object")
         put("additionalProperties", false)
@@ -129,34 +162,7 @@ object EstimatePrompt {
             putJsonObject("note") { put("type", "string") }
             putJsonObject("items") {
                 put("type", "array")
-                putJsonObject("items") {
-                    put("type", "object")
-                    put("additionalProperties", false)
-                    putJsonArray("required") {
-                        add("name"); add("detail"); add("amount"); add("unit"); add("figures_per")
-                        add("kcal"); add("protein_g"); add("carbs_g"); add("fat_g")
-                        add("confidence")
-                    }
-                    putJsonObject("properties") {
-                        putJsonObject("name") { put("type", "string") }
-                        putJsonObject("detail") { put("type", "string") }
-                        putJsonObject("amount") { put("type", "number") }
-                        putJsonObject("unit") { put("type", "string") }
-                        putJsonObject("figures_per") {
-                            put("type", "string")
-                            putJsonArray("enum") { add("100"); add("1") }
-                        }
-                        // Numbers, not integers: a worth keeps its decimals (D53 §1).
-                        putJsonObject("kcal") { put("type", "number") }
-                        putJsonObject("protein_g") { put("type", "number") }
-                        putJsonObject("carbs_g") { put("type", "number") }
-                        putJsonObject("fat_g") { put("type", "number") }
-                        putJsonObject("confidence") {
-                            put("type", "string")
-                            putJsonArray("enum") { add("LOW"); add("MEDIUM"); add("HIGH") }
-                        }
-                    }
-                }
+                put("items", ITEM_SCHEMA)
             }
         }
     }

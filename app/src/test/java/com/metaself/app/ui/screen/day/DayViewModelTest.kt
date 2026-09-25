@@ -142,6 +142,31 @@ class DayViewModelTest {
         assertThat(meals.logged.map { it.loggedAtMillis }).containsExactly(moment, moment, moment, moment)
     }
 
+    /** D58 §12.8: from My meals nothing says which day, so logging goes on today. */
+    @Test
+    fun `a meal logged on today goes on today, whatever day was being looked at`() = runTest {
+        val meals = FakeMealRepository()
+        val viewModel = viewModel(mealRepository = meals)
+        viewModel.showDay(TEST_EPOCH_DAY - 3)
+
+        viewModel.logMeal(listOf(ToLog(anItem(name = "Described"))), onToday = true)
+        advanceUntilIdle()
+
+        assertThat(meals.logged.single().epochDay).isEqualTo(TEST_EPOCH_DAY)
+    }
+
+    @Test
+    fun `a meal logged from Add something goes on the day being looked at`() = runTest {
+        val meals = FakeMealRepository()
+        val viewModel = viewModel(mealRepository = meals)
+        viewModel.showDay(TEST_EPOCH_DAY - 3)
+
+        viewModel.logMeal(listOf(ToLog(anItem(name = "Described"))))
+        advanceUntilIdle()
+
+        assertThat(meals.logged.single().epochDay).isEqualTo(TEST_EPOCH_DAY - 3)
+    }
+
     @Test
     fun `deleting an item asks the store to delete it`() = runTest {
         val meals = FakeMealRepository()

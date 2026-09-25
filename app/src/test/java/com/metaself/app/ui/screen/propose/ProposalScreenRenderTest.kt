@@ -91,7 +91,7 @@ class ProposalScreenRenderTest {
         val texts = draw(state)
 
         assertThat(texts).contains("Say how much Beef burger was to save this.")
-        assertThat(render.isEnabled("Save this meal")).isFalse()
+        assertThat(render.isEnabled(LOG_IT)).isFalse()
     }
 
     /** The model's 6000 g arrives in the box, refused as if he had typed it (D53 §2, D42). */
@@ -100,7 +100,7 @@ class ProposalScreenRenderTest {
         val texts = draw(proposed(aProposedItem(amount = 6000.0)))
 
         assertThat(texts).contains("At most 5000 g at a time.")
-        assertThat(render.isEnabled("Save this meal")).isFalse()
+        assertThat(render.isEnabled(LOG_IT)).isFalse()
     }
 
     /** Millilitres are not grams: the ceiling is said in ml, never as "g" (D56). */
@@ -284,7 +284,7 @@ class ProposalScreenRenderTest {
         assertThat(texts).contains(
             "All four per 100 g (at most 1000 kcal, and 110 g of protein, carbohydrate or fat).",
         )
-        assertThat(render.isEnabled("Save this meal")).isFalse()
+        assertThat(render.isEnabled(LOG_IT)).isFalse()
     }
 
     // --- His own foods (D53 §4, §5) --------------------------------------------------------------
@@ -405,7 +405,7 @@ class ProposalScreenRenderTest {
 
         assertThat(texts).contains(KEEP_AS_MEAL)
         // The offer is an addition: accepting plainly is still the first thing on the screen.
-        assertThat(texts).contains("Save this meal")
+        assertThat(texts).contains(LOG_IT)
     }
 
     /** A meal of one is a food already, and this app has a way of keeping one of those. */
@@ -413,8 +413,93 @@ class ProposalScreenRenderTest {
     fun `a one-item answer does not offer it`() {
         val texts = draw(proposed(aProposedItem(name = "Espresso", amount = 1.0, unit = "cup")))
 
-        assertThat(texts).contains("Save this meal")
+        assertThat(texts).contains(LOG_IT)
         assertThat(texts).doesNotContain(KEEP_AS_MEAL)
+        assertThat(texts).doesNotContain(KEEP_ONLY)
+        assertThat(texts).contains("One item is a food, not a meal — logging it keeps it in your foods.")
+    }
+
+    /** D58 §5.2: the three end choices, in one order, both ways in. */
+    @Test
+    fun `a two-item answer offers log it, keep as a meal, and both, in that order`() {
+        listOf(false, true).forEach { fromMyMeals ->
+            val texts = draw(
+                proposed(
+                    aProposedItem(name = "Milk", amount = 120.0, unit = "ml"),
+                    aProposedItem(name = "Espresso", amount = 1.0, unit = "cup"),
+                ),
+                fromMyMeals = fromMyMeals,
+            )
+
+            assertThat(texts).containsAtLeast(LOG_IT, KEEP_ONLY, KEEP_AS_MEAL).inOrder()
+        }
+    }
+
+    @Test
+    fun `keep as a meal opens its own sheet, and logs nothing`() {
+        var opened = 0
+        var saved = 0
+        render.texts {
+            ProposalScreen(
+                state = proposed(
+                    aProposedItem(name = "Milk", amount = 120.0, unit = "ml"),
+                    aProposedItem(name = "Espresso", amount = 1.0, unit = "cup"),
+                ),
+                description = "",
+                onDescribe = {},
+                onSetAmount = { _, _ -> },
+                onStep = { _, _ -> },
+                onOpenWorth = {},
+                onSetWorthBox = { _, _, _ -> },
+                onCloseWorth = {},
+                onUseYourFood = {},
+                onUseEstimate = {},
+                onCountInFoodUnit = {},
+                onRemove = {},
+                onTellItMore = {},
+                conversation = NO_CONVERSATION,
+                fromMyMeals = true,
+                keepOnly = NO_KEEP_ONLY.copy(onOpen = { opened++ }),
+                onSave = { saved++ },
+                onTypeItMyself = {},
+                onAddKey = {},
+                onCancel = {},
+                onKeepAsMeal = {},
+                onNameMeal = {},
+                onGiveUpNaming = {},
+                onKeepingDone = {},
+                chosenRows = emptyList(),
+                isToday = true,
+                refusal = null,
+            )
+        }
+
+        render.click(KEEP_ONLY)
+
+        assertThat(opened).isEqualTo(1)
+        assertThat(saved).isEqualTo(0)
+    }
+
+    /** The sheet's words for a meal kept without logging: where the rows go, and that none is logged. */
+    @Test
+    fun `the keep sheet says it keeps the meal and logs nothing, and offers log it instead on a refusal`() {
+        val texts = render.texts {
+            com.metaself.app.ui.screen.day.MealNameSheet(
+                items = emptyList(),
+                isToday = true,
+                name = "Counter lunch",
+                refusal = "Bread roll is in roll, and your Bread roll is counted in slice.",
+                onNameChange = {},
+                onConfirm = {},
+                onCancel = {},
+                keepOnly = true,
+                onLogInstead = {},
+            )
+        }
+
+        assertThat(texts).contains("“Counter lunch” will be kept in My meals. Nothing is logged.")
+        assertThat(texts).contains("Log it instead")
+        assertThat(texts.none { it.startsWith("Today will show") }).isTrue()
     }
 
     /**
@@ -430,7 +515,7 @@ class ProposalScreenRenderTest {
         val texts = draw(ProposalUiState.Describing())
 
         assertThat(texts).doesNotContain(KEEP_AS_MEAL)
-        assertThat(texts).doesNotContain("Save this meal")
+        assertThat(texts).doesNotContain(LOG_IT)
     }
 
     /** Asking that threw is said where any other failure to answer is. */
@@ -472,6 +557,9 @@ class ProposalScreenRenderTest {
                 onCountInFoodUnit = {},
                 onRemove = {},
                 onTellItMore = {},
+            conversation = NO_CONVERSATION,
+            fromMyMeals = false,
+            keepOnly = NO_KEEP_ONLY,
                 onSave = {},
                 onTypeItMyself = {},
                 onAddKey = {},
@@ -512,7 +600,7 @@ class ProposalScreenRenderTest {
         render.textsAgain()
 
         assertThat(render.isEnabled(KEEP_AS_MEAL)).isFalse()
-        assertThat(render.isEnabled("Save this meal")).isFalse()
+        assertThat(render.isEnabled(LOG_IT)).isFalse()
     }
 
     private val typed = Provenance(Source.TYPED, null, setAtMillis = 0)
@@ -536,7 +624,7 @@ class ProposalScreenRenderTest {
         note = null,
     )
 
-    private fun draw(state: ProposalUiState): List<String> = render.texts {
+    private fun draw(state: ProposalUiState, fromMyMeals: Boolean = false): List<String> = render.texts {
         ProposalScreen(
             state = state,
             description = "",
@@ -551,6 +639,9 @@ class ProposalScreenRenderTest {
             onCountInFoodUnit = {},
             onRemove = {},
             onTellItMore = {},
+            conversation = NO_CONVERSATION,
+            fromMyMeals = fromMyMeals,
+            keepOnly = NO_KEEP_ONLY,
             onSave = {},
             onTypeItMyself = {},
             onAddKey = {},
@@ -572,7 +663,11 @@ class ProposalScreenRenderTest {
 
     private companion object {
         /** `R.string.propose_keep_as_meal`, as the phone draws it. */
-        const val KEEP_AS_MEAL = "Save, and keep these as a meal"
+        const val KEEP_AS_MEAL = "Log it and keep as a meal"
+
+        /** `R.string.propose_save` and `propose_keep_only`, as the phone draws them (D58 §5.2). */
+        const val LOG_IT = "Log it"
+        const val KEEP_ONLY = "Keep as a meal"
 
         /** `R.string.propose_count_fewer` and `propose_count_more`, as the phone draws them. */
         const val MINUS = "−"

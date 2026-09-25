@@ -4,7 +4,12 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -123,14 +128,66 @@ class OpenAiCallTest {
     }
 
     @Test
-    fun `a call that never left is unreachable and not counted`() = runTest {
+    fun `a call that never connected is unreachable and not counted`() = runTest {
         val settings = FakeSettings()
-        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        val nowhere = server.url("/v1/chat/completions").toString()
+        server.shutdown()
 
-        val outcome = call(settings = settings).send { _, _ -> "{}" }
+        val outcome = OpenAiCall(
+            keys = FakeKeys("a-key"),
+            settings = settings,
+            client = OkHttpClient(),
+            profiles = FakeRequestProfileStore(),
+            baseUrl = nowhere,
+        ).send { _, _ -> "{}" }
 
         assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
         assertThat(settings.calls).isEqualTo(0)
+    }
+
+    @Test
+    fun `a dropped connection is unreachable`() = runTest {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+
+        val outcome = call().send { _, _ -> "{}" }
+
+        assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
+    }
+
+    /**
+     * Sent, and no answer in time: it may have been answered and billed on the provider's side, and
+     * a timeout that counted nothing would let a loop run past the ceiling.
+     */
+    @Test
+    fun `a request sent and never answered in time is unreachable, and counted`() = runTest {
+        val settings = FakeSettings()
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+        val impatient = OkHttpClient.Builder()
+            .readTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+
+        val outcome = call(settings = settings, client = impatient).send { _, _ -> "{}" }
+
+        assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
+        assertThat(settings.calls).isEqualTo(1)
+    }
+
+    /**
+     * He stepped back, or left, while the model was answering: the request was sent and billed, so
+     * it counts, although nobody is waiting for the answer any more.
+     */
+    @Test
+    fun `a request whose caller has gone is still counted`() = runTest {
+        val settings = FakeSettings()
+        server.enqueue(MockResponse().setBody("{}").setHeadersDelay(500, TimeUnit.MILLISECONDS))
+
+        val job = launch(Dispatchers.Default) { call(settings = settings).send { _, _ -> "{}" } }
+        assertThat(server.takeRequest(5, TimeUnit.SECONDS)).isNotNull()
+        job.cancel()
+        job.join()
+
+        assertThat(settings.calls).isEqualTo(1)
     }
 
     /** D8: nothing may escape the seam, including an exception that is not about the network. */
@@ -182,6 +239,8 @@ class OpenAiCallTest {
         override suspend fun setModel(model: String) = Unit
         override suspend fun setDailyCeiling(ceiling: Int) = Unit
         override suspend fun recordCall() {
+            // As the settings store's own edit is: cancellable.
+            currentCoroutineContext().ensureActive()
             calls++
             state.value = state.value.copy(usedToday = state.value.usedToday + 1)
         }

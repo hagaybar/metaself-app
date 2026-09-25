@@ -10,6 +10,9 @@ import com.metaself.app.data.food.FoodDao
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.RoomFoodRepository
 import com.metaself.app.data.food.RoomSavedMealRepository
+import com.metaself.app.data.food.RoomMealKeeper
+import com.metaself.app.data.food.MealKeeper
+import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
@@ -166,6 +169,16 @@ object DataModule {
         foods: FoodDao,
         now: Now,
     ): SavedMealRepository = RoomSavedMealRepository(database, dao, foods, now)
+
+    /** *Keep as a meal* without logging (D58 §5.2): foods, meal and parts in one transaction. */
+    @Provides
+    @Singleton
+    fun provideMealKeeper(
+        database: MetaSelfDatabase,
+        loggedFoods: LoggedFoods,
+        foods: FoodRepository,
+        savedMeals: SavedMealRepository,
+    ): MealKeeper = RoomMealKeeper(database, loggedFoods, foods, savedMeals)
 
     /**
      * The one door through which a food comes into existence.

@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.manager
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -18,12 +19,25 @@ import kotlinx.coroutines.flow.asStateFlow
  * reconsider the shape rather than to add a third thing they both talk to.
  */
 @HiltViewModel
-class ManagerViewModel @Inject constructor() : ViewModel() {
+class ManagerViewModel @Inject constructor(
+    savedState: SavedStateHandle,
+) : ViewModel() {
 
-    private val _tab = MutableStateFlow(ManagerTab.FOODS)
+    /** Opened on the meals list when the route asks, as after keeping a described meal (D58 §5.3). */
+    private val _tab = MutableStateFlow(
+        if (savedState.get<String>(TAB) == MEALS) ManagerTab.MEALS else ManagerTab.FOODS,
+    )
     val tab: StateFlow<ManagerTab> = _tab.asStateFlow()
 
     fun showTab(tab: ManagerTab) {
         _tab.value = tab
+    }
+
+    companion object {
+        /** The route argument naming the list in front. */
+        const val TAB = "tab"
+
+        /** Its value for the meals list. */
+        const val MEALS = "meals"
     }
 }

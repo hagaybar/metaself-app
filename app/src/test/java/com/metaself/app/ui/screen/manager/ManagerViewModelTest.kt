@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.manager
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import org.junit.jupiter.api.Test
 
@@ -16,12 +17,20 @@ class ManagerViewModelTest {
 
     @Test
     fun `it opens on the foods list`() {
-        assertThat(ManagerViewModel().tab.value).isEqualTo(ManagerTab.FOODS)
+        assertThat(ManagerViewModel(SavedStateHandle()).tab.value).isEqualTo(ManagerTab.FOODS)
+    }
+
+    /** After keeping a described meal, he lands on the meals list (D58 §5.3). */
+    @Test
+    fun `asked by the route, it opens on the meals list`() {
+        val model = ManagerViewModel(SavedStateHandle(mapOf(ManagerViewModel.TAB to ManagerViewModel.MEALS)))
+
+        assertThat(model.tab.value).isEqualTo(ManagerTab.MEALS)
     }
 
     @Test
     fun `the other list is one tap away`() {
-        val model = ManagerViewModel()
+        val model = ManagerViewModel(SavedStateHandle())
         model.showTab(ManagerTab.MEALS)
         assertThat(model.tab.value).isEqualTo(ManagerTab.MEALS)
     }

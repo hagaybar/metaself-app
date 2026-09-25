@@ -50,6 +50,7 @@ fun ManagerScreen(
     onBuildMeal: () -> Unit,
     onEditMeal: (Long) -> Unit,
     onDismissMealsFailure: () -> Unit,
+    onDescribeMeal: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -105,6 +106,7 @@ fun ManagerScreen(
                 onBuildMeal = onBuildMeal,
                 onEditMeal = onEditMeal,
                 onDismissFailure = onDismissMealsFailure,
+                onDescribeMeal = onDescribeMeal,
             )
         }
     }

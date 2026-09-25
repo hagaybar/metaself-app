@@ -863,6 +863,9 @@ internal fun MealNamingSheet(
     onNameChange: (String) -> Unit,
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
+    keepOnly: Boolean = false,
+    onLogInstead: (() -> Unit)? = null,
+    busy: Boolean = false,
 ) {
     ModalBottomSheet(
         onDismissRequest = onCancel,
@@ -876,6 +879,9 @@ internal fun MealNamingSheet(
             onNameChange = onNameChange,
             onConfirm = onConfirm,
             onCancel = onCancel,
+            keepOnly = keepOnly,
+            onLogInstead = onLogInstead,
+            busy = busy,
         )
     }
 }
@@ -914,6 +920,12 @@ internal fun MealNameSheet(
     onConfirm: () -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    // D58 §5.2: naming a described meal to keep in My meals, logging nothing. The rows are not on
+    // any day, so the sentence says where they go instead, and a refusal about parts offers
+    // [onLogInstead] beside it.
+    keepOnly: Boolean = false,
+    onLogInstead: (() -> Unit)? = null,
+    busy: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -940,9 +952,18 @@ internal fun MealNameSheet(
                     text = DayTotalsWording.itemName(item),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                val words = portionWords(item)
                 Text(
-                    text = DayTotalsWording.itemNumbers(item, portionWords(item)),
+                    text = DayTotalsWording.itemNumbers(item, words),
                     style = MaterialTheme.typography.labelSmall,
+                    // "≈" is read as a symbol's name, or not at all: said as "about" (D58 §12.9).
+                    modifier = if (DayTotalsWording.amountEstimated(item, words)) {
+                        Modifier.semantics {
+                            contentDescription = DayTotalsWording.itemNumbersSpoken(item, words)
+                        }
+                    } else {
+                        Modifier
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -959,6 +980,8 @@ internal fun MealNameSheet(
         val typed = name.trim()
         Text(
             text = when {
+                keepOnly && typed.isEmpty() -> stringResource(R.string.propose_keep_only_will_unnamed)
+                keepOnly -> stringResource(R.string.propose_keep_only_will, typed)
                 typed.isEmpty() && isToday -> stringResource(R.string.day_meal_will_group_unnamed)
                 typed.isEmpty() -> stringResource(R.string.day_meal_will_group_unnamed_past)
                 isToday -> stringResource(R.string.day_meal_will_group, typed)
@@ -976,6 +999,11 @@ internal fun MealNameSheet(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
             )
+            onLogInstead?.let { logInstead ->
+                OutlinedButton(onClick = logInstead, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.propose_log_instead))
+                }
+            }
         }
 
         Row(
@@ -986,7 +1014,7 @@ internal fun MealNameSheet(
             TextButton(onClick = onCancel) {
                 Text(stringResource(R.string.day_meal_name_cancel))
             }
-            Button(onClick = onConfirm, enabled = name.isNotBlank()) {
+            Button(onClick = onConfirm, enabled = name.isNotBlank() && !busy) {
                 Text(stringResource(R.string.day_meal_name_confirm))
             }
         }
@@ -1460,9 +1488,18 @@ private fun LoggedItem(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
+                val words = portionWords(item)
                 Text(
-                    text = DayTotalsWording.itemNumbers(item, portionWords(item)),
+                    text = DayTotalsWording.itemNumbers(item, words),
                     style = MaterialTheme.typography.bodySmall,
+                    // "≈" is read as a symbol's name, or not at all: said as "about" (D58 §12.9).
+                    modifier = if (DayTotalsWording.amountEstimated(item, words)) {
+                        Modifier.semantics {
+                            contentDescription = DayTotalsWording.itemNumbersSpoken(item, words)
+                        }
+                    } else {
+                        Modifier
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

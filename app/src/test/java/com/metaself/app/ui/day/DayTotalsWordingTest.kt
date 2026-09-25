@@ -295,6 +295,40 @@ class DayTotalsWordingTest {
             .isEqualTo("600 kcal · P 40 · C 50 · F 25")
     }
 
+    /** D7a as amended by D58: a model's estimate reads as one on the day, before its amount. */
+    @Test
+    fun `an estimated row's amount is marked as about`() {
+        val item = anItem(
+            name = "Quinoa", portion = "70 g", portionAmount = 70.0, portionUnit = "g", kcal = 84,
+            proteinG = 3, carbsG = 15, fatG = 1, source = Source.AI_ESTIMATE, confidence = Confidence.MEDIUM,
+        )
+
+        assertThat(DayTotalsWording.itemNumbers(item, item.portion)).isEqualTo("84 kcal · P 3 · C 15 · F 1 · ≈70 g")
+        assertThat(DayTotalsWording.itemNumbersSpoken(item, item.portion))
+            .isEqualTo("84 kcal · P 3 · C 15 · F 1 · about 70 g")
+    }
+
+    /** Typed, scanned, or repeated from his own foods: the amount is his, and carries no mark. */
+    @Test
+    fun `a row that is not a model's estimate carries no mark`() {
+        listOf(Source.TYPED, Source.LABEL, Source.REPEATED).forEach { source ->
+            val item = anItem(portion = "70 g", portionAmount = 70.0, portionUnit = "g", source = source)
+
+            assertThat(DayTotalsWording.itemNumbers(item, item.portion)).endsWith("· 70 g")
+            assertThat(DayTotalsWording.itemNumbersSpoken(item, item.portion)).endsWith("· 70 g")
+        }
+    }
+
+    /** The mark is for an amount; words that do not start with one are left as written. */
+    @Test
+    fun `an estimate with no amount in its words, or no words, carries no mark`() {
+        val worded = anItem(portion = "large", source = Source.AI_ESTIMATE, confidence = Confidence.LOW)
+        val bare = anItem(source = Source.AI_ESTIMATE, confidence = Confidence.LOW)
+
+        assertThat(DayTotalsWording.itemNumbers(worded, worded.portion)).endsWith("· large")
+        assertThat(DayTotalsWording.itemNumbers(bare, null)).doesNotContain("≈")
+    }
+
     /**
      * The reason the name is separate at all. A Hebrew name and a Latin figure in one string are two
      * runs of opposite direction, and the bidirectional algorithm is entitled to reorder them:

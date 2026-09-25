@@ -93,6 +93,52 @@ class DataStoreRequestProfileStoreTest {
         assertThat(profiles.profileFor("gpt-4o").first()).isEqualTo(RequestProfile.DETERMINISTIC)
     }
 
+    @Test
+    fun `a name with no deep level has none`(@TempDir dir: File) = runTest {
+        val store = DataStoreRequestProfileStore(dataStore(dir))
+        store.remember("gpt-6-luna", learned)
+
+        assertThat(store.deepFor("gpt-6-luna").first()).isNull()
+    }
+
+    /** D58 §12.5: an everyday write keeps the deep level, in the same edit. */
+    @Test
+    fun `an everyday write keeps the deep level, and a deep write keeps the everyday profile`(
+        @TempDir dir: File,
+    ) = runTest {
+        val store = DataStoreRequestProfileStore(dataStore(dir))
+
+        store.remember("gpt-6-luna", learned)
+        store.rememberDeep("gpt-6-luna", "medium")
+        assertThat(store.profileFor("gpt-6-luna").first()).isEqualTo(learned)
+
+        store.remember("gpt-6-luna", RequestProfile.REASONING)
+        assertThat(store.deepFor("gpt-6-luna").first()).isEqualTo(DeepLevel("medium"))
+        assertThat(store.profileFor("gpt-6-luna").first()).isEqualTo(RequestProfile.REASONING)
+    }
+
+    @Test
+    fun `a deep level for a name with no entry makes a valid entry from the first guess`(
+        @TempDir dir: File,
+    ) = runTest {
+        val store = DataStoreRequestProfileStore(dataStore(dir))
+
+        store.rememberDeep("gpt-6-luna", "high")
+
+        assertThat(store.profileFor("gpt-6-luna").first()).isEqualTo(RequestProfile.guess("gpt-6-luna"))
+        assertThat(store.deepFor("gpt-6-luna").first()).isEqualTo(DeepLevel("high"))
+    }
+
+    /** Explicitly none: a final analysis that worked only with no effort sent (D58 §12.5). */
+    @Test
+    fun `a deep level of none is kept as none, not as nothing known`(@TempDir dir: File) = runTest {
+        val store = DataStoreRequestProfileStore(dataStore(dir))
+
+        store.rememberDeep("gpt-6-luna", null)
+
+        assertThat(store.deepFor("gpt-6-luna").first()).isEqualTo(DeepLevel(null))
+    }
+
     private fun dataStore(dir: File): DataStore<Preferences> =
         PreferenceDataStoreFactory.create { File(dir, "ai.preferences_pb") }
 }

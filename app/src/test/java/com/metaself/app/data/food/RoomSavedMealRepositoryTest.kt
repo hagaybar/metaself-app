@@ -7,6 +7,12 @@ import com.metaself.app.data.assumeSqliteRuntime
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.day.Confidence
+import com.metaself.app.domain.amount.teaches
+import com.metaself.app.domain.amount.Worth
+import com.metaself.app.domain.amount.Rate
+import com.metaself.app.domain.amount.Per
+import com.metaself.app.domain.amount.ItemToLog
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
@@ -347,5 +353,101 @@ class RoomSavedMealRepositoryTest {
 
         meals.unhide(id)
         assertThat(meals.observeOffered().first()).hasSize(1)
+    }
+
+    // --- Keep as a meal, logging nothing (D58 §5.2, §12.7) ------------------------------------------
+    // Invented meal and figures throughout.
+
+    private fun keeper(foodsFor: FoodRepository = foods) =
+        RoomMealKeeper(database, LoggedFoods(foodsFor), foodsFor, meals)
+
+    /** A described row as the proposal hands it over: the model's worth at the model's amount. */
+    private fun described(name: String, amount: String, unit: String, rate: Rate): ToLog {
+        val item = ItemToLog(
+            name = name, detail = "", amountText = amount, unit = unit,
+            worth = Worth.Estimated(rate, Confidence.MEDIUM), foodId = null,
+        )
+        return ToLog(item.toFoodItem()!!, taught = item.teaches())
+    }
+
+    private val pasta = described("Pasta", "350", "g", Rate(Nutrients(220.0, 6.0, 26.0, 10.0), Per.HUNDRED))
+    private val roll = described("Bread roll", "1", "roll", Rate(Nutrients(150.0, 5.0, 28.0, 2.0), Per.ONE))
+
+    @Test
+    fun `kept as a meal, the foods are made and the parts go in, and nothing is logged`() = runTest {
+        val kept = keeper().keep("Counter lunch", listOf(pasta, roll))
+
+        val meal = meals.byId((kept as MealKeeper.Kept.Made).mealId)!!
+        assertThat(meal.name).isEqualTo("Counter lunch")
+        assertThat(meal.components.map { it.food.name }).containsExactly("Pasta", "Bread roll").inOrder()
+        assertThat(meal.components.map { it.amount }).containsExactly(350.0, 1.0).inOrder()
+        val logged = database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM food_items")
+        logged.use { it.moveToFirst(); assertThat(it.getInt(0)).isEqualTo(0) }
+    }
+
+    @Test
+    fun `a name taken leaves no new food behind`() = runTest {
+        meals.create("Counter lunch")
+
+        val kept = keeper().keep("Counter lunch", listOf(pasta, roll))
+
+        assertThat(kept).isEqualTo(MealKeeper.Kept.NameTaken("Counter lunch"))
+        assertThat(foods.observeAll().first()).isEmpty()
+    }
+
+    /** Re-taught and then refused: the food he had goes back to what it held. */
+    @Test
+    fun `a refusal after a food was re-taught puts the food's facts back`() = runTest {
+        val before = PerHundredGrams(Nutrients(200.0, 5.0, 30.0, 6.0), Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 1_000))
+        val his = foods.findOrCreate("Pasta", facts = FoodFacts(per100g = before)).food
+        // Taught when kept with nothing in the way — so the refusal below has something to undo.
+        keeper().keep("First lunch", listOf(pasta))
+        assertThat(foods.byId(his.id)!!.facts.per100g!!.nutrients.kcal).isEqualTo(220.0)
+        val taughtAgain = described("Pasta", "300", "g", Rate(Nutrients(240.0, 6.0, 28.0, 12.0), Per.HUNDRED))
+
+        val kept = keeper().keep("First lunch", listOf(taughtAgain))
+
+        assertThat(kept).isEqualTo(MealKeeper.Kept.NameTaken("First lunch"))
+        assertThat(foods.byId(his.id)!!.facts.per100g!!.nutrients.kcal).isEqualTo(220.0)
+    }
+
+    @Test
+    fun `a part that cannot join is refused, in words that say nothing was logged, and nothing is kept`() =
+        runTest {
+            foods.findOrCreate(
+                "Bread roll",
+                // His own, counted in slices, typed: a described roll cannot re-teach it (D53 §5).
+                facts = FoodFacts(perUnit = PerUnit("slice", Nutrients(80.0, 3.0, 15.0, 1.0), Provenance(Source.TYPED, null, 1_000))),
+            )
+            val countBefore = foods.observeAll().first().size
+
+            val kept = keeper().keep("Counter lunch", listOf(pasta, roll)) as MealKeeper.Kept.Refused
+
+            assertThat(kept.why.single()).startsWith("Bread roll is in roll")
+            assertThat(kept.why.single()).doesNotContain("logged")
+            assertThat(foods.observeAll().first()).hasSize(countBefore)
+            assertThat(meals.observeOffered().first()).isEmpty()
+        }
+
+    @Test
+    fun `a storage failure while making a food rolls everything back and is let out`() = runTest {
+        val failing = object : FoodRepository by foods {
+            var calls = 0
+            override suspend fun findOrCreate(
+                name: String,
+                brand: String?,
+                facts: FoodFacts,
+                barcode: String?,
+            ): FoundOrCreated {
+                if (++calls == 2) throw android.database.sqlite.SQLiteException("disk full")
+                return foods.findOrCreate(name, brand, facts, barcode)
+            }
+        }
+
+        val thrown = runCatching { keeper(failing).keep("Counter lunch", listOf(pasta, roll)) }
+
+        assertThat(thrown.exceptionOrNull()).isInstanceOf(android.database.sqlite.SQLiteException::class.java)
+        assertThat(foods.observeAll().first()).isEmpty()
+        assertThat(meals.observeOffered().first()).isEmpty()
     }
 }

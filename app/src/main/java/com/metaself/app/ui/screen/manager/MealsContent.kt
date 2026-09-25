@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,6 +38,8 @@ fun MealsContent(
     onBuildMeal: () -> Unit,
     onEditMeal: (Long) -> Unit,
     onDismissFailure: () -> Unit = {},
+    // D58 §1: a meal worked out from a description, to keep here without logging.
+    onDescribeMeal: () -> Unit = {},
 ) {
     state.failed?.let { failed ->
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -62,6 +65,9 @@ fun MealsContent(
             Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.repeat_build_meal))
             }
+            OutlinedButton(onClick = onDescribeMeal, modifier = Modifier.fillMaxWidth()) {
+                Text(stringResource(R.string.propose_describe_meal))
+            }
         }
         return
     }
@@ -78,6 +84,9 @@ fun MealsContent(
 
         Button(onClick = onBuildMeal, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.repeat_build_meal))
+        }
+        OutlinedButton(onClick = onDescribeMeal, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.propose_describe_meal))
         }
     }
 

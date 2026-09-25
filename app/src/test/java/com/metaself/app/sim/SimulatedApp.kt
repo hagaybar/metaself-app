@@ -461,7 +461,7 @@ private fun ManagerHere(
     stack: MutableList<Where>,
     goBack: () -> Unit,
 ) {
-    val managerViewModel = entry.viewModel { ManagerViewModel() }
+    val managerViewModel = entry.viewModel { ManagerViewModel(SavedStateHandle()) }
     val foodsViewModel = entry.viewModel {
         FoodsViewModel(
             world.foods,
@@ -516,6 +516,8 @@ private fun ManagerHere(
         onBuildMeal = { stack.add(Where.BuildingMeal(mealId = 0)) },
         onEditMeal = { mealId -> stack.add(Where.BuildingMeal(mealId = mealId)) },
         onDismissMealsFailure = mealsViewModel::dismissFailure,
+        // The simulation draws no describe screen: describing needs the model, which it never calls.
+        onDescribeMeal = {},
         onBack = goBack,
     )
 }
