@@ -147,34 +147,24 @@ object ReviewPrompt {
         }
     }
 
-    /** The whole request: the instructions, the one food as JSON, and the reply's schema. */
-    fun requestBody(model: String, request: ReviewRequest): String = buildJsonObject {
-        put("model", model)
-        // Temperature 0, or none for a reasoning model that refuses it (ModelParams).
-        ModelParams.of(model).into(this)
-        putJsonArray("messages") {
-            add(
-                buildJsonObject {
-                    put("role", "system")
-                    put("content", instructions(request))
-                },
-            )
-            add(
-                buildJsonObject {
-                    put("role", "user")
-                    put("content", food(request).toString())
-                },
-            )
-        }
-        putJsonObject("response_format") {
-            put("type", "json_schema")
-            putJsonObject("json_schema") {
-                put("name", "food_review")
-                put("strict", true)
-                put("schema", SCHEMA)
-            }
-        }
-    }.toString()
+    /**
+     * The whole request: the instructions, the one food as JSON, and the reply's schema, sent as
+     * [profile] says (D57) — by default the first guess for [model].
+     */
+    fun requestBody(
+        model: String,
+        request: ReviewRequest,
+        profile: RequestProfile = RequestProfile.guess(model),
+    ): String = ChatRequest.body(
+        model = model,
+        profile = profile,
+        messages = listOf(
+            ChatRequest.Message("system", instructions(request)),
+            ChatRequest.Message("user", food(request).toString()),
+        ),
+        schemaName = "food_review",
+        schema = SCHEMA,
+    )
 
     /** The user message, in exactly the spec's shape (§2). */
     private fun food(request: ReviewRequest): JsonObject = buildJsonObject {
