@@ -49,8 +49,9 @@ temperature 0 and no reasoning setting. Both start with the strict schema.
 
 Only an HTTP **400** is read. Its body's `error` object is parsed for `type`, `code`, `param` and
 `message`. **Structured fields decide**; the message is read only where they are silent — to find the
-parameter when `param` is null, and to read a list of accepted values (*"Supported values are:
-'low', 'medium', and 'high'."*).
+parameter when `param` is null (the first known parameter it quotes, else the first it names as a
+bare word, as in *"Unrecognized request argument supplied: reasoning_effort"*), and to read a list
+of accepted values (*"Supported values are: 'low', 'medium', and 'high'."*).
 
 | Refused | Next profile(s), first untried wins |
 |---|---|
@@ -58,7 +59,8 @@ parameter when `param` is null, and to read a list of accepted values (*"Support
 | `reasoning_effort` as a parameter (`unsupported_parameter`, or no value named) | omit it and restore temperature 0; failing that, omit both |
 | `reasoning_effort` value, with a list | the lowest accepted value at or above `low`; if none, the highest below it |
 | `reasoning_effort` value, no list | the next value up from the one sent (`low` → `medium` → `high`) |
-| `response_format` (while strict) | `json_object`, with the schema written into the system message |
+| `response_format` (while strict), when the message says `json_schema` itself is not supported | `json_object`, with the schema written into the system message |
+| `response_format` refused for the app's own schema (*"Invalid schema for response_format …"*, `invalid_json_schema`) | nothing: true of every model, so learning `json_object` from it would be remembered for this one with nothing ever setting it back |
 | anything else — a token limit, a key, a quota, an unknown code | nothing: the refusal is shown exactly as before D57 |
 
 The reply format's fallback loses nothing that matters: every reply is already checked field by field
@@ -67,7 +69,8 @@ malformed answer today.
 
 **Bounds.** At most **three** learning retries follow one call's first request. A profile already
 tried in this call is never sent again. When the bounds, a repeat or an unknown refusal stop the
-learning, the last refusal is shown as it came.
+learning, the last refusal is shown as it came. A retry lost to the network ends as *could not
+reach the model*, as a lost first request always has, and also says the refusal it was answering.
 
 ### 4. Counting against the day's ceiling
 
@@ -79,8 +82,10 @@ really sends keeps it honest.
 
 ### 5. Remembering
 
-- **Only a profile that worked is stored**, on the first success, keyed by the model name exactly as
-  Settings holds it. A stored profile is used as sent on every later call; the guess is not consulted.
+- **Only a profile that worked is stored**: once its answer has been read by the estimate's or the
+  review's own reader — an answer in the wrong shape teaches nothing — keyed by the model name
+  exactly as Settings holds it. A stored profile is used as sent on every later call; the guess is
+  not consulted.
 - All remembered profiles live in one entry of the settings store (a Preferences DataStore, not the
   database — no schema change): a JSON object from model name to profile, for example
   `{"gpt-6-luna":{"temperature":false,"reasoning_effort":"low","format":"strict"}}`. An entry that
@@ -92,15 +97,17 @@ really sends keeps it honest.
 - **Two calls at once for a new model** (a description and a review) may both learn; each writes one
   working profile in a single atomic edit, and the last write stands. Both are working, so either is
   correct.
-- Remembered profiles are not in the backup: they are relearned in at most four requests, and a
-  restore that replaces the settings store drops them like any other setting it replaces.
+- Remembered profiles are not in the backup: they are relearned in at most four requests. A
+  restore writes the backup's model name and ceiling key by key and leaves the remembered profiles
+  where they are, so the restored name uses its own remembered profile if it has one, else the
+  guess. A restore that fails puts the whole settings store back as it was, profiles included.
 
 ### 6. What the owner sees
 
 - **Nothing new, when the model works.** When it would have refused, the answer now comes — a few
   seconds later on its first call, since each learning retry is a request.
-- **Settings → Test it** says, under its usual line, what it now sends for the saved model, in one
-  plain line:
+- **Settings → Test it** says, under its usual line, how the request that got the answer was sent —
+  the profile the answer itself carried back, not a later read of the store — in one plain line:
   - *"gpt-6-luna works as sent."* when the first guess worked;
   - *"gpt-6-luna works: no temperature, medium thinking, strict format."* when something was learned
     (or was learned earlier). The parts read *temperature 0* / *no temperature*; *low thinking* and
