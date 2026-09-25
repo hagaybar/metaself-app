@@ -421,6 +421,33 @@ class FoodPageScreenRenderTest {
         assertThat(texts).doesNotContain(WEIGHT_NEVER_GUESSED)
     }
 
+    /**
+     * A weight typed while the unit was a glass, then the unit changed to ml: Save would store it,
+     * so the box stays in sight with what it holds and why it is not asked (D56, D4). Invented.
+     */
+    @Test
+    fun `a weight typed before the unit became ml stays in sight`() {
+        val glass = hamburgerBun().copy(id = 1, hidden = false)
+        val form = FoodForm.of(glass).copy(unitName = "ml", gramsPerUnit = "250")
+        val texts = draw(FoodPageUiState(food = glass, editing = Editing(foodId = 1, form = form)))
+
+        assertThat(texts).contains("What one of it weighs")
+        assertThat(texts).containsAtLeast("Grams", "250").inOrder()
+        assertThat(texts).contains(WEIGHT_NOT_ASKED_ML)
+    }
+
+    /** A refused weight on a food now in ml: its refusal is drawn, never only in a hidden box. */
+    @Test
+    fun `a refused weight on a food now in ml is said where it can be seen`() {
+        val glass = hamburgerBun().copy(id = 1, hidden = false)
+        val form = FoodForm.of(glass).copy(unitName = "ml", gramsPerUnit = "abc")
+        val texts = draw(
+            FoodPageUiState(food = glass, editing = Editing(foodId = 1, form = form, showErrors = true)),
+        )
+
+        assertThat(texts.any { it.startsWith("What one of it weighs, in grams") }).isTrue()
+    }
+
     private fun opened(food: Food, use: FoodUse? = null): FoodPageUiState {
         val stored = food.copy(id = 1)
         return FoodPageUiState(

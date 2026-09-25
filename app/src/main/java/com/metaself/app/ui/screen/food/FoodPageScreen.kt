@@ -20,7 +20,6 @@ import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodUse
-import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AskBeforeDeleting
 import com.metaself.app.ui.food.FactHeading
@@ -222,10 +221,12 @@ private fun Page(
         }
 
         // What one millilitre weighs is a density, which the app never assumes (D4), so a food counted
-        // in ml is not asked it (D56). One the stored food already holds is not deleted by the app:
-        // the box stays, with its value and why, until he clears it and saves.
-        val millilitres = PerHundredMillilitres.applies(form.unitName)
-        if (!millilitres || food.facts.gramsPerUnit != null) {
+        // in ml is not asked it (D56). One the stored food already holds, or one typed into the box
+        // before the unit became ml, is not deleted by the app: Save would keep it, so the box stays
+        // in sight, with its value, its refusal and why, until he clears it. Nothing is saved or
+        // refused unseen.
+        val millilitres = form.perHundredMl
+        if (!millilitres || food.facts.gramsPerUnit != null || form.gramsPerUnit.isNotBlank()) {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
                 FactHeading(
                     title = stringResource(R.string.foods_group_weight),
