@@ -29,6 +29,10 @@ import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.DailyTargetCalculator
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -522,6 +526,9 @@ class DayScreenRenderTest {
     }
 
     private companion object {
+        /** A sheet shorter than twenty parts need, so without scrolling the button would fall below it. */
+        const val SHORT_SHEET_DP = 400
+
         // The fence on how tall a LOGGED row may be, and its measured pitch, moved to
         // `DayRecordRenderTest` with the list they measure. They are facts about the record's rows,
         // which this screen no longer draws. **The day's new part-of-the-clock row has no pitch
@@ -1127,6 +1134,38 @@ class DayScreenRenderTest {
         portionAmount = amount,
         portionUnit = FoodFacts.PORTION,
     )
+
+    /**
+     * A described meal can have many parts, and the sheet's button once sat below all of them: on a
+     * phone, a long list pushed "Make the meal" off the screen with no way to scroll to it. The list
+     * now scrolls between the name and the buttons, which stay in view. A short box stands in for the
+     * phone's height; only relative geometry is asserted (`CLAUDE.md`).
+     */
+    @Test
+    @Config(qualifiers = "+h640dp")
+    fun `a long list of parts scrolls, and the naming sheet's button stays in view`() {
+        render.texts {
+            Box(Modifier.height(SHORT_SHEET_DP.dp)) {
+                MealNameSheet(
+                    items = (1..20).map { n ->
+                        anItem(id = n.toLong(), name = "Part $n", portion = "50 g", portionAmount = 50.0, portionUnit = "g", kcal = 20)
+                    },
+                    isToday = true,
+                    name = "Counter salad",
+                    refusal = null,
+                    onNameChange = {},
+                    onConfirm = {},
+                    onCancel = {},
+                )
+            }
+        }
+
+        // Placed below the title — a node pushed out of the window reports no bounds, read as 0, so
+        // "above the sheet's foot" alone would pass for a button that is not there at all.
+        val title = render.topDp("Name this meal")
+        assertThat(render.topDp("Make the meal")).isIn(com.google.common.collect.Range.open(title, SHORT_SHEET_DP))
+        assertThat(render.topDp("Not now")).isIn(com.google.common.collect.Range.open(title, SHORT_SHEET_DP))
+    }
 
     /**
      * The sheet's contents, drawn on their own.
