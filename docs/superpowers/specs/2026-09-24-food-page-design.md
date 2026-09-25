@@ -88,8 +88,9 @@ From the top, in the drawing's order:
    yet. Save to keep them, or Undo.* with **Undo**. The same composables (`ReviewTheFigures`,
    `FormReview`) — moved, not copied.
    *(Amended 2026-09-25, D54 §12: the review's suggestions go into the boxes below, pending in the
-   teal accent, each with its reason and a way back, with **Accept all** / **Dismiss all** under the
-   outcome line; the change list and **Apply these changes** / **Keep mine** go. While a group holds
+   teal accent, each with its reason and a way back; while any is pending, **Accept changes and
+   save** and **Cancel** stand in place of Save and Leave it alone; the change list, **Apply these
+   changes** / **Keep mine** and **Undo** go. While a group holds
    a pending box, its four boxes are drawn one per row.)*
 4. **The three groups**, each with its heading and origin on one line (the heading left, the origin
    right, as drawn), then its boxes:

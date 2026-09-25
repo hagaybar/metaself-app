@@ -35,8 +35,8 @@
 >   page but the brand — the name, the unit (naming one where there is none), both groups whatever
 >   their source, and what one weighs — each with a reason; its suggestions go straight into the
 >   boxes, drawn in the teal accent while pending, each with its reason and a way back; **Accept
->   all** / **Dismiss all**; an accepted weight is an estimate; the app still never derives one
->   (§12).
+>   changes and save** in one tap, or **Cancel** back to the page as it was; an accepted weight is an
+>   estimate; the app still never derives one (§12).
 >
 > Every figure below is invented to illustrate the rule beside it.
 
@@ -534,9 +534,9 @@ then, together, the outcome line, any *couldn't be used* lines, **Use all** and 
 ### 11. Amendment, 2026-09-24 (fifth) — a review says what changes
 
 *(Superseded 2026-09-25 by §12.6 for how a suggestion is shown: in the boxes, pending in the teal
-accent, with **Accept all** / **Dismiss all**. The change list, **Apply these changes**, **Keep
-mine** and the after-apply teal marks go; the outcome line, **Undo** after accepting and **Show the
-model's answer** stay.)*
+accent, with **Accept changes and save** / **Cancel**. The change list, **Apply these changes**,
+**Keep mine**, **Undo** and the after-apply teal marks go; the outcome line and **Show the model's
+answer** stay.)*
 
 With the fourth amendment's build it was not clear from the screen whether anything had changed,
 which value, or whether to save: each group's suggestion sat under its own heading with its own
@@ -745,80 +745,86 @@ The two sentences that §2 and §9.2 gave about the weight (*never state what on
 never name a unit*; *grams_per_unit is given only for this check: never change it, state it or guess
 it*) are removed.
 
-**12.6 How it is shown — in the boxes.** §11's change list, **Apply these changes**, **Keep mine**
-and the teal *changed by the review, not saved* marks are replaced by this. The button, its small
-print, the outcome line and its note (§9.4, §10.3, §10.4), the set-aside lines and **Show the model's
-answer** (§8.4) stay where they are.
+**12.6 How it is shown — in the boxes.** §11's change list, **Apply these changes**, **Keep mine**,
+**Undo** and the teal *changed by the review, not saved* marks are replaced by this. The button, its
+small print, the outcome line and its note (§9.4, §10.3, §10.4), the set-aside lines and **Show the
+model's answer** (§8.4) stay where they are. *(Settled with the owner on 2026-09-25, after the first
+draft of this section: the draft's separate Accept all / Dismiss all, its "accepted, not saved"
+line and its Undo are replaced by one act that accepts and saves, and one that cancels.)*
 
 - **When the answer arrives, every suggestion goes straight into its box.** Each such box is
   **pending**: drawn in the suggestion colour, with, directly beneath it, the model's reason in the
   captions' ink, and one text button that goes back — *Back to 19.6* (the box's text as it stood,
-  written as the box writes it, §8.5), or *Clear* for a box that was empty. A reason shared by several
-  boxes of one group is said once, under the first of them.
+  written as the box writes it, §8.5), or *Clear* for a box that was empty. Fills and changes
+  alike are pending and drawn the same way. A reason shared by several boxes of one group is said
+  once, under the first of them.
 - **The suggestion colour is the teal family §11 introduced** — `tertiary` border and label,
-  `tertiaryContainer` fill, the figure in the body's ink. It is free to take this meaning, because
-  nothing else in the editor uses it and, under this section, no box is marked after acceptance; so
-  it keeps **one meaning: suggested, not yet accepted.** No new colour is added (D48), and every
-  pairing is already measured against the 4.5:1 text floor in both schemes by `InkLadderTest`. A
-  pending box also says to a screen reader *suggested by the review, not accepted*; its **Back**
-  button is named with its box (*Calories per 100 g back to 166*), since *Back to 166* alone could
-  be any of eight (public issue #3).
+  `tertiaryContainer` fill, the figure in the body's ink. It keeps **one meaning: suggested, not yet
+  accepted** — nothing else in the editor uses it, and no box is marked once saved. No new colour is
+  added (D48), and every pairing is already measured against the 4.5:1 text floor in both schemes by
+  `InkLadderTest`. A pending box also says to a screen reader *suggested by the review, not
+  accepted*; its **Back** button is named with its box (*Calories per 100 g back to 166*), since
+  *Back to 166* alone could be any of eight (public issue #3).
 - **While a group holds a pending box, its four figure boxes are drawn one per row**, full width, so
   each reason sits under its own box at a readable width; when nothing in it is pending, it returns to
   D55's two by two. (*Make a food* draws one per row already.)
 - **The per-one bundle goes back as one.** When the suggestion renamed or named the unit, the unit
-  box's button reads *Back to {the old unit}* or *Clear* and takes the unit **and** every pending box
-  of the bundle back together, the weight included when the bundle carried one. The bundle's figure
-  boxes and its weight show their reasons and no button of their own: four figures stated for a
-  *tablespoon* under a unit put back to *slice* would be a silent wrong answer. (A respelled unit
-  whose four figures were all kept is a bundle of one box, the unit's.) When the unit was kept, each
-  per-one box has its own button, as every other box does.
-- **Under the outcome line, while anything is pending: Accept all and Dismiss all.**
-  - **Accept all** takes every pending box as it stands: it is drawn in the normal colours, its
-    reason and button go, and its group is accepted (12.7). The line under the outcome then reads
-    *N changes accepted — not saved yet. Save to keep them, or Undo.* (*…Press Make it to keep them,
-    or Undo.* in *Make a food*), with **Undo**, which puts every box that Accept took back to pending
-    — except one typed in since — and the review as it stood. With no colour left on the boxes, this
-    line is the one thing on screen that says Save is still owed.
-  - **Dismiss all** puts every pending box back to its text as it stood, exactly — the same as
-    pressing every **Back** — and what is left of the review goes. Anything already accepted stays.
-- **Typing into a pending box makes it his**: the normal colours, its reason and button go, and
-  the text he typed is his. Nothing else moves. (A pending box of the bundle typed over is taken out
-  of the bundle; the unit's **Back** still takes the rest.)
-- **Only four things take a pending suggestion down**: Accept all, Dismiss all, its own **Back**, and
-  typing in its own box. Typing the name or the brand while suggestions are pending does not withdraw
-  them — they are in front of him, and he may be correcting the model's spelling. (While the request
-  is **out**, §4's rules stand: typing in a group withdraws that group's suggestions, a new name or
-  brand withdraws the whole answer, and an answer with nothing left says *no suggestions left*.)
-- **Review the figures is not offered while anything is pending.** A second review would be sent
-  the model's own figures as if they were the form's, labelled as his.
-- **Save with anything pending is refused**, nothing saved, with one sentence in the slot above Save,
-  in the error ink, and the two buttons with it: *The review's suggestions are still in the boxes.
-  Accept or dismiss them first.* **Accept all** · **Dismiss all**. Acceptance is the only way a guess
-  replaces something better (§5); pressing Save is not acceptance. (Open to the owner — *Questions*,
-  12.12.)
-- **Leave it alone**, Back and the system Back discard everything, pending and accepted alike (D55 §2).
-  An answer that lands after the page began closing is dropped (D55 §8).
+  box's button reads *Back to {the old unit}* or *Clear* and takes the unit **and** every
+  pending box of the bundle back together, the weight included when the bundle carried one. The
+  bundle's figure boxes and its weight show their reasons and no button of their own: four figures
+  stated for a *tablespoon* under a unit put back to *slice* would be a silent wrong answer. (A
+  respelled unit whose four figures were all kept is a bundle of one box, the unit's.) When the unit
+  was kept, each per-one box has its own button, as every other box does.
+- **Typing into a pending box makes it his**: the normal colours, its reason and button go, and the
+  text he typed is his own figure (12.7). Nothing else moves. A pending box of the bundle typed over
+  is taken out of the bundle; the unit's **Back** still takes the rest. Typing in any other box —
+  the brand, a box the review did not touch — is his, as always, and takes no suggestion down.
+- **While anything is pending, the page has exactly two answers to it, in place of Save and Leave it
+  alone** (the foot of the page; in *Make a food*, in place of **Make it** and **Cancel**):
+  - **Accept changes and save** (*Accept changes and make it* in *Make a food*) — **one tap** that
+    accepts every suggestion still pending, as it stands, and saves the food through the one Save
+    there is (12.7). This is the deliberate act: nothing a model wrote is stored by any other.
+  - **Cancel** — every pending suggestion goes, nothing is saved, and **the page is put back exactly
+    as it was when he pressed Review the figures**: every box, his own unsaved typing from before the
+    review included, and the review's answer taken down. Typing done after he pressed the button
+    goes with it — it was typed on the model's answer, and a page half the model's and half restored
+    is the state this answer exists to avoid. The page stays open; *Leave it alone*, Back and the
+    system Back still leave it and discard everything (D55 §2).
+  **Save** and **Leave it alone** (**Make it** and the panel's **Cancel**) are not drawn while
+  anything is pending, so no tap can save a suggestion without saying *accept*, and none can be read
+  as keeping only his figures. Once nothing is pending — every suggestion put back or typed over —
+  the ordinary two return, and Save saves what the boxes hold, all of it his.
+- **A refused Accept changes and save loses nothing.** When Save is refused — a name another food
+  holds (12.7), a group left half filled by a **Back** or by his typing, anything the repository
+  refuses — nothing is stored, the refusal is said in the slot above the two buttons as any refused
+  Save is, and **every suggestion is still pending on screen**, with its reason and its button. The
+  form's own errors show under their boxes, as after any refused Save.
+- **Review the figures is not offered while anything is pending.** A second review would be sent the
+  model's own figures as if they were the form's, labelled as his.
+- **While the request is out**, §4's rules stand: typing in a group withdraws that group's
+  suggestions, a new name or brand withdraws the whole answer, and an answer with nothing left says
+  *no suggestions left*. The snapshot **Cancel** returns to is the page as it stood when he pressed
+  the button.
+- An answer that lands after the page began closing is dropped (D55 §8).
 - **The outcome line** (§9.4, §10.3) now reads, where it differs:
 
 | Outcome | The line |
 |---|---|
 | Suggestions pending | *Reviewed: N suggestions, in the boxes below — {note}* (*1 suggestion…*), N the pending boxes |
-| All accepted, not saved | *Reviewed: suggestions accepted — {note}* |
-| All gone back, by Back or Dismiss all, with a note left | *Reviewed: no suggestions left — {note}* |
+| All put back or typed over, with a note left | *Reviewed: no suggestions left — {note}* |
 
 *Invented example, continuing 12.4.* Eight boxes arrive teal: the name box reads *Hummus* with *Back
-to Humus*; per 100 g's fat reads 9.6 with *Back to 19.6*; the unit box reads *tablespoon* with
-*Clear*, and the four per-tablespoon boxes read 24.9 · 1.2 · 2.1 · 1.4 with the one reason under the
-first; the weight box reads 15 with *Clear*. He presses *Back to Humus* — the name box reads *Humus*
-again, in the normal colours — then **Accept all**. Seven boxes turn to the normal colours, and the
-line reads *7 changes accepted — not saved yet. Save to keep them, or Undo.*
+to Humus*; per 100 g's fat reads 9.6 with *Back to 19.6*; the unit box reads *tablespoon* with *Clear*, and the four per-tablespoon boxes read 24.9 · 1.2 · 2.1 · 1.4 with the one reason under
+the first; the weight box reads 15, its reason under it. At the foot, **Accept changes and save** and
+**Cancel** stand where Save and Leave it alone were. He presses *Back to Humus* — the name box reads
+*Humus* again, in the normal colours — then **Accept changes and save**. The food is saved as 12.7
+says and the page closes.
 
 **12.7 How Save stores it.** §5's machinery, unchanged in the repository — `saveForm`, one
 transaction, `Correction.plan` group by group — with these rules for what the form hands it:
 
-- **A group is accepted when Accept all took at least one of its boxes.** A group whose suggested
-  boxes were all put back, dismissed or typed over is **not accepted**: its boxes hold what they held,
+- **A group is accepted when Accept changes and save took at least one of its boxes.** A group
+  whose suggested boxes were all put back or typed over is **not accepted**: its boxes hold what they held,
   so it reaches the repository as it would have with no review — untouched, if it is the stored
   group, by §8.5 and `Correction.Keep`: no statement, **its figures, source, confidence and date
   exactly as they were**.
@@ -830,7 +836,7 @@ transaction, `Correction.plan` group by group — with these rules for what the 
   (`REPEATED`, `UNRECOGNISED`). A per-figure source would need a schema change and new marks on
   screen; the owner's own rule prefers the honest downgrade. So a label's three kept figures, beside
   one accepted change, are stored as an estimate, as §5 already says. What *kept from* means is
-  worked out at Accept, not at parse: the group's source as sent, when any of its four figures is
+  worked out when he accepts, not at parse: the group's source as sent, when any of its four figures is
   one it was sent with — put back, or echoed. A figure typed over is his (`TYPED`, above an
   estimate) and changes nothing.
 - **The per-one bundle.** A unit renamed or named by an accepted suggestion is part of the group, as
@@ -857,12 +863,16 @@ transaction, `Correction.plan` group by group — with these rules for what the 
   rename is**: when another food already holds that name and brand, the whole Save is refused and
   rolled back — the name, the brand and every group, accepted figures included — and the sentence
   above Save is today's *Another food is already called “{name}”. Join the two, or pick a different
-  name.* The page, its boxes and its acceptance stay as they were; **Undo** returns the name to
-  pending, and its **Back** returns it to his. A change of case or spacing only (the same `nameKey`)
+  name.* Nothing is lost: every suggestion is still pending on screen, and the name's **Back** returns
+  it to his, after which Accept changes and save may be pressed again. A change of case or spacing only (the same `nameKey`)
   is a rename of the name's shown form, as by hand.
-- **Nothing is stored until Save** (D6); *Leave it alone* stores nothing.
+- **A figure he typed over a suggestion is his own**, `TYPED`, as any typing is. Its group is
+  stored as `TYPED` when no suggestion of it was accepted; when one was, the group is a mix with a
+  guess in it and is labelled by its weakest member, as above.
+- **Nothing is stored but by Accept changes and save, or by Save when nothing is pending** (D6);
+  **Cancel** and *Leave it alone* store nothing.
 
-*Invented example, continuing 12.6.* He saves. The name is unchanged — no rename. Per 100 g arrives
+*Invented example, continuing 12.6.* He accepts and saves. The name is unchanged — no rename. Per 100 g arrives
 with fat 9.6, accepted, the other three figures the label's: stored as all four, `AI_ESTIMATE`,
 `MEDIUM` (a label beside a guess is labelled by the guess). Per tablespoon and its unit arrive new,
 accepted: stored `AI_ESTIMATE`, `MEDIUM`. One tablespoon weighs 15 g, accepted: stored `AI_ESTIMATE`,
@@ -877,15 +887,16 @@ does.
 
 **12.9 The meal builder's *Make a food*: the same, for the boxes it has.** It has a name, the two
 groups and the unit, and no brand box and no weight box. It takes this section's behaviour for all of
-them — the in-box suggestions, the per-one bundle, Accept all / Dismiss all, Undo, the refusal to
-*Make it* with anything pending — through the same shared review state and the same composables, so
+them — the in-box suggestions, the per-one bundle, **Accept changes and make it** / **Cancel** in
+place of **Make it** / **Cancel** while anything is pending, a refusal that keeps them pending —
+through the same shared review state and the same composables, so
 the two editors cannot drift (§4's reason for sharing them). **What one weighs is not asked there**
 (`weightAsked` false, 12.2): the panel has nowhere to show it, and a suggestion he cannot see must not
 be stored. Adding a weight box to the panel is not part of this decision.
 
 **12.10 Costs accepted.**
 
-- **A packet's figure can be replaced by a guess in one tap** (Accept all), where before a label was
+- **A packet's figure can be replaced by a guess in one tap** (Accept changes and save), where before a label was
   touched only when impossible or contradicted. It is shown in the box, in the suggestion colour,
   with its reason and *Back to {the packet's figure}*, and it is stored as an estimate — never as a
   label.
@@ -896,10 +907,13 @@ be stored. Adding a weight box to the panel is not part of this decision.
   he can see, it is labelled an estimate on the page, and every row logged through it is labelled an
   estimate.
 - **A name that collides is refused at Save, not when it is suggested** — one refused Save and a
-  **Back** or **Undo**, the same as a collision typed by hand. Checking the name when the answer
+  **Back**, the same as a collision typed by hand. Checking the name when the answer
   arrives was considered and left out: it is a second copy of the rename rule, and a food could take
   the name between the check and the Save anyway.
-- **Save is refused while anything is pending** — one more step before saving a review's answer.
+- **No partial acceptance.** To keep some suggestions and not others he puts back or types over
+  the ones he does not want, then accepts the rest; there is no *accept, then decide whether to
+  save* in between.
+- **Cancel also discards his own typing from after he pressed Review the figures** (12.6).
 - **The page is taller while suggestions are pending** (one box per row, a reason and a button under
   each).
 - **A review costs somewhat more** — a larger schema and a longer answer on the same call, against
@@ -912,16 +926,10 @@ figures, D56's scale, the brand, the join, and every stored shape: **no schema v
 no DAO statement, no backup-format change** — a food's weight already carries a source, a rank and a
 confidence, and `AI_ESTIMATE` is already a value it can hold.
 
-**12.12 Questions for the owner** (each has a default the build takes if unanswered):
-
-1. **Save with suggestions still pending.** *Default:* refused, with the sentence and **Accept all**
-   / **Dismiss all** above Save (12.6) — acceptance stays a tap of its own. *Other:* Save takes what
-   the boxes show, accepting everything pending as it saves — one tap fewer, but a guess could then
-   replace a label with no tap that said *accept*.
-2. **After Accept all.** *Default:* the boxes return to the normal colours, as decided, and one line
-   says *N changes accepted — not saved yet. Save to keep them, or Undo.* *Other:* no line and no
-   Undo — the page looks exactly as if he had typed the figures, and *Leave it alone* is the only way
-   back.
+**12.12 Settled with the owner, 2026-09-25.** The first draft of this section left two questions —
+whether Save with suggestions pending should be refused or accept them, and whether an accepted,
+unsaved state should keep a line and an Undo. The owner's answer replaces both: **one tap accepts
+and saves; one tap cancels; there is no state in between** (12.6).
 
 ---
 
