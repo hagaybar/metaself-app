@@ -39,6 +39,10 @@ import com.metaself.app.ui.screen.entry.EntryFormState
 import com.metaself.app.ui.screen.settings.SettingsScreen
 import com.metaself.app.ui.screen.propose.ConversationActions
 import com.metaself.app.ui.screen.propose.KeepOnlyActions
+import com.metaself.app.ui.screen.propose.Landing
+import com.metaself.app.ui.screen.propose.EndChoice
+import com.metaself.app.ui.screen.propose.DescribedFrom
+import com.metaself.app.ui.screen.propose.DescribeLanding
 import com.metaself.app.ui.screen.propose.ProposalScreen
 import com.metaself.app.ui.screen.record.RecordScreen
 import com.metaself.app.ui.screen.record.RecordUiState
@@ -88,6 +92,9 @@ sealed class Destination(val route: String) {
         /** Carrying the words already typed into the search, so a miss costs a tap, not a retype. */
         fun withWords(text: String): String =
             if (text.isBlank()) route else "meal/describe?text=" + Uri.encode(text)
+
+        /** From My meals' *Describe a meal* (D58 §1): the flow is the same; where he lands is not. */
+        const val fromMyMeals: String = "meal/describe?from=" + DescribeLanding.FROM_MY_MEALS
     }
     data object Repeat : Destination("meal/repeat")
     data object Foods : Destination("foods") {
@@ -95,7 +102,10 @@ sealed class Destination(val route: String) {
          * The pattern the list is registered under: the bare route, and a food to join from (D55
          * §5). A String, as [Record]'s logging is: `NavType` has no nullable `Long`.
          */
-        const val registered: String = "foods?joinFrom={joinFrom}"
+        const val registered: String = "foods?joinFrom={joinFrom}&tab={tab}"
+
+        /** Opened on the meals list: where keeping a described meal lands (D58 §5.3). */
+        const val mealsTab: String = "foods?tab=meals"
 
         /** The list opened picking a duplicate for one food, from a page with no list beneath it. */
         fun joiningFrom(foodId: Long): String = "foods?joinFrom=$foodId"
@@ -167,7 +177,7 @@ sealed class Destination(val route: String) {
  * screen is still the one on top when the naming sheet says it has finished. The second only works
  * against the pattern the stack holds, which is this whole string and not the bare route.
  */
-private val describeRoute = Destination.Describe.route + "?text={text}"
+private val describeRoute = Destination.Describe.route + "?text={text}&from={from}"
 
 /**
  * The day, and the item editor that serves both adding and correcting.
@@ -644,6 +654,12 @@ fun MetaSelfNavHost(
                     nullable = true
                     defaultValue = null
                 },
+                // The list in front when it opens; the meals list after a described meal is kept.
+                navArgument(ManagerViewModel.TAB) {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
             ),
         ) { here ->
             val managerViewModel: ManagerViewModel = hiltViewModel()
@@ -710,6 +726,7 @@ fun MetaSelfNavHost(
                 onBuildMeal = { navController.navigate(Destination.BuildMeal.of(0)) },
                 onEditMeal = { mealId -> navController.navigate(Destination.BuildMeal.of(mealId)) },
                 onDismissMealsFailure = mealsViewModel::dismissFailure,
+                onDescribeMeal = { navController.navigate(Destination.Describe.fromMyMeals) },
                 onBack = { navController.popBackStack() },
             )
         }
@@ -784,10 +801,31 @@ fun MetaSelfNavHost(
                     nullable = true
                     defaultValue = null
                 },
+                // Which way he came in (D58 §1): it decides only where he lands and which day logs.
+                navArgument("from") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
             ),
-        ) {
+        ) { here ->
             val proposeViewModel: ProposalViewModel = hiltViewModel()
             val proposeState by proposeViewModel.state.collectAsStateWithLifecycle()
+            val from = DescribeLanding.fromArgument(here.arguments?.getString("from"))
+            val onToday = DescribeLanding.logsOnToday(from)
+
+            // Where he lands is one rule (DescribeLanding), acted on here (D58 §5.3).
+            fun land(choice: EndChoice) {
+                when (DescribeLanding.after(from, choice)) {
+                    Landing.BACK_TO_DAY, Landing.BACK_TO_MY_MEALS -> navController.popBackStack()
+                    Landing.BACK_PAST_MY_MEALS_TO_DAY ->
+                        navController.popBackStack(Destination.Today.route, inclusive = false)
+                    Landing.ON_TO_MY_MEALS -> {
+                        navController.popBackStack()
+                        navController.navigate(Destination.Foods.mealsTab)
+                    }
+                }
+            }
 
             // The day's own answers about the rows it has just written, for the naming sheet drawn
             // over this screen (D46, issue #24). Read the way the day screen reads them, because it
@@ -822,28 +860,27 @@ fun MetaSelfNavHost(
                     onRetry = proposeViewModel::retry,
                     onBestGuessSoFar = proposeViewModel::bestGuessSoFar,
                 ),
-                fromMyMeals = false,
+                fromMyMeals = from == DescribedFrom.MY_MEALS,
                 keepOnly = KeepOnlyActions(
                     onOpen = proposeViewModel::openKeepOnly,
                     // Kept, and nothing logged: he goes to where the meal is (D58 §5.3).
                     onConfirm = { name ->
                         proposeViewModel.keepOnly(name) {
                             proposeViewModel.startOver()
-                            navController.popBackStack()
-                            navController.navigate(Destination.Foods.route)
+                            land(EndChoice.KEEP)
                         }
                     },
                     onCancel = proposeViewModel::closeKeepOnly,
                     onLogInstead = {
-                        dayViewModel.logMeal(proposeViewModel.accepted())
+                        dayViewModel.logMeal(proposeViewModel.accepted(), onToday)
                         proposeViewModel.startOver()
-                        navController.popBackStack()
+                        land(EndChoice.LOG)
                     },
                 ),
                 onSave = {
-                    dayViewModel.logMeal(proposeViewModel.accepted())
+                    dayViewModel.logMeal(proposeViewModel.accepted(), onToday)
                     proposeViewModel.startOver()
-                    navController.popBackStack()
+                    land(EndChoice.LOG)
                 },
                 // Saved first and named afterwards (D46(b)): this writes the rows and leaves exactly
                 // them chosen, and nothing about a meal is attempted until he confirms a name. The
@@ -851,7 +888,7 @@ fun MetaSelfNavHost(
                 // accepted a second time from a screen he comes back to — and not before, because a
                 // write that throws leaves him the answer to try again, with the failure beside it.
                 onKeepAsMeal = {
-                    dayViewModel.logMealAndChoose(proposeViewModel.accepted()) {
+                    dayViewModel.logMealAndChoose(proposeViewModel.accepted(), onToday) {
                         proposeViewModel.startOver()
                     }
                 },
@@ -868,7 +905,7 @@ fun MetaSelfNavHost(
                 // then takes the day with it and leaves him looking at nothing.
                 onKeepingDone = {
                     if (navController.currentBackStackEntry?.destination?.route == describeRoute) {
-                        navController.popBackStack()
+                        land(EndChoice.BOTH)
                     }
                 },
                 chosenRows = chosenRows,

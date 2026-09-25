@@ -1132,8 +1132,14 @@ class DayViewModel @Inject constructor(
      * One meal holding every item, not one meal per item: they were eaten together, and step 9's
      * repeat will re-log them together.
      */
-    fun logMeal(items: List<ToLog>) {
+    /**
+     * @param onToday log on today whatever day was being looked at — from My meals, where nothing
+     *   says which day (D58 §12.8); the day then shows today, where the rows and the line about them
+     *   are.
+     */
+    fun logMeal(items: List<ToLog>, onToday: Boolean = false) {
         if (items.isEmpty()) return
+        if (onToday) showDay(todayEpochDayNow())
         sayWhatWasLogged(items.map { it.item })
         logging { writeMeal(items) }
     }
@@ -1172,8 +1178,10 @@ class DayViewModel @Inject constructor(
      * accept screen lets go of its answer, which it must keep while a failure is on screen so there
      * is something to try again.
      */
-    fun logMealAndChoose(items: List<ToLog>, onLogged: () -> Unit = {}) {
+    fun logMealAndChoose(items: List<ToLog>, onToday: Boolean = false, onLogged: () -> Unit = {}) {
         if (items.isEmpty()) return
+        // As [logMeal]: from My meals, on today (D58 §12.8). Before the choice is cleared below.
+        if (onToday) showDay(todayEpochDayNow())
         // Synchronously, so that every frame between the tap and the write has an empty choice in
         // it: the sheet stays shut until the ids arrive, and it can never open over the old ones.
         _chosen.value = emptySet()

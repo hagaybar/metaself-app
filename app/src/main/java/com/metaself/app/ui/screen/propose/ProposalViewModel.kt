@@ -446,14 +446,6 @@ class ProposalViewModel @Inject constructor(
         return proposed.rows.mapNotNull { it.toLog() }
     }
 
-    /**
-     * He is going to settings to add the key the last answer said was missing (public issue #11).
-     *
-     * The complaint is taken down now rather than on his return, because nothing here can tell that
-     * he saved one; left up, it would contradict settings the moment he had. The words stay — in
-     * [description], and in the field, which keeps whatever he typed since — so coming back is one
-     * press of "Work it out", and without a key that press simply says so again.
-     */
     /** *Keep as a meal*: its naming sheet opens over the rows; nothing is written yet (D58 §5.2). */
     fun openKeepOnly() {
         val proposed = _state.value as? ProposalUiState.Proposed ?: return
@@ -497,6 +489,14 @@ class ProposalViewModel @Inject constructor(
         _state.value = proposed.copy(keeping = change())
     }
 
+    /**
+     * He is going to settings to add the key the last answer said was missing (public issue #11).
+     *
+     * The complaint is taken down now rather than on his return, because nothing here can tell that
+     * he saved one; left up, it would contradict settings the moment he had. The words stay — in
+     * [description], and in the field, which keeps whatever he typed since — so coming back is one
+     * press of "Work it out", and without a key that press simply says so again.
+     */
     fun leaveToAddKey() {
         _state.value = ProposalUiState.Describing()
     }

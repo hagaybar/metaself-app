@@ -41,6 +41,7 @@ class ManagerScreenRenderTest {
     private var openedMealId: Long? = null
 
     private var builderStarted = false
+    private var describeStarted = false
 
     @After
     fun tearDown() = render.dispose()
@@ -131,6 +132,19 @@ class ManagerScreenRenderTest {
 
         render.click("Build a meal")
         assertThat(builderStarted).isTrue()
+    }
+
+    /** D58 §1: a meal can be worked out from a description here, with or without meals built. */
+    @Test
+    fun `the meals tab offers to describe a meal, built or not`() {
+        listOf(MealsUiState(), null).forEach { meals ->
+            val texts = if (meals == null) draw(tab = ManagerTab.MEALS) else draw(tab = ManagerTab.MEALS, meals = meals)
+
+            assertThat(texts).containsAtLeast("Build a meal", "Describe a meal").inOrder()
+        }
+
+        render.click("Describe a meal")
+        assertThat(describeStarted).isTrue()
     }
 
     /**
@@ -246,6 +260,7 @@ class ManagerScreenRenderTest {
             onBuildMeal = { builderStarted = true },
             onEditMeal = { openedMealId = it },
             onDismissMealsFailure = {},
+            onDescribeMeal = { describeStarted = true },
             onBack = {},
         )
     }
