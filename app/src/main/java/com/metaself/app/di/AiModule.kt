@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.metaself.app.data.ai.AiSettingsStore
+import com.metaself.app.data.ai.AiTimeouts
 import com.metaself.app.data.ai.ApiKeyStore
 import com.metaself.app.data.ai.DataStoreAiSettingsStore
 import com.metaself.app.data.ai.DataStoreRequestProfileStore
@@ -23,7 +24,6 @@ import com.metaself.app.data.secret.SecretStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
-import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 /**
@@ -37,19 +37,17 @@ import javax.inject.Singleton
 object AiModule {
 
     /**
-     * Forty-five seconds.
+     * Every request to the model, apart from a conversation's final analysis (D58 §8.6), may take a
+     * minute: to connect, to be written, for the answer to begin, and in all.
      *
-     * Long, deliberately: a model can take twenty, and a timeout that fires first turns a slow
-     * answer into a failure the owner has to redo — which costs him a second call and the app a
-     * second charge.
+     * The read timeout is the one that matters. Set only the call's, OkHttp's own ten-second read
+     * timeout stayed in force, and a model that thinks before its first byte — a reasoning model
+     * does — failed as unreachable while the call still had time left. That cost a paid request and
+     * gave nothing, which is exactly what a generous timeout exists to prevent.
      */
-    private const val CALL_TIMEOUT_SECONDS = 45L
-
     @Provides
     @Singleton
-    fun provideHttpClient(): OkHttpClient = OkHttpClient.Builder()
-        .callTimeout(CALL_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+    fun provideHttpClient(): OkHttpClient = AiTimeouts.everyday(OkHttpClient.Builder()).build()
 
     @Provides
     @Singleton

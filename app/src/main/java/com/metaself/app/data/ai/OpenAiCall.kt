@@ -4,11 +4,14 @@ import com.metaself.app.domain.ai.EstimateResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import okhttp3.Call
+import okhttp3.EventListener
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -151,18 +154,37 @@ class OpenAiCall(
     /** One HTTP status and body. */
     private class Answer(val code: Int, val text: String)
 
-    /** One request, counted once it reached the provider — a refusal still cost a request. */
+    /**
+     * One request, counted once it was written to the connection — a refusal still cost a request,
+     * and so may one whose answer never arrived.
+     *
+     * A request that was sent and then timed out, or lost its connection while the model was
+     * working, may still have been answered and billed on the provider's side; and the ceiling
+     * exists to bound a loop, which a timeout that counted nothing would let run free. A request
+     * that never connected reached nobody and is not counted.
+     */
     private suspend fun post(key: String, body: String): Answer {
         val request = Request.Builder()
             .url(baseUrl)
             .addHeader("Authorization", "Bearer $key")
             .post(body.toRequestBody(JSON))
             .build()
-        val answer = client.newCall(request).execute().use { response ->
-            Answer(response.code, response.body?.string().orEmpty())
+        val sent = AtomicBoolean(false)
+        val listened = client.newBuilder()
+            .eventListener(
+                object : EventListener() {
+                    override fun requestBodyEnd(call: Call, byteCount: Long) = sent.set(true)
+                },
+            )
+            .build()
+        val answer = try {
+            listened.newCall(request).execute().use { response ->
+                Answer(response.code, response.body?.string().orEmpty())
+            }
+        } catch (lost: IOException) {
+            if (sent.get()) settings.recordCall()
+            throw lost
         }
-        // Counted only when a call actually happened — a refusal still cost money and still spends
-        // allowance; an unreachable server did neither.
         settings.recordCall()
         return answer
     }

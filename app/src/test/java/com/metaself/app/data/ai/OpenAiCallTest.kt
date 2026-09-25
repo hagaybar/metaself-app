@@ -123,14 +123,49 @@ class OpenAiCallTest {
     }
 
     @Test
-    fun `a call that never left is unreachable and not counted`() = runTest {
+    fun `a call that never connected is unreachable and not counted`() = runTest {
         val settings = FakeSettings()
-        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        val nowhere = server.url("/v1/chat/completions").toString()
+        server.shutdown()
 
-        val outcome = call(settings = settings).send { _, _ -> "{}" }
+        val outcome = OpenAiCall(
+            keys = FakeKeys("a-key"),
+            settings = settings,
+            client = OkHttpClient(),
+            profiles = FakeRequestProfileStore(),
+            baseUrl = nowhere,
+        ).send { _, _ -> "{}" }
 
         assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
         assertThat(settings.calls).isEqualTo(0)
+    }
+
+    @Test
+    fun `a dropped connection is unreachable`() = runTest {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+
+        val outcome = call().send { _, _ -> "{}" }
+
+        assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
+    }
+
+    /**
+     * Sent, and no answer in time: it may have been answered and billed on the provider's side, and
+     * a timeout that counted nothing would let a loop run past the ceiling.
+     */
+    @Test
+    fun `a request sent and never answered in time is unreachable, and counted`() = runTest {
+        val settings = FakeSettings()
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.NO_RESPONSE))
+        val impatient = OkHttpClient.Builder()
+            .readTimeout(1, java.util.concurrent.TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false)
+            .build()
+
+        val outcome = call(settings = settings, client = impatient).send { _, _ -> "{}" }
+
+        assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
+        assertThat(settings.calls).isEqualTo(1)
     }
 
     /** D8: nothing may escape the seam, including an exception that is not about the network. */

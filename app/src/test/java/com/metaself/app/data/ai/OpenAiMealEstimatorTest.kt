@@ -161,11 +161,18 @@ class OpenAiMealEstimatorTest {
     }
 
     @Test
-    fun `a call that never left is not counted`() = runTest {
+    fun `a call that never connected is not counted`() = runTest {
         val settings = FakeSettings()
-        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+        val nowhere = server.url("/v1/chat/completions").toString()
+        server.shutdown()
 
-        estimator(settings = settings).estimate("risotto")
+        OpenAiMealEstimator(
+            keys = FakeKeys("a-key"),
+            settings = settings,
+            client = OkHttpClient(),
+            profiles = FakeRequestProfileStore(),
+            baseUrl = nowhere,
+        ).estimate("risotto")
 
         assertThat(settings.calls).isEqualTo(0)
     }
