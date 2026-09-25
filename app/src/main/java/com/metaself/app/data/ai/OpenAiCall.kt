@@ -2,6 +2,7 @@ package com.metaself.app.data.ai
 
 import com.metaself.app.domain.ai.EstimateResult
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.Call
@@ -221,12 +222,19 @@ class OpenAiCall(
                 Answer(response.code, response.body?.string().orEmpty())
             }
         } catch (lost: IOException) {
-            if (sent.get()) settings.recordCall()
+            if (sent.get()) counted()
             throw lost
         }
-        settings.recordCall()
+        counted()
         return answer
     }
+
+    /**
+     * Count a request that reached the provider — even when whoever asked has since gone (he
+     * stepped back, or left). The request was sent and billed; the settings store's edit is itself
+     * cancellable, and would otherwise throw here and leave it uncounted.
+     */
+    private suspend fun counted() = withContext(NonCancellable) { settings.recordCall() }
 
     /** The first profile not yet tried that answers a 400 refusal, or null (D57 §3). */
     private fun nextProfile(

@@ -4,7 +4,12 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -168,6 +173,23 @@ class OpenAiCallTest {
         assertThat(settings.calls).isEqualTo(1)
     }
 
+    /**
+     * He stepped back, or left, while the model was answering: the request was sent and billed, so
+     * it counts, although nobody is waiting for the answer any more.
+     */
+    @Test
+    fun `a request whose caller has gone is still counted`() = runTest {
+        val settings = FakeSettings()
+        server.enqueue(MockResponse().setBody("{}").setHeadersDelay(500, TimeUnit.MILLISECONDS))
+
+        val job = launch(Dispatchers.Default) { call(settings = settings).send { _, _ -> "{}" } }
+        assertThat(server.takeRequest(5, TimeUnit.SECONDS)).isNotNull()
+        job.cancel()
+        job.join()
+
+        assertThat(settings.calls).isEqualTo(1)
+    }
+
     /** D8: nothing may escape the seam, including an exception that is not about the network. */
     @Test
     fun `anything else thrown is a refusal, not a crash`() = runTest {
@@ -217,6 +239,8 @@ class OpenAiCallTest {
         override suspend fun setModel(model: String) = Unit
         override suspend fun setDailyCeiling(ceiling: Int) = Unit
         override suspend fun recordCall() {
+            // As the settings store's own edit is: cancellable.
+            currentCoroutineContext().ensureActive()
             calls++
             state.value = state.value.copy(usedToday = state.value.usedToday + 1)
         }
