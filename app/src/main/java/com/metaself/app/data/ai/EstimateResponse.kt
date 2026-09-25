@@ -38,19 +38,31 @@ object EstimateResponse {
     private val json = Json { ignoreUnknownKeys = true }
 
     fun parse(body: String): EstimateResult {
-        val content = runCatching {
-            json.parseToJsonElement(body)
-                .jsonObject["choices"]!!.jsonArray
-                .first().jsonObject["message"]!!.jsonObject["content"]!!
-                .jsonPrimitive.content
-        }.getOrNull()
+        val content = content(body)
         // What *Show the model's answer* shows (issue #1): the content, or the body when there is
         // none — as a review's answer does (D54 §8.4).
         val raw = content ?: body
         return runCatching { answer(content!!) }.getOrElse {
-            EstimateResult.Unreadable("the reply was not in the shape this app asked for", raw)
+            EstimateResult.Unreadable(NOT_THE_SHAPE, raw)
         }
     }
+
+    /** The model's own JSON inside the provider's envelope, or null when there is none. */
+    internal fun content(body: String): String? = runCatching {
+        json.parseToJsonElement(body)
+            .jsonObject["choices"]!!.jsonArray
+            .first().jsonObject["message"]!!.jsonObject["content"]!!
+            .jsonPrimitive.content
+    }.getOrNull()
+
+    /**
+     * The model's own JSON, already out of its envelope, read by every rule [parse] applies — for a
+     * conversation's first reply, whose estimate sits beside fields this reader ignores (D58 §4.1).
+     */
+    internal fun readContent(content: String): EstimateResult =
+        runCatching { answer(content) }.getOrElse { EstimateResult.Unreadable(NOT_THE_SHAPE, content) }
+
+    internal const val NOT_THE_SHAPE = "the reply was not in the shape this app asked for"
 
     /** The message's [content], read; it is also the answer kept when an item was dropped. */
     private fun answer(content: String): EstimateResult {
