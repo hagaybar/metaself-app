@@ -10,10 +10,12 @@ import kotlinx.serialization.json.putJsonObject
 /**
  * What leaves the phone.
  *
- * The only place in this app that sends anything anywhere, which is why it is a pure function with
- * its own tests. Decision D16 promises that exactly the meal description leaves and nothing else —
- * not the owner's body, his numbers, his history or the date — and a promise that is not tested is
- * a hope. `NOTHING about the owner is sent` is that test.
+ * One of the few places in this app that say what is sent — with [ConversationPrompt] for a meal
+ * worked out in conversation (D58) and [ReviewPrompt] for a food's review — which is why each is a
+ * pure function with its own tests. Decision D16 promises that exactly the meal description leaves
+ * (and, since D58, his answers to the app's questions about it) and nothing else — not the owner's
+ * body, his numbers, his history or the date — and a promise that is not tested is a hope.
+ * `NOTHING about the owner is sent` is that test.
  *
  * The reply is pinned with a schema rather than asked for politely. Both models tried while this
  * was designed answered in ranges, volunteered fields nobody had asked for, and one gave a total
