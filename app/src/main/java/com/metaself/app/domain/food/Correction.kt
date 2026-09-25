@@ -1,5 +1,7 @@
 package com.metaself.app.domain.food
 
+import com.metaself.app.domain.day.Source
+
 /**
  * What the food form's Save does to each of a food's three groups (D54 §5): leave it alone, empty
  * it, or replace it.
@@ -54,9 +56,18 @@ object Correction {
                 ReplacedFacts.sameFigures(held.nutrients, arriving.nutrients)
         },
         gramsPerUnit = step(stored?.gramsPerUnit, incoming.gramsPerUnit) { held, arriving ->
-            ReplacedFacts.sameFigure(held.grams, arriving.grams)
+            ReplacedFacts.sameFigure(held.grams, arriving.grams) && !relabelledDown(held, arriving)
         },
     )
+
+    /**
+     * The one case in which the same figure is written again (D54 §12.7): a weight he accepted as
+     * an estimate under a unit the review named or renamed, held at a higher rank. Its figure did
+     * not change; what it describes did. Only ever downward, and only for the weight — an accepted
+     * group always differs from the stored one, in a figure or in its unit name.
+     */
+    private fun relabelledDown(held: GramsPerUnit, arriving: GramsPerUnit): Boolean =
+        arriving.provenance.source == Source.AI_ESTIMATE && arriving.provenance.rank < held.provenance.rank
 
     private fun <T : Any> step(held: T?, arriving: T?, same: (T, T) -> Boolean): Step<T> = when {
         arriving == null -> Clear

@@ -151,4 +151,48 @@ class CorrectionTest {
             ),
         )
     }
+
+    // --- D54 §12.7: the one relabel of an unchanged figure ----------------------------------------
+
+    /**
+     * A weight echoed under a unit the review renamed, accepted, now describes the model's unit: it
+     * arrives as an estimate over the same figure held higher, and is written. Only downward, only
+     * the weight, and only for an arriving estimate — the form sends one only when he accepted it.
+     */
+    @Test
+    fun `an accepted estimate weight over the same figure held higher is written`() {
+        val overTyped = Correction.plan(oatBiscuit, oatBiscuit.copy(gramsPerUnit = weighs(provenance = estimate)))
+        val overLabel = Correction.plan(
+            oatBiscuit.copy(gramsPerUnit = weighs(provenance = label)),
+            oatBiscuit.copy(gramsPerUnit = weighs(provenance = estimate)),
+        )
+
+        assertThat(overTyped.gramsPerUnit).isEqualTo(Correction.Replace(weighs(provenance = estimate)))
+        assertThat(overLabel.gramsPerUnit).isEqualTo(Correction.Replace(weighs(provenance = estimate)))
+        assertThat(overTyped.per100g).isEqualTo(Correction.Keep)
+        assertThat(overTyped.perUnit).isEqualTo(Correction.Keep)
+    }
+
+    @Test
+    fun `the same weight is kept when it arrives typed, or as an estimate over one held no higher`() {
+        val repeated = Provenance(Source.REPEATED, null, setAtMillis = 700)
+        val lowerHeld = oatBiscuit.copy(gramsPerUnit = weighs(provenance = repeated))
+        val estimateHeld = oatBiscuit.copy(gramsPerUnit = weighs(provenance = estimate))
+
+        assertThat(Correction.plan(oatBiscuit, oatBiscuit).gramsPerUnit).isEqualTo(Correction.Keep)
+        assertThat(Correction.plan(lowerHeld, oatBiscuit.copy(gramsPerUnit = weighs(provenance = estimate))).gramsPerUnit)
+            .isEqualTo(Correction.Keep)
+        assertThat(Correction.plan(estimateHeld, estimateHeld).gramsPerUnit).isEqualTo(Correction.Keep)
+        // A label arriving typed is never relabelled by this: only an arriving estimate is.
+        assertThat(Correction.plan(oatBiscuit.copy(gramsPerUnit = weighs(provenance = label)), oatBiscuit).gramsPerUnit)
+            .isEqualTo(Correction.Keep)
+    }
+
+    /** Groups keep the owner's rule unchanged: equal figures, whatever provenance, are kept. */
+    @Test
+    fun `an estimate over an equal group is still kept`() {
+        val plan = Correction.plan(oatBiscuit, oatBiscuit.copy(per100g = per100g(provenance = estimate)))
+
+        assertThat(plan.per100g).isEqualTo(Correction.Keep)
+    }
 }

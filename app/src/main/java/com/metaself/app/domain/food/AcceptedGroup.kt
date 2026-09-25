@@ -27,3 +27,12 @@ data class AcceptedGroup(val confidence: Confidence, val keptFrom: Source? = nul
         return if (Provenance.rankOf(kept) < estimate.rank) Provenance(kept, null, setAtMillis) else estimate
     }
 }
+
+/**
+ * What one weighs, accepted from a review (D54 §12.7): stored as an estimate with [confidence].
+ *
+ * @property echoed the weight's figure is the one the form already held, kept under a unit the
+ *   review named or renamed and he accepted: it now states what one of the model's unit weighs, so
+ *   it is labelled by the weakest member — the estimate, or its own source where that ranks lower.
+ */
+data class WeightAccepted(val confidence: Confidence, val echoed: Boolean = false)

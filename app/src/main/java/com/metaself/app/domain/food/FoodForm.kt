@@ -36,7 +36,9 @@ enum class FoodField {
  * review is handed over as [Source.AI_ESTIMATE] with that review's confidence, even if he then
  * changed a figure in it, because it is still a mix with a guess in it and a mixed group is labelled
  * by its weakest member (D4) — which is the source of the figures the review kept instead, where that
- * ranks below an estimate ([AcceptedGroup.provenance]). What one weighs is never accepted from anything and is always typed.
+ * ranks below an estimate ([AcceptedGroup.provenance]). What one weighs is typed — or, since D54 §12,
+ * a model's proposal he accepted, handed over as an estimate ([WeightAccepted]). **Nothing here
+ * ever works a weight out.**
  * The rest is the owner's own hand, which is the whole reason a correction is not subject to the
  * ranking that protects him from a guess: the ranking exists to stop a model overwriting him, not to
  * stop him overwriting a model.
@@ -167,11 +169,14 @@ data class FoodForm(
      * @param stored the food as it is stored, or null for a food not yet made. A box still showing a
      *   stored figure as it opened hands over the stored figure, not its rounding ([figure]), so
      *   Save finds the group unchanged and leaves it — figures and source — alone (D54 §8.5).
+     * @param weight what one weighs, when he accepted it from a review (D54 §12.7); null when it is
+     *   his, typed or as stored.
      */
     fun toFacts(
         setAtMillis: Long,
         estimated: Map<FactGroup, AcceptedGroup> = emptyMap(),
         stored: FoodFacts? = null,
+        weight: WeightAccepted? = null,
     ): FoodFacts? {
         if (errors().isNotEmpty()) return null
         val typed = Provenance(Source.TYPED, confidence = null, setAtMillis = setAtMillis)
@@ -197,9 +202,24 @@ data class FoodForm(
                     null
                 },
                 // Never computed from the other two, whatever they say. That arithmetic looks valid
-                // and produces a claim about a physical object out of two estimates.
+                // and produces a claim about a physical object out of two estimates. Typed, or a
+                // model's proposal he accepted — an estimate (D54 §12.7).
                 gramsPerUnit = if (wantsWeight) {
-                    GramsPerUnit(figure(gramsPerUnit, stored?.gramsPerUnit?.grams, GRAMS)!!, typed)
+                    val storedWeight = stored?.gramsPerUnit
+                    GramsPerUnit(
+                        figure(gramsPerUnit, storedWeight?.grams, GRAMS)!!,
+                        weight?.let { accepted ->
+                            // An echoed weight keeps its figure; its source is what Save would give it.
+                            val kept = when {
+                                !accepted.echoed -> null
+                                storedWeight != null &&
+                                    heldAsShown(gramsPerUnit, storedWeight.grams, GRAMS) ->
+                                    storedWeight.provenance.source
+                                else -> Source.TYPED
+                            }
+                            AcceptedGroup(accepted.confidence, kept).provenance(setAtMillis)
+                        } ?: typed,
+                    )
                 } else {
                     null
                 },

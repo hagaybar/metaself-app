@@ -116,8 +116,10 @@ data class PerUnit(val unitName: String, val nutrients: Nutrients, val provenanc
  * It is the number that turns one way of counting into the other, so a wrong one propagates into
  * every future gram-counted log of that food, silently and for ever. Dividing per-unit calories by
  * per-100-g calories would produce it from two figures that are usually both estimates, and present
- * the answer as a fact about a physical object. That is the one thing D4 exists to prevent, so the
- * only ways this is ever set are the owner typing it or a packet stating it.
+ * the answer as a fact about a physical object. That is the one thing D4 exists to prevent, so
+ * **nothing in the app ever works it out**. It is set by the owner typing it, a packet stating it,
+ * or — since D54 §12 — a model proposing it on request, shown to him as a suggestion and stored as
+ * an estimate when he accepts it.
  */
 data class GramsPerUnit(val grams: Double, val provenance: Provenance) {
     init { require(grams > 0.0) { "nothing weighs nothing" } }

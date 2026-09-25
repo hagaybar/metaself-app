@@ -604,6 +604,98 @@ class RoomFoodRepositoryTest {
         assertThat(repository.byId(food.id)!!.facts.per100g).isEqualTo(food.facts.per100g)
     }
 
+    // --- D54 §12: a review may suggest anything but the brand -------------------------------------
+
+    /** An accepted weight, a different figure over a typed one: written, and read back an estimate. */
+    @Test
+    fun `an accepted estimate weight replaces a typed weight and keeps its confidence`() = runTest {
+        val food = oatBiscuit()
+
+        moment = 2_000
+        val accepted = GramsPerUnit(21.3, Provenance(Source.AI_ESTIMATE, Confidence.HIGH, moment))
+        val result = repository.saveForm(
+            food.id,
+            name = "Oat biscuit",
+            brand = null,
+            facts = asTyped(food.facts, moment).copy(gramsPerUnit = accepted),
+        )
+
+        assertThat(result).isEqualTo(EditResult.Done)
+        val after = repository.byId(food.id)!!.facts
+        assertThat(after.gramsPerUnit).isEqualTo(accepted)
+        // The groups the review left alone keep their figures, source and date.
+        assertThat(after.per100g).isEqualTo(food.facts.per100g)
+        assertThat(after.perUnit).isEqualTo(food.facts.perUnit)
+    }
+
+    /**
+     * A weight echoed under a unit the review renamed, accepted: its figure is unchanged but it now
+     * describes the model's unit, so it is relabelled an estimate — the one relabel of an unchanged
+     * figure, only downward (§12.7).
+     */
+    @Test
+    fun `a weight echoed under an accepted rename is relabelled an estimate`() = runTest {
+        val food = oatBiscuit()
+
+        moment = 2_000
+        val renamed = PerUnit(
+            "cracker",
+            food.facts.perUnit!!.nutrients,
+            Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, moment),
+        )
+        val echoed = GramsPerUnit(18.0, Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, moment))
+        val result = repository.saveForm(
+            food.id,
+            name = "Oat biscuit",
+            brand = null,
+            facts = asTyped(food.facts, moment).copy(perUnit = renamed, gramsPerUnit = echoed),
+        )
+
+        assertThat(result).isEqualTo(EditResult.Done)
+        val after = repository.byId(food.id)!!.facts
+        assertThat(after.perUnit).isEqualTo(renamed)
+        assertThat(after.gramsPerUnit).isEqualTo(echoed)
+        assertThat(after.per100g).isEqualTo(food.facts.per100g)
+    }
+
+    /** The same figure arriving typed — a weight he did not accept — is never touched. */
+    @Test
+    fun `an unchanged weight arriving typed keeps its source and date`() = runTest {
+        val food = oatBiscuit()
+
+        moment = 2_000
+        repository.saveForm(food.id, name = "Oat biscuit", brand = null, facts = asTyped(food.facts, moment))
+
+        assertThat(repository.byId(food.id)!!.facts.gramsPerUnit).isEqualTo(food.facts.gramsPerUnit)
+    }
+
+    /**
+     * An accepted name another food holds is refused as a hand rename is, and the whole Save rolls
+     * back: the accepted estimate over the label is not written either.
+     */
+    @Test
+    fun `an accepted name another food holds refuses the Save and writes nothing`() = runTest {
+        val food = oatBiscuit()
+        repository.findOrCreate("Oat cracker", facts = FoodFacts(per100g = per100g()))
+
+        moment = 2_000
+        val accepted = PerHundredGrams(
+            Nutrients(470.0, 7.0, 62.0, 22.0),
+            Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, moment),
+        )
+        val result = repository.saveForm(
+            food.id,
+            name = "Oat cracker",
+            brand = null,
+            facts = asTyped(food.facts, moment).copy(per100g = accepted),
+        )
+
+        assertThat((result as EditResult.Refused).why).isInstanceOf(EditRefused.AlreadyAnotherFood::class.java)
+        val after = repository.byId(food.id)!!
+        assertThat(after.name).isEqualTo("Oat biscuit")
+        assertThat(after.facts).isEqualTo(food.facts)
+    }
+
     /** Checked before anything is written, and the whole Save — the rename included — rolls back. */
     @Test
     fun `emptying a group a saved meal counts in still refuses the Save and undoes it`() = runTest {
