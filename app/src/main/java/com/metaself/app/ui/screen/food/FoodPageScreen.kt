@@ -2,6 +2,8 @@ package com.metaself.app.ui.screen.food
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
@@ -101,6 +103,7 @@ fun FoodPageScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Page(
     food: Food,
@@ -288,7 +291,9 @@ private fun Page(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                // Wraps a button that does not fit onto the next line, whole. A Row squeezed the
+                // last one into what was left, and its label broke mid-word on a narrow phone.
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
                     TextButton(onClick = onBeginJoining) { Text(stringResource(R.string.foods_merge)) }
                     if (food.hidden) {
                         TextButton(onClick = onUnhide) { Text(stringResource(R.string.foods_unhide)) }
