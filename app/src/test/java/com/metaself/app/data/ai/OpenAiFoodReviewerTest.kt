@@ -142,7 +142,7 @@ class OpenAiFoodReviewerTest {
 
         val result = reviewer(settings = settings).review(REQUEST)
 
-        assertThat(result).isEqualTo(ReviewResult.Failed(EstimateResult.Unreachable))
+        assertThat(result).isEqualTo(ReviewResult.Failed(EstimateResult.Unreachable()))
         assertThat(settings.calls).isEqualTo(0)
     }
 

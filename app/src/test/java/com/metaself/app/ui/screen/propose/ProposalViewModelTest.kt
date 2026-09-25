@@ -136,7 +136,7 @@ class ProposalViewModelTest {
 
     @Test
     fun `a failure that is not an answer carries none`() = runTest {
-        val estimator = FakeEstimator(EstimateResult.Unreachable)
+        val estimator = FakeEstimator(EstimateResult.Unreachable())
         val viewModel = ProposalViewModel(estimator, ProblemLog.NONE, FakeFoodRepository())
 
         viewModel.describe("soup")
@@ -745,7 +745,7 @@ class ProposalViewModelTest {
     fun `a failure keeps the owner's words and says what went wrong`() = runTest {
         val viewModel =
             ProposalViewModel(
-                FakeEstimator(EstimateResult.Unreachable),
+                FakeEstimator(EstimateResult.Unreachable()),
                 ProblemLog.NONE,
                 FakeFoodRepository(),
             )
@@ -817,7 +817,7 @@ class ProposalViewModelTest {
     fun `a failure that is not the key offers no way to it`() = runTest {
         val viewModel =
             ProposalViewModel(
-                FakeEstimator(EstimateResult.Unreachable),
+                FakeEstimator(EstimateResult.Unreachable()),
                 ProblemLog.NONE,
                 FakeFoodRepository(),
             )

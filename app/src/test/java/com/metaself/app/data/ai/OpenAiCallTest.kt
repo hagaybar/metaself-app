@@ -129,7 +129,7 @@ class OpenAiCallTest {
 
         val outcome = call(settings = settings).send { _, _ -> "{}" }
 
-        assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable))
+        assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
         assertThat(settings.calls).isEqualTo(0)
     }
 

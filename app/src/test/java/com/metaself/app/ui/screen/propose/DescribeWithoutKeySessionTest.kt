@@ -65,7 +65,7 @@ class DescribeWithoutKeySessionTest {
 
     @Test
     fun `a failure that is not the key offers no way to settings`() {
-        session.start { DescribeThenSettings(result = EstimateResult.Unreachable) }
+        session.start { DescribeThenSettings(result = EstimateResult.Unreachable()) }
 
         session.type(FIELD, "a bowl of soup")
         val failed = session.press("Work it out")

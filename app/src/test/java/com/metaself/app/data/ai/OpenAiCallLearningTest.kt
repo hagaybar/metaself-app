@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.SocketPolicy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -181,6 +182,41 @@ class OpenAiCallLearningTest {
         assertThat(server.requestCount).isEqualTo(1)
     }
 
+    /** D57: a retry lost to the network is still unreachable, and still says what was refused. */
+    @Test
+    fun `a retry that cannot be sent is unreachable and keeps the refusal before it`() = runTest {
+        val settings = FakeSettings(AiSettings(model = "an-invented-model"))
+        server.enqueue(refusal(Refusals.TEMPERATURE))
+        // The connection is lost on the second request, the retry.
+        var requests = 0
+        val losesTheRetry = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (++requests == 2) throw IOException("connection lost")
+                chain.proceed(chain.request())
+            }
+            .build()
+
+        val outcome = call(settings, FakeRequestProfileStore(), losesTheRetry).asked()
+
+        assertThat(outcome).isEqualTo(
+            OpenAiCall.Outcome.Failed(
+                EstimateResult.Unreachable(
+                    afterRefusal = "Unsupported value: 'temperature' does not support 0 with this model. " +
+                        "Only the default (1) value is supported.",
+                ),
+            ),
+        )
+        assertThat(settings.calls).isEqualTo(1)
+    }
+
+    @Test
+    fun `a first request that cannot be sent is unreachable with nothing refused`() = runTest {
+        server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
+
+        assertThat(call(FakeSettings(), FakeRequestProfileStore()).asked())
+            .isEqualTo(OpenAiCall.Outcome.Failed(EstimateResult.Unreachable()))
+    }
+
     /** The ceiling bounds a runaway: a retry is not sent once the day's allowance is spent. */
     @Test
     fun `no retry is sent with the day's allowance spent`() = runTest {
@@ -258,10 +294,14 @@ class OpenAiCallLearningTest {
 
     private fun sent(): JsonObject = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
 
-    private fun call(settings: FakeSettings, profiles: RequestProfileStore) = OpenAiCall(
+    private fun call(
+        settings: FakeSettings,
+        profiles: RequestProfileStore,
+        client: OkHttpClient = OkHttpClient(),
+    ) = OpenAiCall(
         keys = FakeKeys("a-key"),
         settings = settings,
-        client = OkHttpClient(),
+        client = client,
         profiles = profiles,
         baseUrl = server.url("/v1/chat/completions").toString(),
     )

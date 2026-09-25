@@ -80,7 +80,7 @@ class ReviewLineScrollTest {
     fun `a failure that arrives is brought into view`() {
         start()
 
-        reviewing = reviewing.failed(EstimateResult.Unreachable)
+        reviewing = reviewing.failed(EstimateResult.Unreachable())
         compose.waitForIdle()
 
         assertThat(position()).isGreaterThan(0f)

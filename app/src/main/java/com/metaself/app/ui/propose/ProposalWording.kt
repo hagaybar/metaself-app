@@ -24,8 +24,12 @@ object ProposalWording {
             "You have used today's estimates. Type the numbers, or raise the daily limit in " +
                 "settings."
 
-        is EstimateResult.Unreachable ->
+        is EstimateResult.Unreachable -> if (result.afterRefusal != null) {
+            "Could not reach the model. Before that, the provider refused: ${result.afterRefusal} " +
+                "Type the numbers instead — your words are still here."
+        } else {
             "Could not reach the model. Type the numbers instead — your words are still here."
+        }
 
         is EstimateResult.Refused ->
             "The provider refused: ${result.detail}"

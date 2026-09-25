@@ -96,7 +96,7 @@ class OpenAiCall(
             try {
                 learning(key, current.model, build)
             } catch (expected: IOException) {
-                Outcome.Failed(EstimateResult.Unreachable)
+                Outcome.Failed(EstimateResult.Unreachable())
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (unexpected: Exception) {
@@ -125,21 +125,26 @@ class OpenAiCall(
         var profile = remembered ?: RequestProfile.guess(model)
         val tried = mutableSetOf(profile)
         var retries = 0
+        var refusedFirst: String? = null
         while (true) {
-            val answer = post(key, build(model, profile))
+            val answer = try {
+                post(key, build(model, profile))
+            } catch (lost: IOException) {
+                // A retry that could not be sent still says why it was being sent.
+                return Outcome.Failed(EstimateResult.Unreachable(afterRefusal = refusedFirst))
+            }
             if (answer.code in 200..299) {
                 return Outcome.Body(answer.text, model, profile, alreadyRemembered = profile == remembered)
             }
-            val refused = Outcome.Failed(
-                EstimateResult.Refused(refusalOf(answer.code, answer.text)),
-                answer.code,
-            )
+            val words = refusalOf(answer.code, answer.text)
+            val refused = Outcome.Failed(EstimateResult.Refused(words), answer.code)
             if (retries >= RequestFix.MAX_RETRIES) return refused
             val next = nextProfile(answer, profile, tried) ?: return refused
             if (settings.settings.first().remainingToday <= 0) return refused
             tried += next
             profile = next
             retries++
+            refusedFirst = words
         }
     }
 
