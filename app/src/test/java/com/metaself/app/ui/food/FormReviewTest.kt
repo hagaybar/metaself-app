@@ -1,6 +1,7 @@
 package com.metaself.app.ui.food
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FigureChange
@@ -426,14 +427,35 @@ class FormReviewTest {
         assertThat(shown.hasPending).isFalse()
     }
 
+    /** D54 §8.4, as amended 2026-09-25: offered after every answer, suggestions waiting included. */
     @Test
-    fun `the model's answer is kept to show only when the review did not simply work`() {
+    fun `the model's answer is kept to show after every answer`() {
         val asked = FormReview().asked(biscuit)
 
-        assertThat(asked.answered(FoodReview(null, fatChange, null, emptyList()), "raw", biscuit).second.modelAnswer).isNull()
-        assertThat(asked.answered(FoodReview(null, null, null, emptyList()), "raw", biscuit).second.modelAnswer).isEqualTo("raw")
-        assertThat(asked.answered(FoodReview(null, fatChange, null, listOf(ReviewItem.NAME)), "raw", biscuit).second.modelAnswer)
-            .isEqualTo("raw")
+        listOf(
+            FoodReview(null, fatChange, null, emptyList()),
+            FoodReview(null, null, null, emptyList()),
+            FoodReview(null, fatChange, null, listOf(ReviewItem.NAME)),
+        ).forEach { answer ->
+            assertWithMessage("$answer").that(asked.answered(answer, "raw", biscuit).second.modelAnswer).isEqualTo("raw")
+        }
+        assertThat(asked.answered(FoodReview(null, fatChange, null, emptyList()), null, biscuit).second.modelAnswer).isNull()
+    }
+
+    /** It goes with the review it came with: Cancel, Dismiss, and a new request each take it down. */
+    @Test
+    fun `the model's answer goes when its review does`() {
+        val (form, waiting) = FormReview().asked(biscuit).answered(FoodReview(null, fatChange, null, emptyList()), "raw", biscuit)
+        assertThat(waiting.hasPending).isTrue()
+
+        assertThat(waiting.cancel()!!.second.modelAnswer).isNull()
+        assertThat(waiting.asked(form).modelAnswer).isNull()
+        // Dismiss is not drawn while suggestions wait; once none do, it takes the answer down too.
+        assertThat(waiting.dismissed().modelAnswer).isEqualTo("raw")
+        val (_, noneLeft) = waiting.putBack(form, FormBox.FAT_UNIT)!!
+        assertThat(noneLeft.hasPending).isFalse()
+        assertThat(noneLeft.modelAnswer).isEqualTo("raw")
+        assertThat(noneLeft.dismissed().modelAnswer).isNull()
     }
 
     @Test

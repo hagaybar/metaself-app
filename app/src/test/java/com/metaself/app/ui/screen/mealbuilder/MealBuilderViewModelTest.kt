@@ -847,6 +847,34 @@ class MealBuilderViewModelTest {
             assertThat(problems.recorded).isEmpty()
         }
 
+    /**
+     * D54 §8.4, as amended 2026-09-25: in *Make a food* the answer is kept to show with its
+     * suggestions still waiting in the boxes, and Cancel takes it down with them.
+     */
+    @Test
+    fun `a new food's review with suggestions waiting brings the model's answer, and Cancel takes it down`() =
+        runTest(dispatcher) {
+            val raw = """{"per_100g":{"kcal":60},"per_unit":{"kcal":180}}"""
+            val viewModel = opened(
+                carrying(mealId = 1),
+                withSalad(),
+                reviewer = FakeFoodReviewer(ReviewResult.Proposed(lentilsFilled().review, raw)),
+            )
+            viewModel.beginCreatingFood()
+            viewModel.setNewFoodForm(FoodForm(name = "Lentil soup", unitName = "bowl"))
+
+            viewModel.reviewNewFood()
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.making!!.reviewing.hasPending).isTrue()
+            assertThat(viewModel.state.value.making!!.reviewing.modelAnswer).isEqualTo(raw)
+
+            viewModel.cancelNewFoodReview()
+            advanceUntilIdle()
+
+            assertThat(viewModel.state.value.making!!.reviewing.modelAnswer).isNull()
+        }
+
     /** Make it on a form that is not yet answerable says why, in the panel, and makes nothing. */
     @Test
     fun `making a food the form refuses shows its reasons and makes nothing`() = runTest(dispatcher) {

@@ -287,6 +287,30 @@ class FoodPageReviewRenderTest {
         assertThat(draw(reviewing(null))).doesNotContain("Show the model's answer")
     }
 
+    /**
+     * D54 §8.4, as amended 2026-09-25: offered after every answer, suggestions waiting in the boxes
+     * included — under the outcome line, since the button that asks is not drawn while they wait —
+     * and it opens the reply pretty-printed.
+     */
+    @Test
+    fun `the model's answer is offered with suggestions waiting, under the outcome, and opens pretty-printed`() {
+        val raw = """{"per_unit":{"fat":4},"note":"Fat was low."}"""
+        val texts = draw(answered(FoodReview(null, fatTo4, "Fat was low.", emptyList()), raw = raw))
+        val line = "Reviewed: 1 suggestion, in the boxes below — Fat was low."
+
+        assertThat(render.fieldsSaid(SUGGESTED)).containsExactly("4")
+        assertThat(texts).contains(SHOW_ANSWER)
+        assertThat(render.isDrawnBefore(line, SHOW_ANSWER)).isTrue()
+        assertThat(render.isDrawnBefore(SHOW_ANSWER, "Accept changes and save")).isTrue()
+
+        render.click(SHOW_ANSWER)
+        val shown = render.textsAgain()
+
+        assertThat(shown).contains("{\n    \"per_unit\": {\n        \"fat\": 4\n    },\n    \"note\": \"Fat was low.\"\n}")
+        assertThat(shown).contains("Hide the model's answer")
+        assertThat(shown).contains("Copy")
+    }
+
     /** A page with the Oat biscuit open (invented figures) and [review] as its review. */
     /**
      * D56: a food counted in ml is reviewed per 100 ml, so its suggestion is said per 100 ml, in the
@@ -330,9 +354,14 @@ class FoodPageReviewRenderTest {
     }
 
     /** The page with [answer] arrived: its suggestions in the boxes, pending. */
-    private fun answered(answer: FoodReview, food: Food = biscuit(), weight: Boolean = true): FoodPageUiState {
+    private fun answered(
+        answer: FoodReview,
+        food: Food = biscuit(),
+        weight: Boolean = true,
+        raw: String? = null,
+    ): FoodPageUiState {
         val form = FoodForm.of(food).let { if (weight) it else it.copy(gramsPerUnit = "") }
-        val (written, reviewing) = FormReview().asked(form).answered(answer, null, form)
+        val (written, reviewing) = FormReview().asked(form).answered(answer, raw, form)
         return FoodPageUiState(food = food, editing = Editing(1, written, reviewing = reviewing))
     }
 
@@ -397,6 +426,9 @@ class FoodPageReviewRenderTest {
     }
 
     private companion object {
+        /** `R.string.review_show_answer`, as the phone draws it. */
+        const val SHOW_ANSWER = "Show the model's answer"
+
         /** What a screen reader says of a box the review wrote into and he has not accepted (§12.6). */
         const val SUGGESTED = "suggested by the review, not accepted"
 
