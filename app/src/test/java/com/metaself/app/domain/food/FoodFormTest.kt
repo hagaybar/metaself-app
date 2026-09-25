@@ -569,6 +569,112 @@ class FoodFormTest {
         assertThat(filled.errors()).isEmpty()
     }
 
+    // --- A food counted in millilitres (D56) ----------------------------------------------------
+    // Figures invented: a carton's 57 kcal, 2.9 g protein, 4.7 g carbohydrate, 3.6 g fat per 100 ml,
+    // each chosen because its per-ml double is not what a float multiply or divide by 100 gives.
+
+    private fun drink(perMl: Nutrients, unit: String = "ml", grams: Double? = null) = Food(
+        name = "Oat drink",
+        facts = FoodFacts(
+            perUnit = PerUnit(unit, perMl, Provenance(Source.LABEL, null, 0)),
+            gramsPerUnit = grams?.let { GramsPerUnit(it, Provenance(Source.TYPED, null, 0)) },
+        ),
+    )
+
+    private val perMl = Nutrients(0.57, 0.029, 0.047, 0.036)
+
+    @Test
+    fun `a food counted in ml opens per 100 ml`() {
+        val form = FoodForm.of(drink(perMl))
+
+        assertThat(listOf(form.kcalPerUnit, form.proteinPerUnit, form.carbsPerUnit, form.fatPerUnit))
+            .containsExactly("57", "2.9", "4.7", "3.6").inOrder()
+    }
+
+    @Test
+    fun `figures typed per 100 ml are stored per ml`() {
+        val form = FoodForm(
+            name = "Oat drink",
+            unitName = "ml",
+            kcalPerUnit = "57",
+            proteinPerUnit = "2.9",
+            carbsPerUnit = "4.7",
+            fatPerUnit = "3.6",
+        )
+
+        assertThat(form.toFacts(setAtMillis = 0)!!.perUnit!!.nutrients).isEqualTo(perMl)
+    }
+
+    @Test
+    fun `a food counted in ml opened and saved untouched keeps every stored bit`() {
+        // A figure carrying a double's noise, as 2.9 / 100 leaves one, and one past two decimals.
+        val noisy = Nutrients(0.57, 2.9 / 100, 0.04713, 0.036)
+        val stored = drink(noisy).facts
+
+        val facts = FoodForm.of(drink(noisy)).toFacts(setAtMillis = 1, stored = stored)!!
+
+        assertThat(facts.perUnit!!.nutrients).isEqualTo(noisy)
+        assertThat(FoodForm.of(drink(noisy)).perUnitFigures(stored.perUnit!!.nutrients)).isEqualTo(noisy)
+    }
+
+    @Test
+    fun `the Hebrew millilitre is per 100 ml too`() {
+        val form = FoodForm.of(drink(perMl, unit = "מ\"ל"))
+
+        assertThat(form.kcalPerUnit).isEqualTo("57")
+    }
+
+    @Test
+    fun `a food counted in ml is judged by the per 100 ceilings, and says so`() {
+        val form = FoodForm(
+            name = "Oat drink",
+            unitName = "ml",
+            kcalPerUnit = "1200",
+            proteinPerUnit = "1",
+            carbsPerUnit = "1",
+            fatPerUnit = "1",
+        )
+
+        assertThat(form.errors()[FoodField.PER_UNIT]).startsWith(
+            "All four per 100 ml (at most 1000 kcal, and 110 g of protein, carbohydrate or fat)",
+        )
+        assertThat(form.copy(kcalPerUnit = "1000", fatPerUnit = "110").errors()).isEmpty()
+        assertThat(form.copy(kcalPerUnit = "1000", fatPerUnit = "111").errors())
+            .containsKey(FoodField.PER_UNIT)
+    }
+
+    @Test
+    fun `a unit that is not ml keeps its per one boxes and ceilings`() {
+        val glass = FoodForm.of(drink(Nutrients(140.0, 7.0, 12.0, 6.0), unit = "glass"))
+
+        assertThat(glass.kcalPerUnit).isEqualTo("140")
+        assertThat(glass.copy(kcalPerUnit = "1200").errors()).isEmpty()
+        assertThat(glass.toFacts(0)!!.perUnit!!.nutrients).isEqualTo(Nutrients(140.0, 7.0, 12.0, 6.0))
+    }
+
+    @Test
+    fun `the scale follows the unit box as it is typed`() {
+        val typed = FoodForm(
+            name = "Oat drink",
+            kcalPerUnit = "57",
+            proteinPerUnit = "2.9",
+            carbsPerUnit = "4.7",
+            fatPerUnit = "3.6",
+        )
+
+        assertThat(typed.copy(unitName = "ml").perUnitFigures()).isEqualTo(perMl)
+        assertThat(typed.copy(unitName = "cup").perUnitFigures()!!.kcal).isEqualTo(57.0)
+    }
+
+    @Test
+    fun `a review's suggestion for a food counted in ml is written as shown, per 100 ml`() {
+        val filled = FoodForm(name = "Oat drink", unitName = "ml")
+            .with(FactGroup.PER_UNIT, Nutrients(57.0, 2.9, 4.7, 3.6))
+
+        assertThat(filled.kcalPerUnit).isEqualTo("57")
+        assertThat(filled.perUnitFigures()).isEqualTo(perMl)
+    }
+
     private fun someFacts() = FoodFacts(
         per100g = PerHundredGrams(
             Nutrients(72.0, 4.0, 6.0, 2.0),
