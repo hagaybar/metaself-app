@@ -532,7 +532,9 @@ amount the model estimated is now marked with "≈" before it on the day's rows*
 on every `AI_ESTIMATE` row whose words begin with an amount, from the everyday describe as well as a
 conversation; typed, scanned and repeated rows carry none. It is read from the source every row
 already stores: no schema change. A row whose amount he typed over the model's is marked too, since
-an amount has no source of its own (D53 §3) and the figures are still the model's. Exports and the
+an amount has no source of its own (D53 §3) and the figures are still the model's — **a limitation
+the owner accepted on 2026-09-25**. Telling such an amount apart would need the amount's own source
+stored on the row: a schema change, and a step of its own if it is ever wanted. Exports and the
 backup are unchanged. Recorded as an amendment to D7a.
 
 **12.10 Accepted: a final analysis that worked with no effort setting.** When a model takes a final

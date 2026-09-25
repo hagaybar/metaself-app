@@ -142,7 +142,9 @@ source is still stored on every number ever logged.
   his foods whose figures are the model's — whose words begin with an amount. A row typed, scanned,
   or repeated from a past meal carries no mark (a repeat of an estimate keeps its confidence but its
   source says *repeated*). Derived from the source every row already stores: no schema change. A
-  screen reader hears *about 70 g*. Exports and the backup are unchanged.
+  screen reader hears *about 70 g*. Exports and the backup are unchanged. **Accepted by the owner:**
+  an amount he typed over a model's figures keeps the mark, since an amount has no source of its
+  own; storing one would be a schema change, its own step if ever wanted.
 
 **D8 — Logging never depends on the network.** If the model is unreachable or fails, the owner can
 still type the numbers or repeat a past meal. The failure mode of a habit app is the day it refuses
