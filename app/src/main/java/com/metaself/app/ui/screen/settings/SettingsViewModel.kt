@@ -4,8 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.ai.ApiKeyStore
-import com.metaself.app.data.ai.RequestProfile
-import com.metaself.app.data.ai.RequestProfileStore
 import android.net.Uri
 import com.metaself.app.data.backup.AutomaticBackup
 import com.metaself.app.data.backup.BackupCodec
@@ -107,8 +105,6 @@ class SettingsViewModel internal constructor(
     private val steps: StepSource,
     private val meals: MealRepository,
     private val drive: DriveBackup,
-    /** What each model is sent, as learned from its refusals (D57) — for Test it to report. */
-    private val modelProfiles: RequestProfileStore,
 ) : ViewModel() {
 
     @Inject
@@ -131,11 +127,10 @@ class SettingsViewModel internal constructor(
         steps: StepSource,
         meals: MealRepository,
         drive: DriveBackup,
-        modelProfiles: RequestProfileStore,
     ) : this(
         keys, settings, estimator, problems, reminders, scheduler, notifier, backups, files,
         SecretStoreOffAccount(secrets), profiles, backupFolder, automaticBackup, today, now, steps,
-        meals, drive, modelProfiles,
+        meals, drive,
     )
 
     /**
@@ -688,11 +683,11 @@ class SettingsViewModel internal constructor(
             testing.value = true
             testResult.value = null
             testLearned.value = null
-            val model = settings.settings.first().model
             val result = estimator.estimate("one apple")
             problemLines.value = readProblems()
             if (result is EstimateResult.Proposed) {
-                testLearned.value = learnedLine(model, modelProfiles.profileFor(model).first())
+                // How the answered request was sent, as the call carried it (D57 §6).
+                testLearned.value = result.sentAs
             }
             testResult.value = when (result) {
                 // What the answer would log as it came, worth times amount (D53 §1).
@@ -703,19 +698,6 @@ class SettingsViewModel internal constructor(
                 else -> ProposalWording.failure(result)
             }
             testing.value = false
-        }
-    }
-
-    /**
-     * What Test it now sends for [model], in one plain line (D57 §6): *works as sent* when that is
-     * the first guess, else what was learned.
-     */
-    internal fun learnedLine(model: String, profile: RequestProfile?): String {
-        val sent = profile ?: RequestProfile.guess(model)
-        return if (sent == RequestProfile.guess(model)) {
-            "$model works as sent."
-        } else {
-            "$model works: ${sent.describe()}."
         }
     }
 

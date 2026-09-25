@@ -71,6 +71,13 @@ data class RequestProfile(
             return if (REASONING_FAMILIES.any { name.startsWith(it) }) REASONING else DETERMINISTIC
         }
 
+        /**
+         * What Test it says a model is sent, in one plain line (D57 §6): *works as sent* when that
+         * is the first guess, else what was learned.
+         */
+        fun report(model: String, sent: RequestProfile): String =
+            if (sent == guess(model)) "$model works as sent." else "$model works: ${sent.describe()}."
+
         /** A remembered profile, or null when [json] is not one — which is then relearned. */
         fun fromJson(json: JsonObject): RequestProfile? = runCatching {
             val temperature = json["temperature"]?.jsonPrimitive?.booleanOrNull ?: return null

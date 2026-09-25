@@ -7,9 +7,6 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.ai.ApiKeyStore
-import com.metaself.app.data.ai.FakeRequestProfileStore
-import com.metaself.app.data.ai.RequestProfile
-import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.backup.AutomaticBackup
 import com.metaself.app.data.backup.BackupCodec
 import com.metaself.app.data.backup.BackupFiles
@@ -315,30 +312,26 @@ class SettingsViewModelTest {
 
     /** D57 §6: after an answer, one line says what the saved model is now sent. */
     @Test
-    fun `a test that worked says what the model is sent, when it was learned`() = runTest {
-        val learned = RequestProfile(temperature = false, reasoningEffort = "medium")
-        val viewModel = viewModel(
-            estimator = Answers(),
-            modelProfiles = FakeRequestProfileStore(mapOf(AiSettings().model to learned)),
-        )
+    fun `a test that worked says how the answered request was sent, as the answer carried it`() = runTest {
+        val viewModel = viewModel(estimator = Answers(SENT_AS))
         watch(viewModel)
 
         viewModel.test()
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.testLearned)
-            .isEqualTo("${AiSettings().model} works: no temperature, medium thinking, strict format.")
+        assertThat(viewModel.state.value.testLearned).isEqualTo(SENT_AS)
     }
 
     @Test
-    fun `a test that worked with the first guess says it works as sent`() = runTest {
-        val viewModel = viewModel(estimator = Answers())
+    fun `an answer that does not say how it was sent adds no line`() = runTest {
+        val viewModel = viewModel(estimator = Answers(sentAs = null))
         watch(viewModel)
 
         viewModel.test()
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.testLearned).isEqualTo("${AiSettings().model} works as sent.")
+        assertThat(viewModel.state.value.testResult).startsWith("Connected.")
+        assertThat(viewModel.state.value.testLearned).isNull()
     }
 
     @Test
@@ -410,7 +403,6 @@ class SettingsViewModelTest {
         steps: StepSource = Steps(),
         daos: Daos = Daos(),
         snapshot: SettingsSnapshot = SettingsSnapshot { {} },
-        modelProfiles: RequestProfileStore = FakeRequestProfileStore(),
     ): SettingsViewModel {
         val backups = backups(daos, profiles, snapshot)
         val folder = BackupFolder(context, problems)
@@ -436,7 +428,6 @@ class SettingsViewModelTest {
             steps = steps,
             meals = InMemoryMealRepository(),
             drive = drive,
-            modelProfiles = modelProfiles,
         )
     }
 
@@ -489,9 +480,9 @@ class SettingsViewModelTest {
         override suspend fun recordCall() = Unit
     }
 
-    private class Answers : MealEstimator {
+    private class Answers(private val sentAs: String?) : MealEstimator {
         override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
-            EstimateResult.Proposed(aProposal())
+            EstimateResult.Proposed(aProposal(), sentAs = sentAs)
     }
 
     private class Throws : MealEstimator {
@@ -546,5 +537,9 @@ class SettingsViewModelTest {
         }
 
         override suspend fun history(from: LocalDate, to: LocalDate): List<DayMovement> = emptyList()
+    }
+
+    private companion object {
+        const val SENT_AS = "gpt-6-luna works: no temperature, medium thinking, strict format."
     }
 }

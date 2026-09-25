@@ -43,7 +43,14 @@ class OpenAiCallTest {
 
         val outcome = call(settings = settings).send { model, _ -> """{"model":"$model"}""" }
 
-        assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Body("""{"choices":[]}"""))
+        assertThat(outcome).isEqualTo(
+            OpenAiCall.Outcome.Body(
+                """{"choices":[]}""",
+                AiSettings().model,
+                RequestProfile.guess(AiSettings().model),
+                alreadyRemembered = false,
+            ),
+        )
         assertThat(settings.calls).isEqualTo(1)
     }
 

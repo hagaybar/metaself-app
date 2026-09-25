@@ -34,7 +34,20 @@ class OpenAiCall(
     /** What one call came to: the answer's text, or one of the call's own failures. */
     sealed interface Outcome {
 
-        data class Body(val text: String) : Outcome
+        /**
+         * The answer's text, and how the request that got it was sent (D57).
+         *
+         * @property model the model's name as settings held it for this call.
+         * @property profile what the answered request was sent with — the one to report and, once
+         *   the caller has read the answer, to [remember].
+         * @property alreadyRemembered whether [profile] is what was remembered for [model] already.
+         */
+        data class Body(
+            val text: String,
+            val model: String,
+            val profile: RequestProfile,
+            val alreadyRemembered: Boolean,
+        ) : Outcome
 
         /**
          * [failure] is [EstimateResult.NoKey], [EstimateResult.CeilingReached],
@@ -64,7 +77,8 @@ class OpenAiCall(
      * different profile can answer ([RequestFix]) is answered by sending again with it — at most
      * [RequestFix.MAX_RETRIES] times, never the same profile twice in one call, and never with the
      * day's allowance spent. **Every request that reaches the provider is counted**, a refused one
-     * included. The profile that gets an answer is remembered for the model. A refusal nothing can
+     * included. The answer comes back with the profile that got it; the caller [remember]s it once
+     * the answer has been read — an answer in the wrong shape teaches nothing. A refusal nothing can
      * answer is handed back as it always was.
      *
      * Nothing is built or sent without a key or with the day's allowance spent. Never throws.
@@ -107,15 +121,14 @@ class OpenAiCall(
         model: String,
         build: (model: String, profile: RequestProfile) -> String,
     ): Outcome {
-        val remembered = profiles.profileFor(model).first()
+        val remembered = rememberedFor(model)
         var profile = remembered ?: RequestProfile.guess(model)
         val tried = mutableSetOf(profile)
         var retries = 0
         while (true) {
             val answer = post(key, build(model, profile))
             if (answer.code in 200..299) {
-                if (profile != remembered) rememberQuietly(model, profile)
-                return Outcome.Body(answer.text)
+                return Outcome.Body(answer.text, model, profile, alreadyRemembered = profile == remembered)
             }
             val refused = Outcome.Failed(
                 EstimateResult.Refused(refusalOf(answer.code, answer.text)),
@@ -156,15 +169,29 @@ class OpenAiCall(
         return RequestFix.candidates(sent, refusal).firstOrNull { it !in tried }
     }
 
-    /** An answer that came is not lost because remembering how it was asked for failed. */
-    private suspend fun rememberQuietly(model: String, profile: RequestProfile) {
+    /**
+     * Remember how [answer] was asked for, once the caller has read it (D57 §5). Nothing is written
+     * when it is what was remembered already. Never throws: an answer that came is not lost because
+     * remembering how it was asked for failed — the next call learns again.
+     */
+    suspend fun remember(answer: Outcome.Body) {
+        if (answer.alreadyRemembered) return
         try {
-            profiles.remember(model, profile)
+            profiles.remember(answer.model, answer.profile)
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (ignored: Exception) {
             // Nothing remembered: the next call learns again, from the guess.
         }
+    }
+
+    /** What is remembered for [model]; a store that cannot be read is nothing remembered. */
+    private suspend fun rememberedFor(model: String): RequestProfile? = try {
+        profiles.profileFor(model).first()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (unreadable: Exception) {
+        null
     }
 
     /**

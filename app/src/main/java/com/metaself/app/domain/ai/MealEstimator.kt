@@ -25,7 +25,11 @@ interface MealEstimator {
  */
 sealed interface EstimateResult {
 
-    data class Proposed(val proposal: MealProposal) : EstimateResult
+    /**
+     * @property sentAs how the request that got this answer was sent, in one plain line for
+     *   Settings' Test it (D57 §6), such as *"gpt-6-luna works as sent."*; null where not known.
+     */
+    data class Proposed(val proposal: MealProposal, val sentAs: String? = null) : EstimateResult
 
     /** No key entered yet. The only failure with a fix the owner can act on immediately. */
     data object NoKey : EstimateResult

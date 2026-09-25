@@ -33,7 +33,10 @@ class OpenAiFoodReviewer(
         when (
             val outcome = call.send { model, profile -> ReviewPrompt.requestBody(model, request, profile) }
         ) {
-            is OpenAiCall.Outcome.Body -> ReviewResponse.parse(outcome.text, request).alsoRecorded(null)
+            is OpenAiCall.Outcome.Body -> ReviewResponse.parse(outcome.text, request).also { result ->
+                // Read, whatever it proposed: how it was asked for is remembered (D57 §5).
+                if (result !is ReviewResult.Failed) call.remember(outcome)
+            }.alsoRecorded(null)
             is OpenAiCall.Outcome.Failed -> ReviewResult.Failed(outcome.failure).alsoRecorded(outcome.status)
         }
 

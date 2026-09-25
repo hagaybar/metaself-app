@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -16,6 +17,7 @@ import okhttp3.mockwebserver.MockWebServer
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.IOException
 
 /**
  * Learning what a model accepts from its refusals (D57 §3–§5), against a server running in this
@@ -45,9 +47,10 @@ class OpenAiCallLearningTest {
             server.enqueue(refusal(Refusals.EFFORT_LOW_WITH_LIST))
             server.enqueue(MockResponse().setBody(ANSWER))
 
-            val outcome = call(settings, profiles).send(::estimate)
+            val outcome = call(settings, profiles).asked()
 
-            assertThat(outcome).isEqualTo(OpenAiCall.Outcome.Body(ANSWER))
+            assertThat((outcome as OpenAiCall.Outcome.Body).text).isEqualTo(ANSWER)
+            assertThat(outcome.profile).isEqualTo(RequestProfile(temperature = false, reasoningEffort = "medium"))
             assertThat(profiles.remembered.value).containsExactly(
                 "an-invented-model",
                 RequestProfile(temperature = false, reasoningEffort = "medium"),
@@ -71,7 +74,7 @@ class OpenAiCallLearningTest {
         val profiles = FakeRequestProfileStore(mapOf("an-invented-model" to learned))
         server.enqueue(MockResponse().setBody(ANSWER))
 
-        call(FakeSettings(AiSettings(model = "an-invented-model")), profiles).send(::estimate)
+        call(FakeSettings(AiSettings(model = "an-invented-model")), profiles).asked()
 
         assertThat(sent()["reasoning_effort"]!!.jsonPrimitive.content).isEqualTo("high")
         assertThat(profiles.writes).isEqualTo(0)
@@ -82,7 +85,7 @@ class OpenAiCallLearningTest {
         val profiles = FakeRequestProfileStore()
         server.enqueue(MockResponse().setBody(ANSWER))
 
-        call(FakeSettings(AiSettings(model = "gpt-6-luna")), profiles).send(::estimate)
+        call(FakeSettings(AiSettings(model = "gpt-6-luna")), profiles).asked()
 
         assertThat(profiles.remembered.value).containsExactly("gpt-6-luna", RequestProfile.REASONING)
     }
@@ -94,7 +97,7 @@ class OpenAiCallLearningTest {
         server.enqueue(refusal(Refusals.RESPONSE_FORMAT))
         server.enqueue(MockResponse().setBody(ANSWER))
 
-        call(FakeSettings(AiSettings(model = "gpt-6-luna")), profiles).send(::estimate)
+        call(FakeSettings(AiSettings(model = "gpt-6-luna")), profiles).asked()
 
         assertThat(profiles.remembered.value)
             .containsExactly("gpt-6-luna", RequestProfile.REASONING.copy(strictFormat = false))
@@ -114,7 +117,7 @@ class OpenAiCallLearningTest {
         server.enqueue(MockResponse().setBody(ANSWER))
         val profiles = FakeRequestProfileStore()
 
-        call(FakeSettings(AiSettings(model = "an-invented-model")), profiles).send(::estimate)
+        call(FakeSettings(AiSettings(model = "an-invented-model")), profiles).asked()
 
         sent()
         sent()
@@ -134,7 +137,7 @@ class OpenAiCallLearningTest {
         server.enqueue(refusal(Refusals.RESPONSE_FORMAT))
         server.enqueue(MockResponse().setBody(ANSWER))
 
-        val outcome = call(settings, profiles).send(::estimate)
+        val outcome = call(settings, profiles).asked()
 
         assertThat(server.requestCount).isEqualTo(4)
         assertThat(settings.calls).isEqualTo(4)
@@ -155,7 +158,7 @@ class OpenAiCallLearningTest {
             val settings = FakeSettings(AiSettings(model = "gpt-6-luna"))
             server.enqueue(refusal(body))
 
-            val outcome = call(settings, FakeRequestProfileStore()).send(::estimate)
+            val outcome = call(settings, FakeRequestProfileStore()).asked()
 
             assertThat((outcome as OpenAiCall.Outcome.Failed).status).isEqualTo(400)
             assertThat((outcome.failure as EstimateResult.Refused).detail).startsWith(
@@ -172,7 +175,7 @@ class OpenAiCallLearningTest {
         server.enqueue(refusal(Refusals.TEMPERATURE).setResponseCode(429))
 
         val outcome = call(FakeSettings(AiSettings(model = "an-invented-model")), FakeRequestProfileStore())
-            .send(::estimate)
+            .asked()
 
         assertThat((outcome as OpenAiCall.Outcome.Failed).status).isEqualTo(429)
         assertThat(server.requestCount).isEqualTo(1)
@@ -185,12 +188,67 @@ class OpenAiCallLearningTest {
         server.enqueue(refusal(Refusals.TEMPERATURE))
         server.enqueue(MockResponse().setBody(ANSWER))
 
-        val outcome = call(settings, FakeRequestProfileStore()).send(::estimate)
+        val outcome = call(settings, FakeRequestProfileStore()).asked()
 
         assertThat(server.requestCount).isEqualTo(1)
         assertThat(settings.calls).isEqualTo(1)
         assertThat((outcome as OpenAiCall.Outcome.Failed).failure)
             .isInstanceOf(EstimateResult.Refused::class.java)
+    }
+
+    /** A caller that read the answer, and so remembers how it was asked for. */
+    private suspend fun OpenAiCall.asked(): OpenAiCall.Outcome =
+        send(::estimate).also { if (it is OpenAiCall.Outcome.Body) remember(it) }
+
+    /** D57 §5: only an answer that was read teaches; one in the wrong shape leaves nothing behind. */
+    @Test
+    fun `an answer the estimate cannot read is not remembered`() = runTest {
+        val profiles = FakeRequestProfileStore()
+        server.enqueue(refusal(Refusals.TEMPERATURE))
+        server.enqueue(MockResponse().setBody(reply("not the shape asked for")))
+
+        val result = estimator(FakeSettings(AiSettings(model = "an-invented-model")), profiles)
+            .estimate("one apple")
+
+        assertThat(result).isInstanceOf(EstimateResult.Unreadable::class.java)
+        assertThat(profiles.writes).isEqualTo(0)
+    }
+
+    /** D57 §6: the proposal says how the request that got it was sent — not a later read of the store. */
+    @Test
+    fun `a read answer is remembered and says how it was asked for`() = runTest {
+        val profiles = FakeRequestProfileStore()
+        server.enqueue(refusal(Refusals.TEMPERATURE))
+        server.enqueue(MockResponse().setBody(reply(ONE_APPLE)))
+
+        val result = estimator(FakeSettings(AiSettings(model = "an-invented-model")), profiles)
+            .estimate("one apple")
+
+        assertThat((result as EstimateResult.Proposed).sentAs)
+            .isEqualTo("an-invented-model works: no temperature, low thinking, strict format.")
+        assertThat(profiles.remembered.value)
+            .containsExactly("an-invented-model", RequestProfile(temperature = false, reasoningEffort = "low"))
+    }
+
+    @Test
+    fun `a first guess that is answered works as sent`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(ONE_APPLE)))
+
+        val result = estimator(FakeSettings(AiSettings(model = "gpt-6-luna")), FakeRequestProfileStore())
+            .estimate("one apple")
+
+        assertThat((result as EstimateResult.Proposed).sentAs).isEqualTo("gpt-6-luna works as sent.")
+    }
+
+    /** A store that cannot be read or written costs the learning, never the answer. */
+    @Test
+    fun `a broken store is nothing remembered, and the answer still comes`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(ONE_APPLE)))
+
+        val result = estimator(FakeSettings(AiSettings(model = "gpt-6-luna")), BrokenStore())
+            .estimate("one apple")
+
+        assertThat((result as EstimateResult.Proposed).sentAs).isEqualTo("gpt-6-luna works as sent.")
     }
 
     private fun estimate(model: String, profile: RequestProfile): String =
@@ -200,7 +258,7 @@ class OpenAiCallLearningTest {
 
     private fun sent(): JsonObject = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonObject
 
-    private fun call(settings: FakeSettings, profiles: FakeRequestProfileStore) = OpenAiCall(
+    private fun call(settings: FakeSettings, profiles: RequestProfileStore) = OpenAiCall(
         keys = FakeKeys("a-key"),
         settings = settings,
         client = OkHttpClient(),
@@ -228,7 +286,28 @@ class OpenAiCallLearningTest {
         }
     }
 
+    private fun estimator(settings: FakeSettings, profiles: RequestProfileStore) = OpenAiMealEstimator(
+        keys = FakeKeys("a-key"),
+        settings = settings,
+        client = OkHttpClient(),
+        profiles = profiles,
+        baseUrl = server.url("/v1/chat/completions").toString(),
+    )
+
+    private fun reply(content: String): String =
+        """{"choices":[{"message":{"content":${kotlinx.serialization.json.JsonPrimitive(content)}}}]}"""
+
+    /** Remembers nothing it is asked for, and cannot be read. */
+    private class BrokenStore : RequestProfileStore {
+        override fun profileFor(model: String): Flow<RequestProfile?> = flow { throw IOException("disk") }
+        override suspend fun remember(model: String, profile: RequestProfile) = throw IOException("disk")
+    }
+
     private companion object {
         const val ANSWER = """{"choices":[]}"""
+
+        const val ONE_APPLE = """{"note":"","items":[
+            {"name":"Apple","detail":"","amount":1,"unit":"apple","figures_per":"1",
+             "kcal":80,"protein_g":0,"carbs_g":20,"fat_g":0,"confidence":"MEDIUM"}]}"""
     }
 }

@@ -79,8 +79,22 @@ class OpenAiMealEstimator(
                 EstimatePrompt.requestBody(model, description, moreDetail, missingAmounts, profile)
             }
         ) {
-            is OpenAiCall.Outcome.Body -> EstimateResponse.parse(outcome.text)
+            is OpenAiCall.Outcome.Body -> read(outcome)
             is OpenAiCall.Outcome.Failed -> outcome.failure
+        }
+
+    /**
+     * The answer as read, and — when it was read, its amounts given or not — how it was asked for
+     * is remembered (D57 §5). A proposal says how it was asked for, for Settings' Test it (§6).
+     */
+    private suspend fun read(answer: OpenAiCall.Outcome.Body): EstimateResult =
+        when (val result = EstimateResponse.parse(answer.text)) {
+            is EstimateResult.Proposed -> {
+                call.remember(answer)
+                result.copy(sentAs = RequestProfile.report(answer.model, answer.profile))
+            }
+            is EstimateResult.AmountMissing -> result.also { call.remember(answer) }
+            else -> result
         }
 
     companion object {
