@@ -24,12 +24,14 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * One food's own page (D55 §2), drawn from a state: what it holds and in what order.
  *
- * Nothing here about width, wrapping or size — a render in this project has no real font and a
- * 320 dp canvas whatever it is asked for (`CLAUDE.md`). What typed boxes hold is read through
+ * Nothing here about width or size — a render in this project has no real font and a 320 dp canvas
+ * whatever it is asked for (`CLAUDE.md`); the one wrapping test narrows the canvas and asserts only
+ * where the buttons sit relative to each other and to the edge. What typed boxes hold is read through
  * `EditableText`, which [ComposeRender] returns beside the labels. Every figure, name and count is
  * invented.
  *
@@ -522,6 +524,27 @@ class FoodPageScreenRenderTest {
 
         assertThat(texts).doesNotContain(COUNT_IN_ML)
         assertThat(texts).contains(UNIT_LABEL)
+    }
+
+    // --- The food's own buttons wrap whole (Join · Hide · Delete) ------------------------------------
+
+    /**
+     * On a narrow phone the last of three buttons was squeezed into what the row had left, and its
+     * label broke mid-word. A button that does not fit now goes onto the next line, whole. Robolectric
+     * has no real font (`CLAUDE.md`), so a narrow canvas stands in for the phone and only relative
+     * geometry is asserted: Delete sits below Join, and nothing reaches past the edge. The canvas is
+     * tall as well, because these buttons are at the foot of a long page and a node scrolled out of
+     * the window reports no bounds at all.
+     */
+    @Test
+    @Config(qualifiers = "+w150dp-h8000dp")
+    fun `join, hide and delete wrap onto another line rather than breaking a label`() {
+        draw(opened(greekYoghurt()))
+
+        assertThat(render.topDp("Delete")).isGreaterThan(render.topDp("Join with a duplicate"))
+        assertThat(render.rightEdgeDp("Join with a duplicate")).isAtMost(render.canvasWidthDp)
+        assertThat(render.rightEdgeDp("Hide")).isAtMost(render.canvasWidthDp)
+        assertThat(render.rightEdgeDp("Delete")).isAtMost(render.canvasWidthDp)
     }
 
     private fun opened(food: Food, use: FoodUse? = null): FoodPageUiState {
