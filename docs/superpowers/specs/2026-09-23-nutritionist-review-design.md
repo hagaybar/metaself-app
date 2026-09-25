@@ -391,6 +391,10 @@ is not offered when every suggestion is on screen, since those speak for themsel
 or **Dismiss** takes it down; closing the editor forgets it. Both editors, My foods' and *Make a
 food*.
 
+*(Amended 2026-09-25: offered after every answer, suggestions waiting in the boxes (§12.6)
+included — the owner reads the answers. With suggestions waiting it sits under the outcome line,
+and **Cancel** takes it down with them.)*
+
 **It is shown, never kept.** The reply travels from the reviewer to the editor's state and is drawn;
 it is never saved with the food, never written to the problem log, and never sent anywhere. That is
 the problem log's promise — it records what failed, never what you ate — kept for a text that can
@@ -765,7 +769,8 @@ it*) are removed.
 **12.6 How it is shown — in the boxes.** §11's change list, **Apply these changes**, **Keep mine**,
 **Undo** and the teal *changed by the review, not saved* marks are replaced by this. The button, its
 small print, the outcome line and its note (§9.4, §10.3, §10.4), the set-aside lines and **Show the
-model's answer** (§8.4) stay where they are. *(Settled with the owner on 2026-09-25, after the first
+model's answer** (§8.4) stay where they are — the button offered with suggestions waiting too
+(§8.4, amended 2026-09-25). *(Settled with the owner on 2026-09-25, after the first
 draft of this section: the draft's separate Accept all / Dismiss all, its "accepted, not saved"
 line and its Undo are replaced by one act that accepts and saves, and one that cancels.)*
 
@@ -967,7 +972,7 @@ be stored. Adding a weight box to the panel is not part of this decision.
 
 **12.11 What does not change.** What is sent (§2), the key, the model setting, the timeout, the
 failures and their sentences, the daily ceiling (§6), the problem log's silence about the food's name
-(§6, §8.3), **Show the model's answer** (§8.4), D42's ceilings, §8.1/§9.1's echo rules, §8.5's shown
+(§6, §8.3), **Show the model's answer** (§8.4; offered after every answer from 2026-09-25), D42's ceilings, §8.1/§9.1's echo rules, §8.5's shown
 figures, D56's scale, the brand, the join, and every stored shape: **no schema version, no migration,
 no DAO statement, no backup-format change** — a food's weight already carries a source, a rank and a
 confidence, and `AI_ESTIMATE` is already a value it can hold.

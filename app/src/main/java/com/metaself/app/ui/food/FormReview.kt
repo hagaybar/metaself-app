@@ -140,9 +140,10 @@ data class Acceptance(
  * **Accept changes and save** stores a suggestion, handing [accepted] to `FoodForm.toFacts`; there
  * is no state in which a suggestion is accepted and not saved (§12.6).
  *
- * @property modelAnswer the model's reply as it came, offered by **Show the model's answer** after a
- *   review that could not be read or used, proposed nothing, or set an item aside (§8.4). Held here
- *   to be shown and nothing else: it is never saved, and never written to the problem log.
+ * @property modelAnswer the model's reply as it came, offered by **Show the model's answer** after
+ *   every answer — suggestions waiting in the boxes included — and after a reply that could not be
+ *   read (§8.4, amended 2026-09-25). Held here to be shown and nothing else: it is never saved, and
+ *   never written to the problem log. It goes when the review does.
  * @property pending every box the review wrote into and he has not put back or typed over, in the
  *   form's order.
  * @property before the form as it stood when he pressed **Review the figures** — what **Cancel**
@@ -202,7 +203,7 @@ data class FormReview(
 
         return wrote to copy(
             review = Review.Shown(left, nothingSuggested),
-            modelAnswer = raw?.takeIf { nothingSuggested || answer.setAside.isNotEmpty() },
+            modelAnswer = raw,
             pending = pending,
             arrived = form,
         )
