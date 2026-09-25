@@ -23,9 +23,21 @@ data class MovementToday(
     val recorded: Boolean = true,
     val normalSteps: Int?,
     val sessions: List<ExerciseSession> = emptyList(),
+    /**
+     * What the day's movement was worth and which reading decided it — the D12b maximum. Null when
+     * the day has no record. The line under the count speaks in this reading's currency, because a
+     * band-driven day described in steps says the opposite of what it did (milestone 1 §6).
+     */
+    val energy: ActivityEnergy? = null,
+    /** The usual day in that same currency; null while still learning. */
+    val normalEnergyKcal: Int? = null,
     val credit: MovementCredit? = null,
 ) {
     val extraSteps: Int? get() = normalSteps?.let { (steps - it).coerceAtLeast(0) }
+
+    /** True when something other than the step count decided the day's movement. */
+    val decidedByEnergy: Boolean
+        get() = energy != null && energy.source != MovementSource.STEPS && normalEnergyKcal != null
 
     val aboveUsual: Boolean get() = normalSteps != null && steps > normalSteps
 

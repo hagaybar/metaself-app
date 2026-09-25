@@ -79,6 +79,8 @@ class MovementWordingTest {
             MovementWording.earned(credit(10_000)),
             MovementWording.capped(credit(25_000)),
             MovementWording.status(StepAccess.GRANTED, hasNormal = true, daysSoFar = 30),
+            MovementWording.againstUsual(bandDay(900, 580, 400)),
+            MovementWording.againstUsual(bandDay(900, 300, 400)),
         ).joinToString(" ").lowercase()
 
         listOf("you burned", "calories burned", "burn rate").forEach {
@@ -172,4 +174,64 @@ class MovementWordingTest {
 
     private fun today(steps: Int, normal: Int? = 5_200) =
         MovementToday(steps = steps, normalSteps = normal)
+
+    private fun bandDay(steps: Int, energyKcal: Int, normalEnergy: Int?, normalSteps: Int? = 5_200) =
+        MovementToday(
+            steps = steps,
+            normalSteps = normalSteps,
+            energy = ActivityEnergy(energyKcal, MovementSource.ACTIVE_CALORIES),
+            normalEnergyKcal = normalEnergy,
+        )
+
+    /**
+     * The KNOWN GAP of milestone 1 §6: on a swimming day the steps barely move, so a line that
+     * compares steps reads "quiet" while the band's figure is earning calories underneath. The line
+     * speaks in whichever reading decided the credit.
+     */
+    @Test
+    fun `a band-driven day above usual speaks in movement energy`() {
+        assertThat(MovementWording.againstUsual(bandDay(steps = 900, energyKcal = 580, normalEnergy = 400)))
+            .isEqualTo("180 kcal more movement than your usual 400")
+    }
+
+    @Test
+    fun `a band-driven quiet day states the usual in the same currency`() {
+        val text = MovementWording.againstUsual(bandDay(steps = 900, energyKcal = 300, normalEnergy = 400))!!
+
+        assertThat(text).isEqualTo("Your usual day is 400 kcal of movement")
+        assertThat(text.lowercase()).doesNotContain("behind")
+        assertThat(text.lowercase()).doesNotContain("burn")
+    }
+
+    @Test
+    fun `a typed-workout day speaks in the same currency as a band day`() {
+        val typed = MovementToday(
+            steps = 900,
+            normalSteps = 5_200,
+            energy = ActivityEnergy(580, MovementSource.TYPED_WORKOUT),
+            normalEnergyKcal = 400,
+        )
+
+        assertThat(MovementWording.againstUsual(typed))
+            .isEqualTo("180 kcal more movement than your usual 400")
+    }
+
+    /** A step-driven day is worded exactly as before, whether or not the energy is known. */
+    @Test
+    fun `a step-driven day still speaks in steps`() {
+        val stepDay = MovementToday(
+            steps = 9_000,
+            normalSteps = 5_200,
+            energy = ActivityEnergy(270, MovementSource.STEPS),
+            normalEnergyKcal = 156,
+        )
+
+        assertThat(MovementWording.againstUsual(stepDay)).isEqualTo("3,800 more than your usual 5,200")
+    }
+
+    @Test
+    fun `a band-driven day before the usual energy is known falls back to steps`() {
+        assertThat(MovementWording.againstUsual(bandDay(steps = 9_000, energyKcal = 580, normalEnergy = null)))
+            .isEqualTo("3,800 more than your usual 5,200")
+    }
 }

@@ -28,7 +28,10 @@ object MovementWording {
     }
 
     /**
-     * How today stands against a usual day, in plain words.
+     * How today stands against a usual day, in plain words — and **in whichever reading decided
+     * the credit.** A swimming day moves no steps, so comparing steps would call it quiet while the
+     * band's figure was earning calories underneath; on such a day the line speaks in kcal of
+     * movement instead. A day with no band is worded exactly as it always was.
      *
      * Never a reproach. A quiet day says what a usual day is and stops; it does not say he is
      * behind, because a target that already assumes normal movement is not owed anything by a
@@ -36,12 +39,24 @@ object MovementWording {
      */
     fun againstUsual(today: MovementToday?): String? {
         if (today?.recorded == false) return null
+        if (today?.decidedByEnergy == true) return againstUsualEnergy(today)
         val usual = today?.normalSteps ?: return null
         val extra = today.extraSteps ?: return null
         return if (extra > 0) {
             "${number(extra)} more than your usual ${number(usual)}"
         } else {
             "Your usual day is ${number(usual)}"
+        }
+    }
+
+    private fun againstUsualEnergy(today: MovementToday): String? {
+        val energy = today.energy ?: return null
+        val usual = today.normalEnergyKcal ?: return null
+        val extra = (energy.kcal - usual).coerceAtLeast(0)
+        return if (extra > 0) {
+            "${number(extra)} kcal more movement than your usual ${number(usual)}"
+        } else {
+            "Your usual day is ${number(usual)} kcal of movement"
         }
     }
 
