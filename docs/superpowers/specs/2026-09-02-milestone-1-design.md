@@ -133,6 +133,17 @@ whether to accept a figure, which is when it can actually change what he does; *
 if he goes looking; **on the record and in every export**, unchanged. Nothing about D4 moves — the
 source is still stored on every number ever logged.
 
+- **AMENDED 2026-09-25, the owner, with D58 (`2026-09-25-guided-meal-conversation-design.md`
+  §12.9): an amount the model estimated is marked on the day's rows, with "≈" before it** —
+  *84 kcal · P 3 · C 15 · F 1 · ≈70 g* (invented). Still no line of provenance: one character, on
+  the amount, because a conversation's final analysis may now give a weight it worked out, and a
+  weight on the day reads as weighed unless it says otherwise. It marks every row whose source is
+  `AI_ESTIMATE` — from the everyday describe as well as a conversation, and a row logged from one of
+  his foods whose figures are the model's — whose words begin with an amount. A row typed, scanned,
+  or repeated from a past meal carries no mark (a repeat of an estimate keeps its confidence but its
+  source says *repeated*). Derived from the source every row already stores: no schema change. A
+  screen reader hears *about 70 g*. Exports and the backup are unchanged.
+
 **D8 — Logging never depends on the network.** If the model is unreachable or fails, the owner can
 still type the numbers or repeat a past meal. The failure mode of a habit app is the day it refuses
 to work.

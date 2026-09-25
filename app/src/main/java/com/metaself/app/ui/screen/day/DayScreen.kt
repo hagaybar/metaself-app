@@ -940,9 +940,18 @@ internal fun MealNameSheet(
                     text = DayTotalsWording.itemName(item),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                val words = portionWords(item)
                 Text(
-                    text = DayTotalsWording.itemNumbers(item, portionWords(item)),
+                    text = DayTotalsWording.itemNumbers(item, words),
                     style = MaterialTheme.typography.labelSmall,
+                    // "≈" is read as a symbol's name, or not at all: said as "about" (D58 §12.9).
+                    modifier = if (DayTotalsWording.amountEstimated(item, words)) {
+                        Modifier.semantics {
+                            contentDescription = DayTotalsWording.itemNumbersSpoken(item, words)
+                        }
+                    } else {
+                        Modifier
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
@@ -1460,9 +1469,18 @@ private fun LoggedItem(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onBackground,
                 )
+                val words = portionWords(item)
                 Text(
-                    text = DayTotalsWording.itemNumbers(item, portionWords(item)),
+                    text = DayTotalsWording.itemNumbers(item, words),
                     style = MaterialTheme.typography.bodySmall,
+                    // "≈" is read as a symbol's name, or not at all: said as "about" (D58 §12.9).
+                    modifier = if (DayTotalsWording.amountEstimated(item, words)) {
+                        Modifier.semantics {
+                            contentDescription = DayTotalsWording.itemNumbersSpoken(item, words)
+                        }
+                    } else {
+                        Modifier
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

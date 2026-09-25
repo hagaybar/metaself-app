@@ -524,12 +524,22 @@ showing, and he lands on today with the day's usual line about what was logged. 
 logging is onto the day being looked at, as today. Where he lands after each choice is one pure rule
 (§5.3), tested on its own.
 
-**12.9 How an estimate reads on the day (D4).** A gram amount worked out by the final analysis is
-stored as `AI_ESTIMATE` with its confidence, like every model figure. **The day's list shows no
-source under any row** — a standing decision recorded in `DayTotalsWording.origin`: the list is for
-seeing what was eaten, and the source is shown where he decides (the proposal screen's *Estimated —
-… confidence*), kept on the record, in the row's editor and in every export. D58 does not change
-that; whether the day should mark estimated amounts is a separate decision.
+**12.9 How an estimate reads on the day (D4).** *Decided by the owner, 2026-09-25.* A gram amount
+worked out by the final analysis is stored as `AI_ESTIMATE` with its confidence, like every model
+figure. The day's rows print no source (D7a), so a worked-out weight would have read as weighed. **An
+amount the model estimated is now marked with "≈" before it on the day's rows** — *Quinoa* over
+*84 kcal · P 3 · C 15 · F 1 · ≈70 g* (invented) — and a screen reader hears *about 70 g*. The mark is
+on every `AI_ESTIMATE` row whose words begin with an amount, from the everyday describe as well as a
+conversation; typed, scanned and repeated rows carry none. It is read from the source every row
+already stores: no schema change. A row whose amount he typed over the model's is marked too, since
+an amount has no source of its own (D53 §3) and the figures are still the model's. Exports and the
+backup are unchanged. Recorded as an amendment to D7a.
+
+**12.10 Accepted: a final analysis that worked with no effort setting.** When a model takes a final
+analysis only with no `reasoning_effort` at all, the deep level is remembered as *none* (12.5) but
+the temperature choice that went with it is not; the next final analysis may spend one request
+relearning it. Rare — only a model that takes an effort every day and refuses one for this request —
+and bounded by D57's retries.
 
 ---
 

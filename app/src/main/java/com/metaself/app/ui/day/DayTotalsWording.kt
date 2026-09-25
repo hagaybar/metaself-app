@@ -221,12 +221,37 @@ object DayTotalsWording {
      * default of the stored words would be a silent way back to "2 portion" for any caller that
      * forgot to pass it. For every other unit the caller passes the words as stored.
      */
-    fun itemNumbers(item: FoodItem, portion: String?): String {
+    fun itemNumbers(item: FoodItem, portion: String?): String = numbers(item, portion, ABOUT_MARK)
+
+    /**
+     * [itemNumbers] as a screen reader should say it: the mark read as *about*, since "≈" is read
+     * as a symbol's name or not at all (D7a as amended by D58).
+     */
+    fun itemNumbersSpoken(item: FoodItem, portion: String?): String = numbers(item, portion, ABOUT_SPOKEN)
+
+    /**
+     * Whether the row's amount is marked as the model's estimate (D7a as amended by D58, §12.9):
+     * the row's source is the model's, and its words begin with an amount.
+     *
+     * Read from the source every row already stores, so no row needs anything new. A row whose
+     * amount he typed over a model's figures is marked too: the amount has no source of its own
+     * (D53 §3), and the row's figures are still an estimate.
+     */
+    fun amountEstimated(item: FoodItem, portion: String?): Boolean =
+        item.source == Source.AI_ESTIMATE && portion?.trimStart()?.firstOrNull()?.isDigit() == true
+
+    private fun numbers(item: FoodItem, portion: String?, mark: String): String {
         val figures = "${grouped(item.kcal)} kcal · P ${item.proteinG} · " +
             "C ${item.carbsG} · F ${item.fatG}"
         val words = portion?.takeIf { it.isNotBlank() } ?: return figures
-        return "$figures · $words"
+        val marked = if (amountEstimated(item, words)) mark + words.trimStart() else words
+        return "$figures · $marked"
     }
+
+    /** Before an amount the model estimated, on the day (D7a as amended by D58). */
+    const val ABOUT_MARK = "≈"
+
+    private const val ABOUT_SPOKEN = "about "
 
     /**
      * Where a number came from, for the screen that ASKS him to accept it.
