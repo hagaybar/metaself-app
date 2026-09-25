@@ -9,6 +9,7 @@ import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.FormOrigins
 import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredMillilitres
 
 /** Which editor asked for a review (D54 §1). Joining two foods is reserved for later. */
 enum class ReviewProcess {
@@ -34,7 +35,8 @@ data class HeldWeight(val grams: Double, val source: Source)
  *
  * @property brand the brand box, or "" for no brand (D41's `NA` spellings included).
  * @property unitName what "one" is, from the unit box, or "". Sent even with no per-one figures,
- *   because a named unit is what lets the model fill them.
+ *   because a named unit is what lets the model fill them. "100 ml" for a food counted in
+ *   millilitres, whose per-one figures are then sent per 100 ml (D56).
  */
 data class ReviewRequest(
     val process: ReviewProcess,
@@ -45,6 +47,12 @@ data class ReviewRequest(
     val perUnit: HeldGroup?,
     val gramsPerUnit: HeldWeight?,
 ) {
+    /**
+     * True when the per-one group is per 100 ml — a food counted in millilitres (D56) — so its
+     * answer is judged by the per-100 ceilings, as its boxes are. Worked out, never sent.
+     */
+    val perUnitPer100Ml: Boolean get() = unitName == PerHundredMillilitres.PER
+
     companion object {
         /**
          * The form as it stands when he asks — not the stored food, since he may have typed since
@@ -70,7 +78,12 @@ data class ReviewRequest(
                     HeldGroup(figures, origin.source, origin.confidence)
                 }
 
-            val weight = form.weightFigure(stored?.gramsPerUnit?.grams)
+            // A food counted in millilitres is reviewed per 100 ml, as its boxes show it (D56): the
+            // model reads the carton's figures, and a change rounded to one decimal (§3) is rounded
+            // at that scale, not per one ml. What one ml weighs is a density, never assumed (D4), and
+            // the cross-check it would feed has no meaning for it, so it is not sent.
+            val millilitres = form.perHundredMl
+            val weight = form.weightFigure(stored?.gramsPerUnit?.grams).takeUnless { millilitres }
             val weightOrigin = origins.gramsPerUnit
             return ReviewRequest(
                 process = process,
@@ -79,8 +92,8 @@ data class ReviewRequest(
                     .takeIf { it.isNotEmpty() && FoodKeys.brandKey(it) != FoodKeys.NO_BRAND_KEY }
                     .orEmpty(),
                 per100g = held(form.per100gFigures(stored?.per100g?.nutrients), origins.per100g),
-                unitName = form.unitName.trim(),
-                perUnit = held(form.perUnitFigures(stored?.perUnit?.nutrients), origins.perUnit),
+                unitName = if (millilitres) PerHundredMillilitres.PER else form.unitName.trim(),
+                perUnit = held(form.perUnitFiguresAsShown(stored?.perUnit?.nutrients), origins.perUnit),
                 gramsPerUnit = if (weight == null || weightOrigin == null) {
                     null
                 } else {

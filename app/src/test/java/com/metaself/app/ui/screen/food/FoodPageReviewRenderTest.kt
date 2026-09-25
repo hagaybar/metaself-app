@@ -281,6 +281,54 @@ class FoodPageReviewRenderTest {
     }
 
     /** A page with the Oat biscuit open (invented figures) and [review] as its review. */
+    /**
+     * D56: a food counted in ml is reviewed per 100 ml, so its suggestion is said per 100 ml, in the
+     * figures its boxes show. Invented: a carton's 57 kcal per 100 ml, suggested 60.
+     */
+    @Test
+    fun `a review of a food counted in ml is said per 100 ml`() {
+        val kcalTo60 = Suggestion(
+            nutrients = Nutrients(60.0, 2.9, 4.7, 3.6),
+            confidence = Confidence.MEDIUM,
+            filled = false,
+            changes = listOf(FigureChange(Figure.KCAL, 57.0, 60.0, "A reason.")),
+            reason = null,
+        )
+        val drink = oatDrink().copy(id = 1)
+        val texts = draw(
+            FoodPageUiState(
+                food = drink,
+                editing = Editing(
+                    1,
+                    FoodForm.of(drink),
+                    reviewing = FormReview(review = Review.Shown(FoodReview(null, kcalTo60, null, emptyList()))),
+                ),
+            ),
+        )
+
+        assertThat(texts).contains("Per 100 ml: Calories 57 → 60")
+        assertThat(texts.none { it.startsWith("Per ml") }).isTrue()
+    }
+
+    @Test
+    fun `a set-aside suggestion for a food counted in ml is said per 100 ml`() {
+        val drink = oatDrink().copy(id = 1)
+        val texts = draw(
+            FoodPageUiState(
+                food = drink,
+                editing = Editing(
+                    1,
+                    FoodForm.of(drink),
+                    reviewing = FormReview(
+                        review = Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_UNIT)), unusable = true),
+                    ),
+                ),
+            ),
+        )
+
+        assertThat(texts).contains("Its suggestion for per 100 ml couldn't be used.")
+    }
+
     private fun reviewing(review: Review?): FoodPageUiState {
         val food = Food(
             id = 1,
