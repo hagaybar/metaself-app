@@ -7,6 +7,9 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.ai.ApiKeyStore
+import com.metaself.app.data.ai.FakeRequestProfileStore
+import com.metaself.app.data.ai.RequestProfile
+import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.backup.AutomaticBackup
 import com.metaself.app.data.backup.BackupCodec
 import com.metaself.app.data.backup.BackupFiles
@@ -33,6 +36,7 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
+import com.metaself.app.domain.ai.aProposal
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.reminder.Reminder
@@ -309,6 +313,45 @@ class SettingsViewModelTest {
         assertThat(viewModel.state.value.testing).isFalse()
     }
 
+    /** D57 §6: after an answer, one line says what the saved model is now sent. */
+    @Test
+    fun `a test that worked says what the model is sent, when it was learned`() = runTest {
+        val learned = RequestProfile(temperature = false, reasoningEffort = "medium")
+        val viewModel = viewModel(
+            estimator = Answers(),
+            modelProfiles = FakeRequestProfileStore(mapOf(AiSettings().model to learned)),
+        )
+        watch(viewModel)
+
+        viewModel.test()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.testLearned)
+            .isEqualTo("${AiSettings().model} works: no temperature, medium thinking, strict format.")
+    }
+
+    @Test
+    fun `a test that worked with the first guess says it works as sent`() = runTest {
+        val viewModel = viewModel(estimator = Answers())
+        watch(viewModel)
+
+        viewModel.test()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.testLearned).isEqualTo("${AiSettings().model} works as sent.")
+    }
+
+    @Test
+    fun `a test that failed says nothing about what the model is sent`() = runTest {
+        val viewModel = viewModel(estimator = Throws())
+        watch(viewModel)
+
+        viewModel.test()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.testLearned).isNull()
+    }
+
     /** What is on screen is always about the latest thing he did. */
     @Test
     fun `the failure goes when dismissed, and when the next action starts`() = runTest {
@@ -367,6 +410,7 @@ class SettingsViewModelTest {
         steps: StepSource = Steps(),
         daos: Daos = Daos(),
         snapshot: SettingsSnapshot = SettingsSnapshot { {} },
+        modelProfiles: RequestProfileStore = FakeRequestProfileStore(),
     ): SettingsViewModel {
         val backups = backups(daos, profiles, snapshot)
         val folder = BackupFolder(context, problems)
@@ -392,6 +436,7 @@ class SettingsViewModelTest {
             steps = steps,
             meals = InMemoryMealRepository(),
             drive = drive,
+            modelProfiles = modelProfiles,
         )
     }
 
@@ -442,6 +487,11 @@ class SettingsViewModelTest {
         }
 
         override suspend fun recordCall() = Unit
+    }
+
+    private class Answers : MealEstimator {
+        override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
+            EstimateResult.Proposed(aProposal())
     }
 
     private class Throws : MealEstimator {
