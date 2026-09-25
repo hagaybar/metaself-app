@@ -368,6 +368,29 @@ class FormReviewTest {
         assertThat(reviewing.putBack(form, FormBox.UNIT)!!.first.gramsPerUnit).isEqualTo("1.03")
     }
 
+    /** A weight he typed while the request was out is his, typed after the question: it stands. */
+    @Test
+    fun `a weight typed while the request was out is not cleared by a rename away from ml`() {
+        val drink = FoodForm(
+            name = "Oat drink", unitName = "ml",
+            kcalPerUnit = "57", proteinPerUnit = "2.9", carbsPerUnit = "4.7", fatPerUnit = "3.6",
+        )
+        val glass = FoodReview(
+            per100g = null,
+            perUnit = Suggestion(Nutrients(140.0, 7.0, 12.0, 6.0), Confidence.MEDIUM, true, emptyList(), "A glass.", heldSource = null),
+            note = null, setAside = emptyList(),
+            unit = UnitSuggestion("glass", "A glass.", Confidence.MEDIUM, null),
+        )
+        val typed = drink.copy(gramsPerUnit = "250")
+        val withdrawing = FormReview().asked(drink).typed(drink, typed).second
+
+        val (form, reviewing) = withdrawing.answered(glass, null, typed)
+
+        assertThat(form.gramsPerUnit).isEqualTo("250")
+        assertThat(FormBox.WEIGHT in reviewing.pending).isFalse()
+        assertThat(reviewing.pending.keys).contains(FormBox.UNIT)
+    }
+
     @Test
     fun `an accepted weight is saved as an estimate, and nothing works one out`() {
         val (form, reviewing) = arrive(humus, humusAnswer)

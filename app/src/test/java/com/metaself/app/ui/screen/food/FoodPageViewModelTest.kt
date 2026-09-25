@@ -864,7 +864,7 @@ class FoodPageViewModelTest {
         assertThat(reviewer.requests).hasSize(1)
     }
 
-    /** §12.6: a unit renamed changes what a saved meal's "2" means; only meals counting in units count. */
+    /** §12.6: a unit renamed changes what a saved meal's "2" means; meals counting in units, hidden too. */
     @Test
     fun `a renamed unit counts the saved meals that count the food in units`() = runTest(dispatcher) {
         val biscuit = oatBiscuit().copy(id = 1)
@@ -872,6 +872,11 @@ class FoodPageViewModelTest {
             listOf(
                 SavedMeal(name = "Snack", components = listOf(MealComponent(food = biscuit, amount = 2.0, countedAs = CountedAs.UNITS))),
                 SavedMeal(name = "Tea", components = listOf(MealComponent(food = biscuit, amount = 36.0, countedAs = CountedAs.GRAMS))),
+                SavedMeal(
+                    name = "Picnic",
+                    components = listOf(MealComponent(food = biscuit, amount = 3.0, countedAs = CountedAs.UNITS)),
+                    hidden = true,
+                ),
             ),
         )
         val renamed = FoodReview(
@@ -887,7 +892,8 @@ class FoodPageViewModelTest {
         viewModel.review()
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.editing!!.unitMeals).isEqualTo(1)
+        // The hidden meal counts too: the rename changes its "3" as well.
+        assertThat(viewModel.state.value.editing!!.unitMeals).isEqualTo(2)
     }
 
     /** Leaving the page discards the review with the rest (D55 §2); a page opened again is fresh. */

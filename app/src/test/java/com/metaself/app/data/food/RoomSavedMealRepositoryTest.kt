@@ -80,6 +80,24 @@ class RoomSavedMealRepositoryTest {
     private suspend fun aSalad(): Long =
         (meals.create("Vegetable salad") as MealResult.Built).mealId
 
+    // --- D54 §12.6: the meals a unit rename changes ----------------------------------------------
+
+    /** Hidden meals count: a rename changes what their "2" means too. Grams are not affected. */
+    @Test
+    fun `the meals counting a food in units are counted, hidden ones included`() = runTest {
+        val oil = oil()
+        val cucumber = cucumber()
+        val salad = aSalad()
+        meals.put(salad, oil.id, 1.0, CountedAs.UNITS)
+        meals.put(salad, cucumber.id, 80.0, CountedAs.GRAMS)
+        val dressing = (meals.create("Dressing") as MealResult.Built).mealId
+        meals.put(dressing, oil.id, 2.0, CountedAs.UNITS)
+        meals.hide(dressing)
+
+        assertThat(meals.countingInUnits(oil.id)).isEqualTo(2)
+        assertThat(meals.countingInUnits(cucumber.id)).isEqualTo(0)
+    }
+
     // --- Building ------------------------------------------------------------------------------------
 
     @Test

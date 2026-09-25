@@ -13,7 +13,6 @@ import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
-import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
@@ -28,7 +27,6 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -254,10 +252,8 @@ class FoodPageViewModel @Inject constructor(
         write(editing, editing.reviewing.accepted(editing.form))
     }
 
-    /** How many saved meals count this food in units — the ones whose "2" a unit rename changes. */
-    private suspend fun mealsCountingInUnits(): Int = savedMeals.observeOffered().first().count { meal ->
-        meal.components.any { it.food.id == foodId && it.countedAs == CountedAs.UNITS }
-    }
+    /** How many saved meals, hidden ones too, count this food in units: what a unit rename changes. */
+    private suspend fun mealsCountingInUnits(): Int = savedMeals.countingInUnits(foodId)
 
     /**
      * Save what he has typed, and close the page (§2).

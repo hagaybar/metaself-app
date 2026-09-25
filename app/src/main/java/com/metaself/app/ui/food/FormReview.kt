@@ -192,8 +192,9 @@ data class FormReview(
 
         // A weight held per millilitre must not silently become one per glass (§12.4): renamed away
         // from ml with no weight proposed, the bundle clears it — visibly, and it goes back with it.
+        // A weight he typed while the request was out is his, typed after the question: it stands.
         val unit = left.unit
-        if (unit != null && left.weight == null && form.perHundredMl &&
+        if (unit != null && left.weight == null && form.perHundredMl && ReviewItem.WEIGHT !in withdrawn &&
             !PerHundredMillilitres.applies(unit.unitName) && form.gramsPerUnit.isNotBlank()
         ) {
             put(FormBox.WEIGHT, "", ReviewWording.weightPerMillilitre(unit.unitName), bundled = true)

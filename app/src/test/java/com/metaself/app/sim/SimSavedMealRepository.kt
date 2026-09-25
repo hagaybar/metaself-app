@@ -99,6 +99,11 @@ class SimSavedMealRepository(
     override suspend fun byId(id: Long): SavedMeal? =
         meals.value.firstOrNull { it.id == id }?.refreshed(foods.current)
 
+    /** Hidden meals included, as `RoomSavedMealRepository` reads them (D54 §12.6). */
+    override suspend fun countingInUnits(foodId: Long): Int = meals.value.count { meal ->
+        meal.components.any { it.food.id == foodId && it.countedAs == CountedAs.UNITS }
+    }
+
     /** Every name and number in the meal, as the food list holds them now. */
     private fun SavedMeal.refreshed(current: List<com.metaself.app.domain.food.Food>): SavedMeal {
         val byId = current.associateBy { it.id }

@@ -30,6 +30,10 @@ class FakeSavedMealRepository(initial: List<SavedMeal> = emptyList()) : SavedMea
 
     override suspend fun byId(id: Long): SavedMeal? = meals.value.firstOrNull { it.id == id }
 
+    override suspend fun countingInUnits(foodId: Long): Int = meals.value.count { meal ->
+        meal.components.any { it.food.id == foodId && it.countedAs == CountedAs.UNITS }
+    }
+
     override suspend fun create(name: String): MealResult {
         val nameKey = FoodKeys.nameKey(name)
         meals.value.firstOrNull { FoodKeys.nameKey(it.name) == nameKey }?.let {

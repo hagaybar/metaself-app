@@ -8,6 +8,7 @@ import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.SavedMeal
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -68,6 +69,17 @@ interface SavedMealRepository {
     suspend fun unhide(mealId: Long)
 
     suspend fun delete(mealId: Long)
+
+    /**
+     * How many saved meals — hidden ones included — count [foodId] in units: the meals whose "2"
+     * means something else once the food's unit is renamed (D54 §12.6). A meal counting it in
+     * grams is not affected and is not counted.
+     *
+     * The default reads the offered meals only; the real store reads hidden ones too.
+     */
+    suspend fun countingInUnits(foodId: Long): Int = observeOffered().first().count { meal ->
+        meal.components.any { it.food.id == foodId && it.countedAs == CountedAs.UNITS }
+    }
 }
 
 class RoomSavedMealRepository @Inject constructor(
@@ -81,6 +93,15 @@ class RoomSavedMealRepository @Inject constructor(
         dao.observeOffered().map { rows -> rows.mapNotNull { toDomain(it) } }
 
     override suspend fun byId(id: Long): SavedMeal? = dao.byId(id)?.let { toDomain(it) }
+
+    /**
+     * Every meal holding the food, hidden ones included — the statement the delete refusal reads
+     * ([FoodDao.mealsUsing]) — each read whole to see how it counts the food. No new statement.
+     */
+    override suspend fun countingInUnits(foodId: Long): Int =
+        foods.mealsUsing(foodId).distinct()
+            .mapNotNull { name -> dao.idNamed(FoodKeys.nameKey(name))?.let { dao.byId(it) }?.let { toDomain(it) } }
+            .count { meal -> meal.components.any { it.food.id == foodId && it.countedAs == CountedAs.UNITS } }
 
     override suspend fun create(name: String): MealResult = database.withTransaction {
         val moment = now()
