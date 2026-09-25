@@ -95,7 +95,7 @@ class SettingsViewModel internal constructor(
     private val automaticBackup: AutomaticBackup,
     private val today: Today,
     /**
-     * The moment, for the measured window's tally alone.
+     * The moment: for the measured window's tally, and for the moment a backup is stamped with.
      *
      * A stretch is open until the fast completes, so how many of them have been judged depends on
      * what time it is now. Injected for the reason [Today] is: a clock read inside a calculation is
@@ -500,7 +500,7 @@ class SettingsViewModel internal constructor(
      */
     fun driveNow(afterConsent: Boolean = false) {
         act(SettingsPart.BACKUP, ActionRefused.NOTHING_CHANGED) {
-            val outcome = drive.write(today(), System.currentTimeMillis())
+            val outcome = drive.write(today(), now())
 
             if (outcome is DriveOutcome.NeedsConsent) {
                 if (afterConsent) {
@@ -538,7 +538,7 @@ class SettingsViewModel internal constructor(
                 automaticMessage.value = null
                 return@act
             }
-            val backup = backups.export(System.currentTimeMillis())
+            val backup = backups.export(now())
             val outcome = backupFolder.write(
                 folderUri = Uri.parse(folderUri),
                 fileName = BackupSchedule.fileNameFor(today().toString()),
@@ -561,7 +561,7 @@ class SettingsViewModel internal constructor(
         act(SettingsPart.BACKUP, ActionRefused.NOTHING_CHANGED, onRefused = { busy.value = false }) {
             busy.value = true
             backupMessage.value = null
-            val backup = backups.export(System.currentTimeMillis())
+            val backup = backups.export(now())
             val written = files.write(uri, BackupCodec.encode(backup))
             backupMessage.value = if (written) {
                 BackupWording.saved(
