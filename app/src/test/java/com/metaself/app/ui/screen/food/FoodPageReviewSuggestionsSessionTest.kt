@@ -2,14 +2,15 @@ package com.metaself.app.ui.screen.food
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.lifecycle.SavedStateHandle
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
+import com.metaself.app.data.food.FakeSavedMealRepository
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.ai.Figure
@@ -33,18 +34,19 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * Apply these changes, Undo and Save on a food's own page (D55), pressed through against the view
- * model they are really wired to (D54 §11): a box the review changed is marked for a screen reader after Apply, and the mark
- * goes when he types in it, undoes, or saves. Every figure is invented.
+ * A review's suggestions in the boxes of a food's page, pressed through against the view model they
+ * are really wired to (D54 §12.6): each suggested box is marked for a screen reader, **Back** puts a
+ * box back, **Accept changes and save** saves and closes, **Cancel** puts the page back. Every food
+ * and figure is invented.
  *
- * A mark is a colour on screen, which a render here cannot see; what it can see is the state
+ * A suggestion's colour is on screen, which a render here cannot see; what it can see is the state
  * description the same box carries, which is also what a screen reader hears.
  *
  * JUnit 4, because Compose's rule demands it: `org.junit.Test`, never `org.junit.jupiter.api.Test`.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(qualifiers = "w360dp-h640dp")
-class FoodPageReviewAppliedSessionTest {
+class FoodPageReviewSuggestionsSessionTest {
 
     @get:Rule
     val compose = createComposeRule()
@@ -52,61 +54,87 @@ class FoodPageReviewAppliedSessionTest {
     private val session by lazy { ComposeSession(compose) }
 
     @Test
-    fun `applying marks the changed boxes, and typing in one takes its mark off`() {
+    fun `suggestions arrive in the boxes, and Save gives way to Accept changes and save`() {
         session.start { Page(FakeFoodRepository(listOf(oatBiscuit()))) }
+        assertThat(session.screen()).contains("Save")
+
         val shown = session.press("Review the figures")
-        assertThat(shown).contains("Per 100 g: Calories 480 → 470")
-        assertThat(shown).contains("Per biscuit: Fat 1 → 4")
-        assertThat(marked()).isEqualTo(0)
 
-        val applied = session.press("Apply these changes")
-
-        assertThat(applied).contains("2 figures changed by the review — not saved yet. Save to keep them, or Undo.")
-        assertThat(marked()).isEqualTo(2)
-
-        val typed = session.type("4", "5")
-
-        assertThat(marked()).isEqualTo(1)
-        assertThat(typed).contains("1 figure changed by the review — not saved yet. Save to keep it, or Undo.")
+        assertThat(shown).contains("Reviewed: 2 suggestions, in the boxes below.")
+        assertThat(shown).contains("470")
+        assertThat(shown).contains("The macros give about 470.")
+        assertThat(shown).contains("Back to 480")
+        assertThat(shown).contains("Back to 1")
+        assertThat(shown).contains("Accept changes and save")
+        assertThat(shown).contains("Cancel")
+        assertThat(shown).doesNotContain("Save")
+        assertThat(shown).doesNotContain("Leave it alone")
+        assertThat(shown).doesNotContain("Review the figures")
+        assertThat(suggested()).isEqualTo(2)
     }
 
     @Test
-    fun `Undo puts the figures back, takes every mark off, and offers the changes again`() {
+    fun `Back puts one box back, and the last one gives Save back`() {
         session.start { Page(FakeFoodRepository(listOf(oatBiscuit()))) }
         session.press("Review the figures")
-        session.press("Apply these changes")
-        assertThat(marked()).isEqualTo(2)
 
-        val undone = session.press("Undo")
+        val one = session.press("Back to 480")
+        assertThat(suggested()).isEqualTo(1)
+        assertThat(one).contains("480")
+        assertThat(one).contains("Accept changes and save")
 
-        assertThat(marked()).isEqualTo(0)
-        assertThat(undone).contains("480")
-        assertThat(undone).doesNotContain("470")
-        assertThat(undone).contains("Apply these changes")
-        assertThat(undone.none { it.contains("changed by the review") }).isTrue()
+        val none = session.press("Back to 1")
+        assertThat(suggested()).isEqualTo(0)
+        assertThat(none).contains("Save")
+        assertThat(none).contains("Reviewed: no suggestions left.")
     }
 
     @Test
-    fun `Save keeps the applied figures, and the page closes`() {
+    fun `typing in a suggested box makes it his`() {
+        session.start { Page(FakeFoodRepository(listOf(oatBiscuit()))) }
+        session.press("Review the figures")
+
+        session.type("4", "5")
+
+        assertThat(suggested()).isEqualTo(1)
+    }
+
+    @Test
+    fun `Accept changes and save stores the suggestions as estimates, and the page closes`() {
         val foods = FakeFoodRepository(listOf(oatBiscuit()))
         session.start { Page(foods) }
         session.press("Review the figures")
-        session.press("Apply these changes")
-        assertThat(marked()).isEqualTo(2)
 
-        val after = session.press("Save")
+        val after = session.press("Accept changes and save")
 
-        assertThat(after).doesNotContain("Save")
-        assertThat(marked()).isEqualTo(0)
+        assertThat(after).doesNotContain("Accept changes and save")
         val saved = foods.current.single().facts
         assertThat(saved.per100g!!.nutrients.kcal).isEqualTo(470.0)
-        assertThat(saved.perUnit!!.nutrients.fatG).isEqualTo(4.0)
         assertThat(saved.per100g!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        assertThat(saved.perUnit!!.nutrients.fatG).isEqualTo(4.0)
+        assertThat(saved.gramsPerUnit!!.provenance.source).isEqualTo(Source.TYPED)
     }
 
-    /** How many boxes on screen a screen reader hears as changed by the review and not saved. */
-    private fun marked(): Int =
-        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, CHANGED))
+    @Test
+    fun `Cancel puts the page back as it was when Review was pressed, and saves nothing`() {
+        val foods = FakeFoodRepository(listOf(oatBiscuit()))
+        session.start { Page(foods) }
+        session.type("Grams", "20")
+        session.press("Review the figures")
+
+        val cancelled = session.press("Cancel")
+
+        assertThat(suggested()).isEqualTo(0)
+        assertThat(cancelled).contains("480")
+        assertThat(cancelled).doesNotContain("470")
+        assertThat(cancelled).contains("20")
+        assertThat(cancelled).contains("Save")
+        assertThat(foods.current.single().facts).isEqualTo(oatBiscuit().facts)
+    }
+
+    /** How many boxes on screen a screen reader hears as suggested by the review and not accepted. */
+    private fun suggested(): Int =
+        compose.onAllNodes(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, SUGGESTED))
             .fetchSemanticsNodes(atLeastOneRootRequired = false).size
 
     private fun oatBiscuit() = aFood(
@@ -127,6 +155,7 @@ class FoodPageReviewAppliedSessionTest {
                 filled = false,
                 changes = listOf(FigureChange(Figure.KCAL, 480.0, 470.0, "The macros give about 470.")),
                 reason = null,
+                heldSource = Source.LABEL,
             ),
             perUnit = Suggestion(
                 nutrients = Nutrients(90.0, 1.0, 12.0, 4.0),
@@ -134,6 +163,7 @@ class FoodPageReviewAppliedSessionTest {
                 filled = false,
                 changes = listOf(FigureChange(Figure.FAT, 1.0, 4.0, "The biscuit's share of the fat.")),
                 reason = null,
+                heldSource = Source.TYPED,
             ),
             note = null,
             setAside = emptyList(),
@@ -149,6 +179,7 @@ class FoodPageReviewAppliedSessionTest {
                 Now { 1_000 },
                 ProblemLog.NONE,
                 FakeFoodReviewer(bothChanged()),
+                FakeSavedMealRepository(),
                 SavedStateHandle(mapOf(FoodPageViewModel.FOOD_ID to 1L)),
             )
         }
@@ -156,6 +187,6 @@ class FoodPageReviewAppliedSessionTest {
     }
 
     private companion object {
-        const val CHANGED = "changed by the review, not saved"
+        const val SUGGESTED = "suggested by the review, not accepted"
     }
 }

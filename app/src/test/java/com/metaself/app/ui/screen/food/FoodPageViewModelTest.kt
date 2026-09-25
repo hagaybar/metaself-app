@@ -6,7 +6,9 @@ import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
+import com.metaself.app.data.food.FakeSavedMealRepository
 import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.food.aPer100g
 import com.metaself.app.data.time.Now
@@ -15,28 +17,32 @@ import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FigureChange
 import com.metaself.app.domain.ai.FoodReview
 import com.metaself.app.domain.ai.FoodReviewer
+import com.metaself.app.domain.ai.NameSuggestion
 import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.ai.UnitSuggestion
+import com.metaself.app.domain.ai.WeightSuggestion
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
-import com.metaself.app.domain.food.AcceptedGroup
-import com.metaself.app.domain.food.FactGroup
+import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.FoodUse
 import com.metaself.app.domain.food.GramsPerUnit
+import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
+import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
 import com.metaself.app.ui.food.FormReview
 import com.metaself.app.ui.food.Review
-import com.metaself.app.ui.food.ReviewedBox
+import com.metaself.app.ui.food.FormBox
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -213,29 +219,30 @@ class FoodPageViewModelTest {
         assertThat(viewModel.state.value.refusal).contains("Hummus")
     }
 
-    /** D55 §2: a refused Save leaves the page, its boxes and its marks exactly as they were. */
+    /**
+     * D54 §12.6: a refused Accept changes and save loses nothing — the page stays, and every
+     * suggestion still waits in its box, with the refusal above the buttons.
+     */
     @Test
-    fun `a refused Save does not close the page, and leaves the boxes and their marks`() =
+    fun `a refused Accept changes and save keeps every suggestion pending`() =
         runTest(dispatcher) {
             val foods = FakeFoodRepository(listOf(oatBiscuit(), aFood(name = "Hummus")))
             val viewModel = page(foods, reviewer = FakeFoodReviewer(bothChanged()))
+            viewModel.setForm(viewModel.state.value.editing!!.form.copy(name = "Hummus"))
             viewModel.review()
             advanceUntilIdle()
-            viewModel.applyReview()
-            advanceUntilIdle()
-            viewModel.setForm(viewModel.state.value.editing!!.form.copy(name = "Hummus"))
-            advanceUntilIdle()
             val before = viewModel.state.value.editing!!
-            assertThat(before.reviewing.changedBoxes).isNotEmpty()
+            assertThat(before.reviewing.pending).hasSize(2)
 
-            viewModel.save()
+            viewModel.acceptAndSave()
             advanceUntilIdle()
 
             val state = viewModel.state.value
             assertThat(state.closing).isNull()
             assertThat(state.refusal).contains("Hummus")
             assertThat(state.editing!!.form).isEqualTo(before.form)
-            assertThat(state.editing!!.reviewing.changedBoxes).isEqualTo(before.reviewing.changedBoxes)
+            assertThat(state.editing!!.reviewing).isEqualTo(before.reviewing)
+            assertThat(foods.current.first().facts).isEqualTo(oatBiscuit().facts)
         }
 
     // --- Hiding and showing again (D55 §6) ------------------------------------------------------
@@ -661,7 +668,7 @@ class FoodPageViewModelTest {
             assertThat(first.perUnit!!.source).isEqualTo(Source.TYPED)
             assertThat(first.unitName).isEqualTo("biscuit")
 
-            viewModel.dismissReview()
+            viewModel.cancelReview()
             viewModel.setForm(viewModel.state.value.editing!!.form.copy(kcalPer100g = "470"))
             viewModel.review()
             advanceUntilIdle()
@@ -669,42 +676,33 @@ class FoodPageViewModelTest {
             assertThat(reviewer.requests.last().per100g!!.source).isEqualTo(Source.TYPED)
         }
 
+    /** D54 §12.6: the answer goes straight into the boxes, pending; nothing is stored. */
     @Test
-    fun `nothing is written to the boxes until he accepts`() = runTest(dispatcher) {
-        val viewModel = page(FakeFoodRepository(listOf(oatBiscuit())), reviewer = FakeFoodReviewer(fatChanged()))
-        val opened = viewModel.state.value.editing!!.form
+    fun `an answer goes straight into its boxes, pending, and nothing is stored`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(oatBiscuit()))
+        val viewModel = page(foods, reviewer = FakeFoodReviewer(fatChanged()))
 
         viewModel.review()
         advanceUntilIdle()
 
         val editing = viewModel.state.value.editing!!
-        assertThat(editing.form).isEqualTo(opened)
-        val shown = editing.reviewing.review as Review.Shown
-        assertThat(shown.review.perUnit!!.changes.single().to).isEqualTo(4.0)
-        assertThat(shown.review.per100g).isNull()
+        assertThat(editing.form.fatPerUnit).isEqualTo("4")
+        assertThat(editing.reviewing.pending.keys).containsExactly(FormBox.FAT_UNIT)
+        assertThat(foods.current.single().facts).isEqualTo(oatBiscuit().facts)
     }
 
     @Test
-    fun `applying per biscuit fills its four boxes, and Save stores only that group as an estimate`() =
+    fun `Accept changes and save stores only the group it changed as an estimate, and closes`() =
         runTest(dispatcher) {
             val foods = FakeFoodRepository(listOf(oatBiscuit()))
             val viewModel = page(foods, reviewer = FakeFoodReviewer(fatChanged()))
             viewModel.review()
             advanceUntilIdle()
 
-            viewModel.applyReview()
+            viewModel.acceptAndSave()
             advanceUntilIdle()
 
-            val form = viewModel.state.value.editing!!.form
-            assertThat(listOf(form.kcalPerUnit, form.proteinPerUnit, form.carbsPerUnit, form.fatPerUnit))
-                .containsExactly("90", "1", "12", "4").inOrder()
-            assertThat(form.unitName).isEqualTo("biscuit")
-            assertThat(form.gramsPerUnit).isEqualTo("18")
-            assertThat(viewModel.state.value.editing!!.reviewing.review).isNull()
-
-            viewModel.save()
-            advanceUntilIdle()
-
+            assertThat(viewModel.state.value.closing).isEqualTo(Closing.Saved)
             val saved = foods.current.single().facts
             assertThat(saved.perUnit!!.nutrients.fatG).isEqualTo(4.0)
             assertThat(saved.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
@@ -713,63 +711,122 @@ class FoodPageViewModelTest {
             assertThat(saved.gramsPerUnit!!.provenance.source).isEqualTo(Source.TYPED)
         }
 
-    /** D54 §8.5: a label's long figures open rounded; Save on untouched boxes keeps them exactly. */
+    /** The spec's invented example (D54 §12.4–§12.7), end to end, with the name put back. */
     @Test
-    fun `saving a food whose figures opened rounded keeps them exactly, and their source`() =
+    fun `the spec's example, with the name put back and the rest accepted, saves estimates`() =
         runTest(dispatcher) {
-            val scanned = aFood(
-                name = "Seeded cracker",
-                facts = FoodFacts(
-                    per100g = PerHundredGrams(
-                        Nutrients(100.0, 8.571428571428571, 12.857142857142858, 5.714285714285714),
-                        Provenance(Source.LABEL, null, 0),
-                    ),
-                ),
-            )
-            val foods = FakeFoodRepository(listOf(scanned))
-            val viewModel = page(foods)
-            assertThat(viewModel.state.value.editing!!.form.proteinPer100g).isEqualTo("8.57")
-
-            viewModel.save()
-            advanceUntilIdle()
-
-            assertThat(foods.current.single().facts.per100g).isEqualTo(scanned.facts.per100g)
-        }
-
-    /** Still a mix with a guess in it (D54 §5): labelled by its weakest member. */
-    @Test
-    fun `a figure changed after accepting still saves the group as an estimate`() =
-        runTest(dispatcher) {
-            val foods = FakeFoodRepository(listOf(oatBiscuit()))
-            val viewModel = page(foods, reviewer = FakeFoodReviewer(fatChanged()))
+            val foods = FakeFoodRepository(listOf(humus()))
+            val viewModel = page(foods, reviewer = FakeFoodReviewer(ReviewResult.Proposed(humusAnswer())))
             viewModel.review()
             advanceUntilIdle()
-            viewModel.applyReview()
-            advanceUntilIdle()
-            viewModel.setForm(viewModel.state.value.editing!!.form.copy(kcalPerUnit = "95"))
+            assertThat(viewModel.state.value.editing!!.reviewing.pending).hasSize(8)
 
-            viewModel.save()
+            viewModel.putBack(FormBox.NAME)
+            viewModel.acceptAndSave()
             advanceUntilIdle()
 
-            val perUnit = foods.current.single().facts.perUnit!!
-            assertThat(perUnit.nutrients.kcal).isEqualTo(95.0)
-            assertThat(perUnit.nutrients.fatG).isEqualTo(4.0)
-            assertThat(perUnit.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+            val saved = foods.current.single()
+            assertThat(saved.name).isEqualTo("Humus")
+            val facts = saved.facts
+            assertThat(facts.per100g!!.nutrients).isEqualTo(Nutrients(166.0, 7.9, 14.3, 9.6))
+            assertThat(facts.perUnit!!.unitName).isEqualTo("tablespoon")
+            assertThat(facts.perUnit!!.nutrients).isEqualTo(Nutrients(24.9, 1.2, 2.1, 1.4))
+            assertThat(facts.gramsPerUnit!!.grams).isEqualTo(15.0)
+            listOf(facts.per100g!!.provenance, facts.perUnit!!.provenance, facts.gramsPerUnit!!.provenance)
+                .forEach { assertThat(it.source to it.confidence).isEqualTo(Source.AI_ESTIMATE to Confidence.MEDIUM) }
         }
 
     @Test
-    fun `typing in a group withdraws its suggestion and leaves the other`() = runTest(dispatcher) {
-        val viewModel = page(FakeFoodRepository(listOf(oatBiscuit())), reviewer = FakeFoodReviewer(bothChanged()))
+    fun `every suggestion put back, then Save, leaves the stored food exactly as it was`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(oatBiscuit()))
+            val viewModel = page(foods, reviewer = FakeFoodReviewer(bothChanged()))
+            viewModel.review()
+            advanceUntilIdle()
+
+            viewModel.putBack(FormBox.KCAL_100G)
+            viewModel.putBack(FormBox.FAT_UNIT)
+            viewModel.save()
+            advanceUntilIdle()
+
+            // Save stamps the food as edited, as the real one does; nothing it holds has moved.
+            assertThat(foods.current.single().copy(updatedAtMillis = 0)).isEqualTo(oatBiscuit().copy(id = 1))
+        }
+
+    @Test
+    fun `plain Save does nothing while a suggestion waits`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(oatBiscuit()))
+        val viewModel = page(foods, reviewer = FakeFoodReviewer(fatChanged()))
         viewModel.review()
         advanceUntilIdle()
 
-        viewModel.setForm(viewModel.state.value.editing!!.form.copy(fatPerUnit = "2"))
+        viewModel.save()
         advanceUntilIdle()
 
-        val shown = viewModel.state.value.editing!!.reviewing.review as Review.Shown
-        assertThat(shown.review.perUnit).isNull()
-        assertThat(shown.review.per100g).isNotNull()
+        assertThat(viewModel.state.value.closing).isNull()
+        assertThat(foods.current.single().facts).isEqualTo(oatBiscuit().facts)
     }
+
+    @Test
+    fun `Cancel puts the page back as it was when Review was pressed, and stores nothing`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(oatBiscuit()))
+            val viewModel = page(foods, reviewer = FakeFoodReviewer(bothChanged()))
+            val typedFirst = viewModel.state.value.editing!!.form.copy(gramsPerUnit = "20")
+            viewModel.setForm(typedFirst)
+            viewModel.review()
+            advanceUntilIdle()
+            viewModel.setForm(viewModel.state.value.editing!!.form.copy(name = "Oat cookie"))
+
+            viewModel.cancelReview()
+            advanceUntilIdle()
+
+            val editing = viewModel.state.value.editing!!
+            assertThat(editing.form).isEqualTo(typedFirst)
+            assertThat(editing.reviewing).isEqualTo(FormReview())
+            assertThat(viewModel.state.value.closing).isNull()
+            assertThat(foods.current.single().facts).isEqualTo(oatBiscuit().facts)
+        }
+
+    /** A Back that leaves a group half filled: the form's own error, and nothing is lost. */
+    @Test
+    fun `an accept the form refuses keeps every suggestion pending`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(listOf(humus()))
+        val viewModel = page(foods, reviewer = FakeFoodReviewer(ReviewResult.Proposed(humusAnswer())))
+        viewModel.review()
+        advanceUntilIdle()
+        viewModel.setForm(viewModel.state.value.editing!!.form.copy(proteinPerUnit = ""))
+        advanceUntilIdle()
+        val before = viewModel.state.value.editing!!.reviewing
+
+        viewModel.acceptAndSave()
+        advanceUntilIdle()
+
+        val editing = viewModel.state.value.editing!!
+        assertThat(editing.showErrors).isTrue()
+        assertThat(editing.reviewing).isEqualTo(before)
+        assertThat(foods.current.single().facts).isEqualTo(humus().facts)
+    }
+
+    @Test
+    fun `a figure typed over a suggestion is his, and its group is still an estimate`() =
+        runTest(dispatcher) {
+            val foods = FakeFoodRepository(listOf(oatBiscuit()))
+            val viewModel = page(foods, reviewer = FakeFoodReviewer(bothChanged()))
+            viewModel.review()
+            advanceUntilIdle()
+            viewModel.setForm(viewModel.state.value.editing!!.form.copy(fatPerUnit = "5"))
+
+            viewModel.acceptAndSave()
+            advanceUntilIdle()
+
+            val saved = foods.current.single().facts
+            // Per biscuit had only the fat suggested, now typed over: his, and typed.
+            assertThat(saved.perUnit!!.nutrients.fatG).isEqualTo(5.0)
+            assertThat(saved.perUnit!!.provenance.source).isEqualTo(Source.TYPED)
+            assertThat(saved.per100g!!.nutrients.kcal).isEqualTo(470.0)
+            assertThat(saved.per100g!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
+        }
 
     @Test
     fun `typing in a group while the review is out withdraws what comes back for it`() =
@@ -787,10 +844,11 @@ class FoodPageViewModelTest {
             val shown = viewModel.state.value.editing!!.reviewing.review as Review.Shown
             assertThat(shown.review.per100g).isNull()
             assertThat(shown.review.perUnit).isNotNull()
+            assertThat(viewModel.state.value.editing!!.reviewing.pending.keys).containsExactly(FormBox.FAT_UNIT)
         }
 
     @Test
-    fun `while a review is out, asking again sends nothing`() = runTest(dispatcher) {
+    fun `while a review is out, or its suggestions wait, asking again sends nothing`() = runTest(dispatcher) {
         val reviewer = FakeFoodReviewer(fatChanged()).apply { gate = CompletableDeferred() }
         val viewModel = page(FakeFoodRepository(listOf(oatBiscuit())), reviewer = reviewer)
 
@@ -798,105 +856,47 @@ class FoodPageViewModelTest {
         advanceUntilIdle()
         viewModel.review()
         advanceUntilIdle()
+        reviewer.gate!!.complete(Unit)
+        advanceUntilIdle()
+        viewModel.review()
+        advanceUntilIdle()
 
         assertThat(reviewer.requests).hasSize(1)
     }
 
+    /** §12.6: a unit renamed changes what a saved meal's "2" means; only meals counting in units count. */
     @Test
-    fun `Dismiss takes down what is left and keeps what was accepted`() = runTest(dispatcher) {
-        val foods = FakeFoodRepository(listOf(oatBiscuit()))
-        val viewModel = page(foods, reviewer = FakeFoodReviewer(fatChanged()))
+    fun `a renamed unit counts the saved meals that count the food in units`() = runTest(dispatcher) {
+        val biscuit = oatBiscuit().copy(id = 1)
+        val meals = FakeSavedMealRepository(
+            listOf(
+                SavedMeal(name = "Snack", components = listOf(MealComponent(food = biscuit, amount = 2.0, countedAs = CountedAs.UNITS))),
+                SavedMeal(name = "Tea", components = listOf(MealComponent(food = biscuit, amount = 36.0, countedAs = CountedAs.GRAMS))),
+            ),
+        )
+        val renamed = FoodReview(
+            null, null, null, emptyList(),
+            unit = UnitSuggestion("cracker", "The usual word.", Confidence.MEDIUM, Source.TYPED),
+        )
+        val viewModel = page(
+            FakeFoodRepository(listOf(oatBiscuit())),
+            reviewer = FakeFoodReviewer(ReviewResult.Proposed(renamed)),
+            savedMeals = meals,
+        )
+
         viewModel.review()
         advanceUntilIdle()
 
-        viewModel.applyReview()
-        viewModel.dismissReview()
-        advanceUntilIdle()
-
-        val editing = viewModel.state.value.editing!!
-        assertThat(editing.reviewing.review).isNull()
-        assertThat(editing.reviewing.accepted)
-            .containsExactly(FactGroup.PER_UNIT, AcceptedGroup(Confidence.MEDIUM))
-        assertThat(editing.form.kcalPer100g).isEqualTo("480")
-
-        viewModel.save()
-        advanceUntilIdle()
-
-        val saved = foods.current.single().facts
-        assertThat(saved.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
-        assertThat(saved.per100g!!.provenance.source).isEqualTo(Source.LABEL)
-    }
-
-    @Test
-    fun `Apply these changes accepts every group with a suggestion`() = runTest(dispatcher) {
-        val viewModel = page(FakeFoodRepository(listOf(oatBiscuit())), reviewer = FakeFoodReviewer(bothChanged()))
-        viewModel.review()
-        advanceUntilIdle()
-
-        viewModel.applyReview()
-        advanceUntilIdle()
-
-        val editing = viewModel.state.value.editing!!
-        assertThat(editing.form.kcalPer100g).isEqualTo("470")
-        assertThat(editing.form.fatPerUnit).isEqualTo("4")
-        assertThat(editing.reviewing.accepted.keys)
-            .containsExactly(FactGroup.PER_100G, FactGroup.PER_UNIT)
-    }
-
-    /** D54 §11: Undo puts the boxes and the review back as they stood, and Save then keeps them. */
-    @Test
-    fun `Undo restores the boxes and the suggestions, and nothing is accepted`() = runTest(dispatcher) {
-        val foods = FakeFoodRepository(listOf(oatBiscuit()))
-        val viewModel = page(foods, reviewer = FakeFoodReviewer(bothChanged()))
-        val opened = viewModel.state.value.editing!!.form
-        viewModel.review()
-        advanceUntilIdle()
-        val shown = viewModel.state.value.editing!!.reviewing
-
-        viewModel.applyReview()
-        advanceUntilIdle()
-        assertThat(viewModel.state.value.editing!!.reviewing.changedBoxes).hasSize(2)
-        viewModel.undoReview()
-        advanceUntilIdle()
-
-        val editing = viewModel.state.value.editing!!
-        assertThat(editing.form).isEqualTo(opened)
-        assertThat(editing.reviewing).isEqualTo(shown)
-        assertThat(editing.reviewing.accepted).isEmpty()
-        assertThat(editing.reviewing.changedBoxes).isEmpty()
-
-        viewModel.save()
-        advanceUntilIdle()
-
-        // Save stamps the food as edited, as the real one does; nothing it holds has moved.
-        assertThat(foods.current.single().copy(updatedAtMillis = 0)).isEqualTo(oatBiscuit().copy(id = 1))
-    }
-
-    @Test
-    fun `typing in a box the review changed takes its mark off`() = runTest(dispatcher) {
-        val viewModel = page(FakeFoodRepository(listOf(oatBiscuit())), reviewer = FakeFoodReviewer(bothChanged()))
-        viewModel.review()
-        advanceUntilIdle()
-        viewModel.applyReview()
-        advanceUntilIdle()
-
-        viewModel.setForm(viewModel.state.value.editing!!.form.copy(fatPerUnit = "5"))
-        advanceUntilIdle()
-
-        assertThat(viewModel.state.value.editing!!.reviewing.changedBoxes)
-            .containsExactly(ReviewedBox(FactGroup.PER_100G, Figure.KCAL))
-        assertThat(viewModel.state.value.editing!!.reviewing.accepted.keys)
-            .containsExactly(FactGroup.PER_100G, FactGroup.PER_UNIT)
+        assertThat(viewModel.state.value.editing!!.unitMeals).isEqualTo(1)
     }
 
     /** Leaving the page discards the review with the rest (D55 §2); a page opened again is fresh. */
     @Test
-    fun `leaving the page forgets the review and everything accepted`() = runTest(dispatcher) {
+    fun `leaving the page forgets the review and every suggestion`() = runTest(dispatcher) {
         val foods = FakeFoodRepository(listOf(oatBiscuit()))
         val left = page(foods, reviewer = FakeFoodReviewer(fatChanged()))
         left.review()
         advanceUntilIdle()
-        left.applyReview()
 
         val again = page(foods)
 
@@ -1062,6 +1062,29 @@ class FoodPageViewModelTest {
         assertThat(reviewer.requests).isEmpty()
     }
 
+    /** Invented figures: the spec's Humus (D54 §12.4), a label per 100 g, no unit, no weight. */
+    private fun humus() = aFood(
+        name = "Humus",
+        facts = FoodFacts(
+            per100g = PerHundredGrams(Nutrients(166.0, 7.9, 14.3, 19.6), Provenance(Source.LABEL, null, 0)),
+        ),
+    )
+
+    /** §12.4's invented reply to [humus]: a name, one change, a unit with its figures, a weight. */
+    private fun humusAnswer() = FoodReview(
+        per100g = Suggestion(
+            Nutrients(166.0, 7.9, 14.3, 9.6), Confidence.MEDIUM, false,
+            listOf(FigureChange(Figure.FAT, 19.6, 9.6, "The macros are too many.")), null, heldSource = Source.LABEL,
+        ),
+        perUnit = Suggestion(Nutrients(24.9, 1.2, 2.1, 1.4), Confidence.MEDIUM, true, emptyList(), "One tablespoon.", heldSource = null),
+        note = null,
+        setAside = emptyList(),
+        name = NameSuggestion("Hummus", "The usual spelling."),
+        unit = UnitSuggestion("tablespoon", "A dip is counted by the spoon.", Confidence.MEDIUM, null),
+        weight = WeightSuggestion(15.0, Confidence.MEDIUM, "A level tablespoon.", null),
+        weightInBundle = true,
+    )
+
     /** Invented figures: D54's Oat biscuit. */
     private fun oatBiscuit() = aFood(
         name = "Oat biscuit",
@@ -1136,12 +1159,14 @@ class FoodPageViewModelTest {
         foodId: Long = 1,
         problems: ProblemLog = ProblemLog.NONE,
         reviewer: FoodReviewer = FakeFoodReviewer(),
+        savedMeals: SavedMealRepository = FakeSavedMealRepository(),
     ): FoodPageViewModel {
         val viewModel = FoodPageViewModel(
             foods,
             Now { 1_000 },
             problems,
             reviewer,
+            savedMeals,
             SavedStateHandle(mapOf("foodId" to foodId)),
         )
         backgroundScope.launch { viewModel.state.collect { } }

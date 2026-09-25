@@ -7,16 +7,20 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.EditRefused
 import com.metaself.app.data.food.EditResult
 import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
+import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.food.Acceptance
 import com.metaself.app.ui.food.FoodWording
+import com.metaself.app.ui.food.FormBox
 import com.metaself.app.ui.guarded
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +28,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -60,6 +65,7 @@ class FoodPageViewModel @Inject constructor(
     private val now: Now,
     private val problems: ProblemLog,
     private val reviewer: FoodReviewer,
+    private val savedMeals: SavedMealRepository,
     savedState: SavedStateHandle,
 ) : ViewModel() {
 
@@ -133,8 +139,10 @@ class FoodPageViewModel @Inject constructor(
      */
     fun setForm(form: FoodForm) {
         _editing.value = _editing.value?.let { editing ->
-            // Typing in a group withdraws its suggestion, arrived or still out (D54 §4).
-            editing.copy(form = form, reviewing = editing.reviewing.typed(editing.form, form))
+            // Typing withdraws what it answers while the request is out, and makes a suggested box
+            // his once it has arrived; a new unit takes down what was stated for another (D54 §12.6).
+            val (typed, reviewing) = editing.reviewing.typed(editing.form, form)
+            editing.copy(form = typed, reviewing = reviewing)
         }
         _deleting.value = null
     }
@@ -154,10 +162,10 @@ class FoodPageViewModel @Inject constructor(
      */
     fun review() {
         val editing = _editing.value ?: return
-        if (editing.reviewing.asking || FoodField.NAME in editing.errors) return
+        if (editing.reviewing.asking || editing.reviewing.hasPending || FoodField.NAME in editing.errors) return
         dismissRefusal()
         val asked = ++reviewsAsked
-        _editing.value = editing.copy(reviewing = editing.reviewing.asked())
+        _editing.value = editing.copy(reviewing = editing.reviewing.asked(editing.form), unitMeals = 0)
         fun stillWaiting() = asked == reviewsAsked && !finished &&
             _editing.value?.reviewing?.asking == true
         // A throw is logged by the guard and said under the button by `finally` (D54 §9.4).
@@ -172,13 +180,24 @@ class FoodPageViewModel @Inject constructor(
                     weightBox = true,
                 )
                 val result = reviewer.review(request)
+                // Read before the answer is drawn, so nothing typed meanwhile is overwritten.
+                val meals = if (result is ReviewResult.Proposed && result.review.unit != null) {
+                    mealsCountingInUnits()
+                } else {
+                    0
+                }
                 if (!stillWaiting()) return@guarded
                 val open = _editing.value ?: return@guarded
                 when (result) {
-                    is ReviewResult.Proposed ->
+                    is ReviewResult.Proposed -> {
+                        // Every suggestion goes straight into its box, pending (§12.6).
+                        val (form, reviewing) = open.reviewing.answered(result.review, result.raw, open.form)
                         _editing.value = open.copy(
-                            reviewing = open.reviewing.answered(result.review, result.raw),
+                            form = form,
+                            reviewing = reviewing,
+                            unitMeals = if (FormBox.UNIT in reviewing.pending) meals else 0,
                         )
+                    }
                     // Arrived, and nothing in it could be used: said as that, not as a failure.
                     is ReviewResult.Unusable ->
                         _editing.value = open.copy(
@@ -199,26 +218,45 @@ class FoodPageViewModel @Inject constructor(
         }
     }
 
+    /** **Back** on a box the review wrote into: it holds again exactly what it held (D54 §12.6). */
+    fun putBack(box: FormBox) {
+        val editing = _editing.value ?: return
+        val (form, reviewing) = editing.reviewing.putBack(editing.form, box) ?: return
+        _editing.value = editing.copy(form = form, reviewing = reviewing)
+    }
+
     /**
-     * **Apply these changes** (D54 §11): every suggested group into its boxes, accepted as an
-     * estimate, and the boxes it changed marked until he saves, undoes or types in them.
+     * **Cancel** (D54 §12.6): every suggestion goes and the page is exactly as it was when he
+     * pressed Review the figures, his own earlier typing included. Nothing is saved; the page stays.
      */
-    fun applyReview() {
+    fun cancelReview() {
         val editing = _editing.value ?: return
-        val (form, reviewing) = editing.reviewing.apply(editing.form)
-        _editing.value = editing.copy(form = form, reviewing = reviewing)
+        val (form, reviewing) = editing.reviewing.cancel() ?: return
+        _editing.value = editing.copy(form = form, reviewing = reviewing, unitMeals = 0)
+        dismissRefusal()
     }
 
-    /** **Undo**: the boxes and the review go back to how they stood before Apply these changes. */
-    fun undoReview() {
-        val editing = _editing.value ?: return
-        val (form, reviewing) = editing.reviewing.undo(editing.form) ?: return
-        _editing.value = editing.copy(form = form, reviewing = reviewing)
-    }
-
-    /** **Dismiss**, or **Keep mine**: what is left of the review goes; what he accepted stays accepted. */
+    /** **Dismiss**, for an answer with nothing waiting in the boxes: what is left of it goes. */
     fun dismissReview() {
         _editing.value = _editing.value?.let { it.copy(reviewing = it.reviewing.dismissed()) }
+    }
+
+    /**
+     * **Accept changes and save** (D54 §12.6, §12.7): one tap that takes every suggestion still
+     * waiting in a box, as it stands, and saves the food through the one Save there is — each
+     * group it touched labelled by its weakest member, an accepted weight as an estimate. A Save
+     * that is refused — a name another food holds, a group left half filled — loses nothing: every
+     * suggestion is still pending, with the refusal above the buttons.
+     */
+    fun acceptAndSave() {
+        val editing = _editing.value ?: return
+        if (!editing.reviewing.hasPending) return
+        write(editing, editing.reviewing.accepted(editing.form))
+    }
+
+    /** How many saved meals count this food in units — the ones whose "2" a unit rename changes. */
+    private suspend fun mealsCountingInUnits(): Int = savedMeals.observeOffered().first().count { meal ->
+        meal.components.any { it.food.id == foodId && it.countedAs == CountedAs.UNITS }
     }
 
     /**
@@ -235,6 +273,12 @@ class FoodPageViewModel @Inject constructor(
      */
     fun save() {
         val editing = _editing.value ?: return
+        // While a suggestion waits in a box, only Accept changes and save stores (D54 §12.6).
+        if (editing.reviewing.hasPending) return
+        write(editing, Acceptance())
+    }
+
+    private fun write(editing: Editing, accepted: Acceptance) {
         if (finished) return
         _deleting.value = null
         if (editing.errors.isNotEmpty()) {
@@ -243,13 +287,17 @@ class FoodPageViewModel @Inject constructor(
         }
         act(ActionRefused.NOTHING_CHANGED) {
             val form = editing.form
-            // A group accepted from a review goes as an estimate, or weaker, even if he then changed
-            // a figure in it (D54 §5); the repository leaves any group whose figures did not change alone.
-            // A box still showing a stored figure as it opened, rounded, saves the stored figure,
-            // so an untouched group is found unchanged and kept, source and all (D54 §8.5).
+            // A group accepted from a review goes as an estimate, or weaker (D54 §5, §12.7); the
+            // repository leaves any group whose figures did not change alone. A box still showing
+            // a stored figure as it opened, rounded, saves the stored figure, so an untouched group
+            // is found unchanged and kept, source and all (D54 §8.5).
             val stored = foods.byId(editing.foodId)?.facts
-            val facts = form.toFacts(now(), estimated = editing.reviewing.accepted, stored = stored)
-                ?: return@act
+            val facts = form.toFacts(
+                now(),
+                estimated = accepted.groups,
+                stored = stored,
+                weight = accepted.weight,
+            ) ?: return@act
             val brand = form.brand.takeIf { it.isNotBlank() }
             when (val saved = foods.saveForm(editing.foodId, form.name, brand, facts)) {
                 is EditResult.Refused -> refuse(saved.why)

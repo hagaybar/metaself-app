@@ -1,6 +1,7 @@
 package com.metaself.app.ui.food
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
@@ -78,6 +79,11 @@ internal fun FactHeading(title: String, origin: String?) {
  * [numeric] picks the keyboard. Decimal rather than Number, because a food's facts are kept exactly
  * as typed, decimals included (D38) — a keyboard with no point on it would make the packet's 0.5 g
  * untypable on the one screen that promises to keep it.
+ *
+ * With [pending], the review wrote this box and he has not accepted it (D54 §12.6): it is drawn in
+ * the suggestion colour, says so to a screen reader, and has beneath it the model's reason and a
+ * button that puts back what it held — *Back to 19.6*, or *Clear* for a box that was empty —
+ * named with the box, since eight of them can read *Back to …* at once (public issue #3).
  */
 @Composable
 internal fun Field(
@@ -88,27 +94,49 @@ internal fun Field(
     /** Where it sits in a row of two; on its own it takes the whole width. */
     modifier: Modifier = Modifier,
     numeric: Boolean = false,
-    /** The review wrote this box's value and it is not saved yet: drawn and said so (D54 §11). */
-    changed: Boolean = false,
     /**
      * What a screen reader calls the box, when [label] alone is not enough to tell it from another
      * box on the same screen (public issue #3) — see [figureSaid]. Never drawn.
      */
     said: String? = null,
+    /** A suggestion waiting in this box, or null (D54 §12.6). */
+    pending: PendingView? = null,
+    /** Puts back what the box held before the suggestion. */
+    onBack: () -> Unit = {},
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        isError = error != null,
-        supportingText = error?.let { { Text(it) } },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
-        ),
-        colors = if (changed) changedBoxColors() else OutlinedTextFieldDefaults.colors(),
-        modifier = modifier.fillMaxWidth().changedByReview(changed).saidAs(said),
-    )
+    Column(modifier = modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            label = { Text(label) },
+            isError = error != null,
+            supportingText = error?.let { { Text(it) } },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
+            ),
+            colors = if (pending != null) suggestedBoxColors() else OutlinedTextFieldDefaults.colors(),
+            modifier = Modifier.fillMaxWidth().suggestedByReview(pending != null).saidAs(said),
+        )
+        pending?.reason?.let { Caption(it) }
+        pending?.back?.let { original ->
+            val whose = said ?: label
+            val spoken = if (original.isBlank()) {
+                stringResource(R.string.review_clear_said, whose)
+            } else {
+                stringResource(R.string.review_back_to_said, whose, original)
+            }
+            TextButton(onClick = onBack, modifier = Modifier.saidAs(spoken)) {
+                Text(
+                    if (original.isBlank()) {
+                        stringResource(R.string.review_clear)
+                    } else {
+                        stringResource(R.string.review_back_to, original)
+                    },
+                )
+            }
+        }
+    }
 }
 
 /** Names the node for a screen reader as [said], or leaves it as it is when there is nothing to say. */

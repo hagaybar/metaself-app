@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import com.metaself.app.R
-import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
@@ -33,7 +32,8 @@ import com.metaself.app.ui.food.PartsLine
 import com.metaself.app.ui.food.perUnitHeading
 import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.food.ReviewTheFigures
-import com.metaself.app.ui.food.ReviewedBox
+import com.metaself.app.ui.food.FormBox
+import com.metaself.app.ui.food.PendingView
 import com.metaself.app.ui.food.SlotSentence
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
@@ -47,12 +47,16 @@ import com.metaself.app.ui.theme.Spacing
  * The list keeps what is about more than one food: finding, choosing, and joining.
  *
  * From the top, in the drawing's order: the name and the list row's own summary line; the name and
- * brand boxes; **Review the figures** and its verdict (D54, unchanged); the three groups, each
- * headed by where its figures came from; Save and Leave it alone; *Where it's used*; and Join, Hide
- * and Delete, whose question takes their place (D36).
+ * brand boxes; **Review the figures** and its verdict (D54); the three groups, each headed by where
+ * its figures came from; Save and Leave it alone; *Where it's used*; and Join, Hide and Delete, whose
+ * question takes their place (D36).
  *
- * **Nothing is saved but by Save.** Leave it alone is the same Back as the arrow and the system
- * gesture: all three leave the page and discard what was typed (D55 §2, open question 3's default).
+ * **A review's suggestions are drawn in the boxes** (D54 §12.6), each with its reason and its
+ * **Back**; while any waits, **Accept changes and save** and **Cancel** stand in place of Save and
+ * Leave it alone.
+ *
+ * **Nothing is saved but by Save**, or by Accept changes and save. Leave it alone is the same Back as
+ * the arrow and the system gesture: all three leave the page and discard what was typed (D55 §2).
  *
  * The title bar says *My foods*, the list the food belongs to, whichever way he arrived.
  */
@@ -122,7 +126,9 @@ private fun Page(
     onLeave: () -> Unit,
 ) {
     val form = editing.form
-    val changed = editing.reviewing.changedBoxes
+    val reviewing = editing.reviewing
+    fun box(at: FormBox, value: String, onValueChange: (String) -> Unit, error: String? = null) =
+        Box(value, onValueChange, error, reviewing.view(at)) { review.onPutBack(at) }
     Column(
         modifier = Modifier.fillMaxWidth(),
         // D48's grouping: each group one block, tight inside, and the blocks a section apart.
@@ -168,6 +174,8 @@ private fun Page(
                 onValueChange = { onSetForm(form.copy(name = it)) },
                 label = stringResource(R.string.foods_field_name),
                 error = editing.errorFor(FoodField.NAME),
+                pending = reviewing.view(FormBox.NAME),
+                onBack = { review.onPutBack(FormBox.NAME) },
             )
             Field(
                 value = form.brand,
@@ -199,10 +207,10 @@ private fun Page(
             FourFigures(
                 group = FactGroup.PER_100G,
                 unitName = form.unitName,
-                kcal = Box(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, editing.errorFor(FoodField.PER_100G), ReviewedBox(FactGroup.PER_100G, Figure.KCAL) in changed),
-                protein = Box(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, null, ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN) in changed),
-                carbs = Box(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, null, ReviewedBox(FactGroup.PER_100G, Figure.CARBS) in changed),
-                fat = Box(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, null, ReviewedBox(FactGroup.PER_100G, Figure.FAT) in changed),
+                kcal = box(FormBox.KCAL_100G, form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, editing.errorFor(FoodField.PER_100G)),
+                protein = box(FormBox.PROTEIN_100G, form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }),
+                carbs = box(FormBox.CARBS_100G, form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }),
+                fat = box(FormBox.FAT_100G, form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }),
             )
         }
 
@@ -213,16 +221,37 @@ private fun Page(
                 origin = food.facts.perUnit
                     ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
             )
-            Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), editing.errorFor(FoodField.UNIT_NAME))
+            Field(
+                value = form.unitName,
+                onValueChange = { onSetForm(form.copy(unitName = it)) },
+                label = stringResource(R.string.foods_field_unit),
+                error = editing.errorFor(FoodField.UNIT_NAME),
+                pending = reviewing.view(FormBox.UNIT),
+                onBack = { review.onPutBack(FormBox.UNIT) },
+            )
+            // A unit the review names or renames changes what a saved meal's "2" means (§12.6).
+            reviewing.pending[FormBox.UNIT]?.let { unit ->
+                if (editing.unitMeals > 0 && unit.original.isNotBlank()) {
+                    Caption(
+                        pluralStringResource(
+                            R.plurals.review_meals_count_units,
+                            editing.unitMeals,
+                            editing.unitMeals,
+                            unit.original.trim(),
+                            unit.suggested.trim(),
+                        ),
+                    )
+                }
+            }
             // One tap to ml, offered only while no per-one figure would change meaning (#5).
             CountInMillilitres(form, onSetForm)
             FourFigures(
                 group = FactGroup.PER_UNIT,
                 unitName = form.unitName,
-                kcal = Box(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, editing.errorFor(FoodField.PER_UNIT), ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed),
-                protein = Box(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, null, ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed),
-                carbs = Box(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, null, ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed),
-                fat = Box(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, null, ReviewedBox(FactGroup.PER_UNIT, Figure.FAT) in changed),
+                kcal = box(FormBox.KCAL_UNIT, form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, editing.errorFor(FoodField.PER_UNIT)),
+                protein = box(FormBox.PROTEIN_UNIT, form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }),
+                carbs = box(FormBox.CARBS_UNIT, form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }),
+                fat = box(FormBox.FAT_UNIT, form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }),
             )
         }
 
@@ -246,7 +275,15 @@ private fun Page(
                         if (millilitres) R.string.foods_weight_not_asked_ml else R.string.foods_weight_never_guessed,
                     ),
                 )
-                Field(form.gramsPerUnit, { onSetForm(form.copy(gramsPerUnit = it)) }, stringResource(R.string.foods_field_weight), editing.errorFor(FoodField.WEIGHT), numeric = true)
+                Field(
+                    value = form.gramsPerUnit,
+                    onValueChange = { onSetForm(form.copy(gramsPerUnit = it)) },
+                    label = stringResource(R.string.foods_field_weight),
+                    error = editing.errorFor(FoodField.WEIGHT),
+                    numeric = true,
+                    pending = reviewing.view(FormBox.WEIGHT),
+                    onBack = { review.onPutBack(FormBox.WEIGHT) },
+                )
             }
         }
 
@@ -263,9 +300,17 @@ private fun Page(
             // A Save refused or an action that threw, said directly above the buttons (§2).
             (state.refusal ?: state.failed?.let { stringResource(it.sentence) })
                 ?.let { SlotSentence(it, onDismissRefusal) }
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Button(onClick = onSave) { Text(stringResource(R.string.foods_save)) }
-                TextButton(onClick = onLeave) { Text(stringResource(R.string.foods_cancel)) }
+            // While a suggestion waits in a box, the only two answers are to accept every one and
+            // save, or to cancel back to the page as it was (D54 §12.6): Save and Leave it alone
+            // are not drawn, so no tap saves a suggestion without saying accept.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                if (reviewing.hasPending) {
+                    Button(onClick = review.onAcceptAndSave) { Text(stringResource(R.string.review_accept_and_save)) }
+                    TextButton(onClick = review.onCancel) { Text(stringResource(R.string.review_cancel)) }
+                } else {
+                    Button(onClick = onSave) { Text(stringResource(R.string.foods_save)) }
+                    TextButton(onClick = onLeave) { Text(stringResource(R.string.foods_cancel)) }
+                }
             }
         }
 
@@ -341,28 +386,39 @@ private fun WhereItIsUsed(use: FoodUse) {
     }
 }
 
-/** One box of a row of figures: what it holds, what typing does, its error, and its review mark. */
+/** One box of a row of figures: what it holds, what typing does, its error, and a suggestion in it. */
 private data class Box(
     val value: String,
     val onValueChange: (String) -> Unit,
     val error: String?,
-    val changed: Boolean,
+    val pending: PendingView?,
+    val onBack: () -> Unit,
 )
 
 /**
- * A group's four figures, two by two, as D55's drawing lays them out. Each box is named for a
- * screen reader by its label and its [group] (public issue #3), since both groups draw the same four
- * labels.
+ * A group's four figures, two by two, as D55's drawing lays them out — or one per row while a
+ * suggestion waits in any of them, so each reason sits under its own box at a width it can be read
+ * at (D54 §12.6). Each box is named for a screen reader by its label and its [group] (public issue
+ * #3), since both groups draw the same four labels.
  */
 @Composable
 private fun FourFigures(group: FactGroup, unitName: String, kcal: Box, protein: Box, carbs: Box, fat: Box) {
-    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-        FigureBox(kcal, stringResource(R.string.foods_field_kcal), group, unitName, Modifier.weight(1f))
-        FigureBox(protein, stringResource(R.string.foods_field_protein), group, unitName, Modifier.weight(1f))
+    val boxes = listOf(
+        kcal to R.string.foods_field_kcal,
+        protein to R.string.foods_field_protein,
+        carbs to R.string.foods_field_carbs,
+        fat to R.string.foods_field_fat,
+    )
+    if (boxes.any { it.first.pending != null }) {
+        boxes.forEach { (box, label) -> FigureBox(box, stringResource(label), group, unitName, Modifier) }
+        return
     }
-    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-        FigureBox(carbs, stringResource(R.string.foods_field_carbs), group, unitName, Modifier.weight(1f))
-        FigureBox(fat, stringResource(R.string.foods_field_fat), group, unitName, Modifier.weight(1f))
+    boxes.chunked(2).forEach { pair ->
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            pair.forEach { (box, label) ->
+                FigureBox(box, stringResource(label), group, unitName, Modifier.weight(1f))
+            }
+        }
     }
 }
 
@@ -375,8 +431,9 @@ private fun FigureBox(box: Box, label: String, group: FactGroup, unitName: Strin
         error = box.error,
         modifier = modifier,
         numeric = true,
-        changed = box.changed,
         said = figureSaid(label, group, unitName),
+        pending = box.pending,
+        onBack = box.onBack,
     )
 }
 

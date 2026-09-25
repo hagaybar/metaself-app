@@ -601,8 +601,9 @@ fun MetaSelfNavHost(
                 onCancelCreatingFood = builderViewModel::cancelCreatingFood,
                 newFoodReview = ReviewActions(
                     onReview = builderViewModel::reviewNewFood,
-                    onApply = builderViewModel::applyNewFoodReview,
-                    onUndo = builderViewModel::undoNewFoodReview,
+                    onPutBack = builderViewModel::putBackNewFood,
+                    onAcceptAndSave = builderViewModel::acceptAndCreateFood,
+                    onCancel = builderViewModel::cancelNewFoodReview,
                     onDismiss = builderViewModel::dismissNewFoodReview,
                 ),
                 // Left only once the meal is gone, so a delete that fails stays on screen to say so.
@@ -758,8 +759,9 @@ fun MetaSelfNavHost(
                 onDismissRefusal = pageViewModel::dismissRefusal,
                 review = ReviewActions(
                     onReview = pageViewModel::review,
-                    onApply = pageViewModel::applyReview,
-                    onUndo = pageViewModel::undoReview,
+                    onPutBack = pageViewModel::putBack,
+                    onAcceptAndSave = pageViewModel::acceptAndSave,
+                    onCancel = pageViewModel::cancelReview,
                     onDismiss = pageViewModel::dismissReview,
                 ),
                 // Leave it alone and the back arrow: nothing is saved but by Save (§2). A second

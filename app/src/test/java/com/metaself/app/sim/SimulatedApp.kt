@@ -540,6 +540,7 @@ private fun FoodPageHere(
             now = world.now,
             problems = ProblemLog.NONE,
             reviewer = FakeFoodReviewer(),
+            savedMeals = world.savedMeals,
             savedState = SavedStateHandle(mapOf(FoodPageViewModel.FOOD_ID to here.foodId)),
         )
     }
@@ -570,8 +571,9 @@ private fun FoodPageHere(
         onDismissRefusal = pageViewModel::dismissRefusal,
         review = ReviewActions(
             onReview = pageViewModel::review,
-            onApply = pageViewModel::applyReview,
-            onUndo = pageViewModel::undoReview,
+            onPutBack = pageViewModel::putBack,
+            onAcceptAndSave = pageViewModel::acceptAndSave,
+            onCancel = pageViewModel::cancelReview,
             onDismiss = pageViewModel::dismissReview,
         ),
         onBack = goBack,
@@ -617,8 +619,9 @@ private fun BuildingMealHere(world: World, entry: Entry, here: Where.BuildingMea
         onCancelCreatingFood = builderViewModel::cancelCreatingFood,
         newFoodReview = ReviewActions(
             onReview = builderViewModel::reviewNewFood,
-            onApply = builderViewModel::applyNewFoodReview,
-            onUndo = builderViewModel::undoNewFoodReview,
+            onPutBack = builderViewModel::putBackNewFood,
+            onAcceptAndSave = builderViewModel::acceptAndCreateFood,
+            onCancel = builderViewModel::cancelNewFoodReview,
             onDismiss = builderViewModel::dismissNewFoodReview,
         ),
         // Gone back from once the meal is gone, as the nav host does.

@@ -100,7 +100,7 @@ class ReviewInMillilitresTest {
 
     /**
      * The whole path: asked per 100 ml, a change to the calories answered per 100 ml and shown so,
-     * applied into the boxes as shown, and saved per ml — the figures it kept exactly as stored.
+     * written into the boxes as shown, and saved per ml — the figures it kept exactly as stored.
      */
     @Test
     fun `a suggestion per 100 ml is applied as shown and saved per ml, kept figures untouched`() {
@@ -114,12 +114,12 @@ class ReviewInMillilitresTest {
         assertThat(suggestion.nutrients).isEqualTo(Nutrients(60.0, 2.9, 4.7, 3.6))
         assertThat(suggestion.changes.single().from).isEqualTo(57.0)
 
-        val (applied, reviewing) = FormReview().asked().answered(answer.review).apply(form)
+        val (applied, reviewing) = FormReview().asked(form).answered(answer.review, null, form)
         assertThat(applied.kcalPerUnit).isEqualTo("60")
 
         val saved = applied.toFacts(
             setAtMillis = 1,
-            estimated = reviewing.accepted,
+            estimated = reviewing.accepted(applied).groups,
             stored = drink.facts,
         )!!.perUnit!!
         assertThat(saved.unitName).isEqualTo("ml")

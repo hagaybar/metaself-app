@@ -11,6 +11,7 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.FakeFoodReviewer
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FakeFoodRepository
+import com.metaself.app.data.food.FakeSavedMealRepository
 import com.metaself.app.data.food.aFood
 import com.metaself.app.data.time.Now
 import com.metaself.app.ui.ComposeSession
@@ -112,6 +113,7 @@ class FoodPageAskFirstSessionTest {
                 Now { 1_000 },
                 ProblemLog.NONE,
                 FakeFoodReviewer(),
+                FakeSavedMealRepository(),
                 SavedStateHandle(mapOf(FoodPageViewModel.FOOD_ID to 1L)),
             )
         }

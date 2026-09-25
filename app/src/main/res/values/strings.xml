@@ -309,33 +309,37 @@
     <string name="review_the_figures">Review the figures</string>
     <string name="review_asking">Reviewing…</string>
     <string name="review_sends">Sends this food\'s name, brand and figures, and where each came from, to the model, with your key. Nothing else.</string>
-    <!-- Under the verdict: every suggested group at once, or none (D54 §11). -->
-    <string name="review_apply">Apply these changes</string>
-    <string name="review_keep_mine">Keep mine</string>
-    <string name="review_undo">Undo</string>
-    <!-- Said after Apply these changes, until Save, Cancel, Undo, or he types over every box. -->
-    <plurals name="review_applied">
-        <item quantity="one">%1$d figure changed by the review — not saved yet. Save to keep it, or Undo.</item>
-        <item quantity="other">%1$d figures changed by the review — not saved yet. Save to keep them, or Undo.</item>
+    <!-- While a review's suggestions wait in the boxes, these two stand in place of Save and
+         Leave it alone (D54 §12.6): one tap accepts every one and saves; Cancel puts the page back
+         as it was when Review the figures was pressed. -->
+    <string name="review_accept_and_save">Accept changes and save</string>
+    <string name="review_cancel">Cancel</string>
+    <!-- The same in the meal builder's Make a food, whose own Cancel closes the panel. -->
+    <string name="review_accept_and_make">Accept changes and make it</string>
+    <string name="review_cancel_suggestions">Cancel suggestions</string>
+    <!-- Under a box the review wrote into: what it held, to put back; Clear when it was empty. -->
+    <string name="review_back_to">Back to %1$s</string>
+    <string name="review_clear">Clear</string>
+    <!-- The same button, as a screen reader calls it: the box first (public issue #3). -->
+    <string name="review_back_to_said">%1$s back to %2$s</string>
+    <string name="review_clear_said">Clear %1$s</string>
+    <!-- What a screen reader says of a box the review wrote into and he has not accepted. -->
+    <string name="review_suggested_box">suggested by the review, not accepted</string>
+    <!-- Under a unit the review named or renamed, when saved meals count the food in units. -->
+    <plurals name="review_meals_count_units">
+        <item quantity="one">%1$d saved meal counts this food in %2$s; after saving it will count it in %3$s.</item>
+        <item quantity="other">%1$d saved meals count this food in %2$s; after saving they will count it in %3$s.</item>
     </plurals>
-    <!-- The same in the meal builder's Make a food, whose button that saves is Make it. -->
-    <plurals name="review_applied_new_food">
-        <item quantity="one">%1$d figure changed by the review — not saved yet. Press Make it to keep it, or Undo.</item>
-        <item quantity="other">%1$d figures changed by the review — not saved yet. Press Make it to keep them, or Undo.</item>
-    </plurals>
-    <!-- What a screen reader says of a box the review changed. -->
-    <string name="review_changed_box">changed by the review, not saved</string>
     <string name="review_dismiss">Dismiss</string>
     <!-- The line under the button after every review (D54 §9.4). No full stop: the model's note
          follows after " — ", or the line ends in one. -->
     <string name="review_no_changes">Reviewed: no changes suggested</string>
     <string name="review_problem_found">Reviewed: a problem found</string>
     <plurals name="review_suggestions">
-        <item quantity="one">Reviewed: %1$d suggestion below</item>
-        <item quantity="other">Reviewed: %1$d suggestions below</item>
+        <item quantity="one">Reviewed: %1$d suggestion, in the boxes below</item>
+        <item quantity="other">Reviewed: %1$d suggestions, in the boxes below</item>
     </plurals>
     <string name="review_none_left">Reviewed: no suggestions left</string>
-    <string name="review_changes_applied">Reviewed: changes applied</string>
     <string name="review_unusable">The model\'s answer arrived, but its suggestions could not be used</string>
     <string name="review_show_answer">Show the model\'s answer</string>
     <string name="review_hide_answer">Hide the model\'s answer</string>
@@ -357,7 +361,7 @@
          a food only when the packet is logged (D38; since issue #28 the food then takes the
          packet's figures as printed). -->
     <string name="scan_label_figures_kept">Type the numbers as printed — 0.5 g is kept as 0.5 g for this packet. What goes on the day is counted in whole grams.</string>
-    <string name="foods_weight_never_guessed">Nothing works this out for you. It is what turns grams into units and back, so a wrong one would follow into everything you log afterwards.</string>
+    <string name="foods_weight_never_guessed">Nothing in the app works this out. A review may suggest one, which is kept as an estimate. It is what turns grams into units and back, so a wrong one would follow into everything you log afterwards.</string>
     <string name="foods_field_name">Name</string>
     <string name="foods_field_brand">Brand</string>
     <string name="foods_field_kcal">Calories</string>
