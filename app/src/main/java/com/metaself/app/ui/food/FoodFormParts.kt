@@ -22,6 +22,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.food.FactGroup
+import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.ui.theme.Spacing
 
@@ -140,6 +141,20 @@ internal fun figureSaid(label: String, group: FactGroup, unitName: String): Stri
 internal fun perUnitHeading(unitName: String): String = stringResource(
     if (PerHundredMillilitres.applies(unitName)) R.string.foods_group_per_100ml else R.string.foods_group_per_unit,
 )
+
+/**
+ * The one-tap way to count a food in millilitres (public issue #5): it writes "ml" into the unit
+ * box and touches nothing else. Drawn only while [FoodForm.offersMillilitres] holds, so it never
+ * changes what a figure already typed means. Beneath the unit box in both food forms.
+ */
+@Composable
+internal fun CountInMillilitres(form: FoodForm, onSetForm: (FoodForm) -> Unit) {
+    if (form.offersMillilitres) {
+        TextButton(onClick = { onSetForm(form.copy(unitName = PerHundredMillilitres.UNIT)) }) {
+            Text(stringResource(R.string.foods_count_in_ml))
+        }
+    }
+}
 
 /**
  * A line made of parts, each its own text with ` · ` between them — never one joined string, so a

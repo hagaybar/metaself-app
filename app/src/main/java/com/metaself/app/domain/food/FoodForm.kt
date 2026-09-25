@@ -87,6 +87,15 @@ data class FoodForm(
      */
     val perHundredMl: Boolean get() = PerHundredMillilitres.applies(unitName)
 
+    /**
+     * True when the form may offer to count the food in millilitres with one tap (public issue #5):
+     * the unit box does not already name the millilitre, and the four per-one boxes are empty. With a
+     * figure in them the offer stands aside, because changing the unit under it would silently turn
+     * a figure typed per bar into one per 100 ml; typing ml by hand stays possible, and the group's
+     * heading then says per 100 ml as it is typed.
+     */
+    val offersMillilitres: Boolean get() = !perHundredMl && perUnitTyped.all { it.isBlank() }
+
     /** True when he has started filling the group in, which is when it has to be finished. */
     val wantsPer100g: Boolean get() = per100gTyped.any { it.isNotBlank() }
 

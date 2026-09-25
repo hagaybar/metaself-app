@@ -37,6 +37,7 @@ import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.food.AmountTooMuch
 import com.metaself.app.ui.food.AskBeforeDeleting
+import com.metaself.app.ui.food.CountInMillilitres
 import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.food.HowItIsCounted
 import com.metaself.app.ui.food.ReviewActions
@@ -686,6 +687,8 @@ private fun NewFood(
                 style = MaterialTheme.typography.titleSmall,
             )
             Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), making.errorFor(FoodField.UNIT_NAME))
+            // One tap to ml, offered only while no per-one figure would change meaning (#5).
+            CountInMillilitres(form, onSetForm)
             Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_UNIT), numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed, said = figureSaid(stringResource(R.string.foods_field_kcal), FactGroup.PER_UNIT, form.unitName))
             Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed, said = figureSaid(stringResource(R.string.foods_field_protein), FactGroup.PER_UNIT, form.unitName))
             Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed, said = figureSaid(stringResource(R.string.foods_field_carbs), FactGroup.PER_UNIT, form.unitName))
