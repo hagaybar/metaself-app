@@ -53,7 +53,7 @@ class FoodPageExitTest {
     /** The list is recognised by the pattern the host registers it under, arguments and all. */
     @Test
     fun `only the list's registered route counts as the list`() {
-        assertThat(Destination.Foods.isTheList("foods?joinFrom={joinFrom}")).isTrue()
+        assertThat(Destination.Foods.isTheList("foods?joinFrom={joinFrom}&tab={tab}")).isTrue()
         assertThat(Destination.Foods.isTheList("meal/repeat")).isFalse()
         assertThat(Destination.Foods.isTheList("food/{foodId}")).isFalse()
         assertThat(Destination.Foods.isTheList(null)).isFalse()

@@ -120,8 +120,15 @@ class DestinationRouteTest {
     @Test
     fun `the list can be opened picking a duplicate for one food`() {
         assertThat(Destination.Foods.joiningFrom(7L)).isEqualTo("foods?joinFrom=7")
-        assertThat(Destination.Foods.registered).isEqualTo("foods?joinFrom={joinFrom}")
+        assertThat(Destination.Foods.registered).isEqualTo("foods?joinFrom={joinFrom}&tab={tab}")
         assertThat(Destination.Foods.route).isEqualTo("foods")
+    }
+
+    /** D58 §5.3: keeping a described meal lands on the meals list; My meals describes with from=meals. */
+    @Test
+    fun `the meals list and describing from My meals have routes of their own`() {
+        assertThat(Destination.Foods.mealsTab).isEqualTo("foods?tab=meals")
+        assertThat(Destination.Describe.fromMyMeals).isEqualTo("meal/describe?from=meals")
     }
 
     /** "Add a key in settings" opens settings at the key, by the route the host registers. */
