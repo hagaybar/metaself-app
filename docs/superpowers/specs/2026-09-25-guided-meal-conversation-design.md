@@ -231,7 +231,7 @@ A later step:
   "properties": {
     "needs_questions": { "type": "boolean" },
     "total_planned":   { "type": "integer" },
-    "question":        { "anyOf": [ QUESTION, { "type": "null" } ] }
+    "question":        QUESTION
   }
 }
 ```
@@ -241,14 +241,22 @@ schema, unchanged (`EstimatePrompt`'s: `name`, `detail`, `amount`, `unit`, `figu
 `protein_g`, `carbs_g`, `fat_g`, `confidence`) — and `note`, a string. With questions, `items` is
 an empty array.
 
+**The question is always an object, never null** (*amended after review*). When there is no question
+its `text` and `options` are empty. A nullable object (`anyOf` with `null`) was the first shape
+drawn; it was dropped because the first request now replaces the everyday describe for every meal,
+a model that refused that schema would refuse every description, and D57 deliberately learns nothing
+from a refusal of the app's own schema.
+
 **Read as:**
 
 | Reply | Read as |
 |---|---|
 | `needs_questions` false, first request | An estimate: `items` and `note` read by today's reader (`EstimateResponse`) with all its rules — an item dropped and named, D34's second ask, *unreadable* when nothing is left. `question` is ignored. |
 | `needs_questions` false, later step | No more questions: the final analysis follows. |
-| `needs_questions` true | A question: `text` trimmed and not blank; `options` trimmed, blanks and repeats (ignoring case) removed, **2 to 6 left** (five and *Not sure*). `total_planned` below 1 is 1, above 5 is 5. `items` is ignored. |
-| Anything else — `question` null or unusable while `needs_questions` is true, a field missing, not JSON | **An unreadable step** (§9). |
+| `needs_questions` true | A question: `text` trimmed and not blank; `options` trimmed, blanks and repeats (ignoring case) removed, the first five kept. **If none of them means *Not sure*, the phone adds *Not sure* itself** — never unreadable for that. `total_planned` below 1 is 1, above 5 is 5. `items` is ignored. |
+| `needs_questions` missing, `items` present (the `json_object` fallback of D57, loosely followed) | Read as `needs_questions` false: an estimate on the first request. |
+| `needs_questions` false alone on a later step | No more questions. |
+| Anything else — no question text or not one usable answer while `needs_questions` is true, not JSON | **An unreadable step** (§9). |
 
 **No `allow_other` field.** The owner's design gives every question an *Other* answer, so a flag
 that let the model withhold it could only break that. The phone adds *Other* itself.
@@ -454,6 +462,74 @@ Every item a conversation proposes is `AI_ESTIMATE` with the model's confidence,
 described item is, whatever was answered: an answer narrows the guess, it does not measure anything.
 The rest of D53 §3 applies unchanged — a row taking his own food's figures carries that food's
 source; a figure he types makes the row `TYPED`.
+
+### 12. Settled in review, 2026-09-25
+
+A review of this design, before any of it was built, settled the following. Each overrides anything
+above that reads otherwise.
+
+**12.1 One conversation, one live request.** Every request carries the conversation's generation;
+a reply to a request that has since been superseded — by Back, by leaving, by a second tap — is
+dropped unread. **Back while waiting cancels the request in flight** and steps back; the request
+still counts if it was sent (12.6). While a request is in flight the answer buttons, *Other*,
+*That's enough* and *OK* / *Use your best guess* are disabled, so nothing is sent twice.
+
+**12.2 Back and the answers, exactly.**
+
+- The top bar's back arrow steps back exactly as the phone's back gesture and the question's Back do.
+- *That's enough, go ahead* after going back uses the answers up to **and including** the question
+  shown, when it has a remembered answer; later answers are dropped.
+- *Use your best guess* from the offer uses no answers, even ones remembered from before going back.
+- An answer is *the same* as the remembered one when the two are equal trimmed and ignoring case —
+  a tapped button or *Other* words alike.
+- The heading's *of up to N* is the latest `total_planned`, never above the number offered and never
+  below the question's own number.
+
+**12.3 A refusal never ends the conversation.** Anything the screen's safety net catches (the
+`guarded` refusal) is said on the stage he is on, which is kept; it does not reset him to an empty
+description.
+
+**12.4 The allowance's last request.** When exactly one request remains before the final analysis,
+it is sent as an everyday request — the everyday profile, no `high` effort — since a refusal of
+`high` could not be answered by a retry anyway. D34's second ask is **not** part of the reserve: when
+the final analysis leaves an amount out and nothing remains, D34's refusal is shown, as today.
+
+**12.5 What D57 remembers, precisely.**
+
+- **The everyday profile is remembered after every readable step**: the first request, a question,
+  and a *no more questions* reply — any answer the conversation's reader could read.
+- **A final analysis never writes the everyday profile.** It writes only the deep level.
+- **The deep level is merged in the same single edit** as any everyday write, which never drops it.
+  Written for a model with no entry, it creates a valid entry whose everyday part is the first guess.
+- The deep level has three states: **absent** (start from `high`), **a value** (send it), and
+  **explicitly none** — a final analysis on that model worked only with no `reasoning_effort` at all,
+  so none is sent (stored as JSON `null`).
+
+**12.6 Timeouts and counting** (fixed for every request, before D58 was built). Every request's
+connect, write, read and call timeouts are set explicitly — 15 s to connect, 60 s for the rest — and
+the final analysis has 120 s for write, read and call. OkHttp's ten-second read timeout had stayed
+in force beneath the old 45-second call timeout. **A request written to the connection counts
+against the ceiling even if its answer never arrives** (it may have been answered and billed); one
+that never connected does not.
+
+**12.7 Keep as a meal is all or nothing.** Finding or making the foods, teaching them the rows'
+worth, making the meal and its parts run in **one** transaction. On this path a storage failure while
+finding or teaching a food is not swallowed (logging swallows it, by design, so a row is still
+logged): it ends the transaction. A refusal — the name taken, a part that cannot join — also rolls
+everything back, including facts re-taught to a food he already had, and is said afterwards. The
+refusal's words never say anything *was logged*, since nothing was; beside it, **Log it instead**.
+
+**12.8 Log it from My meals logs on today**, explicitly, whatever day the day screen was last
+showing, and he lands on today with the day's usual line about what was logged. From Add something,
+logging is onto the day being looked at, as today. Where he lands after each choice is one pure rule
+(§5.3), tested on its own.
+
+**12.9 How an estimate reads on the day (D4).** A gram amount worked out by the final analysis is
+stored as `AI_ESTIMATE` with its confidence, like every model figure. **The day's list shows no
+source under any row** — a standing decision recorded in `DayTotalsWording.origin`: the list is for
+seeing what was eaten, and the source is shown where he decides (the proposal screen's *Estimated —
+… confidence*), kept on the record, in the row's editor and in every export. D58 does not change
+that; whether the day should mark estimated amounts is a separate decision.
 
 ---
 
