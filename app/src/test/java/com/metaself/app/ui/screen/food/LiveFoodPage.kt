@@ -39,8 +39,9 @@ fun LiveFoodPage(viewModel: FoodPageViewModel) {
         onDismissRefusal = viewModel::dismissRefusal,
         review = ReviewActions(
             onReview = viewModel::review,
-            onApply = viewModel::applyReview,
-            onUndo = viewModel::undoReview,
+            onPutBack = viewModel::putBack,
+            onAcceptAndSave = viewModel::acceptAndSave,
+            onCancel = viewModel::cancelReview,
             onDismiss = viewModel::dismissReview,
         ),
         onBack = {},

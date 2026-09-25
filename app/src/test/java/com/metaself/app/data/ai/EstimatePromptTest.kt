@@ -62,8 +62,8 @@ class EstimatePromptTest {
     }
 
     /**
-     * Asked again, it is told what was missing — the request is otherwise identical, and at
-     * temperature 0 the same question gets the same answer.
+     * Asked again, it is told what was missing — the request is otherwise identical, and the same
+     * question asked again unchanged would most likely get much the same answer.
      */
     @Test
     fun `asked again, it is told which items came back without an amount`() {

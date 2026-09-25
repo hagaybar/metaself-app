@@ -3,6 +3,8 @@ package com.metaself.app.ui.screen.mealbuilder
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -11,7 +13,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.food.CountedAs
-import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodField
@@ -42,9 +42,8 @@ import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.food.HowItIsCounted
 import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.food.ReviewTheFigures
-import com.metaself.app.ui.food.ReviewedBox
-import com.metaself.app.ui.food.changedBoxColors
-import com.metaself.app.ui.food.changedByReview
+import com.metaself.app.ui.food.Field
+import com.metaself.app.ui.food.FormBox
 import com.metaself.app.ui.food.figureSaid
 import com.metaself.app.ui.food.named
 import com.metaself.app.ui.food.namesTogether
@@ -625,10 +624,11 @@ private fun HowMuchOfIt(
  * A food made without leaving the meal, through the same door as every other.
  *
  * Its form lives in the view model ([MakingFood]) rather than in a `remember`, because a review
- * asked for here has to outlive its request (D54). The review is drawn by the same pieces as My
- * foods' editor draws it — the button under the name, what would change under the button, and each
- * box the review changed drawn in the teal accent (D54 §11).
+ * asked for here has to outlive its request (D54). The review is drawn by the same pieces as the
+ * food's page draws it — the button under the name, and each suggestion in its box, pending in the
+ * teal accent with its reason and its Back (D54 §12.6). No weight box here, so no weight is asked.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun NewFood(
     making: MakingFood,
@@ -638,7 +638,24 @@ private fun NewFood(
     review: ReviewActions,
 ) {
     val form = making.form
-    val changed = making.reviewing.changedBoxes
+    val reviewing = making.reviewing
+
+    /** A box of the panel's form: a suggestion waiting in it is drawn in it, with its Back (§12.6). */
+    @Composable
+    fun FormField(at: FormBox, value: String, onValueChange: (String) -> Unit, label: Int, error: String?, group: FactGroup?) {
+        val words = stringResource(label)
+        Field(
+            value = value,
+            onValueChange = onValueChange,
+            label = words,
+            error = error,
+            numeric = group != null,
+            // Named with its group for a screen reader: "Calories per 100 g" (public issue #3).
+            said = group?.let { figureSaid(words, it, form.unitName) },
+            pending = reviewing.view(at),
+            onBack = { review.onPutBack(at) },
+        )
+    }
 
     // Grouped as My foods' editor is (D48): each group one block, tight inside, a section apart.
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
@@ -647,7 +664,7 @@ private fun NewFood(
                 text = stringResource(R.string.builder_make_a_food),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Field(form.name, { onSetForm(form.copy(name = it)) }, stringResource(R.string.foods_field_name), making.errorFor(FoodField.NAME))
+            FormField(FormBox.NAME, form.name, { onSetForm(form.copy(name = it)) }, R.string.foods_field_name, making.errorFor(FoodField.NAME), null)
             // The same food form as My foods, so the same true sentence: decimals are kept here (D38).
             Text(
                 text = stringResource(R.string.food_facts_decimals_kept),
@@ -657,12 +674,10 @@ private fun NewFood(
         }
 
         ReviewTheFigures(
-            reviewing = making.reviewing,
+            reviewing = reviewing,
             offered = FoodField.NAME !in making.errors,
             unitName = form.unitName,
             actions = review,
-            // Make it is this panel's Save, so the line after Apply these changes names it.
-            appliedLine = R.plurals.review_applied_new_food,
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -674,10 +689,10 @@ private fun NewFood(
                 text = stringResource(R.string.foods_group_per_100g),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Field(form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_100G), numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.KCAL) in changed, said = figureSaid(stringResource(R.string.foods_field_kcal), FactGroup.PER_100G, form.unitName))
-            Field(form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.PROTEIN) in changed, said = figureSaid(stringResource(R.string.foods_field_protein), FactGroup.PER_100G, form.unitName))
-            Field(form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.CARBS) in changed, said = figureSaid(stringResource(R.string.foods_field_carbs), FactGroup.PER_100G, form.unitName))
-            Field(form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_100G, Figure.FAT) in changed, said = figureSaid(stringResource(R.string.foods_field_fat), FactGroup.PER_100G, form.unitName))
+            FormField(FormBox.KCAL_100G, form.kcalPer100g, { onSetForm(form.copy(kcalPer100g = it)) }, R.string.foods_field_kcal, making.errorFor(FoodField.PER_100G), FactGroup.PER_100G)
+            FormField(FormBox.PROTEIN_100G, form.proteinPer100g, { onSetForm(form.copy(proteinPer100g = it)) }, R.string.foods_field_protein, null, FactGroup.PER_100G)
+            FormField(FormBox.CARBS_100G, form.carbsPer100g, { onSetForm(form.copy(carbsPer100g = it)) }, R.string.foods_field_carbs, null, FactGroup.PER_100G)
+            FormField(FormBox.FAT_100G, form.fatPer100g, { onSetForm(form.copy(fatPer100g = it)) }, R.string.foods_field_fat, null, FactGroup.PER_100G)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -686,13 +701,13 @@ private fun NewFood(
                 text = perUnitHeading(form.unitName),
                 style = MaterialTheme.typography.titleSmall,
             )
-            Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), making.errorFor(FoodField.UNIT_NAME))
+            FormField(FormBox.UNIT, form.unitName, { onSetForm(form.copy(unitName = it)) }, R.string.foods_field_unit, making.errorFor(FoodField.UNIT_NAME), null)
             // One tap to ml, offered only while no per-one figure would change meaning (#5).
             CountInMillilitres(form, onSetForm)
-            Field(form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, stringResource(R.string.foods_field_kcal), making.errorFor(FoodField.PER_UNIT), numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.KCAL) in changed, said = figureSaid(stringResource(R.string.foods_field_kcal), FactGroup.PER_UNIT, form.unitName))
-            Field(form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, stringResource(R.string.foods_field_protein), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.PROTEIN) in changed, said = figureSaid(stringResource(R.string.foods_field_protein), FactGroup.PER_UNIT, form.unitName))
-            Field(form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, stringResource(R.string.foods_field_carbs), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.CARBS) in changed, said = figureSaid(stringResource(R.string.foods_field_carbs), FactGroup.PER_UNIT, form.unitName))
-            Field(form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, stringResource(R.string.foods_field_fat), null, numeric = true, changed = ReviewedBox(FactGroup.PER_UNIT, Figure.FAT) in changed, said = figureSaid(stringResource(R.string.foods_field_fat), FactGroup.PER_UNIT, form.unitName))
+            FormField(FormBox.KCAL_UNIT, form.kcalPerUnit, { onSetForm(form.copy(kcalPerUnit = it)) }, R.string.foods_field_kcal, making.errorFor(FoodField.PER_UNIT), FactGroup.PER_UNIT)
+            FormField(FormBox.PROTEIN_UNIT, form.proteinPerUnit, { onSetForm(form.copy(proteinPerUnit = it)) }, R.string.foods_field_protein, null, FactGroup.PER_UNIT)
+            FormField(FormBox.CARBS_UNIT, form.carbsPerUnit, { onSetForm(form.copy(carbsPerUnit = it)) }, R.string.foods_field_carbs, null, FactGroup.PER_UNIT)
+            FormField(FormBox.FAT_UNIT, form.fatPerUnit, { onSetForm(form.copy(fatPerUnit = it)) }, R.string.foods_field_fat, null, FactGroup.PER_UNIT)
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -704,47 +719,26 @@ private fun NewFood(
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Button(onClick = onCreate) {
-                    Text(stringResource(R.string.builder_make_it))
+            // While a suggestion waits in a box, accept every one and make it, or cancel them back
+            // to the panel as it was (§12.6). "Cancel suggestions", since the panel's own Cancel
+            // closes it: no two buttons here say Cancel and do different things.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                if (reviewing.hasPending) {
+                    Button(onClick = review.onAcceptAndSave) {
+                        Text(stringResource(R.string.review_accept_and_make))
+                    }
+                    TextButton(onClick = review.onCancel) {
+                        Text(stringResource(R.string.review_cancel_suggestions))
+                    }
+                } else {
+                    Button(onClick = onCreate) {
+                        Text(stringResource(R.string.builder_make_it))
+                    }
+                    TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
                 }
-                TextButton(onClick = onCancel) { Text(stringResource(R.string.foods_cancel)) }
             }
         }
     }
-}
-
-/**
- * One field of the food form, the same one My foods draws.
- *
- * [numeric] picks the keyboard, and Decimal rather than Number for the reason that form gives: a
- * food's facts are kept exactly as typed, decimals included (D38).
- */
-@Composable
-private fun Field(
-    value: String,
-    onValueChange: (String) -> Unit,
-    label: String,
-    error: String?,
-    numeric: Boolean = false,
-    /** The review wrote this box's value and it is not saved yet: drawn and said so (D54 §11). */
-    changed: Boolean = false,
-    /** What a screen reader calls the box when its label names another box too (public issue #3). */
-    said: String? = null,
-) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text(label) },
-        isError = error != null,
-        supportingText = error?.let { { Text(it) } },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = if (numeric) KeyboardType.Decimal else KeyboardType.Text,
-        ),
-        colors = if (changed) changedBoxColors() else OutlinedTextFieldDefaults.colors(),
-        modifier = Modifier.fillMaxWidth().changedByReview(changed).saidAs(said),
-    )
 }
 
 /**

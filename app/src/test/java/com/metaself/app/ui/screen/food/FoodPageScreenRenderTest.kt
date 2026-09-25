@@ -285,7 +285,10 @@ class FoodPageScreenRenderTest {
             .isTrue()
     }
 
-    /** Nothing computes what one of something weighs, and the screen says so where it is typed. */
+    /**
+     * Nothing computes what one of something weighs, and the screen says so where it is typed —
+     * and that a review may suggest one, kept as an estimate (D54 §12.7).
+     */
     @Test
     fun `the page says that nothing works out what one of it weighs`() {
         val food = aFood().copy(id = 1)
@@ -294,7 +297,7 @@ class FoodPageScreenRenderTest {
             opened(food),
         )
 
-        assertThat(texts.any { it.contains("Nothing works this out for you") }).isTrue()
+        assertThat(texts.any { it.contains("Nothing in the app works this out.") }).isTrue()
     }
 
     /** Putting a brand on a food changes what it is. Said before he does it, not after. */
@@ -587,7 +590,8 @@ class FoodPageScreenRenderTest {
 
         /** `R.string.foods_weight_never_guessed`. */
         const val WEIGHT_NEVER_GUESSED =
-            "Nothing works this out for you. It is what turns grams into units and back, so a " +
+            "Nothing in the app works this out. A review may suggest one, which is kept as an estimate. " +
+                "It is what turns grams into units and back, so a " +
                 "wrong one would follow into everything you log afterwards."
 
         const val DECIMALS_KEPT =

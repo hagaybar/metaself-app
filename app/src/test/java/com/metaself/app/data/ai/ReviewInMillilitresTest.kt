@@ -1,11 +1,11 @@
 package com.metaself.app.data.ai
 
+import com.metaself.app.domain.ai.ReviewItem
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.day.Source
-import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
@@ -46,7 +46,7 @@ class ReviewInMillilitresTest {
     )
 
     private fun request(form: FoodForm = FoodForm.of(drink)) =
-        ReviewRequest.of(ReviewProcess.EXISTING_FOOD, form, drink.facts, accepted = emptyMap())
+        ReviewRequest.of(ReviewProcess.EXISTING_FOOD, form, drink.facts, weightBox = true)
 
     @Test
     fun `a food counted in ml is sent per 100 ml, with the carton's figures`() {
@@ -78,7 +78,7 @@ class ReviewInMillilitresTest {
         val sent = userMessage(
             ReviewPrompt.requestBody(
                 "a-model",
-                ReviewRequest.of(ReviewProcess.EXISTING_FOOD, FoodForm.of(glass), glass.facts, emptyMap()),
+                ReviewRequest.of(ReviewProcess.EXISTING_FOOD, FoodForm.of(glass), glass.facts, weightBox = true),
             ),
         )
 
@@ -95,12 +95,12 @@ class ReviewInMillilitresTest {
         )
 
         assertThat(result).isInstanceOf(ReviewResult.Unusable::class.java)
-        assertThat((result as ReviewResult.Unusable).review.setAside).containsExactly(FactGroup.PER_UNIT)
+        assertThat((result as ReviewResult.Unusable).review.setAside).containsExactly(ReviewItem.PER_UNIT)
     }
 
     /**
      * The whole path: asked per 100 ml, a change to the calories answered per 100 ml and shown so,
-     * applied into the boxes as shown, and saved per ml — the figures it kept exactly as stored.
+     * written into the boxes as shown, and saved per ml — the figures it kept exactly as stored.
      */
     @Test
     fun `a suggestion per 100 ml is applied as shown and saved per ml, kept figures untouched`() {
@@ -114,12 +114,12 @@ class ReviewInMillilitresTest {
         assertThat(suggestion.nutrients).isEqualTo(Nutrients(60.0, 2.9, 4.7, 3.6))
         assertThat(suggestion.changes.single().from).isEqualTo(57.0)
 
-        val (applied, reviewing) = FormReview().asked().answered(answer.review).apply(form)
+        val (applied, reviewing) = FormReview().asked(form).answered(answer.review, null, form)
         assertThat(applied.kcalPerUnit).isEqualTo("60")
 
         val saved = applied.toFacts(
             setAtMillis = 1,
-            estimated = reviewing.accepted,
+            estimated = reviewing.accepted(applied).groups,
             stored = drink.facts,
         )!!.perUnit!!
         assertThat(saved.unitName).isEqualTo("ml")

@@ -20,6 +20,8 @@ import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.domain.food.ReplacedFacts
 import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.food.Acceptance
+import com.metaself.app.ui.food.FormBox
 import com.metaself.app.ui.food.MealWording
 import com.metaself.app.ui.food.RetaughtBecause
 import com.metaself.app.ui.food.RetaughtWording
@@ -335,10 +337,14 @@ class MealBuilderViewModel @Inject constructor(
         _making.value = null
     }
 
-    /** He is typing in *Make a food*. Typing in a group withdraws its suggestion (D54 §4). */
+    /**
+     * He is typing in *Make a food*. While the request is out, typing withdraws what it answers; a
+     * suggested box he types in is his; a new unit takes down what was stated for another (D54 §12.6).
+     */
     fun setNewFoodForm(form: FoodForm) {
         _making.value = _making.value?.let { making ->
-            making.copy(form = form, reviewing = making.reviewing.typed(making.form, form))
+            val (typed, reviewing) = making.reviewing.typed(making.form, form)
+            making.copy(form = typed, reviewing = reviewing)
         }
     }
 
@@ -348,17 +354,18 @@ class MealBuilderViewModel @Inject constructor(
      * empty is sent as unknown.
      *
      * The same rules as My foods' review: offered only for a name the form would take, once at a
-     * time; nothing goes into the boxes until he accepts; a failure is said under the button in the
+     * time; its suggestions go into the boxes, pending, and nothing is made until he accepts them
+     * and makes it (§12.6); a failure is said under the button in the
      * estimator's own words, the form untouched (D54 §9.4); an answer for a panel he has closed —
      * or closed and opened again — is dropped; a throw says it could not open, since nothing was
      * written.
      */
     fun reviewNewFood() {
         val making = _making.value ?: return
-        if (making.reviewing.asking || FoodField.NAME in making.errors) return
+        if (making.reviewing.asking || making.reviewing.hasPending || FoodField.NAME in making.errors) return
         dismissRefusal()
         val asked = ++reviewsAsked
-        val waiting = making.copy(reviewing = making.reviewing.asked())
+        val waiting = making.copy(reviewing = making.reviewing.asked(making.form))
         _making.value = waiting
         fun stillWaiting() = asked == reviewsAsked && _making.value?.reviewing?.asking == true
         _failed.value = null
@@ -369,16 +376,17 @@ class MealBuilderViewModel @Inject constructor(
                     ReviewProcess.NEW_FOOD,
                     making.form,
                     stored = null,
-                    accepted = making.reviewing.accepted,
+                    weightBox = false,
                 )
                 val result = reviewer.review(request)
                 if (!stillWaiting()) return@guarded
                 val open = _making.value ?: return@guarded
                 when (result) {
-                    is ReviewResult.Proposed ->
-                        _making.value = open.copy(
-                            reviewing = open.reviewing.answered(result.review, result.raw),
-                        )
+                    is ReviewResult.Proposed -> {
+                        // Into the boxes, pending (§12.6). No weight box here, so none was asked.
+                        val (form, reviewing) = open.reviewing.answered(result.review, result.raw, open.form)
+                        _making.value = open.copy(form = form, reviewing = reviewing)
+                    }
                     // Arrived, and nothing in it could be used: said as that, not as a failure.
                     is ReviewResult.Unusable ->
                         _making.value = open.copy(
@@ -399,21 +407,35 @@ class MealBuilderViewModel @Inject constructor(
         }
     }
 
-    /** **Apply these changes** in *Make a food* (D54 §11), as My foods' editor does it. */
-    fun applyNewFoodReview() {
+    /** **Back** on a box the review wrote into in *Make a food* (D54 §12.6). */
+    fun putBackNewFood(box: FormBox) {
         val making = _making.value ?: return
-        val (form, reviewing) = making.reviewing.apply(making.form)
+        val (form, reviewing) = making.reviewing.putBack(making.form, box) ?: return
         _making.value = making.copy(form = form, reviewing = reviewing)
     }
 
-    /** **Undo** in *Make a food*: the boxes and the review as they stood before applying. */
-    fun undoNewFoodReview() {
+    /**
+     * **Cancel suggestions** in *Make a food* (D54 §12.6): the panel exactly as it was when he pressed
+     * Review the figures. The panel stays; nothing is made.
+     */
+    fun cancelNewFoodReview() {
         val making = _making.value ?: return
-        val (form, reviewing) = making.reviewing.undo(making.form) ?: return
+        val (form, reviewing) = making.reviewing.cancel() ?: return
         _making.value = making.copy(form = form, reviewing = reviewing)
     }
 
-    /** **Dismiss** or **Keep mine** in *Make a food*: what is left goes; what he accepted stays accepted. */
+    /**
+     * **Accept changes and make it** (D54 §12.6): one tap that takes every suggestion still waiting
+     * and makes the food. Refused by the form's own errors, it loses nothing: every suggestion is
+     * still pending.
+     */
+    fun acceptAndCreateFood() {
+        val making = _making.value ?: return
+        if (!making.reviewing.hasPending) return
+        make(making, making.reviewing.accepted(making.form))
+    }
+
+    /** **Dismiss** in *Make a food*, for an answer with nothing waiting in the boxes. */
     fun dismissNewFoodReview() {
         _making.value = _making.value?.let { it.copy(reviewing = it.reviewing.dismissed()) }
     }
@@ -431,12 +453,19 @@ class MealBuilderViewModel @Inject constructor(
      */
     fun createFood() {
         val making = _making.value ?: return
+        // While a suggestion waits in a box, only Accept changes and make it makes the food (§12.6).
+        if (making.reviewing.hasPending) return
+        make(making, Acceptance())
+    }
+
+    private fun make(making: MakingFood, accepted: Acceptance) {
         if (making.errors.isNotEmpty()) {
             _making.value = making.copy(showErrors = true)
             return
         }
         val form = making.form
-        val facts = form.toFacts(now(), estimated = making.reviewing.accepted) ?: return
+        // No weight box here, so no weight is ever accepted (§12.9).
+        val facts = form.toFacts(now(), estimated = accepted.groups) ?: return
         // One transaction, and nothing read after it: a failure made no food.
         act({ ActionRefused.NOTHING_CHANGED }) {
             val made = foods.findOrCreate(

@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.FoodReview
+import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.MetaSelfTheme
 import org.junit.Rule
@@ -36,7 +37,7 @@ class ReviewLineScrollTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private var reviewing by mutableStateOf(FormReview().asked())
+    private var reviewing by mutableStateOf(FormReview().asked(FoodForm(name = "Oat biscuit")))
 
     private val scroller = SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange)
 
@@ -69,7 +70,7 @@ class ReviewLineScrollTest {
     fun `an answer that arrives is brought into view`() {
         start()
 
-        reviewing = reviewing.answered(FoodReview(null, null, "Consistent.", emptyList()))
+        reviewing = reviewing.answered(FoodReview(null, null, "Consistent.", emptyList()), null, FoodForm(name = "Oat biscuit")).second
         compose.waitForIdle()
 
         assertThat(position()).isGreaterThan(0f)

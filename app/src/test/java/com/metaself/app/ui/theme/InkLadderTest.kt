@@ -160,13 +160,13 @@ class InkLadderTest {
     }
 
     /**
-     * A box the review changed and he has not saved (D54 §11) is drawn with a `tertiaryContainer`
+     * A box the review wrote into and he has not accepted (D54 §12.6) is drawn with a `tertiaryContainer`
      * fill, a `tertiary` border and a `tertiary` label, and its figure in the body's ink. The label
      * sits in the border's notch, so it lands on the fill and on the page (or a card) behind it;
      * the figure lands on the fill. Every one of those is text, held to 4.5:1 in both schemes.
      */
     @Test
-    fun `a box changed by the review is legible in both schemes`() {
+    fun `a box suggested by the review is legible in both schemes`() {
         listOf(MetaSelfLightColours to "light", MetaSelfDarkColours to "dark").forEach { (scheme, name) ->
             assertLegible(
                 mapOf("the teal label" to scheme.tertiary, "the figure" to scheme.onSurface),

@@ -8,7 +8,9 @@ import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FigureChange
 import com.metaself.app.domain.ai.FoodReview
+import com.metaself.app.domain.ai.ReviewItem
 import com.metaself.app.domain.ai.Suggestion
+import com.metaself.app.domain.ai.UnitSuggestion
 import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
@@ -29,7 +31,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * A review on a food's page (D54 §8–§11), drawn from a state — moved with the editor from the
+ * A review on a food's page (D54 §8–§12), drawn from a state — moved with the editor from the
  * list's render test (D55 §2: the same composables, moved, not copied). The Oat biscuit's figures
  * are invented.
  *
@@ -44,29 +46,77 @@ class FoodPageReviewRenderTest {
     fun tearDown() = render.dispose()
 
     /**
-     * D54 §11: what would change is listed in one place, under the verdict — group, figure, old →
-     * new, its reason small — with Apply these changes and Keep mine, and nothing under the groups'
-     * headings or in any box until he applies it.
+     * D54 §12.6: a suggestion goes straight into its box, drawn as suggested and said so to a
+     * screen reader, with its reason and its Back beneath it — no list of changes, no Apply, Keep
+     * mine or Undo — and Save gives way to Accept changes and save and Cancel.
      */
     @Test
-    fun `a review lists what would change under its verdict, with Apply and Keep mine`() {
-        val texts = draw(reviewing(Review.Shown(FoodReview(null, fatTo4, "Fat was low.", emptyList()))))
+    fun `a suggestion is in its box, marked, with its reason and its Back beneath it`() {
+        val texts = draw(answered(FoodReview(null, fatTo4, "Fat was low.", emptyList())))
 
-        val verdict = "Reviewed: 1 suggestion below — Fat was low."
-        val change = "Per biscuit: Fat 1 → 4"
-        assertThat(texts.count { it == change }).isEqualTo(1)
-        assertThat(texts).contains("A reason.")
-        assertThat(render.isDrawnBefore(verdict, change)).isTrue()
-        assertThat(render.isDrawnBefore(change, "A reason.")).isTrue()
-        assertThat(render.isDrawnBefore("A reason.", "Apply these changes")).isTrue()
-        assertThat(render.isDrawnBefore("Apply these changes", "Keep mine")).isTrue()
-        assertThat(render.isDrawnBefore("Keep mine", "What 100 g of it are worth")).isTrue()
-        assertThat(render.fieldTexts()).doesNotContain("4")
-        // One way to take the suggestions, for the whole review — no per-group button beside it.
-        assertThat(texts.filter { it.startsWith("Apply") || it.startsWith("Use ") })
-            .containsExactly("Apply these changes")
-        assertThat(texts.count { it == "Keep mine" }).isEqualTo(1)
-        assertThat(texts).doesNotContain("Dismiss")
+        assertThat(render.fieldsSaid(SUGGESTED)).containsExactly("4")
+        assertThat(texts).contains("Reviewed: 1 suggestion, in the boxes below — Fat was low.")
+        assertThat(render.isDrawnBefore("What one of it is worth", "A reason.")).isTrue()
+        assertThat(render.isDrawnBefore("A reason.", "Back to 1")).isTrue()
+        assertThat(texts.none { "→" in it }).isTrue()
+        listOf("Apply these changes", "Keep mine", "Undo", "Save", "Leave it alone", "Review the figures", "Dismiss")
+            .forEach { assertWithMessage(it).that(texts).doesNotContain(it) }
+        assertThat(texts).contains("Accept changes and save")
+        assertThat(texts).contains("Cancel")
+        // Named with its box for a screen reader: eight boxes can read "Back to …" at once.
+        assertThat(render.describedCount("Fat (g) per biscuit back to 1")).isEqualTo(1)
+    }
+
+    @Test
+    fun `with nothing waiting in the boxes, Save and Leave it alone are back`() {
+        val texts = draw(reviewing(null))
+
+        assertThat(texts).contains("Save")
+        assertThat(texts).contains("Leave it alone")
+        assertThat(texts).doesNotContain("Accept changes and save")
+        assertThat(render.fieldsSaid(SUGGESTED)).isEmpty()
+    }
+
+    /** §12.6: a unit named goes back with its figures; they have no Back of their own. */
+    @Test
+    fun `a named unit carries the only Back for its bundle, and an empty box says Clear`() {
+        val answer = FoodReview(
+            per100g = null,
+            perUnit = Suggestion(Nutrients(24.9, 1.2, 2.1, 1.4), Confidence.MEDIUM, true, emptyList(), "One spoon of it."),
+            note = null,
+            setAside = emptyList(),
+            unit = UnitSuggestion("tablespoon", "A dip is counted by the spoon.", Confidence.MEDIUM, null),
+        )
+        val texts = draw(answered(answer, humus()))
+
+        assertThat(render.fieldsSaid(SUGGESTED)).containsExactly("tablespoon", "24.9", "1.2", "2.1", "1.4")
+        assertThat(texts.count { it == "Clear" }).isEqualTo(1)
+        assertThat(texts.count { it.startsWith("Back to") }).isEqualTo(0)
+        assertThat(texts.count { it == "One spoon of it." }).isEqualTo(1)
+    }
+
+    /** §12.6: saved meals that count the food in units are named under a pending unit. */
+    @Test
+    fun `saved meals counting the food in units are named under a renamed unit`() {
+        val answer = FoodReview(
+            null, null, null, emptyList(),
+            unit = UnitSuggestion("cracker", "The usual word.", Confidence.MEDIUM, Source.TYPED),
+        )
+        val state = answered(answer, weight = true).let { it.copy(editing = it.editing!!.copy(unitMeals = 2)) }
+
+        val texts = draw(state)
+
+        assertThat(texts).contains("2 saved meals count this food in biscuit; after saving they will count it in cracker.")
+    }
+
+    @Test
+    fun `the weight line says a review may suggest one, kept as an estimate`() {
+        val texts = draw(reviewing(null))
+
+        assertThat(texts).contains(
+            "Nothing in the app works this out. A review may suggest one, which is kept as an estimate. " +
+                "It is what turns grams into units and back, so a wrong one would follow into everything you log afterwards.",
+        )
     }
 
     @Test
@@ -84,42 +134,23 @@ class FoodPageReviewRenderTest {
     }
 
     @Test
-    fun `two groups are listed each on its line, and a note and a set-aside group are said`() {
+    fun `every item set aside is said in its own line`() {
         val texts = draw(
             reviewing(
                 Review.Shown(
                     FoodReview(
-                        per100g = null,
-                        perUnit = fatTo4,
-                        note = "A short note.",
-                        setAside = listOf(FactGroup.PER_100G),
+                        null, null, "A short note.",
+                        listOf(ReviewItem.NAME, ReviewItem.PER_100G, ReviewItem.PER_UNIT, ReviewItem.WEIGHT),
                     ),
+                    unusable = true,
                 ),
             ),
         )
 
-        assertThat(texts).contains("Reviewed: 1 suggestion below — A short note.")
+        assertThat(texts).contains("Its suggestion for the name couldn't be used.")
         assertThat(texts).contains("Its suggestion for per 100 g couldn't be used.")
-
-        val both = draw(
-            reviewing(
-                Review.Shown(
-                    FoodReview(
-                        per100g = fatTo4.copy(
-                            changes = listOf(FigureChange(Figure.KCAL, 480.0, 470.0, "Another.")),
-                        ),
-                        perUnit = fatTo4,
-                        note = null,
-                        setAside = emptyList(),
-                    ),
-                ),
-            ),
-        )
-
-        assertThat(both).contains("Per 100 g: Calories 480 → 470")
-        assertThat(both).contains("Per biscuit: Fat 1 → 4")
-        assertThat(render.isDrawnBefore("Per 100 g: Calories", "Per biscuit: Fat")).isTrue()
-        assertThat(both.count { it == "Apply these changes" }).isEqualTo(1)
+        assertThat(texts).contains("Its suggestion for per biscuit couldn't be used.")
+        assertThat(texts).contains("Its suggestion for what one weighs couldn't be used.")
     }
 
     @Test
@@ -129,7 +160,7 @@ class FoodPageReviewRenderTest {
         )
 
         assertThat(texts).contains("Reviewed: no changes suggested.")
-        assertThat(texts).doesNotContain("Apply these changes")
+        assertThat(texts).doesNotContain("Accept changes and save")
         assertThat(texts).contains("Dismiss")
     }
 
@@ -153,17 +184,11 @@ class FoodPageReviewRenderTest {
             ) to "Reviewed: a problem found — Per piece does not match per 100 g.",
             Review.Shown(FoodReview(null, null, null, emptyList(), Verdict.PROBLEM_FOUND), nothingSuggested = true) to
                 "Reviewed: a problem found.",
-            Review.Shown(FoodReview(null, fatTo4, "Per piece was off.", emptyList(), Verdict.PROBLEM_FOUND)) to
-                "Reviewed: 1 suggestion below — Per piece was off.",
-            Review.Shown(FoodReview(null, fatTo4, "Fat was low for the piece.", emptyList())) to
-                "Reviewed: 1 suggestion below — Fat was low for the piece.",
-            Review.Shown(FoodReview(fatTo4, fatTo4, null, emptyList())) to
-                "Reviewed: 2 suggestions below.",
             Review.Shown(
-                FoodReview(null, null, "Per 100 g looks off.", listOf(FactGroup.PER_100G)),
+                FoodReview(null, null, "Per 100 g looks off.", listOf(ReviewItem.PER_100G)),
                 unusable = true,
             ) to "The model's answer arrived, but its suggestions could not be used — Per 100 g looks off.",
-            Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true) to
+            Review.Shown(FoodReview(null, null, null, listOf(ReviewItem.PER_100G)), unusable = true) to
                 "The model's answer arrived, but its suggestions could not be used.",
             Review.Shown(FoodReview(null, null, null, emptyList())) to
                 "Reviewed: no suggestions left.",
@@ -238,7 +263,7 @@ class FoodPageReviewRenderTest {
     fun `an answer whose suggestions could not be used says so, and which`() {
         val texts = draw(
             reviewing(
-                Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true),
+                Review.Shown(FoodReview(null, null, null, listOf(ReviewItem.PER_100G)), unusable = true),
             ),
         )
 
@@ -262,31 +287,13 @@ class FoodPageReviewRenderTest {
         assertThat(draw(reviewing(null))).doesNotContain("Show the model's answer")
     }
 
-    /**
-     * D54 §11: after Apply these changes, each box the review changed says so to a screen reader,
-     * and a line under the verdict counts them, with Undo. A box it kept says nothing.
-     */
-    @Test
-    fun `after applying, the changed boxes are marked and counted under the verdict`() {
-        val base = reviewing(Review.Shown(FoodReview(null, fatTo4, "Fat was low.", emptyList())))
-        val (form, applied) = base.editing!!.reviewing.apply(base.editing!!.form)
-        val texts = draw(base.copy(editing = base.editing!!.copy(form = form, reviewing = applied)))
-
-        val line = "1 figure changed by the review — not saved yet. Save to keep it, or Undo."
-        assertThat(texts).contains(line)
-        assertThat(render.isDrawnBefore("Reviewed: changes applied — Fat was low.", line)).isTrue()
-        assertThat(render.isDrawnBefore(line, "Undo")).isTrue()
-        assertThat(texts).doesNotContain("Apply these changes")
-        assertThat(render.fieldsSaid(CHANGED)).containsExactly("4")
-    }
-
     /** A page with the Oat biscuit open (invented figures) and [review] as its review. */
     /**
      * D56: a food counted in ml is reviewed per 100 ml, so its suggestion is said per 100 ml, in the
      * figures its boxes show. Invented: a carton's 57 kcal per 100 ml, suggested 60.
      */
     @Test
-    fun `a review of a food counted in ml is said per 100 ml`() {
+    fun `a suggestion for a food counted in ml goes into its box per 100 ml`() {
         val kcalTo60 = Suggestion(
             nutrients = Nutrients(60.0, 2.9, 4.7, 3.6),
             confidence = Confidence.MEDIUM,
@@ -295,19 +302,12 @@ class FoodPageReviewRenderTest {
             reason = null,
         )
         val drink = oatDrink().copy(id = 1)
-        val texts = draw(
-            FoodPageUiState(
-                food = drink,
-                editing = Editing(
-                    1,
-                    FoodForm.of(drink),
-                    reviewing = FormReview(review = Review.Shown(FoodReview(null, kcalTo60, null, emptyList()))),
-                ),
-            ),
-        )
+        val form = FoodForm.of(drink)
+        val (written, pending) = FormReview().asked(form).answered(FoodReview(null, kcalTo60, null, emptyList()), null, form)
+        draw(FoodPageUiState(food = drink, editing = Editing(1, written, reviewing = pending)))
 
-        assertThat(texts).contains("Per 100 ml: Calories 57 → 60")
-        assertThat(texts.none { it.startsWith("Per ml") }).isTrue()
+        assertThat(render.fieldsSaid(SUGGESTED)).containsExactly("60")
+        assertThat(render.describedCount("Calories per 100 ml back to 57")).isEqualTo(1)
     }
 
     @Test
@@ -320,7 +320,7 @@ class FoodPageReviewRenderTest {
                     1,
                     FoodForm.of(drink),
                     reviewing = FormReview(
-                        review = Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_UNIT)), unusable = true),
+                        review = Review.Shown(FoodReview(null, null, null, listOf(ReviewItem.PER_UNIT)), unusable = true),
                     ),
                 ),
             ),
@@ -328,6 +328,32 @@ class FoodPageReviewRenderTest {
 
         assertThat(texts).contains("Its suggestion for per 100 ml couldn't be used.")
     }
+
+    /** The page with [answer] arrived: its suggestions in the boxes, pending. */
+    private fun answered(answer: FoodReview, food: Food = biscuit(), weight: Boolean = true): FoodPageUiState {
+        val form = FoodForm.of(food).let { if (weight) it else it.copy(gramsPerUnit = "") }
+        val (written, reviewing) = FormReview().asked(form).answered(answer, null, form)
+        return FoodPageUiState(food = food, editing = Editing(1, written, reviewing = reviewing))
+    }
+
+    /** The spec's invented Humus (D54 §12.4): a label per 100 g, no unit, no weight. */
+    private fun humus() = Food(
+        id = 1,
+        name = "Humus",
+        facts = FoodFacts(
+            per100g = PerHundredGrams(Nutrients(166.0, 7.9, 14.3, 19.6), Provenance(Source.LABEL, null, 0)),
+        ),
+    )
+
+    private fun biscuit() = Food(
+        id = 1,
+        name = "Oat biscuit",
+        facts = FoodFacts(
+            per100g = PerHundredGrams(Nutrients(480.0, 7.0, 62.0, 22.0), Provenance(Source.LABEL, null, 0)),
+            perUnit = aPerUnit("biscuit", 90.0).copy(nutrients = Nutrients(90.0, 1.0, 12.0, 1.0)),
+            gramsPerUnit = weighing(18.0),
+        ),
+    )
 
     private fun reviewing(review: Review?): FoodPageUiState {
         val food = Food(
@@ -371,8 +397,8 @@ class FoodPageReviewRenderTest {
     }
 
     private companion object {
-        /** What a screen reader says of a box the review changed and he has not saved (D54 §11). */
-        const val CHANGED = "changed by the review, not saved"
+        /** What a screen reader says of a box the review wrote into and he has not accepted (§12.6). */
+        const val SUGGESTED = "suggested by the review, not accepted"
 
         /** `R.string.action_refused_could_not_open`, as the phone draws it. */
         const val COULD_NOT_OPEN =

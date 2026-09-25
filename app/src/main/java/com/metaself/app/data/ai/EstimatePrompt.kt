@@ -84,9 +84,10 @@ object EstimatePrompt {
     /**
      * The request, and — when a previous answer left amounts out — a second instruction naming them.
      *
-     * [missingAmounts] is for the one retry D34 asks for. At temperature 0 the same request
-     * gets the same answer, so asking again unchanged would get the same amountless reply; the
-     * correction says which items had none. It is an instruction from the app, sent as the app's own,
+     * [missingAmounts] is for the one retry D34 asks for. At temperature 0 the same request gets
+     * much the same answer, and a reasoning model — sent no temperature ([ModelParams]) — is no
+     * likelier to change its mind unprompted, so asking again unchanged would most likely get the
+     * same amountless reply; the correction says which items had none. It is an instruction from the app, sent as the app's own,
      * and never folded into the owner's words the way [moreDetail] is.
      */
     fun requestBody(
@@ -103,7 +104,8 @@ object EstimatePrompt {
 
         return buildJsonObject {
             put("model", model)
-            put("temperature", 0)
+            // Temperature 0, or none for a reasoning model that refuses it (ModelParams).
+            ModelParams.of(model).into(this)
             putJsonArray("messages") {
                 add(
                     buildJsonObject {

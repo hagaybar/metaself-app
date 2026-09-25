@@ -508,7 +508,7 @@ class FoodFormTest {
             .isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 5))
     }
 
-    /** The weight is never a review's to give (D54 §3), so it is never an estimate here either. */
+    /** Accepting a group says nothing about the weight: it is his unless he accepted it too. */
     @Test
     fun `the weight is typed even when both groups were accepted`() {
         val facts = oatBiscuit.toFacts(
@@ -522,6 +522,51 @@ class FoodFormTest {
         assertThat(facts.per100g!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
         assertThat(facts.perUnit!!.provenance.source).isEqualTo(Source.AI_ESTIMATE)
         assertThat(facts.gramsPerUnit!!.provenance.source).isEqualTo(Source.TYPED)
+    }
+
+    // D54 §12.7: what one weighs, accepted from a review, is an estimate. Nothing works it out.
+
+    @Test
+    fun `a weight accepted from a review is an estimate with its confidence`() {
+        val facts = oatBiscuit.toFacts(5, weight = WeightAccepted(Confidence.HIGH))!!
+
+        assertThat(facts.gramsPerUnit)
+            .isEqualTo(GramsPerUnit(18.0, Provenance(Source.AI_ESTIMATE, Confidence.HIGH, 5)))
+        assertThat(facts.perUnit!!.provenance.source).isEqualTo(Source.TYPED)
+    }
+
+    @Test
+    fun `a weight echoed under an accepted unit is an estimate, or its own source where weaker`() {
+        val storedLabel = FoodFacts(
+            gramsPerUnit = GramsPerUnit(18.0, Provenance(Source.LABEL, null, 1)),
+            perUnit = PerUnit("biscuit", Nutrients(90.0, 1.0, 12.0, 4.0), Provenance(Source.TYPED, null, 1)),
+        )
+        val storedRepeated = storedLabel.copy(
+            gramsPerUnit = GramsPerUnit(18.0, Provenance(Source.REPEATED, null, 1)),
+        )
+
+        val overLabel = oatBiscuit.toFacts(5, stored = storedLabel, weight = WeightAccepted(Confidence.MEDIUM, echoed = true))!!
+        val overRepeated = oatBiscuit.toFacts(5, stored = storedRepeated, weight = WeightAccepted(Confidence.MEDIUM, echoed = true))!!
+        val typedNow = oatBiscuit.copy(gramsPerUnit = "18.0")
+            .toFacts(5, stored = storedLabel, weight = WeightAccepted(Confidence.MEDIUM, echoed = true))!!
+
+        assertThat(overLabel.gramsPerUnit!!.provenance).isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 5))
+        assertThat(overRepeated.gramsPerUnit!!.provenance).isEqualTo(Provenance(Source.REPEATED, null, 5))
+        // Typed another way, the figure is his (TYPED, above an estimate): the estimate stands.
+        assertThat(typedNow.gramsPerUnit!!.provenance).isEqualTo(Provenance(Source.AI_ESTIMATE, Confidence.MEDIUM, 5))
+    }
+
+    @Test
+    fun `a weight he did not accept, left as it opened, hands back the stored weight and source`() {
+        val stored = FoodFacts(
+            per100g = PerHundredGrams(Nutrients(480.0, 7.0, 62.0, 22.0), Provenance(Source.LABEL, null, 1)),
+            gramsPerUnit = GramsPerUnit(18.04, Provenance(Source.LABEL, null, 1)),
+        )
+        val form = oatBiscuit.copy(unitName = "", kcalPerUnit = "", proteinPerUnit = "", carbsPerUnit = "", fatPerUnit = "", gramsPerUnit = "18.04")
+
+        val facts = form.toFacts(5, stored = stored)!!
+
+        assertThat(Correction.plan(stored, facts).gramsPerUnit).isEqualTo(Correction.Keep)
     }
 
     @Test

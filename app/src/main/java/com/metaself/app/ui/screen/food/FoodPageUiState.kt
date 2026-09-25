@@ -14,12 +14,16 @@ import com.metaself.app.ui.food.FormReview
  *   the moment it opens is a form shouting at somebody who has not done anything yet.
  * @property reviewing a review of this food asked for here, and the groups accepted from it (D54).
  *   Lives and dies with the form: leaving it forgets it.
+ * @property unitMeals how many saved meals count this food in units, read when a review's answer
+ *   names or renames its unit — said under the unit, since the rename changes what their "2" means
+ *   (D54 §12.6).
  */
 data class Editing(
     val foodId: Long,
     val form: FoodForm,
     val showErrors: Boolean = false,
     val reviewing: FormReview = FormReview(),
+    val unitMeals: Int = 0,
 ) {
     val errors: Map<FoodField, String> get() = form.errors()
 

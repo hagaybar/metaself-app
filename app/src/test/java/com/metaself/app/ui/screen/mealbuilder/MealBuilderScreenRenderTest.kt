@@ -318,60 +318,30 @@ class MealBuilderScreenRenderTest {
     }
 
     /**
-     * *Make a food* offers the review once it has a name, and lists a filled group's suggestion under
-     * its verdict — the same pieces as My foods' editor (D54 §11). Figures invented.
+     * *Make a food* offers the review once it has a name, and a filled group's suggestion goes into
+     * its boxes, pending, with its reason once and a Clear under each — the same pieces as the
+     * food's page (D54 §12.6); Make it and Cancel give way to Accept changes and make it and Cancel
+     * suggestions. Figures invented.
      */
     @Test
-    fun `making a food on the spot offers a review and lists what it suggests under the verdict`() {
+    fun `making a food on the spot offers a review, and its suggestions wait in the boxes`() {
         val nameless = draw(MealBuilderUiState(meal = salad(), making = MakingFood()))
         assertThat(nameless).doesNotContain("Review the figures")
 
         val filled = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A reason.")
-        val texts = draw(
-            MealBuilderUiState(
-                meal = salad(),
-                making = MakingFood(
-                    form = FoodForm(name = "Lentil soup", unitName = "bowl"),
-                    reviewing = FormReview(
-                        review = Review.Shown(FoodReview(filled, null, null, emptyList())),
-                    ),
-                ),
-            ),
-        )
+        val start = FoodForm(name = "Lentil soup", unitName = "bowl")
+        val (form, reviewing) = FormReview().asked(start).answered(FoodReview(filled, null, null, emptyList()), null, start)
+        val texts = draw(MealBuilderUiState(meal = salad(), making = MakingFood(form = form, reviewing = reviewing)))
 
-        val line = "Per 100 g: Filled: 60 kcal · P 4 · C 9 · F 1"
-        assertThat(texts).contains("Review the figures")
-        assertThat(texts).contains(line)
-        assertThat(texts).contains("A reason.")
-        assertThat(render.isDrawnBefore(line, "Apply these changes")).isTrue()
-        assertThat(render.isDrawnBefore("Keep mine", "What 100 g of it are worth")).isTrue()
-        assertThat(render.fieldTexts()).doesNotContain("60")
-    }
-
-    /**
-     * D54 §9.4: in *Make a food* too, a review ends in one line under its button — a failure
-     * included, which was said at the top of the builder, off screen from the panel.
-     */
-    /**
-     * D54 §11, in *Make a food*: after applying, the boxes it filled say so to a screen reader, and
-     * the line names this panel's own button that keeps them.
-     */
-    @Test
-    fun `a new food's applied figures are marked, and the line names Make it`() {
-        val filled = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A reason.")
-        val shown = FormReview(review = Review.Shown(FoodReview(filled, null, null, emptyList())))
-        val (form, applied) = shown.apply(FoodForm(name = "Lentil soup", unitName = "bowl"))
-
-        val texts = draw(
-            MealBuilderUiState(meal = salad(), making = MakingFood(form = form, reviewing = applied)),
-        )
-
-        assertThat(texts).contains(
-            "4 figures changed by the review — not saved yet. Press Make it to keep them, or Undo.",
-        )
-        assertThat(texts).contains("Undo")
-        assertThat(render.fieldsSaid("changed by the review, not saved"))
+        assertThat(render.fieldsSaid("suggested by the review, not accepted"))
             .containsExactly("60", "4", "9", "1").inOrder()
+        assertThat(texts.count { it == "A reason." }).isEqualTo(1)
+        assertThat(texts.count { it == "Clear" }).isEqualTo(4)
+        assertThat(texts).contains("Accept changes and make it")
+        assertThat(texts).contains("Cancel suggestions")
+        assertThat(texts).doesNotContain("Make it")
+        assertThat(texts).doesNotContain("Review the figures")
+        assertThat(texts.none { "→" in it || it == "Apply these changes" || it == "Undo" }).isTrue()
     }
 
     @Test
@@ -385,15 +355,12 @@ class MealBuilderScreenRenderTest {
                 ),
             ),
         )
-        val filled = Suggestion(Nutrients(60.0, 4.0, 9.0, 1.0), Confidence.LOW, true, emptyList(), "A reason.")
         val sends = "Sends this food's name"
 
         listOf(
-            Review.Shown(FoodReview(filled, null, "A thick soup.", emptyList())) to
-                "Reviewed: 1 suggestion below — A thick soup.",
             Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true) to
                 "Reviewed: no changes suggested.",
-            Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_UNIT)), unusable = true) to
+            Review.Shown(FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_UNIT)), unusable = true) to
                 "The model's answer arrived, but its suggestions could not be used.",
             Review.Failed(EstimateResult.Unreachable) to
                 "Could not reach the model. Type the numbers instead — your words are still here.",

@@ -558,7 +558,9 @@ or a correctable time on the day, he chose the day. Design:
 #23. Every item the model proposes comes with a number greater than zero and a unit.** The prompt asks
 for a best estimate always — lower the confidence rather than leave the amount out — and no longer
 offers "0 and \"\"" as an answer. A reply in which any item lacks one is asked again ONCE, with an
-instruction from the app naming the items (at temperature 0 the same request gets the same answer);
+instruction from the app naming the items (at temperature 0 the same request gets the same answer;
+*amended 2026-09-25: a reasoning model is sent no temperature, which it refuses, and is no likelier to
+change its mind unprompted, so the naming instruction is still what the retry needs*);
 if it still lacks one, nothing is logged and the owner is told which items, and how to say amounts in
 his description. The second ask is a second paid call and is not made past the day's ceiling.
 

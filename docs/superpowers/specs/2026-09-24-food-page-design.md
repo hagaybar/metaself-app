@@ -87,11 +87,18 @@ From the top, in the drawing's order:
    answer**; and after applying, the teal marks and *N figures changed by the review — not saved
    yet. Save to keep them, or Undo.* with **Undo**. The same composables (`ReviewTheFigures`,
    `FormReview`) — moved, not copied.
+   *(Amended 2026-09-25, D54 §12: the review's suggestions go into the boxes below, pending in the
+   teal accent, each with its reason and a way back; while any is pending, **Accept changes and
+   save** and **Cancel** stand in place of Save and Leave it alone; the change list, **Apply these
+   changes** / **Keep mine** and **Undo** go. While a group holds
+   a pending box, its four boxes are drawn one per row.)*
 4. **The three groups**, each with its heading and origin on one line (the heading left, the origin
    right, as drawn), then its boxes:
    - *What 100 g of it are worth* — Calories, Protein, Carbs, Fat;
    - *What one of it is worth* — *One what?* and the same four;
-   - *What one of it weighs* — the never-guessed line and *Grams*.
+   - *What one of it weighs* — the never-guessed line and *Grams*. *(Amended 2026-09-25, D54 §12:
+     the line now says the app never works it out and that a review may suggest one, kept as an
+     estimate; the review may propose the name, the unit and the weight too — never the brand.)*
 
    **The four figure boxes of a group are laid out two by two**, as drawn; the unit-name box and the
    grams box are full width. **The origin wording does not change in this step**: it is today's
@@ -290,7 +297,7 @@ from; nothing on the page writes but Save, through `saveForm`), **D6**, **D7a** 
 shown where a figure is corrected; the page is that place), **D37** (new counts are plurals from
 resources), **D38** (decimals kept), **D41** (the search), **D42** (the same ceilings refuse the same
 figures), **D45**, **D48** (the display face for the heading, no new colours — the teal is D54
-§11's), **D53**.
+§11's; from D54 §12 it means *suggested, not yet accepted*), **D53**.
 
 ## What does not change
 
@@ -351,6 +358,9 @@ is the millilitre:
    (public issue #3), the list row and the page head say "57 kcal per 100 ml", and a review (D54) is
    asked, answered, shown and accepted at that scale. The four boxes are judged by the per-100
    ceilings (D42: 1000 kcal, 110 g), since they are per 100 of something, like a packet's.
+   *(D54 §12, 2026-09-25: a review may now also propose the unit; a proposal of the millilitre, or
+   away from it, carries its per-one figures at the new unit's scale, and the millilitre's weight is
+   still never asked.)*
 2. **It is stored per one ml, exactly as before.** This is the shape D53 §3 already writes when a
    model's per-100 ml worth teaches a food (its per-one figure in `ml`, divided by 100). The page only
    moves the decimal point: shown = stored × 100, saved = typed ÷ 100, as decimal shifts, never as a
@@ -360,7 +370,7 @@ is the millilitre:
 3. **What one ml weighs is not asked.** It is a density, and the app assumes none (D4): nothing turns
    millilitres into grams. A food that already holds one keeps it, shown with its value and a line
    saying why it is not asked, until he clears it; the app deletes nothing. A review does not send it,
-   and so does not cross-check against it.
+   and so does not cross-check against it — nor propose one (D54 §12.4).
 4. **An amount of it is a number of millilitres**: typed, never stepped by one; capped at 5000 as a
    measure (the ceiling D42 already names for millilitres), not at the count of 100; the counting
    choice reads *In ml*, and a refused amount *At most 5000 ml at a time*. His ml food's worth on the
