@@ -92,8 +92,14 @@ object FoodWording {
      * somewhere to type the missing number is an invitation.
      */
     fun why(reason: CannotCount): String = when (reason) {
+        // A food counted in ml is never asked what one ml weighs (D56): the page draws no box for
+        // it, so the reason names what would switch weighing on — its per 100 g — instead.
         is CannotCount.NothingKnowsWhatOneWeighs ->
-            "Nothing knows what one ${reason.unitName} weighs"
+            if (PerHundredMillilitres.applies(reason.unitName)) {
+                "Nothing says what 100 g of it are worth"
+            } else {
+                "Nothing knows what one ${reason.unitName} weighs"
+            }
         CannotCount.NothingSaysWhatOneIs ->
             "Nothing has said what one of this is"
     }

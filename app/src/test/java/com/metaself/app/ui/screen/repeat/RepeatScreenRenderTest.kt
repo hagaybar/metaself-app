@@ -840,6 +840,40 @@ class RepeatScreenRenderTest {
         assertThat(texts.none { it.startsWith("At most") }).isTrue()
     }
 
+    /**
+     * An ml food is never asked what one ml weighs (D56), so the reason weighing is off points at
+     * what would switch it on — its per 100 g — and not at a weight box the page does not draw.
+     */
+    @Test
+    fun `weighing a food counted in ml says what is missing, not a weight`() {
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(oatDrink),
+                choosing = Choosing(index = 0, food = oatDrink, countedAs = CountedAs.UNITS),
+            ),
+        )
+
+        assertThat(texts).contains("Weigh it: nothing says what 100 g of it are worth")
+        assertThat(texts.none { it.contains("what one ml weighs") }).isTrue()
+    }
+
+    /** The ceiling names the millilitre as the food spells it. Invented figures. */
+    @Test
+    fun `too many of a food counted in Hebrew millilitres says them as the food does`() {
+        val hebrew = oatDrink.copy(
+            facts = FoodFacts(perUnit = oatDrink.facts.perUnit!!.copy(unitName = "מ\"ל")),
+        )
+        val texts = draw(
+            RepeatUiState(
+                foods = listOf(hebrew),
+                choosing = Choosing(index = 0, food = hebrew, countedAs = CountedAs.UNITS, amount = "5001"),
+            ),
+        )
+
+        assertThat(texts).contains("At most 5000 מ\"ל at a time.")
+        assertThat(texts).contains("In מ\"ל")
+    }
+
     @Test
     fun `too many ml says the ceiling in ml`() {
         val texts = draw(

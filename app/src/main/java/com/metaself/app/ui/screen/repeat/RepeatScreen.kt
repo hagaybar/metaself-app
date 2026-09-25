@@ -499,7 +499,7 @@ private fun Adjuster(
                     onText = { onSetAmount(component.id, it) },
                     onStep = { onStep(component.id, it) },
                     of = component.food.name,
-                    inMillilitres = millilitres,
+                    millilitres = PortionWording.unitOf(component).takeIf { millilitres },
                 )
                 // Drawn once per part: said with the part it takes out (public issue #3).
                 Small(
@@ -763,7 +763,7 @@ private fun HowMuch(
             tooMuch = choosing.amountTooMuch,
             most = choosing.most,
             countedAs = choosing.countedAs,
-            inMillilitres = choosing.inMillilitres,
+            millilitres = choosing.food.facts.perUnit?.unitName?.takeIf { choosing.inMillilitres },
         )
 
         choosing.preview?.let { numbers ->

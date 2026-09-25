@@ -514,7 +514,7 @@ private fun Waiting(
             tooMuch = pending.amountTooMuch,
             most = pending.most,
             countedAs = pending.countedAs,
-            inMillilitres = pending.inMillilitres,
+            millilitres = pending.unitName.takeIf { pending.inMillilitres },
         )
         val preview = pending.preview
         if (preview != null) {
@@ -598,7 +598,7 @@ private fun HowMuchOfIt(
             tooMuch = adding.amountTooMuch,
             most = adding.most,
             countedAs = adding.countedAs,
-            inMillilitres = adding.inMillilitres,
+            millilitres = adding.unitName.takeIf { adding.inMillilitres },
         )
         adding.preview?.let {
             Text(

@@ -398,7 +398,7 @@ private fun ProposedRow(
             tooMuch = item.amountTooMuch,
             most = item.most,
             inGrams = Portions.isGrams(item.unit),
-            inMillilitres = Portions.isMillilitres(item.unit),
+            millilitres = item.unit.trim().takeIf { Portions.isMillilitres(item.unit) },
             onText = onSetAmount,
             onStep = onStep,
             of = item.name,

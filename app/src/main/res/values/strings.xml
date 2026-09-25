@@ -438,8 +438,9 @@
          plural on the screen (D37), and "at most 100 slice" would be wrong. -->
     <string name="amount_at_most_grams">At most %1$s g at a time.</string>
     <string name="amount_at_most_count">At most %1$s at a time.</string>
-    <!-- D56: the same line for an amount of millilitres. -->
-    <string name="amount_at_most_ml">At most %1$s ml at a time.</string>
+    <!-- D56: the same line for an amount of millilitres. %2$s is the millilitre as the food
+         spells it ("ml", or a Hebrew spelling). -->
+    <string name="amount_at_most_ml">At most %1$s %2$s at a time.</string>
     <string name="settings_window_title">When you eat</string>
     <string name="settings_window_none">Off. Set the hours you mean to eat between and the app will keep tab, from today onwards.</string>
     <string name="settings_window_set">Your window is %1$s.</string>
