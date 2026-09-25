@@ -37,3 +37,14 @@ class EstimatingAsker(private val estimator: MealEstimator) : MealConversationAs
 
     override suspend fun remainingToday(): Int = Int.MAX_VALUE
 }
+
+/** A screen drawn where no conversation is under test: every stage's actions do nothing. */
+val NO_CONVERSATION = com.metaself.app.ui.screen.propose.ConversationActions(
+    onAcceptQuestions = {},
+    onBestGuess = {},
+    onAnswer = {},
+    onEnough = {},
+    onStepBack = { false },
+    onRetry = {},
+    onBestGuessSoFar = {},
+)

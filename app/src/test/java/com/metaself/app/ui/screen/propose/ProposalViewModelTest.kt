@@ -708,7 +708,7 @@ class ProposalViewModelTest {
 
         viewModel.describe("a pita")
         advanceUntilIdle()
-        assertThat(viewModel.state.value).isEqualTo(ProposalUiState.Waiting())
+        assertThat(viewModel.state.value).isInstanceOf(ProposalUiState.Waiting::class.java)
         assertThat(foods.reads).isEqualTo(0)
 
         answer.complete(EstimateResult.Proposed(aProposal(items = listOf(aModelPita()))))

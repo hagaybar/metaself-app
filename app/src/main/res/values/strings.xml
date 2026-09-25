@@ -212,6 +212,26 @@
     <string name="propose_manual">Type the numbers myself</string>
     <string name="propose_add_key">Add a key in settings</string>
     <string name="propose_describe_meal">Describe a meal</string>
+    <!-- D58: a meal worked out in a short conversation. The offer, one question at a time, and
+         what is said while waiting or when a step fails. -->
+    <plurals name="conversation_offer">
+        <item quantity="one">I\'d like to ask one question to get this right.</item>
+        <item quantity="other">I\'d like to ask up to %1$d questions to get this right.</item>
+    </plurals>
+    <string name="conversation_ok">OK</string>
+    <string name="conversation_best_guess">Use your best guess</string>
+    <string name="conversation_heading">Question %1$d of up to %2$d</string>
+    <string name="conversation_your_answer">Your answer: %1$s</string>
+    <string name="conversation_other">Other</string>
+    <string name="conversation_other_send">Answer</string>
+    <string name="conversation_enough">That\'s enough, go ahead</string>
+    <string name="conversation_back">Back</string>
+    <string name="conversation_waiting_question">Thinking of the next question…</string>
+    <string name="conversation_waiting_result">Working it out carefully…</string>
+    <string name="conversation_allowance_only">Today\'s allowance has room for the result only, so it\'s being worked out with what you\'ve said so far.</string>
+    <string name="conversation_try_again">Try again</string>
+    <string name="conversation_best_guess_so_far">Use your best guess with what you\'ve said so far</string>
+    <string name="conversation_what_you_said">What you said</string>
     <string name="repeat_title">Add something</string>
     <string name="repeat_none">Nothing to repeat yet. Anything you log will appear here.</string>
     <string name="repeat_tab_none">Nothing on this list yet.</string>

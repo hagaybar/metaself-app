@@ -242,6 +242,63 @@ class ConversationViewModelTest {
         assertThat(asker.nextCalls).hasSize(2)
     }
 
+    /** The reviewer's case: Try again never spends the request kept for the result (§7, §12.4). */
+    @Test
+    fun `try again with one request left goes to the result, as an everyday request`() = runTest {
+        val asker = ScriptedAsker(
+            opening = StepResult.Ask(q1, 3),
+            steps = mutableListOf(StepResult.Failed(EstimateResult.Unreachable())),
+        )
+        val viewModel = asking(asker)
+        viewModel.answer("Standard box")
+        advanceUntilIdle()
+        asker.remaining = 1
+
+        viewModel.retry()
+        advanceUntilIdle()
+
+        assertThat(asker.nextCalls).hasSize(1)
+        assertThat(asker.finishCalls.single().deep).isFalse()
+        assertThat(asker.finishCalls.single().asked).containsExactly(Asked(q1.text, "Standard box"))
+    }
+
+    @Test
+    fun `back from a failure returns to the question it came from, however often it was retried`() = runTest {
+        val asker = ScriptedAsker(
+            opening = StepResult.Ask(q1, 3),
+            steps = mutableListOf(
+                StepResult.Failed(EstimateResult.Unreachable()),
+                StepResult.Failed(EstimateResult.Unreachable()),
+            ),
+        )
+        val viewModel = asking(asker)
+        viewModel.answer("Standard box")
+        advanceUntilIdle()
+        viewModel.retry()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value).isInstanceOf(ProposalUiState.ConversationFailed::class.java)
+
+        assertThat(viewModel.back()).isTrue()
+
+        assertThat((viewModel.state.value as ProposalUiState.Asking).chat.shown).isEqualTo(q1)
+    }
+
+    /** §12.1: Back during the first request returns to his words, and the late reply is dropped. */
+    @Test
+    fun `back during the first request returns to his words`() = runTest {
+        val gate = CompletableDeferred<StepResult>()
+        val viewModel = viewModel(ScriptedAsker(opening = StepResult.Ask(q1, 3), openGate = gate))
+
+        viewModel.describe(MEAL)
+        advanceUntilIdle()
+        assertThat(viewModel.back()).isTrue()
+        gate.complete(StepResult.Ask(q1, 3))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value).isEqualTo(ProposalUiState.Describing())
+        assertThat(viewModel.description).isEqualTo(MEAL)
+    }
+
     @Test
     fun `best guess after a failed step sends the answers so far`() = runTest {
         val asker = ScriptedAsker(
@@ -260,11 +317,18 @@ class ConversationViewModelTest {
 
     @Test
     fun `with one request left, no question is asked and the result is an everyday request`() = runTest {
-        val asker = ScriptedAsker(opening = StepResult.Ask(q1, 3), remaining = 3)
+        val asker = ScriptedAsker(opening = StepResult.Ask(q1, 3), remaining = 3, finishGate = CompletableDeferred())
         val viewModel = asking(asker)
         asker.remaining = 1
 
         viewModel.answer("Standard box")
+        advanceUntilIdle()
+
+        // Said while it is worked out (§7).
+        val waiting = viewModel.state.value as ProposalUiState.Waiting
+        assertThat(waiting.kind).isEqualTo(WaitingFor.RESULT)
+        assertThat(waiting.allowanceOnly).isTrue()
+        asker.finishGate!!.complete(Unit)
         advanceUntilIdle()
 
         assertThat(asker.nextCalls).isEmpty()
@@ -377,11 +441,13 @@ class ConversationViewModelTest {
         var remaining: Int = 20,
         private val stepGate: CompletableDeferred<StepResult>? = null,
         private val throwOnStep: Boolean = false,
+        private val openGate: CompletableDeferred<StepResult>? = null,
+        val finishGate: CompletableDeferred<Unit>? = null,
     ) : MealConversationAsker {
         val nextCalls = mutableListOf<List<Asked>>()
         val finishCalls = mutableListOf<FinishCall>()
 
-        override suspend fun open(description: String): StepResult = opening
+        override suspend fun open(description: String): StepResult = openGate?.await() ?: opening
 
         override suspend fun next(description: String, asked: List<Asked>, cap: Int): StepResult {
             nextCalls += asked
@@ -397,6 +463,7 @@ class ConversationViewModelTest {
             deep: Boolean,
         ): EstimateResult {
             finishCalls += FinishCall(asked, moreDetail, deep)
+            finishGate?.await()
             return final
         }
 

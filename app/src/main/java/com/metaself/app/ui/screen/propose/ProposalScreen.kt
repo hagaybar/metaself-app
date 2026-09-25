@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.propose
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -79,6 +80,8 @@ fun ProposalScreen(
     onTypeItMyself: () -> Unit,
     onAddKey: () -> Unit,
     onCancel: () -> Unit,
+    // A conversation's stages (D58). No default, for the reason the naming sheet's have none.
+    conversation: ConversationActions,
     // Deliberately without defaults, all seven: the sheet is reachable from one place only, and a
     // default would let that one place forget a piece of the wiring and fail in silence on the
     // phone instead of at the compiler.
@@ -129,10 +132,14 @@ fun ProposalScreen(
         }
     }
 
+    // Back steps through a conversation's stages — the phone's gesture and the arrow alike — and
+    // leaves only from his words or the result (D58 §2.5, §12.2).
+    BackHandler(enabled = stepsBack(state)) { conversation.onStepBack() }
+
     MetaSelfScreen(
         title = stringResource(R.string.propose_title),
         modifier = modifier,
-        onBack = onCancel,
+        onBack = { if (!stepsBack(state) || !conversation.onStepBack()) onCancel() },
     ) {
         when (state) {
             is ProposalUiState.Describing -> {
@@ -181,8 +188,12 @@ fun ProposalScreen(
                 }
             }
 
-            // The conversation's stages are drawn by D58's next step; until then, nothing.
-            is ProposalUiState.Offer, is ProposalUiState.Asking, is ProposalUiState.ConversationFailed -> Unit
+            is ProposalUiState.Offer -> OfferContent(state, conversation)
+
+            is ProposalUiState.Asking -> QuestionContent(state, conversation)
+
+            is ProposalUiState.ConversationFailed ->
+                ConversationFailedContent(state, description, conversation, onTypeItMyself)
 
             is ProposalUiState.Waiting -> {
                 Row(
@@ -192,8 +203,15 @@ fun ProposalScreen(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(20.dp))
                     Text(
-                        text = stringResource(R.string.propose_waiting),
+                        text = waitingWords(state),
                         style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                if (state.allowanceOnly) {
+                    Text(
+                        text = stringResource(R.string.conversation_allowance_only),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -319,6 +337,13 @@ fun ProposalScreen(
 
                 // The one case a typed amount cannot fix: the same bowl, cooked richer.
                 Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    state.refused?.let {
+                        Text(
+                            text = stringResource(it.sentence),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                     OutlinedTextField(
                         value = extra,
                         onValueChange = { extra = it },

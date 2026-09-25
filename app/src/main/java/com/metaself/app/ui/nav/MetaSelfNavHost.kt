@@ -37,6 +37,7 @@ import com.metaself.app.ui.screen.day.DayViewModel
 import com.metaself.app.ui.screen.entry.EntryEditorScreen
 import com.metaself.app.ui.screen.entry.EntryFormState
 import com.metaself.app.ui.screen.settings.SettingsScreen
+import com.metaself.app.ui.screen.propose.ConversationActions
 import com.metaself.app.ui.screen.propose.ProposalScreen
 import com.metaself.app.ui.screen.record.RecordScreen
 import com.metaself.app.ui.screen.record.RecordUiState
@@ -811,6 +812,15 @@ fun MetaSelfNavHost(
                 onCountInFoodUnit = proposeViewModel::countInFoodUnit,
                 onRemove = proposeViewModel::remove,
                 onTellItMore = proposeViewModel::tellItMore,
+                conversation = ConversationActions(
+                    onAcceptQuestions = proposeViewModel::acceptQuestions,
+                    onBestGuess = proposeViewModel::bestGuess,
+                    onAnswer = proposeViewModel::answer,
+                    onEnough = proposeViewModel::enough,
+                    onStepBack = proposeViewModel::back,
+                    onRetry = proposeViewModel::retry,
+                    onBestGuessSoFar = proposeViewModel::bestGuessSoFar,
+                ),
                 onSave = {
                     dayViewModel.logMeal(proposeViewModel.accepted())
                     proposeViewModel.startOver()

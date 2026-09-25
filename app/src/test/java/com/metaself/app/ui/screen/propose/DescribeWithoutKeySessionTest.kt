@@ -98,6 +98,7 @@ class DescribeWithoutKeySessionTest {
                     onCountInFoodUnit = {},
                     onRemove = {},
                     onTellItMore = {},
+            conversation = NO_CONVERSATION,
                     onSave = {},
                     onTypeItMyself = {},
                     onAddKey = {

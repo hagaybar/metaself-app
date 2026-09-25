@@ -80,10 +80,11 @@ class ProposalViewModel @Inject constructor(
     fun describe(text: String) {
         description = text
         if (text.isBlank()) return
+        // Back while waiting cancels, and returns to his words in the box (D58 §12.1).
         send(
-            waiting = ProposalUiState.Waiting(),
+            waiting = ProposalUiState.Waiting(returnTo = ProposalUiState.Describing()),
             onRefused = { ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED) },
-        ) {
+        ) { mine ->
             when (val result = asker.open(text)) {
                 is StepResult.Estimate -> shown(result.result, afterConversation = null)
                 is StepResult.Failed -> described(result.failure)
@@ -92,7 +93,10 @@ class ProposalViewModel @Inject constructor(
                     if (chat == null) described(EstimateResult.CeilingReached) else ProposalUiState.Offer(chat)
                 }
                 // A first reply is never *no more questions*; read as needing none, it is the best guess.
-                StepResult.Enough -> null.also { go(MealConversation.bestGuess(asker.remainingToday()), null) }
+                StepResult.Enough -> null.also {
+                    val next = MealConversation.bestGuess(asker.remainingToday())
+                    if (mine == generation) go(next, ProposalUiState.Describing())
+                }
             }
         }
     }
@@ -122,12 +126,21 @@ class ProposalViewModel @Inject constructor(
         decide(asking) { MealConversation.enough(asking.chat, it) }
     }
 
-    /** *Try again*: the same request as the one that failed. */
+    /**
+     * *Try again*: the same request as the one that failed — decided again from the day's
+     * allowance, so a retry never spends the request kept for the result, nor asks for more
+     * thinking on the day's last one (D58 §7, §12.4).
+     */
     fun retry() {
         val failed = _state.value as? ProposalUiState.ConversationFailed ?: return
         val again = failed.retry ?: return
-        _state.value = ProposalUiState.Waiting(returnTo = failed)
-        go(again, returnTo = failed)
+        decide(failed) { remaining ->
+            when (again) {
+                is Next.Step -> MealConversation.beforeStep(again.chat, again.asked, remaining)
+                is Next.Final -> MealConversation.beforeFinal(again.asked, remaining)
+                is Next.Show, Next.Ceiling -> again
+            }
+        }
     }
 
     /** *Use your best guess with what you've said so far*, after a question step failed (D58 §9). */
@@ -172,12 +185,16 @@ class ProposalViewModel @Inject constructor(
         val asked = proposed?.afterConversation
         val kept = proposed
         send(
-            waiting = ProposalUiState.Waiting(kind = if (asked != null) WaitingFor.RESULT else WaitingFor.ANSWER),
+            waiting = ProposalUiState.Waiting(
+                kind = if (asked != null) WaitingFor.RESULT else WaitingFor.ANSWER,
+                // Back returns to the rows after a conversation, to his words otherwise (§12.1).
+                returnTo = if (asked != null) kept else ProposalUiState.Describing(),
+            ),
             onRefused = {
                 kept?.copy(refused = ActionRefused.NOTHING_CHANGED)
                     ?: ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED)
             },
-        ) {
+        ) { _ ->
             if (asked != null) {
                 val deep = asker.remainingToday() >= 2
                 shown(asker.finish(description, asked, moreDetail = extra, deep = deep), afterConversation = asked)
@@ -187,14 +204,18 @@ class ProposalViewModel @Inject constructor(
         }
     }
 
-    /** Decide the next request from the day's allowance, then send it; [from] is where Back returns. */
+    /**
+     * Decide the next request from the day's allowance, then send it; [from] is where Back returns
+     * — or, from a failure, the stage the failure came from, so one Back always does (§12.1).
+     */
     private fun decide(from: ProposalUiState, next: (remaining: Int) -> Next) {
+        val back = (from as? ProposalUiState.ConversationFailed)?.returnTo ?: from
         // Taken synchronously, so a second tap in the same frame finds no question to answer.
-        _state.value = ProposalUiState.Waiting(kind = WaitingFor.QUESTION, returnTo = from)
+        _state.value = ProposalUiState.Waiting(kind = WaitingFor.QUESTION, returnTo = back)
         val mine = ++generation
         inFlight = guarded(problems, onRefused = { if (mine == generation) _state.value = refusedAt(from) }) {
             val decided = next(asker.remainingToday())
-            if (mine == generation) go(decided, returnTo = from)
+            if (mine == generation) go(decided, returnTo = back)
         }
     }
 
@@ -210,13 +231,15 @@ class ProposalViewModel @Inject constructor(
             is Next.Step -> send(
                 waiting = ProposalUiState.Waiting(WaitingFor.QUESTION, returnTo),
                 onRefused = { refusedAt(returnTo) },
-            ) {
+            ) { mine ->
                 when (val result = asker.next(description, next.asked, next.chat.cap)) {
                     // Onto the conversation as the request left it, later questions already dropped.
                     is StepResult.Ask ->
                         ProposalUiState.Asking(MealConversation.arrived(next.chat, result.question, result.planned))
-                    StepResult.Enough ->
-                        null.also { go(MealConversation.beforeFinal(next.asked, asker.remainingToday()), returnTo) }
+                    StepResult.Enough -> null.also {
+                        val final = MealConversation.beforeFinal(next.asked, asker.remainingToday())
+                        if (mine == generation) go(final, returnTo)
+                    }
                     is StepResult.Failed -> ProposalUiState.ConversationFailed(
                         failure = ProposalWording.failure(result.failure),
                         asked = next.asked,
@@ -238,7 +261,7 @@ class ProposalViewModel @Inject constructor(
             is Next.Final -> send(
                 waiting = ProposalUiState.Waiting(WaitingFor.RESULT, returnTo, next.allowanceOnly),
                 onRefused = { refusedAt(returnTo) },
-            ) {
+            ) { _ ->
                 when (val result = asker.finish(description, next.asked, deep = next.deep)) {
                     is EstimateResult.Proposed -> shown(result, afterConversation = next.asked)
                     else -> ProposalUiState.ConversationFailed(
@@ -254,18 +277,19 @@ class ProposalViewModel @Inject constructor(
     }
 
     /**
-     * One request: [waiting] shown at once, the reply shown if it is still wanted. [block] returns
-     * the state to show, or null when it has handed on to another request itself.
+     * One request: [waiting] shown at once, the reply shown if it is still wanted. [block] is given
+     * its generation and returns the state to show, or null when it has handed on to another
+     * request itself — which it does only while its generation is still the current one.
      */
     private fun send(
         waiting: ProposalUiState,
         onRefused: () -> ProposalUiState,
-        block: suspend () -> ProposalUiState?,
+        block: suspend (mine: Long) -> ProposalUiState?,
     ) {
         _state.value = waiting
         val mine = ++generation
         inFlight = guarded(problems, onRefused = { if (mine == generation) _state.value = onRefused() }) {
-            val shown = block()
+            val shown = block(mine)
             if (shown != null && mine == generation) _state.value = shown
         }
     }
