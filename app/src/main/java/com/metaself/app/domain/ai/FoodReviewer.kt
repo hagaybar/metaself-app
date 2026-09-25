@@ -108,7 +108,8 @@ data class ReviewRequest(
                 } else {
                     HeldWeight(weight, weightOrigin.source)
                 },
-                weightAsked = weightBox,
+                // Never for a food counted in ml: a millilitre's weight is a density (D56 §3).
+                weightAsked = weightBox && !millilitres,
             )
         }
     }
@@ -153,8 +154,18 @@ data class NameSuggestion(val name: String, val reason: String)
  * A unit named where there was none, or a different one proposed (D54 §12.4): the per-one
  * suggestion beside it is for this unit. [unitName] is as the box will hold it — the millilitre
  * written "ml", whose figures are then per 100 ml (D56).
+ *
+ * @property confidence the per-one answer's, given with every unit named or renamed: what the
+ *   per-one group (and a weight echoed beside it) is stored with if he accepts (§12.7).
+ * @property heldSource the per-one group's source as sent, when its figures were judged against
+ *   the held ones (a rename on the same side of the millilitre); null when they are all new.
  */
-data class UnitSuggestion(val unitName: String, val reason: String)
+data class UnitSuggestion(
+    val unitName: String,
+    val reason: String,
+    val confidence: Confidence = Confidence.LOW,
+    val heldSource: Source? = null,
+)
 
 /**
  * What one weighs, as the model proposes it (D54 §12). The app never works one out: this is only

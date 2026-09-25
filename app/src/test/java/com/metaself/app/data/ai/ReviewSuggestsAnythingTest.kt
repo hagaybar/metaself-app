@@ -42,7 +42,8 @@ class ReviewSuggestsAnythingTest {
         assertThat(review.name).isEqualTo(NameSuggestion("Hummus", "The usual spelling."))
         assertThat(review.per100g!!.changes.map { it.to }).containsExactly(9.6)
         assertThat(review.per100g!!.heldSource).isEqualTo(Source.LABEL)
-        assertThat(review.unit).isEqualTo(UnitSuggestion("tablespoon", "A dip is usually counted by the spoon."))
+        assertThat(review.unit)
+            .isEqualTo(UnitSuggestion("tablespoon", "A dip is usually counted by the spoon.", Confidence.MEDIUM, null))
         assertThat(review.perUnit!!.filled).isTrue()
         assertThat(review.perUnit!!.heldSource).isNull()
         assertThat(review.perUnit!!.nutrients).isEqualTo(Nutrients(24.9, 1.2, 2.1, 1.4))
@@ -60,6 +61,13 @@ class ReviewSuggestsAnythingTest {
 
         assertThat(review.name).isNull()
         assertThat(review.setAside).isEmpty()
+    }
+
+    @Test
+    fun `a name only case or spacing apart is an echo without a reason, and a change with one`() {
+        assertThat(proposed(reply(name = text("HUMUS", "")), HUMUS).name).isNull()
+        assertThat(proposed(reply(name = text("humus", "A capital at the start is usual.")), HUMUS.copy(name = "HUMUS")).name)
+            .isEqualTo(NameSuggestion("humus", "A capital at the start is usual."))
     }
 
     @Test
@@ -81,6 +89,26 @@ class ReviewSuggestsAnythingTest {
 
         assertThat(review.unit).isNull()
         assertThat(review.perUnit!!.changes.single().from).isEqualTo(1.0)
+    }
+
+    @Test
+    fun `an empty unit echoed back as blank is kept, not a naming`() {
+        val review = proposed(reply(name = text("Hummus", "Spelling."), unitName = text("", "")), HUMUS)
+
+        assertThat(review.unit).isNull()
+        assertThat(review.setAside).isEmpty()
+    }
+
+    @Test
+    fun `a unit only case apart with no reason is kept, so a held weight is not asked again`() {
+        val review = proposed(
+            reply(unitName = text("Biscuit", ""), perUnit = group(90, 1, 12, 4, fatReason = "A reason.")),
+            BISCUIT,
+        )
+
+        assertThat(review.unit).isNull()
+        assertThat(review.perUnit!!.changes.single().to).isEqualTo(4.0)
+        assertThat(review.setAside).isEmpty()
     }
 
     @Test
@@ -117,7 +145,8 @@ class ReviewSuggestsAnythingTest {
             BISCUIT.copy(gramsPerUnit = null),
         )
 
-        assertThat(review.unit).isEqualTo(UnitSuggestion("cracker", "The usual word."))
+        assertThat(review.unit)
+            .isEqualTo(UnitSuggestion("cracker", "The usual word.", Confidence.MEDIUM, Source.TYPED))
         assertThat(review.perUnit).isNull()
     }
 
@@ -231,11 +260,35 @@ class ReviewSuggestsAnythingTest {
     }
 
     @Test
-    fun `a weight with no unit anywhere, or for a food counted in ml, is set aside`() {
+    fun `a weight with no unit that stands is set aside`() {
         assertThat(unusable(reply(weight = weight(25, "Why.")), HUMUS).setAside)
             .containsExactly(ReviewItem.WEIGHT)
-        assertThat(unusable(reply(weight = weight(250, "Why.")), DRINK).setAside)
-            .containsExactly(ReviewItem.WEIGHT)
+    }
+
+    /** A millilitre's weight is not asked (D56 §3), so one given back is ignored quietly — no line. */
+    @Test
+    fun `a weight given back for a food counted in ml is ignored, never a line`() {
+        val review = proposed(reply(weight = weight(250, "Why.")), DRINK)
+
+        assertThat(review.weight).isNull()
+        assertThat(review.setAside).isEmpty()
+    }
+
+    @Test
+    fun `a food counted in ml is never asked what one weighs, whatever the page`() {
+        val drink = com.metaself.app.domain.food.FoodForm(
+            name = "Oat drink", unitName = "ml",
+            kcalPerUnit = "57", proteinPerUnit = "2.9", carbsPerUnit = "4.7", fatPerUnit = "3.6",
+            gramsPerUnit = "103",
+        )
+        val biscuit = drink.copy(unitName = "biscuit", kcalPerUnit = "90")
+
+        assertThat(ReviewRequest.of(ReviewProcess.EXISTING_FOOD, drink, null, weightBox = true).weightAsked)
+            .isFalse()
+        assertThat(ReviewRequest.of(ReviewProcess.EXISTING_FOOD, biscuit, null, weightBox = true).weightAsked)
+            .isTrue()
+        assertThat(ReviewRequest.of(ReviewProcess.NEW_FOOD, biscuit, null, weightBox = false).weightAsked)
+            .isFalse()
     }
 
     // --- Usable, or not ---------------------------------------------------------------------------
@@ -331,7 +384,8 @@ class ReviewSuggestsAnythingTest {
             unitName = "100 ml",
             perUnit = HeldGroup(Nutrients(57.0, 2.9, 4.7, 3.6), Source.LABEL, null),
             gramsPerUnit = null,
-            weightAsked = true,
+            // As `ReviewRequest.of` makes it for a food counted in ml.
+            weightAsked = false,
         )
     }
 }

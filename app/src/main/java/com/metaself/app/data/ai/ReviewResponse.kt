@@ -153,8 +153,10 @@ object ReviewResponse {
         val given = answer ?: return Read.Unchanged
         val proposal = given.jsonObject
         val value = proposal["value"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
-        if (value == request.name.trim()) return Read.Unchanged
         val reason = proposal["reason"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        if (value == request.name.trim()) return Read.Unchanged
+        // Only case or spacing apart, and nothing said about it: an echo, not a proposal.
+        if (reason.isEmpty() && folded(value) == folded(request.name)) return Read.Unchanged
         if (reason.isEmpty()) return Read.SetAside
         if (runCatching { FoodKeys.nameKey(value) }.isFailure) return Read.SetAside
         return Read.Named(NameSuggestion(value, reason))
@@ -188,8 +190,10 @@ object ReviewResponse {
         val value = proposal?.get("value")?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
             // What §2 sends a food counted in ml as, and what the one-tap switch writes (D56).
             .let { if (it.equals(PerHundredMillilitres.PER, ignoreCase = true)) PerHundredMillilitres.UNIT else it }
+        val unitReason = proposal?.get("reason")?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
         val kept = proposal == null || value.isEmpty() ||
             (held.isNotEmpty() && sameUnit(value, held)) ||
+            (held.isNotEmpty() && unitReason.isEmpty() && folded(value) == folded(held)) ||
             (heldIsMl && Portions.isMillilitres(value))
 
         if (kept) {
@@ -213,7 +217,7 @@ object ReviewResponse {
         // Set aside whole — and a weight given with it was for the unit it proposed, so it goes too.
         val weightGoes = if (weightAnswer != null && request.weightAsked) Read.SetAside else Read.Unchanged
         val aside = Bundle(null, null, setAside = true, unitThatStands = held.ifEmpty { null }, weight = weightGoes)
-        val reason = proposal!!["reason"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+        val reason = unitReason
         val unitName = runCatching { FoodKeys.displayName(value) }.getOrNull() ?: return aside
         if (reason.isEmpty() || perUnitAnswer == JsonNull) return aside
         val newIsMl = Portions.isMillilitres(unitName)
@@ -241,13 +245,21 @@ object ReviewResponse {
             else -> null
         }
         return Bundle(
-            unit = UnitSuggestion(unitName, reason),
+            unit = UnitSuggestion(
+                unitName = unitName,
+                reason = reason,
+                confidence = confidenceOf(perUnitAnswer.jsonObject["confidence"]?.jsonPrimitive?.contentOrNull),
+                heldSource = against?.source,
+            ),
             perUnit = perUnit,
             setAside = false,
             unitThatStands = unitName,
             weight = weight,
         )
     }
+
+    /** A name or unit with case, spacing, marks and punctuation folded away ([FoodKeys.nameKey]). */
+    private fun folded(text: String): String? = runCatching { FoodKeys.nameKey(text) }.getOrNull()
 
     private fun sameUnit(a: String, b: String): Boolean =
         runCatching { FoodKeys.displayName(a) == FoodKeys.displayName(b) }.getOrDefault(false)
