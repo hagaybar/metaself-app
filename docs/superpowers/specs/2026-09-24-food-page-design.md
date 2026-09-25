@@ -334,3 +334,54 @@ figures), **D45**, **D48** (the display face for the heading, no new colours —
 3. **Leaving with unsaved changes.** *Default:* Back and *Leave it alone* discard without asking, as
    today. *Other:* when anything differs from what is stored, Back asks *Leave without saving?* —
    one more question, but a review's applied figures cannot be lost to a stray gesture.
+
+---
+
+## D56 — A food counted in millilitres is stated per 100 ml (added 2026-09-24, public issue #5)
+
+> Decided 2026-09-24 by the owner: option 1 of public issue #5 — millilitres work properly on a
+> food's page, with no change to what is stored. The worked example below is invented.
+
+**The rule.** When a food's unit — the unit box, as it stands, in any spelling the app already
+recognises as the millilitre (`Portions.isMillilitres`: *ml*, *millilitres*, the Hebrew spellings) —
+is the millilitre:
+
+1. **Its per-one group is typed and shown per 100 ml**, the way a carton prints it: the heading reads
+   *What 100 ml of it are worth*, each figure box is named "Calories per 100 ml" for a screen reader
+   (public issue #3), the list row and the page head say "57 kcal per 100 ml", and a review (D54) is
+   asked, answered, shown and accepted at that scale. The four boxes are judged by the per-100
+   ceilings (D42: 1000 kcal, 110 g), since they are per 100 of something, like a packet's.
+2. **It is stored per one ml, exactly as before.** This is the shape D53 §3 already writes when a
+   model's per-100 ml worth teaches a food (its per-one figure in `ml`, divided by 100). The page only
+   moves the decimal point: shown = stored × 100, saved = typed ÷ 100, as decimal shifts, never as a
+   floating-point multiply — 0.57 × 100 is 56.99999999999999 as a double; shifted, it is 57. A box
+   left as it opened hands back the stored figure itself (D54 §8.5), so opening a food and saving it
+   untouched changes nothing stored.
+3. **What one ml weighs is not asked.** It is a density, and the app assumes none (D4): nothing turns
+   millilitres into grams. A food that already holds one keeps it, shown with its value and a line
+   saying why it is not asked, until he clears it; the app deletes nothing. A review does not send it,
+   and so does not cross-check against it.
+4. **An amount of it is a number of millilitres**: typed, never stepped by one; capped at 5000 as a
+   measure (the ceiling D42 already names for millilitres), not at the count of 100; the counting
+   choice reads *In ml*, and a refused amount *At most 5000 ml at a time*. His ml food's worth on the
+   proposal screen (D53 §4) is said per 100 ml.
+
+*Worked example, invented:* a carton reads 57 kcal, 2.9 g protein, 4.7 g carbohydrate and 3.6 g fat
+per 100 ml. A food is made with *ml* as its unit and those four figures typed under *What 100 ml of
+it are worth*. It is stored as 0.57 kcal, 0.029 g, 0.047 g and 0.036 g per ml, with the source it was
+given. 200 ml of it logs as 114 kcal. Opened again, the page shows 57 · 2.9 · 4.7 · 3.6.
+
+**What it does not change.** No schema, DAO, migration, backup format or provenance rank. Decision 2
+of the food model stands: per 100 g and per one are independent facts, and **volume is not a third
+kind of fact** — a food still has one unit slot, and *ml* is a unit name the app understands. So a
+food counted in ml cannot also be counted by a named piece such as a glass; that is the limit the
+owner accepted. A food whose unit is anything else is exactly as before.
+
+**Not reached.** The barcode scan's *add it yourself* form keeps asking per 100 g. A scanned packet
+is cached as per-100 g figures in its own table and written to Open Food Facts in that shape; marking
+it as per 100 ml would need a new stored field, which this decision does not make.
+
+**Foods already counted in ml.** They were stored per ml, so they now show their figures × 100. One
+whose figures had been typed per 100 ml into the old per-one boxes shows them a hundred times too
+large, past the per-100 ceilings, and Save refuses them until they are corrected; opening it changes
+nothing stored.

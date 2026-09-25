@@ -68,10 +68,24 @@ data class FoodForm(
             listOf(KCAL_PER_100G, MACRO_PER_100G, MACRO_PER_100G, MACRO_PER_100G),
         )
 
+    /**
+     * For a food counted in millilitres the four boxes are per 100 ml (D56), so they are judged by
+     * the per-100 ceilings: a carton's figures are per 100 of something, like a packet's.
+     */
     private val perUnitJudged: List<Pair<String, Double>>
         get() = perUnitTyped.zip(
-            listOf(KCAL_PER_UNIT, MACRO_PER_UNIT, MACRO_PER_UNIT, MACRO_PER_UNIT),
+            if (perHundredMl) {
+                listOf(KCAL_PER_100G, MACRO_PER_100G, MACRO_PER_100G, MACRO_PER_100G)
+            } else {
+                listOf(KCAL_PER_UNIT, MACRO_PER_UNIT, MACRO_PER_UNIT, MACRO_PER_UNIT)
+            },
         )
+
+    /**
+     * True when the unit box, as it stands and as Save would store it, names the millilitre: the per-one boxes
+     * are then typed and shown per 100 ml, and stored per one ml (D56).
+     */
+    val perHundredMl: Boolean get() = PerHundredMillilitres.applies(unitName)
 
     /** True when he has started filling the group in, which is when it has to be finished. */
     val wantsPer100g: Boolean get() = per100gTyped.any { it.isNotBlank() }
@@ -106,7 +120,11 @@ data class FoodForm(
             if (perUnitJudged.any { (typed, most) -> number(typed, most) == null }) {
                 put(
                     FoodField.PER_UNIT,
-                    allFour("unit", KCAL_PER_UNIT, MACRO_PER_UNIT) + ", or leave them all empty.",
+                    if (perHundredMl) {
+                        allFour(PerHundredMillilitres.PER, KCAL_PER_100G, MACRO_PER_100G)
+                    } else {
+                        allFour("unit", KCAL_PER_UNIT, MACRO_PER_UNIT)
+                    } + ", or leave them all empty.",
                 )
             }
         }
@@ -184,11 +202,26 @@ data class FoodForm(
     fun per100gFigures(held: Nutrients? = null): Nutrients? = figures(per100gJudged, held)
 
     /**
-     * The four per-one figures, or null while the group is empty, half filled or refused — or names
+     * The four per-one figures **as stored** — per one ml for a food counted in millilitres, whose
+     * boxes are per 100 ml (D56) — or null while the group is empty, half filled or refused, or names
      * no unit, since "90 kcal" of nothing is not a figure.
      */
     fun perUnitFigures(held: Nutrients? = null): Nutrients? =
-        if (unitName.isBlank()) null else figures(perUnitJudged, held)
+        if (unitName.isBlank()) {
+            null
+        } else if (perHundredMl) {
+            figures(perUnitJudged, held, PerHundredMillilitres::shown, PerHundredMillilitres::stored)
+        } else {
+            figures(perUnitJudged, held)
+        }
+
+    /**
+     * The four per-one figures **as the boxes state them** — per 100 ml for a food counted in
+     * millilitres — or null as [perUnitFigures] is. What a review is asked about (D54, D56), so the
+     * model reads the carton's figures and answers at the scale it will be shown in.
+     */
+    fun perUnitFiguresAsShown(held: Nutrients? = null): Nutrients? =
+        perUnitFigures(held)?.let { if (perHundredMl) PerHundredMillilitres.shown(it) else it }
 
     /** What one weighs, or null while the box is empty or refused. */
     fun weightFigure(held: Double? = null): Double? = figure(gramsPerUnit, held, GRAMS)?.takeIf { it > 0.0 }
@@ -199,6 +232,9 @@ data class FoodForm(
     /**
      * The four boxes of [group] filled with [nutrients] — never the unit name, never the weight —
      * written as a stored figure is written into the form (D54: accepting a review's suggestion).
+     *
+     * [nutrients] are at the boxes' own scale: per 100 ml for a food counted in millilitres (D56),
+     * which is the scale its review was asked and answered in ([perUnitFiguresAsShown]).
      */
     fun with(group: FactGroup, nutrients: Nutrients): FoodForm = when (group) {
         FactGroup.PER_100G -> copy(
@@ -215,9 +251,26 @@ data class FoodForm(
         )
     }
 
-    private fun figures(judged: List<Pair<String, Double>>, held: Nutrients?): Nutrients? {
+    /**
+     * A group's four figures as stored. [toBox] turns a stored figure into the box's scale and
+     * [fromBox] a typed one back — the identity but for a food counted in millilitres (D56). A box
+     * still reading its [held] figure as shown hands back [held] itself, untouched by either.
+     */
+    private fun figures(
+        judged: List<Pair<String, Double>>,
+        held: Nutrients?,
+        toBox: (Double) -> Double = { it },
+        fromBox: (Double) -> Double = { it },
+    ): Nutrients? {
         val holds = held?.let { listOf(it.kcal, it.proteinG, it.carbsG, it.fatG) }
-        val read = judged.mapIndexed { i, (typed, most) -> figure(typed, holds?.get(i), most) ?: return null }
+        val read = judged.mapIndexed { i, (typed, most) ->
+            val keep = holds?.get(i)
+            if (keep != null && heldAsShown(typed, toBox(keep), most)) {
+                keep
+            } else {
+                number(typed, most)?.let(fromBox) ?: return null
+            }
+        }
         return runCatching { Nutrients(read[0], read[1], read[2], read[3]) }.getOrNull()
     }
 
@@ -232,7 +285,19 @@ data class FoodForm(
                 "${words(macroMost)} g of protein, carbohydrate or fat)"
 
         /** A food opened for editing, as the fields it fills. */
-        fun of(food: Food): FoodForm = FoodForm(
+        fun of(food: Food): FoodForm {
+            // Per 100 ml for a food counted in millilitres, as its boxes are (D56); stored per ml.
+            val perUnit = food.facts.perUnit?.let { held ->
+                if (PerHundredMillilitres.applies(held.unitName)) {
+                    PerHundredMillilitres.shown(held.nutrients)
+                } else {
+                    held.nutrients
+                }
+            }
+            return of(food, perUnit)
+        }
+
+        private fun of(food: Food, perUnit: Nutrients?): FoodForm = FoodForm(
             name = food.name,
             brand = FoodKeys.brandKey(food.brand)
                 .takeIf { it != FoodKeys.NO_BRAND_KEY }
@@ -243,10 +308,10 @@ data class FoodForm(
             carbsPer100g = food.facts.per100g?.nutrients?.carbsG.asTyped(),
             fatPer100g = food.facts.per100g?.nutrients?.fatG.asTyped(),
             unitName = food.facts.perUnit?.unitName.orEmpty(),
-            kcalPerUnit = food.facts.perUnit?.nutrients?.kcal.asTyped(),
-            proteinPerUnit = food.facts.perUnit?.nutrients?.proteinG.asTyped(),
-            carbsPerUnit = food.facts.perUnit?.nutrients?.carbsG.asTyped(),
-            fatPerUnit = food.facts.perUnit?.nutrients?.fatG.asTyped(),
+            kcalPerUnit = perUnit?.kcal.asTyped(),
+            proteinPerUnit = perUnit?.proteinG.asTyped(),
+            carbsPerUnit = perUnit?.carbsG.asTyped(),
+            fatPerUnit = perUnit?.fatG.asTyped(),
             gramsPerUnit = food.facts.gramsPerUnit?.grams.asTyped(),
         )
 
@@ -278,13 +343,13 @@ data class FoodForm(
      * yet made, or a group it does not know.
      */
     private fun figure(typed: String, held: Double?, most: Double): Double? {
-        if (held != null && BelievableAmount.isBelievable(held, most) &&
-            typed.trim().replace(',', '.') == shown(held)
-        ) {
-            return held
-        }
+        if (held != null && heldAsShown(typed, held, most)) return held
         return number(typed, most)
     }
+
+    /** [typed] is exactly how [held], at the box's scale, is [shown] — and [held] is believable. */
+    private fun heldAsShown(typed: String, held: Double, most: Double): Boolean =
+        BelievableAmount.isBelievable(held, most) && typed.trim().replace(',', '.') == shown(held)
 
     private fun number(typed: String, most: Double): Double? =
         typed.trim().replace(',', '.').toDoubleOrNull()

@@ -1,6 +1,8 @@
 package com.metaself.app.domain.amount
 
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.portion.Portions
 import java.math.BigDecimal
 
@@ -93,6 +95,14 @@ object BelievableAmount {
         CountedAs.GRAMS -> GRAMS
         CountedAs.UNITS -> COUNT
     }
+
+    /**
+     * The ceiling on an amount eaten of the food whose [facts] these are. A food counted in
+     * millilitres is measured out, not counted (D56), so its amount is capped as a measure — 5000,
+     * the ceiling [GRAMS] already names for millilitres — and not as a count of 100.
+     */
+    fun amountEaten(countedAs: CountedAs, facts: FoodFacts): Double =
+        if (PerHundredMillilitres.inMillilitres(countedAs, facts)) GRAMS else amountEaten(countedAs)
 
     /**
      * The ceiling on an amount of a logged row, which names its unit in words. The mass/count split

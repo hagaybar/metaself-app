@@ -2,7 +2,12 @@ package com.metaself.app.domain.amount
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.amount.BelievableAmount.Verdict
+import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerUnit
+import com.metaself.app.domain.food.Provenance
 import org.junit.jupiter.api.Test
 
 /**
@@ -91,6 +96,22 @@ class BelievableAmountTest {
         assertThat(BelievableAmount.amountIn("ml")).isEqualTo(5_000.0)
         assertThat(BelievableAmount.amountIn("slice")).isEqualTo(100.0)
         assertThat(BelievableAmount.amountIn("portion")).isEqualTo(100.0)
+    }
+
+    /**
+     * D56: a food counted in millilitres is measured out, not counted, so its amount has the
+     * measured ceiling — 5000 — and not the count of 100. Figures invented.
+     */
+    @Test
+    fun `an amount of a food counted in ml is capped as a measure, not a count`() {
+        fun counted(unit: String) = FoodFacts(
+            perUnit = PerUnit(unit, Nutrients(0.57, 0.029, 0.047, 0.036), Provenance(Source.TYPED, null, 0)),
+        )
+
+        assertThat(BelievableAmount.amountEaten(CountedAs.UNITS, counted("ml"))).isEqualTo(5_000.0)
+        assertThat(BelievableAmount.amountEaten(CountedAs.UNITS, counted("מ\"ל"))).isEqualTo(5_000.0)
+        assertThat(BelievableAmount.amountEaten(CountedAs.UNITS, counted("glass"))).isEqualTo(100.0)
+        assertThat(BelievableAmount.amountEaten(CountedAs.GRAMS, counted("ml"))).isEqualTo(5_000.0)
     }
 
     /** "At most 1000", never "at most 1000.0" nor "1E+3": the refusal is read by a person. */

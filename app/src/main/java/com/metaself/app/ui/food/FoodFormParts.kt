@@ -22,6 +22,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.food.FactGroup
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.ui.theme.Spacing
 
 /*
@@ -119,16 +120,26 @@ internal fun Modifier.saidAs(said: String?): Modifier =
  * The form draws the same four labels in both groups — "Calories" under per 100 g and again under
  * per one — so the label alone names two boxes, and nothing that reads the screen could aim at
  * either (public issue #3). "Calories per 100 g" and "Calories per bar" are one box each. With no
- * unit named yet the group is per "one", as its heading says.
+ * unit named yet the group is per "one", as its heading says; for a food counted in millilitres it
+ * is per 100 ml, as its boxes are (D56).
  */
 @Composable
 internal fun figureSaid(label: String, group: FactGroup, unitName: String): String =
     when (group) {
         FactGroup.PER_100G -> stringResource(R.string.said_per_100g, label)
-        FactGroup.PER_UNIT -> unitName.trim().takeIf { it.isNotEmpty() }
+        FactGroup.PER_UNIT -> PerHundredMillilitres.per(unitName).takeIf { it.isNotEmpty() }
             ?.let { stringResource(R.string.said_per_unit, label, it) }
             ?: stringResource(R.string.said_per_one, label)
     }
+
+/**
+ * The heading of a food form's per-one group: *What one of it is worth*, or — for a unit box naming
+ * the millilitre — *What 100 ml of it are worth*, since its boxes are then per 100 ml (D56).
+ */
+@Composable
+internal fun perUnitHeading(unitName: String): String = stringResource(
+    if (PerHundredMillilitres.applies(unitName)) R.string.foods_group_per_100ml else R.string.foods_group_per_unit,
+)
 
 /**
  * A line made of parts, each its own text with ` · ` between them — never one joined string, so a

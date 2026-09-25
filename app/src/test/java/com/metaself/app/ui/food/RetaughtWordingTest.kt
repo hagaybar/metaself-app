@@ -164,4 +164,23 @@ class RetaughtWordingTest {
                 "because you have just typed different numbers for it.",
         )
     }
+
+    /** D56: a food counted in ml is said per 100 ml here as in the list. Invented figures. */
+    @Test
+    fun `a food counted in ml is retaught per 100 ml`() {
+        val notice = RetaughtWording.notice(
+            listOf(
+                FoodRetaught(
+                    "Oat drink",
+                    listOf(Replaced.PerOne(perUnit("ml", 0.45), perUnit("ml", 0.57, 2_000))),
+                ),
+            ),
+            RetaughtBecause.JUST_LOGGED,
+        )
+
+        assertThat(notice).isEqualTo(
+            "“Oat drink” now counts 57 kcal per 100 ml, where it counted 45, " +
+                "because you have just logged it with different numbers.",
+        )
+    }
 }

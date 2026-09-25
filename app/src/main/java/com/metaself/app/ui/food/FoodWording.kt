@@ -6,6 +6,7 @@ import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.CannotCount
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.portion.Portions
 import java.util.Locale
 import kotlin.math.absoluteValue
@@ -50,7 +51,18 @@ object FoodWording {
         food.facts.per100g?.let { "${grouped(it.nutrients.kcal)} kcal per 100 g" }
 
     private fun perUnit(food: Food): String? =
-        food.facts.perUnit?.let { "${grouped(it.nutrients.kcal)} kcal per ${it.unitName}" }
+        food.facts.perUnit?.let { perOne(it.nutrients.kcal, it.unitName) }
+
+    /**
+     * "190 kcal per bar" — or, for a food counted in millilitres, "57 kcal per 100 ml" (D56): a
+     * figure stored per one ml is said per 100 ml, as the carton says it and the food's page shows it.
+     */
+    internal fun perOne(kcal: Double, unitName: String): String =
+        "${kcalPerOne(kcal, unitName)} kcal per ${PerHundredMillilitres.per(unitName)}"
+
+    /** [kcal] stored per one [unitName], grouped as it is said: per 100 ml for a millilitre (D56). */
+    internal fun kcalPerOne(kcal: Double, unitName: String): String =
+        grouped(if (PerHundredMillilitres.applies(unitName)) PerHundredMillilitres.shown(kcal) else kcal)
 
     private fun weighs(food: Food): String? = food.facts.gramsPerUnit?.let { weight ->
         val unit = food.facts.perUnit?.unitName ?: FoodFacts.PORTION
@@ -80,8 +92,14 @@ object FoodWording {
      * somewhere to type the missing number is an invitation.
      */
     fun why(reason: CannotCount): String = when (reason) {
+        // A food counted in ml is never asked what one ml weighs (D56): the page draws no box for
+        // it, so the reason names what would switch weighing on — its per 100 g — instead.
         is CannotCount.NothingKnowsWhatOneWeighs ->
-            "Nothing knows what one ${reason.unitName} weighs"
+            if (PerHundredMillilitres.applies(reason.unitName)) {
+                "Nothing says what 100 g of it are worth"
+            } else {
+                "Nothing knows what one ${reason.unitName} weighs"
+            }
         CannotCount.NothingSaysWhatOneIs ->
             "Nothing has said what one of this is"
     }

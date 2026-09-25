@@ -27,6 +27,7 @@ import com.metaself.app.ui.food.Field
 import com.metaself.app.ui.food.figureSaid
 import com.metaself.app.ui.food.FoodWording
 import com.metaself.app.ui.food.PartsLine
+import com.metaself.app.ui.food.perUnitHeading
 import com.metaself.app.ui.food.ReviewActions
 import com.metaself.app.ui.food.ReviewTheFigures
 import com.metaself.app.ui.food.ReviewedBox
@@ -203,7 +204,8 @@ private fun Page(
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             FactHeading(
-                title = stringResource(R.string.foods_group_per_unit),
+                // Per 100 ml when the unit box names the millilitre, live as it is typed (D56).
+                title = perUnitHeading(form.unitName),
                 origin = food.facts.perUnit
                     ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
             )
@@ -218,16 +220,28 @@ private fun Page(
             )
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            FactHeading(
-                title = stringResource(R.string.foods_group_weight),
-                origin = food.facts.gramsPerUnit
-                    ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
-            )
-            // Nothing works this out. It is the number that turns one way of counting into the
-            // other, so a wrong one propagates into every future gram-counted log of this food.
-            Caption(stringResource(R.string.foods_weight_never_guessed))
-            Field(form.gramsPerUnit, { onSetForm(form.copy(gramsPerUnit = it)) }, stringResource(R.string.foods_field_weight), editing.errorFor(FoodField.WEIGHT), numeric = true)
+        // What one millilitre weighs is a density, which the app never assumes (D4), so a food counted
+        // in ml is not asked it (D56). One the stored food already holds, or one typed into the box
+        // before the unit became ml, is not deleted by the app: Save would keep it, so the box stays
+        // in sight, with its value, its refusal and why, until he clears it. Nothing is saved or
+        // refused unseen.
+        val millilitres = form.perHundredMl
+        if (!millilitres || food.facts.gramsPerUnit != null || form.gramsPerUnit.isNotBlank()) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                FactHeading(
+                    title = stringResource(R.string.foods_group_weight),
+                    origin = food.facts.gramsPerUnit
+                        ?.let { FoodWording.origin(it.provenance.source, it.provenance.confidence) },
+                )
+                // Nothing works this out. It is the number that turns one way of counting into the
+                // other, so a wrong one propagates into every future gram-counted log of this food.
+                Caption(
+                    stringResource(
+                        if (millilitres) R.string.foods_weight_not_asked_ml else R.string.foods_weight_never_guessed,
+                    ),
+                )
+                Field(form.gramsPerUnit, { onSetForm(form.copy(gramsPerUnit = it)) }, stringResource(R.string.foods_field_weight), editing.errorFor(FoodField.WEIGHT), numeric = true)
+            }
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {

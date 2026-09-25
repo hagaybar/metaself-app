@@ -379,6 +379,75 @@ class FoodPageScreenRenderTest {
         assertThat(texts).contains("150")
     }
 
+    // --- A food counted in millilitres (D56) ----------------------------------------------------
+
+    @Test
+    fun `a food counted in ml is worth per 100 ml, on the page and in its head`() {
+        val texts = draw(opened(oatDrink()))
+
+        assertThat(texts).contains("What 100 ml of it are worth")
+        assertThat(texts).doesNotContain("What one of it is worth")
+        assertThat(texts).containsAtLeast("ml", "57", "2.9", "4.7", "3.6").inOrder()
+        assertThat(texts).contains("57 kcal per 100 ml")
+    }
+
+    @Test
+    fun `each figure box of a food counted in ml is said per 100 ml`() {
+        draw(opened(oatDrink()))
+
+        for (label in listOf("Calories", "Protein (g)", "Carbs (g)", "Fat (g)")) {
+            assertWithMessage(label).that(render.describedCount("$label per 100 ml")).isEqualTo(1)
+            assertWithMessage(label).that(render.describedCount("$label per ml")).isEqualTo(0)
+        }
+    }
+
+    /** What a millilitre weighs is a density, which the app does not assume (D4); it is not asked. */
+    @Test
+    fun `a food counted in ml is not asked what one of it weighs`() {
+        val texts = draw(opened(oatDrink()))
+
+        assertThat(texts).doesNotContain("What one of it weighs")
+        assertThat(texts).doesNotContain("Grams")
+    }
+
+    /** One typed before D56 is not deleted by the app: shown, with its value, to be cleared. */
+    @Test
+    fun `a stored weight on a food counted in ml stays on the page, with its value and why`() {
+        val texts = draw(opened(oatDrinkWithAWeight()))
+
+        assertThat(texts).contains("What one of it weighs")
+        assertThat(texts).containsAtLeast("Grams", "1.03").inOrder()
+        assertThat(texts).contains(WEIGHT_NOT_ASKED_ML)
+        assertThat(texts).doesNotContain(WEIGHT_NEVER_GUESSED)
+    }
+
+    /**
+     * A weight typed while the unit was a glass, then the unit changed to ml: Save would store it,
+     * so the box stays in sight with what it holds and why it is not asked (D56, D4). Invented.
+     */
+    @Test
+    fun `a weight typed before the unit became ml stays in sight`() {
+        val glass = hamburgerBun().copy(id = 1, hidden = false)
+        val form = FoodForm.of(glass).copy(unitName = "ml", gramsPerUnit = "250")
+        val texts = draw(FoodPageUiState(food = glass, editing = Editing(foodId = 1, form = form)))
+
+        assertThat(texts).contains("What one of it weighs")
+        assertThat(texts).containsAtLeast("Grams", "250").inOrder()
+        assertThat(texts).contains(WEIGHT_NOT_ASKED_ML)
+    }
+
+    /** A refused weight on a food now in ml: its refusal is drawn, never only in a hidden box. */
+    @Test
+    fun `a refused weight on a food now in ml is said where it can be seen`() {
+        val glass = hamburgerBun().copy(id = 1, hidden = false)
+        val form = FoodForm.of(glass).copy(unitName = "ml", gramsPerUnit = "abc")
+        val texts = draw(
+            FoodPageUiState(food = glass, editing = Editing(foodId = 1, form = form, showErrors = true)),
+        )
+
+        assertThat(texts.any { it.startsWith("What one of it weighs, in grams") }).isTrue()
+    }
+
     private fun opened(food: Food, use: FoodUse? = null): FoodPageUiState {
         val stored = food.copy(id = 1)
         return FoodPageUiState(
@@ -406,6 +475,16 @@ class FoodPageScreenRenderTest {
     }
 
     private companion object {
+        /** `R.string.foods_weight_not_asked_ml`. */
+        const val WEIGHT_NOT_ASKED_ML =
+            "What a millilitre weighs depends on what is poured, so it is not asked of a food " +
+                "counted in ml, and nothing here works it out. This figure stays until you clear it."
+
+        /** `R.string.foods_weight_never_guessed`. */
+        const val WEIGHT_NEVER_GUESSED =
+            "Nothing works this out for you. It is what turns grams into units and back, so a " +
+                "wrong one would follow into everything you log afterwards."
+
         const val DECIMALS_KEPT =
             "Numbers here can have a decimal point: 0.5 g is kept as 0.5 g on this food."
 

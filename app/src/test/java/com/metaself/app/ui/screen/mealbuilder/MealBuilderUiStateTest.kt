@@ -8,6 +8,7 @@ import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import org.junit.jupiter.api.Test
 
@@ -32,6 +33,24 @@ class MealBuilderUiStateTest {
     )
 
     private val bar = aFood(name = "Protein bar", facts = FoodFacts(perUnit = aPerUnit("bar", 190.0)))
+
+    /** D56: counted in ml, a measured amount, up to 5000 ml. Invented 57 kcal per 100 ml. */
+    @Test
+    fun `an amount of a food counted in ml goes in up to 5000 ml`() {
+        val oatDrink = aFood(
+            name = "Oat drink",
+            facts = FoodFacts(
+                perUnit = PerUnit("ml", Nutrients(0.57, 0.029, 0.047, 0.036), Provenance(Source.LABEL, null, 0)),
+            ),
+        )
+
+        val pending = Pending(food = oatDrink, countedAs = CountedAs.UNITS, amount = "200")
+        assertThat(pending.most).isEqualTo(5_000.0)
+        assertThat(pending.canAdd).isTrue()
+        assertThat(pending.preview!!.kcal).isEqualTo(114)
+        assertThat(Adding(food = oatDrink, countedAs = CountedAs.UNITS, amount = "5000").amountTooMuch).isFalse()
+        assertThat(Adding(food = oatDrink, countedAs = CountedAs.UNITS, amount = "5001").amountTooMuch).isTrue()
+    }
 
     /**
      * Before D42 an infinite amount threw while the preview was drawn (a zero figure), or went into

@@ -1,6 +1,7 @@
 package com.metaself.app.ui.food
 
 import com.metaself.app.domain.food.FoodRetaught
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.Replaced
 import com.metaself.app.domain.food.ReplacedFacts
 
@@ -66,10 +67,11 @@ object RetaughtWording {
         }
 
         is Replaced.PerOne -> {
-            val held = FoodWording.grouped(replaced.before.nutrients.kcal)
-            val holds = FoodWording.grouped(replaced.after.nutrients.kcal)
-            val heldUnit = replaced.before.unitName
-            val holdsUnit = replaced.after.unitName
+            // Each side said as the food list says it: per 100 ml for a millilitre (D56).
+            val held = FoodWording.kcalPerOne(replaced.before.nutrients.kcal, replaced.before.unitName)
+            val holds = FoodWording.kcalPerOne(replaced.after.nutrients.kcal, replaced.after.unitName)
+            val heldUnit = PerHundredMillilitres.per(replaced.before.unitName)
+            val holdsUnit = PerHundredMillilitres.per(replaced.after.unitName)
             when {
                 // What one of it IS has changed, so both sides say which "one" they mean. Compared
                 // by `ReplacedFacts`' own rule, so a unit that only changed case is not introduced

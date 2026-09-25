@@ -35,7 +35,9 @@ import com.metaself.app.ui.theme.Spacing
  * @param unitWords the unit as it is drawn beside the number (the app's own "portion" pluralised,
  *   D37 — see [unitWord]).
  * @param counted true for a piece, which is stepped; false for grams, millilitres and the rest.
- * @param inGrams whether the ceiling sentence names grams; a ceiling of anything else names no unit.
+ * @param inGrams whether the ceiling sentence names grams.
+ * @param millilitres the millilitre as the unit spells it, when the amount is one (D56), for the
+ *   ceiling sentence to name; null otherwise. A ceiling of anything else names no unit.
  * @param of the thing whose amount this is, when the box is drawn once per row: the box and its
  *   − and + are then said with its name — "How much of Pizza", "One more of Pizza" — so one row's
  *   controls are not heard by the same names as the next row's (public issue #3). Never drawn.
@@ -52,6 +54,7 @@ fun AmountBox(
     onStep: (Int) -> Unit,
     modifier: Modifier = Modifier,
     of: String? = null,
+    millilitres: String? = null,
 ) {
     val fewerSaid = of?.let { stringResource(R.string.said_one_less, it) }
     val moreSaid = of?.let { stringResource(R.string.said_one_more, it) }
@@ -81,6 +84,7 @@ fun AmountBox(
             tooMuch = tooMuch,
             most = most,
             countedAs = if (inGrams) CountedAs.GRAMS else CountedAs.UNITS,
+            millilitres = millilitres,
         )
     }
 }

@@ -6,8 +6,10 @@ import com.metaself.app.data.food.aPerUnit
 import com.metaself.app.domain.day.Source
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
+import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
 import com.metaself.app.domain.food.SavedMeal
 import org.junit.jupiter.api.Test
@@ -122,6 +124,36 @@ class RepeatUiStateTest {
     )
 
     private val bar = aFood(name = "Protein bar", facts = FoodFacts(perUnit = aPerUnit("bar", 190.0)))
+
+    /** D56. Counted in ml, stored per ml; invented 57 kcal per 100 ml. */
+    private val oatDrink = aFood(
+        name = "Oat drink",
+        facts = FoodFacts(
+            perUnit = PerUnit("ml", Nutrients(0.57, 0.029, 0.047, 0.036), Provenance(Source.LABEL, null, 0)),
+        ),
+    )
+
+    @Test
+    fun `an amount of a food counted in ml is measured, up to 5000 ml`() {
+        val glass = Choosing(index = 0, food = oatDrink, countedAs = CountedAs.UNITS, amount = "200")
+        assertThat(glass.most).isEqualTo(5_000.0)
+        assertThat(glass.amountOrNull).isEqualTo(200.0)
+        assertThat(glass.preview!!.kcal).isEqualTo(114)
+
+        assertThat(glass.copy(amount = "5000").amountTooMuch).isFalse()
+        assertThat(glass.copy(amount = "5001").amountTooMuch).isTrue()
+
+        val meal = SavedMeal(
+            id = 1,
+            name = "Breakfast",
+            components = listOf(MealComponent(1, oatDrink, 200.0, CountedAs.UNITS)),
+        )
+        val adjusting = Adjusting(asDefined = meal, rows = meal.components, typed = mapOf(1L to "300"))
+        assertThat(adjusting.amountTooMuch(meal.components.single())).isFalse()
+        assertThat(adjusting.blockedBy).isNull()
+        assertThat(adjusting.copy(typed = mapOf(1L to "5001")).amountTooMuch(meal.components.single()))
+            .isTrue()
+    }
 
     /**
      * "Infinity" typed as the amount of a food with a zero figure threw while the screen was

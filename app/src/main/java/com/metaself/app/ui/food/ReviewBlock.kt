@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontFamily
 import com.metaself.app.R
 import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.food.FactGroup
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.propose.ProposalWording
 import com.metaself.app.ui.theme.MetaSelfInk
@@ -172,7 +173,8 @@ private fun Outcome(line: String) {
 @Composable
 private fun Answer(shown: Review.Shown, unitName: String, actions: ReviewActions) {
     val review = shown.review
-    val one = unitName.trim().ifEmpty { stringResource(R.string.review_one) }
+    // Per 100 ml for a food counted in millilitres, the scale it was reviewed in (D56).
+    val one = PerHundredMillilitres.per(unitName).ifEmpty { stringResource(R.string.review_one) }
     FactGroup.values().forEach { group ->
         val suggestion = review.suggestionFor(group) ?: return@forEach
         val per = when (group) {

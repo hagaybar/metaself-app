@@ -47,6 +47,7 @@ import com.metaself.app.ui.food.changedByReview
 import com.metaself.app.ui.food.figureSaid
 import com.metaself.app.ui.food.named
 import com.metaself.app.ui.food.namesTogether
+import com.metaself.app.ui.food.perUnitHeading
 import com.metaself.app.ui.food.saidAs
 import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.theme.MetaSelfInk
@@ -513,6 +514,7 @@ private fun Waiting(
             tooMuch = pending.amountTooMuch,
             most = pending.most,
             countedAs = pending.countedAs,
+            millilitres = pending.unitName.takeIf { pending.inMillilitres },
         )
         val preview = pending.preview
         if (preview != null) {
@@ -596,6 +598,7 @@ private fun HowMuchOfIt(
             tooMuch = adding.amountTooMuch,
             most = adding.most,
             countedAs = adding.countedAs,
+            millilitres = adding.unitName.takeIf { adding.inMillilitres },
         )
         adding.preview?.let {
             Text(
@@ -677,8 +680,9 @@ private fun NewFood(
         }
 
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            // Per 100 ml when the unit box names the millilitre, live as it is typed (D56).
             Text(
-                text = stringResource(R.string.foods_group_per_unit),
+                text = perUnitHeading(form.unitName),
                 style = MaterialTheme.typography.titleSmall,
             )
             Field(form.unitName, { onSetForm(form.copy(unitName = it)) }, stringResource(R.string.foods_field_unit), making.errorFor(FoodField.UNIT_NAME))

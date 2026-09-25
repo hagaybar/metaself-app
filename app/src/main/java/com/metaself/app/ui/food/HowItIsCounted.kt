@@ -14,6 +14,7 @@ import androidx.compose.ui.res.stringResource
 import com.metaself.app.R
 import com.metaself.app.domain.food.CannotCount
 import com.metaself.app.domain.food.CountedAs
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 
@@ -50,7 +51,12 @@ fun HowItIsCounted(
     of: String? = null,
 ) {
     val weighLabel = stringResource(R.string.food_in_grams)
-    val countLabel = stringResource(R.string.food_in_units, unitName)
+    // Millilitres are measured out, not counted: "In ml", not "Count ml" (D56).
+    val countLabel = if (PerHundredMillilitres.applies(unitName)) {
+        stringResource(R.string.food_in_measure, unitName)
+    } else {
+        stringResource(R.string.food_in_units, unitName)
+    }
     val weighSaid = of?.let { stringResource(R.string.said_for, weighLabel, it) }
     val countSaid = of?.let { stringResource(R.string.said_for, countLabel, it) }
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {

@@ -19,16 +19,18 @@ import com.metaself.app.domain.food.CountedAs
  *
  * [most] is the ceiling the box's own state judged against, passed in rather than worked out again
  * here: the number the line names is then the number that refused him, by construction. [countedAs]
- * only chooses the wording.
+ * and [millilitres] only choose the wording: an amount of millilitres is said in the millilitre as
+ * the food spells it (D56) — [millilitres] is that word, or null when the amount is not millilitres.
  */
 @Composable
-fun AmountTooMuch(tooMuch: Boolean, most: Double, countedAs: CountedAs) {
+fun AmountTooMuch(tooMuch: Boolean, most: Double, countedAs: CountedAs, millilitres: String? = null) {
     if (!tooMuch) return
     val words = BelievableAmount.words(most)
     Text(
-        text = when (countedAs) {
-            CountedAs.GRAMS -> stringResource(R.string.amount_at_most_grams, words)
-            CountedAs.UNITS -> stringResource(R.string.amount_at_most_count, words)
+        text = when {
+            millilitres != null -> stringResource(R.string.amount_at_most_ml, words, millilitres)
+            countedAs == CountedAs.GRAMS -> stringResource(R.string.amount_at_most_grams, words)
+            else -> stringResource(R.string.amount_at_most_count, words)
         },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.error,

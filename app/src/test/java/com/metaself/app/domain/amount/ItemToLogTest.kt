@@ -305,6 +305,26 @@ class ItemToLogTest {
         assertThat(burger("").teaches()).isNull()
     }
 
+    /**
+     * D56: his food counted in ml says its worth per 100 ml, as its page does — not per one ml,
+     * which as a row would log rounds to nothing. The boxes under the line hold the carton's own
+     * figures, with no float artefact. Invented: 57 kcal · P 2.9 · C 4.7 · F 3.6 per 100 ml.
+     */
+    @Test
+    fun `the worth line of his food counted in ml is per 100 ml`() {
+        val drink = Food(
+            id = 8,
+            name = "Oat drink",
+            facts = FoodFacts(perUnit = PerUnit("ml", Nutrients(0.57, 0.029, 0.047, 0.036), typed())),
+        )
+        val item = ItemToLog("Oat drink", "", "200", "ml", Worth.YourFood(drink, CountedAs.UNITS), drink.id)
+
+        assertThat(item.rateLine!!.per).isEqualTo(Per.HUNDRED)
+        assertThat(item.rateLine!!.nutrients.kcal).isEqualTo(57.0)
+        assertThat(item.exactRate).isEqualTo(Rate(Nutrients(57.0, 2.9, 4.7, 3.6), Per.HUNDRED))
+        assertThat(item.numbers!!.kcal).isEqualTo(114)
+    }
+
     private fun pita() = Food(
         id = 7,
         name = "Pita",

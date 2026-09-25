@@ -300,6 +300,11 @@
     <string name="foods_group_per_100g">What 100 g of it are worth</string>
     <string name="foods_group_per_unit">What one of it is worth</string>
     <string name="foods_group_weight">What one of it weighs</string>
+    <!-- D56: the per-one group of a food counted in millilitres, whose boxes are per 100 ml. -->
+    <string name="foods_group_per_100ml">What 100 ml of it are worth</string>
+    <!-- D56: drawn only when a food counted in ml already holds what one ml weighs; the box is
+         not otherwise asked, since that is a density and the app assumes none (D4). -->
+    <string name="foods_weight_not_asked_ml">What a millilitre weighs depends on what is poured, so it is not asked of a food counted in ml, and nothing here works it out. This figure stays until you clear it.</string>
     <!-- A review of a food's figures by the model, on request (D54). -->
     <string name="review_the_figures">Review the figures</string>
     <string name="review_asking">Reviewing…</string>
@@ -406,6 +411,9 @@
     <string name="delete_keep_it">Keep it</string>
     <string name="food_in_grams">Weigh it</string>
     <string name="food_in_units">Count %1$s</string>
+    <!-- D56: the counting chip of a food counted in millilitres, which is measured out rather than
+         counted. %1$s is the unit as the food spells it. -->
+    <string name="food_in_measure">In %1$s</string>
     <string name="food_how_much">How much</string>
     <!-- Under a switched-off count, for a food nobody has named a portion of: opens that food in the food editor. -->
     <string name="food_give_a_portion">Give this a portion</string>
@@ -430,6 +438,9 @@
          plural on the screen (D37), and "at most 100 slice" would be wrong. -->
     <string name="amount_at_most_grams">At most %1$s g at a time.</string>
     <string name="amount_at_most_count">At most %1$s at a time.</string>
+    <!-- D56: the same line for an amount of millilitres. %2$s is the millilitre as the food
+         spells it ("ml", or a Hebrew spelling). -->
+    <string name="amount_at_most_ml">At most %1$s %2$s at a time.</string>
     <string name="settings_window_title">When you eat</string>
     <string name="settings_window_none">Off. Set the hours you mean to eat between and the app will keep tab, from today onwards.</string>
     <string name="settings_window_set">Your window is %1$s.</string>

@@ -8,6 +8,7 @@ import com.metaself.app.domain.food.FoodField
 import com.metaself.app.domain.food.FoodForm
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Logging
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.food.FormReview
@@ -40,8 +41,11 @@ data class Adding(
      */
     val changing: Long? = null,
 ) {
-    /** The ceiling on how much of it, by how he is counting: 5000 g, or 100 of them (D42). */
-    val most: Double get() = BelievableAmount.amountEaten(countedAs)
+    /** The ceiling on how much of it, by how he is counting: 5000 g or ml, or 100 of them (D42, D56). */
+    val most: Double get() = BelievableAmount.amountEaten(countedAs, food.facts)
+
+    /** True when the amount is a number of millilitres, said so when it is too much (D56). */
+    val inMillilitres: Boolean get() = PerHundredMillilitres.inMillilitres(countedAs, food.facts)
 
     /**
      * The amount to put in: above nothing and not past [most] (D42, issue #32). Past it there is no
@@ -96,6 +100,8 @@ data class Pending(
     val amountOrNull: Double? get() = asAdding.amountOrNull
 
     val most: Double get() = asAdding.most
+
+    val inMillilitres: Boolean get() = asAdding.inMillilitres
 
     val amountTooMuch: Boolean get() = asAdding.amountTooMuch
 

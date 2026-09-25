@@ -8,6 +8,7 @@ import com.metaself.app.domain.food.FoodKeys
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Logging
 import com.metaself.app.domain.food.Nutrients
+import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
@@ -77,7 +78,7 @@ data class ItemToLog(
             is Worth.Estimated -> worth.rate
             is Worth.Typed -> worth.rate
             is Worth.YourFood -> {
-                val per = if (worth.countedAs == CountedAs.GRAMS) Per.HUNDRED else Per.ONE
+                val per = perOf(worth)
                 val one = Logging.log(worth.food.facts, per.divisor, worth.countedAs)
                 (one as? LoggedFrom.Numbers)?.let {
                     val figures = Nutrients(
@@ -101,12 +102,28 @@ data class ItemToLog(
         get() = when (val worth = worth) {
             is Worth.Estimated -> worth.rate
             is Worth.Typed -> worth.rate
-            is Worth.YourFood -> {
-                val per = if (worth.countedAs == CountedAs.GRAMS) Per.HUNDRED else Per.ONE
-                Logging.unrounded(worth.food.facts, per.divisor, worth.countedAs)
-                    ?.let { Rate(it, per) }
-            }
+            is Worth.YourFood ->
+                if (PerHundredMillilitres.inMillilitres(worth.countedAs, worth.food.facts)) {
+                    // Its own per-ml figures shifted to per 100 ml, never multiplied by 100 in
+                    // floating point: 0.57 × 100 is 56.99999999999999 (D56).
+                    Logging.unrounded(worth.food.facts, 1.0, worth.countedAs)
+                        ?.let { Rate(PerHundredMillilitres.shown(it), Per.HUNDRED) }
+                } else {
+                    val per = perOf(worth)
+                    Logging.unrounded(worth.food.facts, per.divisor, worth.countedAs)
+                        ?.let { Rate(it, per) }
+                }
         }
+
+    /**
+     * What his food's worth is stated per: 100 g when weighed; 100 ml when counted in millilitres,
+     * as its page states it (D56); one of it otherwise.
+     */
+    private fun perOf(worth: Worth.YourFood): Per = when {
+        worth.countedAs == CountedAs.GRAMS -> Per.HUNDRED
+        PerHundredMillilitres.inMillilitres(worth.countedAs, worth.food.facts) -> Per.HUNDRED
+        else -> Per.ONE
+    }
 
     private fun costed(rate: Rate, provenance: Provenance, amount: Double): LoggedFrom.Numbers =
         Logging.rounded(rate.nutrients * (amount / rate.per.divisor), provenance, amount, unit)

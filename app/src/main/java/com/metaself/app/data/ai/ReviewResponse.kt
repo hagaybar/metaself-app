@@ -99,11 +99,12 @@ object ReviewResponse {
             payload.getValue("per_unit")
             Read.Unchanged
         } else {
+            // Per 100 ml for a food counted in millilitres (D56): judged as its boxes are.
             read(
                 payload.getValue("per_unit"),
                 request.perUnit,
-                BelievableAmount.KCAL_PER_UNIT,
-                BelievableAmount.MACRO_PER_UNIT,
+                if (request.perUnitPer100Ml) BelievableAmount.KCAL_PER_100G else BelievableAmount.KCAL_PER_UNIT,
+                if (request.perUnitPer100Ml) BelievableAmount.MACRO_PER_100G else BelievableAmount.MACRO_PER_UNIT,
             )
         }
 
