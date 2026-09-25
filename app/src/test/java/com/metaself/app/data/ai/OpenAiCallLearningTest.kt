@@ -232,9 +232,77 @@ class OpenAiCallLearningTest {
             .isInstanceOf(EstimateResult.Refused::class.java)
     }
 
+    /** D58 §8.2: a final analysis on a model that takes an effort asks for `high`. */
+    @Test
+    fun `a final analysis on a reasoning model asks for high, and remembers it as the deep level only`() =
+        runTest {
+            val profiles = FakeRequestProfileStore(mapOf("gpt-6-luna" to RequestProfile.REASONING))
+            server.enqueue(MockResponse().setBody(ANSWER))
+
+            call(FakeSettings(AiSettings(model = "gpt-6-luna")), profiles).askedDeep()
+
+            assertThat(sent()["reasoning_effort"]!!.jsonPrimitive.content).isEqualTo("high")
+            assertThat(profiles.deep.value).containsExactly("gpt-6-luna", DeepLevel("high"))
+            assertThat(profiles.writes).isEqualTo(0)
+        }
+
+    /** D58 §8.3: a model sent temperature 0 is sent as it always is, and nothing is remembered. */
+    @Test
+    fun `a final analysis on a model that takes no effort is sent as every day`() = runTest {
+        val profiles = FakeRequestProfileStore()
+        server.enqueue(MockResponse().setBody(ANSWER))
+
+        call(FakeSettings(AiSettings(model = "an-invented-model")), profiles).askedDeep()
+
+        val body = sent()
+        assertThat(body["temperature"]!!.jsonPrimitive.content).isEqualTo("0")
+        assertThat(body.keys).doesNotContain("reasoning_effort")
+        assertThat(profiles.deep.value).isEmpty()
+        assertThat(profiles.writes).isEqualTo(0)
+    }
+
+    @Test
+    fun `a refused high is learned downward, remembered as deep, and the everyday effort untouched`() =
+        runTest {
+            val settings = FakeSettings(AiSettings(model = "gpt-6-luna"))
+            val profiles = FakeRequestProfileStore(mapOf("gpt-6-luna" to RequestProfile.REASONING))
+            server.enqueue(
+                refusal(
+                    Refusals.EFFORT_LOW_WITH_LIST.replace("'low'", "'high'")
+                        .replace("'medium' and 'high'", "'low' and 'medium'"),
+                ),
+            )
+            server.enqueue(MockResponse().setBody(ANSWER))
+
+            call(settings, profiles).askedDeep()
+
+            assertThat(sent()["reasoning_effort"]!!.jsonPrimitive.content).isEqualTo("high")
+            assertThat(sent()["reasoning_effort"]!!.jsonPrimitive.content).isEqualTo("medium")
+            assertThat(profiles.deep.value).containsExactly("gpt-6-luna", DeepLevel("medium"))
+            assertThat(profiles.remembered.value["gpt-6-luna"]).isEqualTo(RequestProfile.REASONING)
+            assertThat(settings.calls).isEqualTo(2)
+        }
+
+    @Test
+    fun `a remembered deep level is sent as remembered, and not written again`() = runTest {
+        val profiles = FakeRequestProfileStore(
+            mapOf("gpt-6-luna" to RequestProfile.REASONING),
+            mapOf("gpt-6-luna" to DeepLevel("medium")),
+        )
+        server.enqueue(MockResponse().setBody(ANSWER))
+
+        val outcome = call(FakeSettings(AiSettings(model = "gpt-6-luna")), profiles).askedDeep()
+
+        assertThat(sent()["reasoning_effort"]!!.jsonPrimitive.content).isEqualTo("medium")
+        assertThat((outcome as OpenAiCall.Outcome.Body).alreadyRemembered).isTrue()
+    }
+
+    private suspend fun OpenAiCall.askedDeep(): OpenAiCall.Outcome =
+        send(OpenAiCall.Effort.DEEP, ::estimate).also { if (it is OpenAiCall.Outcome.Body) remember(it) }
+
     /** A caller that read the answer, and so remembers how it was asked for. */
     private suspend fun OpenAiCall.asked(): OpenAiCall.Outcome =
-        send(::estimate).also { if (it is OpenAiCall.Outcome.Body) remember(it) }
+        send(build = ::estimate).also { if (it is OpenAiCall.Outcome.Body) remember(it) }
 
     /** D57 §5: only an answer that was read teaches; one in the wrong shape leaves nothing behind. */
     @Test
@@ -341,6 +409,8 @@ class OpenAiCallLearningTest {
     private class BrokenStore : RequestProfileStore {
         override fun profileFor(model: String): Flow<RequestProfile?> = flow { throw IOException("disk") }
         override suspend fun remember(model: String, profile: RequestProfile) = throw IOException("disk")
+        override fun deepFor(model: String): Flow<DeepLevel?> = flow { throw IOException("disk") }
+        override suspend fun rememberDeep(model: String, effort: String?) = throw IOException("disk")
     }
 
     private companion object {

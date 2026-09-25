@@ -95,6 +95,44 @@ class RequestFixTest {
         }
     }
 
+    /** D58 §8.4: a final analysis aims at `high`, so a refused `high` steps down, not up. */
+    @Test
+    fun `aiming high, a refused high moves to the highest accepted below it`() {
+        val high = reasoning.copy(reasoningEffort = "high")
+        val listed = Refusals.EFFORT_LOW_WITH_LIST
+            .replace("'low'", "'high'").replace("'medium' and 'high'", "'low' and 'medium'")
+
+        assertThat(fixAiming(high, listed).map { it.reasoningEffort }).containsExactly("medium", "low").inOrder()
+    }
+
+    @Test
+    fun `aiming high, with only a little thinking accepted, that little`() {
+        val high = reasoning.copy(reasoningEffort = "high")
+        val listed = Refusals.EFFORT_LOW_WITH_LIST
+            .replace("'low'", "'high'").replace("'medium' and 'high'", "'minimal'")
+
+        assertThat(fixAiming(high, listed).map { it.reasoningEffort }).containsExactly("minimal")
+    }
+
+    @Test
+    fun `aiming high, a refused high with no list steps down`() {
+        val high = reasoning.copy(reasoningEffort = "high")
+
+        assertThat(fixAiming(high, Refusals.effortWithoutList("high")).map { it.reasoningEffort })
+            .containsExactly("medium", "low", "minimal", "none").inOrder()
+    }
+
+    @Test
+    fun `aiming high, a refused parameter is dropped exactly as every day`() {
+        assertThat(fixAiming(reasoning.copy(reasoningEffort = "high"), Refusals.EFFORT_PARAMETER)).containsExactly(
+            RequestProfile(temperature = true, reasoningEffort = null),
+            RequestProfile(temperature = false, reasoningEffort = null),
+        ).inOrder()
+    }
+
+    private fun fixAiming(sent: RequestProfile, body: String): List<RequestProfile> =
+        RequestFix.candidates(sent, ProviderRefusal.parse(body)!!, wanted = RequestFix.DEEP)
+
     private fun fix(sent: RequestProfile, body: String): List<RequestProfile> =
         RequestFix.candidates(sent, ProviderRefusal.parse(body)!!)
 }
