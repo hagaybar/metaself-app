@@ -970,7 +970,7 @@ class FoodPageViewModelTest {
     @Test
     fun `an answer whose every suggestion was set aside is said as unusable, not as a failure`() =
         runTest(dispatcher) {
-            val answer = FoodReview(null, null, null, listOf(FactGroup.PER_100G))
+            val answer = FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_100G))
             val viewModel = page(
                 FakeFoodRepository(listOf(oatBiscuit())),
                 reviewer = FakeFoodReviewer(ReviewResult.Unusable(answer)),
@@ -991,7 +991,7 @@ class FoodPageViewModelTest {
             val raw = """{"per_100g":{"kcal":500},"note":"Oat biscuit"}"""
             listOf(
                 ReviewResult.Failed(EstimateResult.Unreadable("not the shape"), raw),
-                ReviewResult.Unusable(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), raw),
+                ReviewResult.Unusable(FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_100G)), raw),
             ).forEach { answer ->
                 val problems = RecordingProblemLog()
                 val viewModel = page(

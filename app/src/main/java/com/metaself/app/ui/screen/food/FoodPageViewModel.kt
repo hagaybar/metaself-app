@@ -169,7 +169,7 @@ class FoodPageViewModel @Inject constructor(
                     ReviewProcess.EXISTING_FOOD,
                     editing.form,
                     stored.facts,
-                    editing.reviewing.accepted,
+                    weightBox = true,
                 )
                 val result = reviewer.review(request)
                 if (!stillWaiting()) return@guarded

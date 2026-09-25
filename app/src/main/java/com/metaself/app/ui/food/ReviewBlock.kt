@@ -30,6 +30,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import com.metaself.app.R
+import com.metaself.app.domain.ai.ReviewItem
 import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.PerHundredMillilitres
@@ -187,11 +188,13 @@ private fun Answer(shown: Review.Shown, unitName: String, actions: ReviewActions
         )
         ReviewWording.reasons(suggestion)?.let { Caption(it) }
     }
-    review.setAside.forEach { group ->
+    review.setAside.forEach { item ->
         Caption(
-            when (group) {
-                FactGroup.PER_100G -> stringResource(R.string.review_set_aside_per_100g)
-                FactGroup.PER_UNIT -> stringResource(R.string.review_set_aside_per_unit, one)
+            when (item) {
+                ReviewItem.NAME -> stringResource(R.string.review_set_aside_name)
+                ReviewItem.PER_100G -> stringResource(R.string.review_set_aside_per_100g)
+                ReviewItem.PER_UNIT -> stringResource(R.string.review_set_aside_per_unit, one)
+                ReviewItem.WEIGHT -> stringResource(R.string.review_set_aside_weight)
             },
         )
     }

@@ -1,11 +1,11 @@
 package com.metaself.app.data.ai
 
+import com.metaself.app.domain.ai.ReviewItem
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.ReviewProcess
 import com.metaself.app.domain.ai.ReviewRequest
 import com.metaself.app.domain.ai.ReviewResult
 import com.metaself.app.domain.day.Source
-import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.FoodForm
@@ -46,7 +46,7 @@ class ReviewInMillilitresTest {
     )
 
     private fun request(form: FoodForm = FoodForm.of(drink)) =
-        ReviewRequest.of(ReviewProcess.EXISTING_FOOD, form, drink.facts, accepted = emptyMap())
+        ReviewRequest.of(ReviewProcess.EXISTING_FOOD, form, drink.facts, weightBox = true)
 
     @Test
     fun `a food counted in ml is sent per 100 ml, with the carton's figures`() {
@@ -78,7 +78,7 @@ class ReviewInMillilitresTest {
         val sent = userMessage(
             ReviewPrompt.requestBody(
                 "a-model",
-                ReviewRequest.of(ReviewProcess.EXISTING_FOOD, FoodForm.of(glass), glass.facts, emptyMap()),
+                ReviewRequest.of(ReviewProcess.EXISTING_FOOD, FoodForm.of(glass), glass.facts, weightBox = true),
             ),
         )
 
@@ -95,7 +95,7 @@ class ReviewInMillilitresTest {
         )
 
         assertThat(result).isInstanceOf(ReviewResult.Unusable::class.java)
-        assertThat((result as ReviewResult.Unusable).review.setAside).containsExactly(FactGroup.PER_UNIT)
+        assertThat((result as ReviewResult.Unusable).review.setAside).containsExactly(ReviewItem.PER_UNIT)
     }
 
     /**

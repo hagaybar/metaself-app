@@ -92,7 +92,7 @@ class FoodPageReviewRenderTest {
                         per100g = null,
                         perUnit = fatTo4,
                         note = "A short note.",
-                        setAside = listOf(FactGroup.PER_100G),
+                        setAside = listOf(com.metaself.app.domain.ai.ReviewItem.PER_100G),
                     ),
                 ),
             ),
@@ -160,10 +160,10 @@ class FoodPageReviewRenderTest {
             Review.Shown(FoodReview(fatTo4, fatTo4, null, emptyList())) to
                 "Reviewed: 2 suggestions below.",
             Review.Shown(
-                FoodReview(null, null, "Per 100 g looks off.", listOf(FactGroup.PER_100G)),
+                FoodReview(null, null, "Per 100 g looks off.", listOf(com.metaself.app.domain.ai.ReviewItem.PER_100G)),
                 unusable = true,
             ) to "The model's answer arrived, but its suggestions could not be used — Per 100 g looks off.",
-            Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true) to
+            Review.Shown(FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_100G)), unusable = true) to
                 "The model's answer arrived, but its suggestions could not be used.",
             Review.Shown(FoodReview(null, null, null, emptyList())) to
                 "Reviewed: no suggestions left.",
@@ -238,7 +238,7 @@ class FoodPageReviewRenderTest {
     fun `an answer whose suggestions could not be used says so, and which`() {
         val texts = draw(
             reviewing(
-                Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_100G)), unusable = true),
+                Review.Shown(FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_100G)), unusable = true),
             ),
         )
 
@@ -320,7 +320,7 @@ class FoodPageReviewRenderTest {
                     1,
                     FoodForm.of(drink),
                     reviewing = FormReview(
-                        review = Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_UNIT)), unusable = true),
+                        review = Review.Shown(FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_UNIT)), unusable = true),
                     ),
                 ),
             ),

@@ -3,6 +3,7 @@ package com.metaself.app.ui.food
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.Figure
 import com.metaself.app.domain.ai.FoodReview
+import com.metaself.app.domain.ai.ReviewItem
 import com.metaself.app.domain.food.AcceptedGroup
 import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.FoodForm
@@ -249,8 +250,8 @@ data class FormReview(
     }
 
     private fun FoodReview.without(group: FactGroup): FoodReview = when (group) {
-        FactGroup.PER_100G -> copy(per100g = null, setAside = setAside - group)
-        FactGroup.PER_UNIT -> copy(perUnit = null, setAside = setAside - group)
+        FactGroup.PER_100G -> copy(per100g = null, setAside = setAside - ReviewItem.PER_100G)
+        FactGroup.PER_UNIT -> copy(perUnit = null, setAside = setAside - ReviewItem.PER_UNIT)
     }
 
     private fun boxes(form: FoodForm, group: FactGroup): List<String> = when (group) {

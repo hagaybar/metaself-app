@@ -1,5 +1,6 @@
 package com.metaself.app.data.ai
 
+import com.metaself.app.domain.ai.ReviewItem
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import com.metaself.app.domain.ai.EstimateResult
@@ -15,7 +16,6 @@ import com.metaself.app.domain.ai.Suggestion
 import com.metaself.app.domain.ai.Verdict
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.Source
-import com.metaself.app.domain.food.FactGroup
 import com.metaself.app.domain.food.Nutrients
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
@@ -341,7 +341,7 @@ class ReviewResponseTest {
         val review = proposed(result)
         assertThat(review.per100g).isNull()
         assertThat(review.perUnit).isNotNull()
-        assertThat(review.setAside).containsExactly(FactGroup.PER_100G)
+        assertThat(review.setAside).containsExactly(ReviewItem.PER_100G)
     }
 
     // --- Set aside, whole, never repaired --------------------------------------------------------
@@ -360,7 +360,7 @@ class ReviewResponseTest {
 
         assertThat(review.per100g).isNull()
         assertThat(review.perUnit!!.changes.single().figure).isEqualTo(Figure.FAT)
-        assertThat(review.setAside).containsExactly(FactGroup.PER_100G)
+        assertThat(review.setAside).containsExactly(ReviewItem.PER_100G)
     }
 
     @Test
@@ -402,7 +402,7 @@ class ReviewResponseTest {
             OAT_BISCUIT,
         )
 
-        assertThat(proposed(past100g).setAside).containsExactly(FactGroup.PER_100G)
+        assertThat(proposed(past100g).setAside).containsExactly(ReviewItem.PER_100G)
         assertThat(pastUnit).isInstanceOf(ReviewResult.Unusable::class.java)
         assertThat(proposed(atUnit).perUnit!!.nutrients).isEqualTo(Nutrients(5000.0, 1.0, 12.0, 500.0))
     }
@@ -420,7 +420,7 @@ class ReviewResponseTest {
                 ReviewResponse.parse(reply(per100g = ONE_CHANGE_100G, perUnit = bad), OAT_BISCUIT),
             )
             assertThat(review.perUnit).isNull()
-            assertThat(review.setAside).containsExactly(FactGroup.PER_UNIT)
+            assertThat(review.setAside).containsExactly(ReviewItem.PER_UNIT)
         }
     }
 
@@ -440,7 +440,7 @@ class ReviewResponseTest {
         )
 
         assertThat((result as ReviewResult.Unusable).review)
-            .isEqualTo(FoodReview(null, null, "A note.", listOf(FactGroup.PER_100G)))
+            .isEqualTo(FoodReview(null, null, "A note.", listOf(ReviewItem.PER_100G)))
     }
 
     // --- The model's answer, shown on request (D54 §8.4) ------------------------------------------
@@ -460,18 +460,17 @@ class ReviewResponseTest {
     // --- The rest --------------------------------------------------------------------------------
 
     @Test
-    fun `per one is ignored when the editor names no unit`() {
+    fun `per one with no unit named and none proposed is set aside`() {
         val request = OAT_BISCUIT.copy(unitName = "", perUnit = null, gramsPerUnit = null)
 
-        val review = proposed(
-            ReviewResponse.parse(
-                reply(per100g = null, perUnit = group(90, 1, 12, 4, kcalReason = "a biscuit")),
-                request,
-            ),
+        val result = ReviewResponse.parse(
+            reply(per100g = null, perUnit = group(90, 1, 12, 4, kcalReason = "a biscuit")),
+            request,
         )
 
+        val review = (result as ReviewResult.Unusable).review
         assertThat(review.perUnit).isNull()
-        assertThat(review.setAside).isEmpty()
+        assertThat(review.setAside).containsExactly(ReviewItem.PER_UNIT)
     }
 
     @Test

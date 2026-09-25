@@ -800,7 +800,7 @@ class MealBuilderViewModelTest {
     @Test
     fun `a new food's review whose every suggestion was set aside is said as unusable`() =
         runTest(dispatcher) {
-            val answer = FoodReview(null, null, null, listOf(FactGroup.PER_UNIT))
+            val answer = FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_UNIT))
             val viewModel = opened(
                 carrying(mealId = 1),
                 withSalad(),

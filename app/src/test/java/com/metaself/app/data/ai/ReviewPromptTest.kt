@@ -146,7 +146,7 @@ class ReviewPromptTest {
             ReviewProcess.EXISTING_FOOD,
             FoodForm.of(food),
             food.facts,
-            accepted = emptyMap(),
+            weightBox = true,
         )
 
         val body = ReviewPrompt.requestBody("a-model", request)
@@ -176,6 +176,8 @@ class ReviewPromptTest {
 
         assertThat(fieldsOf(ReviewRequest::class.java)).containsExactly(
             "process", "name", "brand", "per100g", "unitName", "perUnit", "gramsPerUnit",
+            // Never sent: it only chooses the instructions (D54 §12.2).
+            "weightAsked",
         )
         assertThat(fieldsOf(HeldGroup::class.java)).containsExactly("nutrients", "source", "confidence")
         assertThat(fieldsOf(HeldWeight::class.java)).containsExactly("grams", "source")
@@ -183,12 +185,12 @@ class ReviewPromptTest {
             .containsExactly("kcal", "proteinG", "carbsG", "fatG")
 
         // What the editors build it from: one form, the one stored food's facts (not the food, so
-        // not its aliases, barcode, id or dates), and what was accepted in this editing session.
+        // not its aliases, barcode, id or dates), and whether the editor has a weight box.
         val from = ReviewRequest.Companion::class.java.declaredMethods.filter { it.name == "of" }
         assertThat(from).hasSize(1)
         assertThat(from.single().parameterTypes.toList()).containsExactly(
             ReviewProcess::class.java, FoodForm::class.java, FoodFacts::class.java,
-            Map::class.java,
+            Boolean::class.javaPrimitiveType,
         ).inOrder()
         assertThat(build("a-model", request())).contains("Oat biscuit")
     }
@@ -229,7 +231,7 @@ class ReviewPromptTest {
             ReviewProcess.EXISTING_FOOD,
             form,
             stored,
-            accepted = mapOf(FactGroup.PER_UNIT to AcceptedGroup(Confidence.MEDIUM)),
+            weightBox = true,
         )
 
         assertThat(request.name).isEqualTo("Oat biscuit")
@@ -237,7 +239,7 @@ class ReviewPromptTest {
         assertThat(request.per100g).isEqualTo(HeldGroup(OAT_100G, Source.LABEL, null))
         assertThat(request.unitName).isEqualTo("biscuit")
         assertThat(request.perUnit)
-            .isEqualTo(HeldGroup(Nutrients(90.0, 1.0, 12.0, 4.0), Source.AI_ESTIMATE, Confidence.MEDIUM))
+            .isEqualTo(HeldGroup(Nutrients(90.0, 1.0, 12.0, 4.0), Source.TYPED, null))
         assertThat(request.gramsPerUnit).isEqualTo(HeldWeight(18.0, Source.TYPED))
     }
 
@@ -250,7 +252,7 @@ class ReviewPromptTest {
             unitName = "bowl",
         )
 
-        val request = ReviewRequest.of(ReviewProcess.NEW_FOOD, form, null, emptyMap())
+        val request = ReviewRequest.of(ReviewProcess.NEW_FOOD, form, null, weightBox = false)
 
         assertThat(request.per100g).isNull()
         assertThat(request.perUnit).isNull()
@@ -265,7 +267,7 @@ class ReviewPromptTest {
             ReviewProcess.NEW_FOOD,
             FoodForm(name = "Oat biscuit", brand = " Examplebrand "),
             null,
-            emptyMap(),
+            weightBox = false,
         )
 
         assertThat(request.brand).isEqualTo("Examplebrand")
@@ -274,21 +276,49 @@ class ReviewPromptTest {
     // --- The instructions ------------------------------------------------------------------------
 
     @Test
-    fun `a label is kept unless impossible, and every change needs a reason`() {
+    fun `a label is strong evidence, may be changed with a reason, and every change needs one`() {
         val body = ReviewPrompt.requestBody("a-model", request())
 
         assertThat(body).contains("LABEL")
-        assertThat(body).contains("internally impossible")
+        assertThat(body).contains("strong evidence")
         assertThat(body).contains("4 kcal per gram of protein or carbohydrate, 9 per gram of fat")
-        assertThat(body).contains("For each figure you change, give a short reason")
+        assertThat(body).contains("For each value you change, give a short reason")
+        assertThat(body).doesNotContain("Keep it unless the figures are")
+    }
+
+    /** D54 §12.5: everything on the page but the brand, a unit may be named, a weight proposed. */
+    @Test
+    fun `it may propose the name, a unit and a weight, and never the brand`() {
+        val system = systemMessage(ReviewPrompt.requestBody("a-model", request().copy(weightAsked = true)))
+
+        assertThat(system).contains("everything the owner's food page holds except")
+        assertThat(system).contains("the brand is not yours to change")
+        assertThat(system).contains("you may name the one this food is most often counted in")
+        assertThat(system).contains("per_unit must be the figures for")
+        assertThat(system).contains("Never a unit of mass")
+        assertThat(system).contains("You may propose what one of the unit weighs, in grams")
+        assertThat(system).doesNotContain("Never state what one piece weighs")
+        assertThat(system).doesNotContain("never name a unit")
+        assertThat(system).doesNotContain("never change it, state it or guess it")
+    }
+
+    /** No weight box, no weight: the meal builder's *Make a food* (D54 §12.9). */
+    @Test
+    fun `where the editor has no weight box, no weight is invited`() {
+        val system = systemMessage(ReviewPrompt.requestBody("a-model", request().copy(weightAsked = false)))
+
+        assertThat(system).contains("What one weighs: return grams_per_unit as null.")
+        assertThat(system).doesNotContain("You may propose what one of the unit weighs")
     }
 
     @Test
-    fun `it never states what a piece weighs and never names a unit`() {
-        val body = ReviewPrompt.requestBody("a-model", request())
+    fun `whether a weight is asked is never itself sent`() {
+        val asked = ReviewPrompt.requestBody("a-model", request().copy(weightAsked = true))
+        val notAsked = ReviewPrompt.requestBody("a-model", request().copy(weightAsked = false))
 
-        assertThat(body).contains("Never state what one piece weighs")
-        assertThat(body).contains("never name a unit")
+        assertThat(userMessage(asked)).isEqualTo(userMessage(notAsked))
+        assertThat(asked.lowercase()).doesNotContain("weightasked")
+        assertThat(asked.lowercase()).doesNotContain("weight_asked")
     }
 
     @Test
@@ -303,50 +333,27 @@ class ReviewPromptTest {
     }
 
     /**
-     * D54 §9.2: with both groups and what one weighs, the model is told the two groups must agree
-     * through that weight, and what to do when they do not. Without all three there is nothing to
-     * check them against, and the rule is not sent.
+     * D54 §9.2, as amended by §10.1 and §12.5: with both groups and what one weighs, the model is
+     * told the three must agree, and that the one it believes wrong — either group, a label
+     * included, or the weight — gets the correction. Without all three the rule is not sent.
      */
     @Test
-    fun `the two groups are cross-checked through what one weighs, only when all three are held`() {
+    fun `the groups and the weight are cross-checked, only when all three are held`() {
         val rule = "should equal the figures per 100 g times grams_per_unit / 100"
 
         val all = systemMessage(ReviewPrompt.requestBody("a-model", request()))
         assertThat(all).contains(rule)
-        assertThat(all).contains("which group you believe and why")
-        assertThat(all).contains("propose the corrected figures")
-        // The existing rule stands beside it.
-        assertThat(all).contains("Never state what one piece weighs")
+        assertThat(all).contains("either group, even a LABEL group, or grams_per_unit")
+        assertThat(all).contains("propose the correction for that one")
+        assertThat(all).contains("Say in the\nnote what you believe and why")
 
         listOf(
             request(per100g = null),
             request(perUnit = null),
             request().copy(gramsPerUnit = null),
         ).forEach { without ->
-            val system = systemMessage(ReviewPrompt.requestBody("a-model", without))
-            assertThat(system).doesNotContain(rule)
-            assertThat(system).contains("Never state what one piece weighs")
+            assertThat(systemMessage(ReviewPrompt.requestBody("a-model", without))).doesNotContain(rule)
         }
-    }
-
-    /**
-     * D54 §10.1: when the two groups contradict each other through what one weighs, one of them is
-     * wrong, and the model proposes the corrected figures for the one it believes wrong — a label
-     * group included — rather than only flagging it. A label group on its own is still changed
-     * only when its own figures are impossible.
-     */
-    @Test
-    fun `when the groups contradict, the group believed wrong is corrected, even a label`() {
-        val system = systemMessage(ReviewPrompt.requestBody("a-model", request()))
-
-        assertThat(system).contains("propose the corrected figures for the group you believe is wrong")
-        assertThat(system).contains("even if it is a LABEL group")
-        assertThat(system).contains("with a reason for each figure you change")
-        assertThat(system).contains("checked on its own is still changed only when its own figures")
-        assertThat(system).doesNotContain("keep its figures")
-        assertThat(system).doesNotContain("flag it in the note")
-        // The label rule for a group standing alone is unchanged.
-        assertThat(system).contains("Keep it unless the figures are")
     }
 
     /**
@@ -424,7 +431,7 @@ class ReviewPromptTest {
     // --- The reply's shape (§3) ------------------------------------------------------------------
 
     @Test
-    fun `the reply is pinned by a strict schema, every field required, and carries no weight`() {
+    fun `the reply is pinned by a strict schema, every field required, and carries no brand`() {
         val format = Json.parseToJsonElement(ReviewPrompt.requestBody("a-model", request()))
             .jsonObject["response_format"]!!.jsonObject
         assertThat(format["type"]!!.jsonPrimitive.content).isEqualTo("json_schema")
@@ -432,25 +439,30 @@ class ReviewPromptTest {
         assertThat(jsonSchema["strict"]!!.jsonPrimitive.content).isEqualTo("true")
         val schema = jsonSchema["schema"]!!.jsonObject
 
+        val seven = listOf("name", "unit_name", "per_100g", "per_unit", "grams_per_unit", "note", "verdict")
         assertThat(schema["type"]!!.jsonPrimitive.content).isEqualTo("object")
         assertThat(schema["additionalProperties"]!!.jsonPrimitive.content).isEqualTo("false")
-        assertThat(schema["properties"]!!.jsonObject.keys)
-            .containsExactly("per_100g", "per_unit", "note", "verdict")
-        assertThat(requiredOf(schema)).containsExactly("per_100g", "per_unit", "note", "verdict")
+        assertThat(schema["properties"]!!.jsonObject.keys).containsExactlyElementsIn(seven)
+        assertThat(requiredOf(schema)).containsExactlyElementsIn(seven)
 
-        listOf("per_100g", "per_unit").forEach { group ->
-            val options = schema["properties"]!!.jsonObject[group]!!.jsonObject["anyOf"]!!.jsonArray
+        fun option(field: String): JsonObject {
+            val options = schema["properties"]!!.jsonObject[field]!!.jsonObject["anyOf"]!!.jsonArray
             assertThat(options).hasSize(2)
             assertThat(options[1].jsonObject["type"]!!.jsonPrimitive.content).isEqualTo("null")
+            val proposal = options[0].jsonObject
+            assertThat(proposal["additionalProperties"]!!.jsonPrimitive.content).isEqualTo("false")
+            assertThat(requiredOf(proposal))
+                .containsExactlyElementsIn(proposal["properties"]!!.jsonObject.keys)
+            return proposal
+        }
 
-            val suggestion = options[0].jsonObject
+        listOf("per_100g", "per_unit").forEach { group ->
+            val suggestion = option(group)
             val fields = listOf(
                 "kcal", "protein_g", "carbs_g", "fat_g",
                 "kcal_reason", "protein_reason", "carbs_reason", "fat_reason", "confidence",
             )
-            assertThat(suggestion["additionalProperties"]!!.jsonPrimitive.content).isEqualTo("false")
             assertThat(suggestion["properties"]!!.jsonObject.keys).containsExactlyElementsIn(fields)
-            assertThat(requiredOf(suggestion)).containsExactlyElementsIn(fields)
             val properties = suggestion["properties"]!!.jsonObject
             listOf("kcal", "protein_g", "carbs_g", "fat_g").forEach {
                 assertThat(properties[it]!!.jsonObject["type"]!!.jsonPrimitive.content)
@@ -460,10 +472,15 @@ class ReviewPromptTest {
                 properties["confidence"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content },
             ).containsExactly("LOW", "MEDIUM", "HIGH")
         }
+        listOf("name", "unit_name").forEach { text ->
+            assertThat(option(text)["properties"]!!.jsonObject.keys).containsExactly("value", "reason")
+        }
+        val weight = option("grams_per_unit")["properties"]!!.jsonObject
+        assertThat(weight.keys).containsExactly("grams", "reason", "confidence")
+        assertThat(weight["grams"]!!.jsonObject["type"]!!.jsonPrimitive.content).isEqualTo("number")
 
-        // No weight, no unit name, anywhere in what can come back (§3: by construction).
-        val everyName = propertyNames(schema)
-        assertThat(everyName.none { "gram" in it || "weigh" in it || "unit_name" in it }).isTrue()
+        // A brand can never come back (D41: a brand makes it a different food).
+        assertThat(propertyNames(schema).none { "brand" in it }).isTrue()
     }
 
     // --- Helpers ---------------------------------------------------------------------------------

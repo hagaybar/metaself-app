@@ -393,7 +393,7 @@ class MealBuilderScreenRenderTest {
                 "Reviewed: 1 suggestion below — A thick soup.",
             Review.Shown(FoodReview(null, null, null, emptyList()), nothingSuggested = true) to
                 "Reviewed: no changes suggested.",
-            Review.Shown(FoodReview(null, null, null, listOf(FactGroup.PER_UNIT)), unusable = true) to
+            Review.Shown(FoodReview(null, null, null, listOf(com.metaself.app.domain.ai.ReviewItem.PER_UNIT)), unusable = true) to
                 "The model's answer arrived, but its suggestions could not be used.",
             Review.Failed(EstimateResult.Unreachable) to
                 "Could not reach the model. Type the numbers instead — your words are still here.",
