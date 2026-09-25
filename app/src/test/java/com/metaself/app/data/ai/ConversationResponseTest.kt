@@ -65,6 +65,16 @@ class ConversationResponseTest {
         assertThat(ask.question.options).containsExactly("עגבניות", "שמנת", "לא בטוח").inOrder()
     }
 
+    /** One real answer and the phone's *Not sure* make a question — never a crash (§4.1). */
+    @Test
+    fun `one ready-made answer is enough, with the phone's not sure beside it`() {
+        val question = """{"text":"Was there dressing?","options":["Yes"]}"""
+
+        val ask = ConversationResponse.step(reply(step("true", 1, question))) as StepResult.Ask
+
+        assertThat(ask.question.options).containsExactly("Yes", "Not sure").inOrder()
+    }
+
     @Test
     fun `more than five answers keep the first five and not sure`() {
         val question = """{"text":"How much oil?","options":["A","B","C","D","E","F","G","Not sure"]}"""

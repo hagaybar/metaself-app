@@ -96,6 +96,15 @@ class ConversationPromptTest {
         assertThat(system).contains("A drink is one item")
     }
 
+    /** The final's own unit rules replace the everyday ones, which forbid a weight worked out. */
+    @Test
+    fun `the final instructions do not carry the everyday rule against grams worked out`() {
+        val system = messages(ConversationPrompt.final("a-model", description, emptyList()))[0].second
+
+        assertThat(system).doesNotContain(EstimatePrompt.INSTRUCTIONS)
+        assertThat(system).doesNotContain("Never make up grams")
+    }
+
     @Test
     fun `the step schema is strict and every property is required`() {
         val schema = schema(ConversationPrompt.step("a-model", description, twoAnswered, cap = 3))
