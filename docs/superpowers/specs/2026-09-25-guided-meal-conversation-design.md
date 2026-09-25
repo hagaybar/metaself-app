@@ -163,9 +163,15 @@ else, and the final analysis follows.
 > - **Before the items, write the plate in `plate`**: a few short lines going through the source,
 >   the portions, the cooking and the hidden calories. This is your working; it is not shown with
 >   the items.
+> - **Give each amount in the unit that fits how it was served.** For a loose, scooped, ladled or
+>   plated component — rice, pasta, a salad's leaves, a stew, grated cheese, a sauce — give the
+>   weight you worked out, in grams, with figures per 100 g, whenever your reconstruction supports
+>   it (the utensil, the container, the place's usual portion). For a counted piece — a roll, an egg,
+>   a slice, a bar, a drink — give the count in its own unit with figures per one piece. An amount
+>   the eater stated is used exactly as stated.
 > - **For every item, the detail is one line saying the amount's assumption and why** — for example
->   "standard takeaway box, two ladles; cream sauce assumed from the answer". At most about fifteen
->   words.
+>   "two ladles into a standard takeaway box; thick cream sauce from the answer". At most about
+>   fifteen words. **No grams in the detail**: the amount already says them.
 
 Followed by the everyday rules, unchanged in force: every item with an amount greater than zero and
 a unit (D34); a drink is one item in its usual serving (D35); the plain name, the unit as stated or
@@ -173,9 +179,28 @@ the natural piece, *g* and *ml* written exactly, figures per 100 or per one piec
 confidence LOW/MEDIUM/HIGH, the description's language (D53 §2); and at most one note, about the
 biggest remaining uncertainty.
 
-**No weight is invented (D53 §2 unchanged).** An amount the eater did not state is the thing's
-natural piece — here, the kind of place's own piece: *1 box*, *2 ladles*, *1 tablespoon* — at
-per-piece figures, and the detail says the size in words. *See open question 1.*
+**Amended 2026-09-25, the owner: the final analysis may give an amount in grams it worked out.**
+(Open question 1, answered.) In a conversation's final analysis only, a loose, scooped or plated
+component may come back as *Quinoa, 70 g*, the reason reading *a serving spoon at such a counter;
+two spoonfuls* (invented). How this sits with the earlier decisions:
+
+- **D53 §2** forbade the model to invent a weight for an unstated amount, because an invented weight
+  looks like a measurement. For the final analysis that rule is **lifted for the amount only**: the
+  weight is worked out from the reconstruction the owner asked for — the place, its utensils, his
+  answers — and it is the most checkable thing the model can say. Everywhere else D53 §2 stands
+  unchanged: the everyday describe, and the first request's estimate when no question is needed,
+  still give an unstated amount as one natural piece. **The detail still carries no invented grams**
+  beyond restating the amount; its words say why, the amount says how much.
+- **D4** is what keeps it honest: the row is `AI_ESTIMATE` with the model's confidence, labelled as
+  an estimate on the proposal screen and on the record, like every figure the model gives. A weight
+  worked out is never presented as a weight measured. Typing over the amount changes the total and
+  nothing about the worth or the source (D53 §1, §3), as for any row.
+- **D34** is unchanged: every item still needs an amount greater than zero and a unit, and the
+  second ask still names the items without one. Grams are simply one more unit the answer may give;
+  the reader's rules on a per-100 worth (grams or millilitres only, D42's ceilings, the row's
+  ceiling) apply as they do to a weight the eater stated.
+- **D35** is unchanged: a drink is still one item counted in its serving, not in millilitres
+  worked out.
 
 ### 4. What comes back
 
@@ -249,9 +274,10 @@ applies as it does to any described meal.
 
 **The per-item reason is the existing `detail`**, not a parallel field. `detail` is already "the
 assumption behind the numbers" (D5): it is shown under the item's name on the proposal screen and
-kept in the logged row's portion words — *1 box (standard takeaway box, two ladles; cream sauce
-assumed from the answer)*. That is where a reason belongs, and it survives as the only trace of the
-conversation (§6). D53 §2's rule that the detail says the size in words, never in grams, stands.
+kept in the logged row's portion words — *350 g (two ladles into a standard takeaway box; cream
+sauce assumed from the answer)*. That is where a reason belongs, and it survives as the only trace of the
+conversation (§6). The detail says the assumption in words and carries no grams of its own; an
+amount in grams is the amount's, as §3.2 amended says.
 
 ### 5. The result, and the end choice
 
@@ -367,7 +393,7 @@ D58 does not change it.
 3. **If it sends none** — a model sent `temperature: 0`, like today's default — **it is sent exactly
    as the profile says.** Adding an effort such a model has refused would spend a request to learn
    what is already known. For such a model the deeper analysis comes from the instructions and the
-   `plate` working alone. *See open question 2.*
+   `plate` working alone.
 4. **A refusal of `high` is learned by D57 §3's table, aimed at `high` instead of `low`** (the
    amendment below): with a list of accepted values, the highest accepted value at or below `high`;
    without a list, the next value down. Within D57's bounds — three retries, none repeated, none past
@@ -436,8 +462,10 @@ source; a figure he types makes the row `TYPED`.
 - **D16** — §10's wording.
 - **D46** — the offer's two buttons become three (§5.2); *Save, and keep these as a meal* is renamed
   and unchanged in what it does; keeping without logging is added.
-- **D53 §2** — the detail may be a one-line reason, not only a size in words (§4.2); still no grams
-  invented. D53's rules on items, figures and units are otherwise the conversation's rules.
+- **D53 §2** — in a conversation's final analysis only, an amount may be a weight the model worked
+  out (§3.2, amended); the detail may be a one-line reason, not only a size in words (§4.2), and
+  still carries no invented grams. D53's rules on items, figures and units are otherwise the
+  conversation's rules.
 - **D57 §3** — the table's rule for a refused `reasoning_effort` value is aimed at the level the call
   wants: `low` for every request but the final analysis, `high` for it (§8.4). Every existing request
   behaves exactly as before.
@@ -510,17 +538,17 @@ sprinkle of hard cheese, and a plain roll with nothing on it said. It returns:
 
 | Item | Amount | Worth | Row | Detail (the reason) | Confidence |
 |---|---|---|---|---|---|
-| Pasta with mushroom cream sauce | 1 box | 772 kcal · P 22 · C 90 · F 36 per box | 772 kcal | standard takeaway box, two ladles; thick cream sauce from the answer | MEDIUM |
-| Grated hard cheese | 2 tablespoon | 22 kcal · P 2 · C 0 · F 1.5 per tablespoon | 44 kcal | a counter's usual sprinkle, since the amount was not known | LOW |
+| Pasta with mushroom cream sauce | 350 g | 220 kcal · P 6.3 · C 25.7 · F 10.3 per 100 g | 770 kcal | two ladles into a standard takeaway box; thick cream sauce from the answer | MEDIUM |
+| Grated hard cheese | 10 g | 400 kcal · P 32 · C 0 · F 29 per 100 g | 40 kcal | a counter's usual sprinkle, since the amount was not known | LOW |
 | Bread roll | 1 roll | 150 kcal · P 5 · C 28 · F 2 per roll | 150 kcal | small plain roll; no butter was mentioned | MEDIUM |
 
 Note: *The cream in the sauce is the biggest unknown; a thinner sauce would be about 200 kcal less.*
-Total **966 kcal** · P 31 · C 118 · F 41. **Four requests** in all.
+Total **960 kcal** · P 30 · C 118 · F 41. **Four requests** in all.
 
-The proposal screen opens on the three rows; he could change *2 tablespoon* to *1*, or tap *Use your
+The proposal screen opens on the three rows; he could change *350 g* to *300*, or tap *Use your
 …* if he has a food called *Bread roll*. From Add something he taps **Log it**: three rows go on the
-day, each an estimate, the first reading *1 box (standard takeaway box, two ladles; thick cream sauce
-from the answer)*. Had he come from My meals and tapped **Keep as a meal**, a named meal of the three
+day, each an estimate, the first reading *350 g (two ladles into a standard takeaway box; thick cream
+sauce from the answer)*. Had he come from My meals and tapped **Keep as a meal**, a named meal of the three
 would be on My meals and nothing on the day.
 
 Had he typed *"an apple"*, request 1 would have returned `needs_questions: false` with *Apple, 1
@@ -528,17 +556,9 @@ apple*, and the proposal screen would have opened as it does today: one request.
 
 ---
 
-## Open questions for the owner
+## Open questions — answered 2026-09-25
 
-1. **May the reason name the weight the model assumed?** A nutritionist reasons in grams ("a
-   standard box holds about 350 g"), and a weight is the easiest thing to check against a packet.
-   D53 forbade invented weights because they look like measurements. As written, D58 keeps that rule:
-   the amount is the place's own piece (*1 box*) and the reason says its size in words. Allowing
-   grams in the reason only (never as the amount) would make the reasons more checkable at the price
-   D53 named. **Recommendation: keep D53's rule.**
-2. **The deeper thinking needs a model that takes a thinking setting.** The app's default model does
-   not, so on it the final analysis is deeper only through its instructions and its written working.
-   If he has set a newer model in Settings, it gets `high` effort as designed. The alternative is a
-   second model setting used only for the final analysis — more setup, and every final analysis
-   costs that model's price. **Recommendation: no second setting now; decide once conversations have
-   been tried on the model he uses.**
+1. **May the final analysis give a weight it worked out?** Yes, as the amount (§3.2, amended); the
+   detail still carries no invented grams.
+2. **A second model for the final analysis?** No: not needed, since a model that accepts a thinking
+   setting gets `high` effort as designed (§8).
