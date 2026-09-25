@@ -66,6 +66,8 @@ import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -946,62 +948,72 @@ internal fun MealNameSheet(
             modifier = Modifier.fillMaxWidth(),
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            items.forEach { item ->
-                Text(
-                    text = DayTotalsWording.itemName(item),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                val words = portionWords(item)
-                Text(
-                    text = DayTotalsWording.itemNumbers(item, words),
-                    style = MaterialTheme.typography.labelSmall,
-                    // "≈" is read as a symbol's name, or not at all: said as "about" (D58 §12.9).
-                    modifier = if (DayTotalsWording.amountEstimated(item, words)) {
-                        Modifier.semantics {
-                            contentDescription = DayTotalsWording.itemNumbersSpoken(item, words)
-                        }
-                    } else {
-                        Modifier
-                    },
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+        // Everything between the name and the buttons scrolls, and only it: a described meal can
+        // have many parts, and a list that grew past the screen once pushed the button off the
+        // bottom with no way to reach it. The name stays above and the buttons below, in view.
+        Column(
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Related),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                items.forEach { item ->
+                    Text(
+                        text = DayTotalsWording.itemName(item),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    val words = portionWords(item)
+                    Text(
+                        text = DayTotalsWording.itemNumbers(item, words),
+                        style = MaterialTheme.typography.labelSmall,
+                        // "≈" is read as a symbol's name, or not at all: said as "about" (D58 §12.9).
+                        modifier = if (DayTotalsWording.amountEstimated(item, words)) {
+                            Modifier.semantics {
+                                contentDescription = DayTotalsWording.itemNumbersSpoken(item, words)
+                            }
+                        } else {
+                            Modifier
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-        }
 
-        Text(
-            text = stringResource(
-                R.string.day_meal_name_total,
-                DayTotalsWording.itemsTotal(items),
-            ),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        val typed = name.trim()
-        Text(
-            text = when {
-                keepOnly && typed.isEmpty() -> stringResource(R.string.propose_keep_only_will_unnamed)
-                keepOnly -> stringResource(R.string.propose_keep_only_will, typed)
-                typed.isEmpty() && isToday -> stringResource(R.string.day_meal_will_group_unnamed)
-                typed.isEmpty() -> stringResource(R.string.day_meal_will_group_unnamed_past)
-                isToday -> stringResource(R.string.day_meal_will_group, typed)
-                else -> stringResource(R.string.day_meal_will_group_past, typed)
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = MetaSelfInk.two,
-        )
-
-        // Why nothing was made, next to the name that caused it and above the button that would try
-        // again. The day behind the sheet says the same thing, and cannot be read through it.
-        refusal?.let { why ->
             Text(
-                text = why,
+                text = stringResource(
+                    R.string.day_meal_name_total,
+                    DayTotalsWording.itemsTotal(items),
+                ),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
             )
-            onLogInstead?.let { logInstead ->
-                OutlinedButton(onClick = logInstead, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.propose_log_instead))
+
+            val typed = name.trim()
+            Text(
+                text = when {
+                    keepOnly && typed.isEmpty() -> stringResource(R.string.propose_keep_only_will_unnamed)
+                    keepOnly -> stringResource(R.string.propose_keep_only_will, typed)
+                    typed.isEmpty() && isToday -> stringResource(R.string.day_meal_will_group_unnamed)
+                    typed.isEmpty() -> stringResource(R.string.day_meal_will_group_unnamed_past)
+                    isToday -> stringResource(R.string.day_meal_will_group, typed)
+                    else -> stringResource(R.string.day_meal_will_group_past, typed)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MetaSelfInk.two,
+            )
+
+            // Why nothing was made, next to the name that caused it and above the button that would try
+            // again. The day behind the sheet says the same thing, and cannot be read through it.
+            refusal?.let { why ->
+                Text(
+                    text = why,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                onLogInstead?.let { logInstead ->
+                    OutlinedButton(onClick = logInstead, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.propose_log_instead))
+                    }
                 }
             }
         }
