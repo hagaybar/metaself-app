@@ -31,6 +31,13 @@
 >   and counted, *not saved yet*, with **Undo**; the per-group lines go. The owner's earlier *no new
 >   marks* is superseded for the review by his feedback (§11).
 >
+> - **2026-09-25, sixth amendment** — the review may propose a value for every box on the food's
+>   page but the brand — the name, the unit (naming one where there is none), both groups whatever
+>   their source, and what one weighs — each with a reason; its suggestions go straight into the
+>   boxes, drawn in the teal accent while pending, each with its reason and a way back; **Accept
+>   all** / **Dismiss all**; an accepted weight is an estimate; the app still never derives one
+>   (§12).
+>
 > Every figure below is invented to illustrate the rule beside it.
 
 ---
@@ -91,7 +98,7 @@ when or how much of it was eaten, nothing about the owner (D16, as amended below
 | `per_100g` | The four figures, with `source` and `confidence`, or `null` when the group is not known. |
 | `unit_name` | What "one" is, from the unit box, or `""`. Sent even when the per-one figures are empty, because a named unit is what lets the model fill them (§3). |
 | `per_unit` | The four per-one figures, with `source` and `confidence`, or `null`. |
-| `grams_per_unit` | What one weighs, with its `source`, or `null`. Sent so the reviewer can see that 100 g and one piece disagree — **never asked for** (§3). |
+| `grams_per_unit` | What one weighs, with its `source`, or `null`. Sent so the reviewer can see that 100 g and one piece disagree — **never asked for** (§3). *(Amended 2026-09-25, §12: the review may now propose it.)* |
 
 **What "the figures" are.** The form as it stands when he presses the button, not the stored food —
 he may have typed since opening it. Each group's `source` is worked out by one pure rule, the same
@@ -138,7 +145,8 @@ twin of `EstimatePrompt`'s *NOTHING about the owner is sent*. *Invented example:
   with its confidence, and may be improved. `REPEATED` was copied from a past meal and its origin is
   unknown. `UNKNOWN` is a figure of unknown origin.
 - **Never state what one piece weighs, and never name a unit.** Per one is filled only for the unit
-  named, and only when one is named. `portion` means an unnamed serving whose size nobody recorded:
+  named, and only when one is named. *(Removed 2026-09-25, §12.5: it may name a unit, propose a
+  better one, and propose a weight.)* `portion` means an unnamed serving whose size nobody recorded:
   change its figures only if they are impossible.
 - Every figure is one number, never a range. For each figure you change, a short reason (one
   sentence); for a group you fill, one short reason for the group; for a figure you keep, an empty
@@ -160,7 +168,9 @@ Pinned by a `strict` JSON schema, every field required, each group nullable:
 
 **There is no weight field, by construction** — the schema cannot carry a guess at what one piece
 weighs, so `foods_weight_never_guessed` stays true without relying on the model's obedience. The
-unit name is not in the reply either: the proposal is always for the unit in the editor.
+unit name is not in the reply either: the proposal is always for the unit in the editor. *(Amended
+2026-09-25, §12.3: the reply now carries `name`, `unit_name` and `grams_per_unit`; the weight line
+says a review may suggest one, kept as an estimate.)*
 
 **Read strictly, as `EstimateResponse` is** (a pure `ReviewResponse.parse`):
 
@@ -248,7 +258,7 @@ The owner's rule of 2026-09-23, verbatim:
 |---|---|
 | Accepted from a review this session — **even if he then changed a figure in it** | `AI_ESTIMATE`, the review's confidence for that group — or, where the figures the model kept rank below an estimate, their source (amendment of 2026-09-24, below). A mixed group is labelled by its weakest member. |
 | Anything else he typed | `TYPED`, as today. |
-| What one weighs | Never accepted from anything; `TYPED` when typed, as today. |
+| What one weighs | Never accepted from anything; `TYPED` when typed, as today. *(Amended 2026-09-25, §12.7: accepted from a review, `AI_ESTIMATE` with the review's confidence for it.)* |
 
 **Amendment, 2026-09-24 — the weakest member includes the figures the model kept.** The owner's
 rule says a mixed group is labelled by its weakest member, and that downgrading is always honest
@@ -435,7 +445,8 @@ does not believe; a `LABEL` group it still changes only when its own figures are
 label that merely disagrees with the other group is flagged in the note, with the reason, and left
 as it is. *(Amended 2026-09-24, §10.1: a label group that contradicts the other group may now be
 corrected.)* What one weighs is still never stated, never changed and never guessed: it is given only to
-check the groups against each other. Without both groups and the weight, the rule is not sent.
+check the groups against each other. *(Amended 2026-09-25, §12.5: the weight is inside the
+cross-check, and may be the one proposed for correction.)* Without both groups and the weight, the rule is not sent.
 
 **9.3 The note is a verdict, and never empty.** The instructions ask for the note on every reply:
 *what you concluded, in one sentence* — that the figures are consistent and kept, or what was changed
@@ -481,7 +492,8 @@ at least one is wrong; decide which you believe; propose the corrected figures f
 believe is wrong, even a `LABEL` group, with a reason for each figure changed; and say in the note
 which you believe and why. **A label group standing alone is still changed only when its own
 figures are impossible** (§2's rule, unchanged): a contradiction is the one case in which a label
-whose own figures are possible may be changed. Nothing about storage changes — an accepted
+whose own figures are possible may be changed. *(Superseded 2026-09-25, §12.1: any figure, a
+label's included, may be proposed when the model judges it wrong or improvable, with its reason.)* Nothing about storage changes — an accepted
 correction of a label group is stored as §5 says, `AI_ESTIMATE`, the safe direction.
 
 **10.2 The note and the reasons are written in his words.** They are drawn on screen as they come,
@@ -520,6 +532,11 @@ then, together, the outcome line, any *couldn't be used* lines, **Use all** and 
 **Show the model's answer**. Same type, ink and scrolling into view as §9.4; both editors.
 
 ### 11. Amendment, 2026-09-24 (fifth) — a review says what changes
+
+*(Superseded 2026-09-25 by §12.6 for how a suggestion is shown: in the boxes, pending in the teal
+accent, with **Accept all** / **Dismiss all**. The change list, **Apply these changes**, **Keep
+mine** and the after-apply teal marks go; the outcome line, **Undo** after accepting and **Show the
+model's answer** stay.)*
 
 With the fourth amendment's build it was not clear from the screen whether anything had changed,
 which value, or whether to save: each group's suggestion sat under its own heading with its own
@@ -584,6 +601,328 @@ reads *Reviewed: changes applied — {note}*, not *no suggestions left*.
 Nothing about what is sent (§2), what comes back (§3), or what is stored (§5) changes. Both
 editors, My foods' and *Make a food*.
 
+### 12. Amendment, 2026-09-25 (sixth) — the review may suggest anything but the brand, in the boxes
+
+The owner's decisions of 2026-09-25. A review had three limits that the page no longer needs: it could
+not name a unit for a food that had none, so a food known only per 100 g stayed that way; it could
+not say what one weighs, so the one figure that joins the two ways of counting was left to him; and a
+suggestion was a list of *old → new* lines above the boxes, which he then had to find in the boxes
+below. What follows is settled so that the model may propose a value for **every box on the food's
+page except the brand**, each with its reason, and so that what it proposes is drawn **in the boxes
+themselves**, where he accepts, reverts or types over it. Everything that is sent (§2) is unchanged;
+what may come back, how it is shown, and how an accepted weight is stored change.
+
+*Every name and figure in this section is invented to illustrate the rule beside it.*
+
+**12.1 What may be proposed.** Eleven boxes, each on its own:
+
+| Box | May be proposed | Never |
+|---|---|---|
+| **Name** | A clearer or correctly spelled name for the same food. | A different food; a brand added to or taken out of the name. |
+| **Brand** | — | Anything. A brand makes it a different food (D41, `foods_brand_splits`), which is not a correction. The brand is still *sent*, as context. |
+| **One what?** (the unit) | A unit when the box is empty (*slice*, *cup*, *tablespoon*, *piece*…); a different unit when one is named and the model judges its own better. | A mass unit (`Portions.isMass` other than the millilitre: *g*, *100 g*, *kg*, *oz*, *litre*…) — per 100 g is the way to say that; the app's own *portion*. |
+| **Per 100 g**, four boxes | Any figure, filled or changed, **whatever its source** — `LABEL` and `TYPED` included. | — |
+| **Per one**, four boxes (per 100 ml for a food counted in ml, D56) | Any figure, filled or changed, whatever its source — for the unit that will stand once the suggestion is taken. | — |
+| **What one weighs**, grams | A typical weight of one of the unit that will stand, filled or changed, whatever its source. | A weight for a food counted in millilitres (a density, D4, D56 §3). A weight when the editor has no weight box (*Make a food*, 12.9). |
+
+**This supersedes §2's and §10.1's special treatment of a label.** A `LABEL` figure is no longer
+changed *only when impossible or contradicted*: the model is told the source of every figure and that
+a label is the packet's own statement — strong evidence — and it may change any figure it judges
+wrong or improvable, saying why. What stops a guess replacing a label is unchanged and was always the
+real guard: **only his tap accepts it** (§5's *acceptance is the only way a guess replaces something
+better*), and a figure accepted is stored as an estimate (12.7).
+
+**12.2 What is sent.** Exactly §2's fields, unchanged: the name and brand were already sent, and so
+were the unit name and what one weighs, as context. So **D16 (as amended by §7) and the privacy
+page's item do not change** — checked against `privacy.html` item 2 and `terms.html`: both describe
+what leaves the phone, and nothing new leaves it. What one weighs is still not sent for a food counted
+in millilitres (D56 §3). One thing is added to the request object that is **not sent**: whether the
+editor can take a weight (`weightAsked`: true on a food's page unless its unit is the millilitre, false
+in *Make a food*), which only chooses the instructions (12.4).
+
+**12.3 What comes back.** The strict schema gains three required, nullable fields; `null` still
+means *leave it exactly as it is*:
+
+| Field | What it holds |
+|---|---|
+| `name` | `null`, or `{value, reason}` — strings. |
+| `unit_name` | `null`, or `{value, reason}` — strings. |
+| `per_100g` | As §3: `null`, or the four figures, four reasons and a confidence. |
+| `per_unit` | As §3, **for the unit that will stand**: the proposed `unit_name` when there is one, else the one named. Per 100 ml when that unit is the millilitre. |
+| `grams_per_unit` | `null`, or `{grams, reason, confidence}` — a number, a string, `LOW`/`MEDIUM`/`HIGH`. |
+| `note`, `verdict` | As §9.3 and §10.3. |
+
+Nullability is `anyOf: [{the object}, {"type": "null"}]` for each, as §3 already does. The schema's
+top-level `required` lists all seven.
+
+**12.4 How it is read** (`ReviewResponse.parse`, pure, strict, as before). The answer is read as
+**four independent items**, each used whole or set aside whole, never repaired:
+
+1. **The name.** Kept when its value, trimmed, equals the name box trimmed. Otherwise a **change**:
+   it needs a non-blank reason and a value `FoodKeys.nameKey` accepts, or the item is set aside.
+2. **Per 100 g.** Exactly §3, §8.1, §8.2 and §9.1: an echo at the model's own precision is kept
+   exactly as held; a change or fill is rounded to one decimal, needs a reason (its own or its
+   group's first), and is judged by D42's per-100 g ceilings; the group is set aside whole otherwise.
+3. **The unit and per one — one item, the *per-one bundle*.** The unit that will stand decides the
+   scale and the ceilings of the four figures, so the two are read together:
+   - `unit_name` is **kept** when it is `null`; when its value is the unit box's as Save stores it
+     (`FoodKeys.displayName`, exactly); and, for a food counted in millilitres, when it is any
+     millilitre spelling or *100 ml* (what §2 sends such a food as). A proposed *100 ml* is read as
+     *ml*, the spelling the one-tap switch writes (D56).
+   - Otherwise it is a **rename** (a named unit replaced) or a **naming** (the box was empty). Either
+     needs a non-blank reason, a value `FoodKeys.displayName` accepts, not a mass unit (12.1), not
+     *portion* — and **`per_unit` in full** for the new unit: `null` beside a new unit would relabel
+     figures stated for one thing as figures for another, so the bundle is set aside.
+   - `per_unit` is read against the held per-one figures by §3's rules — an echo kept exactly as
+     held, a difference a change needing a reason — when the unit is kept, and when it is renamed on
+     the same side of the millilitre (a respelling, or *slice* for *piece*): the held figures are
+     then at the same scale, and a figure the model leaves alone is not new. After a **naming**, or a
+     rename **to or from the millilitre**, every figure is new — a fill of the group, rounded to one
+     decimal, needing one reason. Its ceilings are the new unit's: per 100 (1000 kcal, 110 g) when it is the
+     millilitre, per one (5000 kcal, 500 g) otherwise; its scale is per 100 ml when it is the
+     millilitre (D56), so a figure is rounded at that scale and stored divided by 100 by the form, as
+     one typed there is.
+   - `per_unit` with no unit named and none proposed is set aside (a figure of nothing) — where §3
+     ignored it silently.
+   - **A rename, when the food holds a weight and the new unit is not the millilitre, needs
+     `grams_per_unit` too** — an echo of the held weight is its answer that the weight stands. A
+     rename with `grams_per_unit: null` there leaves the old unit's weight under the new unit's name,
+     so the bundle is set aside, and the weight item with it. A rename *to* the millilitre leaves the
+     held weight where D56 §3 puts it — shown, with its line, until he clears it; the app deletes
+     nothing — and any weight in the answer is set aside.
+4. **What one weighs.** Read only when the request says a weight is asked (12.2); otherwise ignored,
+   never shown. Kept when it is an echo of the held weight (§9.1's rules, grams at one decimal);
+   otherwise a change or fill rounded to one decimal, needing a non-blank reason, greater than 0 and
+   within D42's ceiling for grams (5000 g), for a unit that will stand — held or proposed; set aside
+   otherwise, and set aside with the bundle when the bundle is (above).
+
+**Unusable** (§8.3) is now *every item that changed or filled something was set aside*. *No changes
+suggested* (§3) is every item kept or `null`. The set-aside lines are one per item: *Its suggestion
+for the name couldn't be used.*, *…for per 100 g…*, *…for per {unit}…* (the unit as it stands, or
+*one*), *…for what one weighs…*.
+
+*Invented example.* A food named *Humus*, brand none, per 100 g from the packet: 166 kcal, protein
+7.9, carbohydrate 14.3, fat 19.6; no unit; no weight. Its label's macros come to 265 kcal against the
+166 stated. The reply proposes: name *Hummus* (*The usual spelling.*); per 100 g fat 9.6 (*At 19.6 g
+of fat the macros come to 265 kcal, far above the 166 stated; 9.6 g fits.*), the other three kept,
+`MEDIUM`; unit *tablespoon* (*A dip is usually counted by the spoon.*) with per tablespoon 24.9 ·
+1.2 · 2.1 · 1.4 (*One tablespoon of it, from the figures per 100 g.*), `MEDIUM`; one tablespoon
+weighs 15 g (*A level tablespoon of a thick dip holds about 15 g.*), `MEDIUM`. Read: a name change,
+one change in per 100 g, a per-one bundle that names a unit and fills its group, and a weight fill —
+eight boxes suggested.
+
+**12.5 The instructions**, in substance, replacing §2's list where they differ (the source
+descriptions, the one-number rule, the language rule, the plain-words rule of §10.2, the verdict and
+the note stay):
+
+- You review **everything on this food's page except its brand**: its name, what one of it is
+  called, its figures per 100 g, its figures for one, and what one weighs. Propose a value for
+  anything you judge wrong, missing or improvable; return what is right as `null`, or exactly as
+  given.
+- Where each figure came from matters, and you are told it. `LABEL` is the packet's own statement and
+  strong evidence; change it when you judge it wrong or improvable, and say why. `TYPED` is the
+  owner's own number: change it when you judge it wrong, and say why. (The rest as §2.)
+- **The name**: correct its spelling or make it clearer; it must stay the same food. Never add a
+  brand to it or take one out of it.
+- **The unit**: when none is named, you may name the one this food is most often counted in, with
+  its figures for one and — if a weight is asked — what one weighs. When one is named, you may
+  propose a better one; then `per_unit` must be the figures for **your** unit, and, when a weight is
+  known, `grams_per_unit` must be the weight of **your** unit (the same number if it still holds).
+  Never a mass unit such as g, 100 g, kg or oz: that is what per 100 g is for. `ml` means the drink
+  is counted by volume, and then the figures for one are **per 100 ml** and no weight is given.
+  *portion* is a serving whose size nobody recorded: you may name a real unit for it only with
+  figures for that unit.
+- **What one weighs** *(only when a weight is asked)*: you may propose what one of the unit weighs,
+  in grams, as a typical figure, with a reason. It will be shown to the owner as a suggestion and
+  kept as an estimate. *(Otherwise: return `grams_per_unit` as null.)*
+- **The cross-check** (§9.2, §10.1) is kept for a food holding both groups and a weight, with one
+  change: the weight is no longer outside it. When the three disagree, decide which of the three you
+  believe is wrong — either group, or the weight — and propose the correction for that one.
+- A reason for every change and every fill, one sentence each; for a group you fill, one reason for
+  the group.
+
+The two sentences that §2 and §9.2 gave about the weight (*never state what one piece weighs, and
+never name a unit*; *grams_per_unit is given only for this check: never change it, state it or guess
+it*) are removed.
+
+**12.6 How it is shown — in the boxes.** §11's change list, **Apply these changes**, **Keep mine**
+and the teal *changed by the review, not saved* marks are replaced by this. The button, its small
+print, the outcome line and its note (§9.4, §10.3, §10.4), the set-aside lines and **Show the model's
+answer** (§8.4) stay where they are.
+
+- **When the answer arrives, every suggestion goes straight into its box.** Each such box is
+  **pending**: drawn in the suggestion colour, with, directly beneath it, the model's reason in the
+  captions' ink, and one text button that goes back — *Back to 19.6* (the box's text as it stood,
+  written as the box writes it, §8.5), or *Clear* for a box that was empty. A reason shared by several
+  boxes of one group is said once, under the first of them.
+- **The suggestion colour is the teal family §11 introduced** — `tertiary` border and label,
+  `tertiaryContainer` fill, the figure in the body's ink. It is free to take this meaning, because
+  nothing else in the editor uses it and, under this section, no box is marked after acceptance; so
+  it keeps **one meaning: suggested, not yet accepted.** No new colour is added (D48), and every
+  pairing is already measured against the 4.5:1 text floor in both schemes by `InkLadderTest`. A
+  pending box also says to a screen reader *suggested by the review, not accepted*; its **Back**
+  button is named with its box (*Calories per 100 g back to 166*), since *Back to 166* alone could
+  be any of eight (public issue #3).
+- **While a group holds a pending box, its four figure boxes are drawn one per row**, full width, so
+  each reason sits under its own box at a readable width; when nothing in it is pending, it returns to
+  D55's two by two. (*Make a food* draws one per row already.)
+- **The per-one bundle goes back as one.** When the suggestion renamed or named the unit, the unit
+  box's button reads *Back to {the old unit}* or *Clear* and takes the unit **and** every pending box
+  of the bundle back together, the weight included when the bundle carried one. The bundle's figure
+  boxes and its weight show their reasons and no button of their own: four figures stated for a
+  *tablespoon* under a unit put back to *slice* would be a silent wrong answer. (A respelled unit
+  whose four figures were all kept is a bundle of one box, the unit's.) When the unit was kept, each
+  per-one box has its own button, as every other box does.
+- **Under the outcome line, while anything is pending: Accept all and Dismiss all.**
+  - **Accept all** takes every pending box as it stands: it is drawn in the normal colours, its
+    reason and button go, and its group is accepted (12.7). The line under the outcome then reads
+    *N changes accepted — not saved yet. Save to keep them, or Undo.* (*…Press Make it to keep them,
+    or Undo.* in *Make a food*), with **Undo**, which puts every box that Accept took back to pending
+    — except one typed in since — and the review as it stood. With no colour left on the boxes, this
+    line is the one thing on screen that says Save is still owed.
+  - **Dismiss all** puts every pending box back to its text as it stood, exactly — the same as
+    pressing every **Back** — and what is left of the review goes. Anything already accepted stays.
+- **Typing into a pending box makes it his**: the normal colours, its reason and button go, and
+  the text he typed is his. Nothing else moves. (A pending box of the bundle typed over is taken out
+  of the bundle; the unit's **Back** still takes the rest.)
+- **Only four things take a pending suggestion down**: Accept all, Dismiss all, its own **Back**, and
+  typing in its own box. Typing the name or the brand while suggestions are pending does not withdraw
+  them — they are in front of him, and he may be correcting the model's spelling. (While the request
+  is **out**, §4's rules stand: typing in a group withdraws that group's suggestions, a new name or
+  brand withdraws the whole answer, and an answer with nothing left says *no suggestions left*.)
+- **Review the figures is not offered while anything is pending.** A second review would be sent
+  the model's own figures as if they were the form's, labelled as his.
+- **Save with anything pending is refused**, nothing saved, with one sentence in the slot above Save,
+  in the error ink, and the two buttons with it: *The review's suggestions are still in the boxes.
+  Accept or dismiss them first.* **Accept all** · **Dismiss all**. Acceptance is the only way a guess
+  replaces something better (§5); pressing Save is not acceptance. (Open to the owner — *Questions*,
+  12.12.)
+- **Leave it alone**, Back and the system Back discard everything, pending and accepted alike (D55 §2).
+  An answer that lands after the page began closing is dropped (D55 §8).
+- **The outcome line** (§9.4, §10.3) now reads, where it differs:
+
+| Outcome | The line |
+|---|---|
+| Suggestions pending | *Reviewed: N suggestions, in the boxes below — {note}* (*1 suggestion…*), N the pending boxes |
+| All accepted, not saved | *Reviewed: suggestions accepted — {note}* |
+| All gone back, by Back or Dismiss all, with a note left | *Reviewed: no suggestions left — {note}* |
+
+*Invented example, continuing 12.4.* Eight boxes arrive teal: the name box reads *Hummus* with *Back
+to Humus*; per 100 g's fat reads 9.6 with *Back to 19.6*; the unit box reads *tablespoon* with
+*Clear*, and the four per-tablespoon boxes read 24.9 · 1.2 · 2.1 · 1.4 with the one reason under the
+first; the weight box reads 15 with *Clear*. He presses *Back to Humus* — the name box reads *Humus*
+again, in the normal colours — then **Accept all**. Seven boxes turn to the normal colours, and the
+line reads *7 changes accepted — not saved yet. Save to keep them, or Undo.*
+
+**12.7 How Save stores it.** §5's machinery, unchanged in the repository — `saveForm`, one
+transaction, `Correction.plan` group by group — with these rules for what the form hands it:
+
+- **A group is accepted when Accept all took at least one of its boxes.** A group whose suggested
+  boxes were all put back, dismissed or typed over is **not accepted**: its boxes hold what they held,
+  so it reaches the repository as it would have with no review — untouched, if it is the stored
+  group, by §8.5 and `Correction.Keep`: no statement, **its figures, source, confidence and date
+  exactly as they were**.
+- **An accepted group is stored by the weakest-member rule of §5 as amended 2026-09-24, kept.** A
+  box put back, or never changed, keeps its **figure** exactly — but the stored food carries one
+  source per group, not per figure, so it cannot keep its **own** source inside a group whose other
+  figures are now a guess. The group is labelled by its weakest member: `AI_ESTIMATE` with the
+  confidence the review gave the group, or the kept figures' source where that ranks lower
+  (`REPEATED`, `UNRECOGNISED`). A per-figure source would need a schema change and new marks on
+  screen; the owner's own rule prefers the honest downgrade. So a label's three kept figures, beside
+  one accepted change, are stored as an estimate, as §5 already says. What *kept from* means is
+  worked out at Accept, not at parse: the group's source as sent, when any of its four figures is
+  one it was sent with — put back, or echoed. A figure typed over is his (`TYPED`, above an
+  estimate) and changes nothing.
+- **The per-one bundle.** A unit renamed or named by an accepted suggestion is part of the group, as
+  it always has been (`Correction` compares the unit name exactly): the per-one group is stored as
+  accepted, by the rule above, under the new unit name. A rename that kept all four figures (a
+  spelling of the unit) is still an accepted change, so a label's per-one group respelled by the
+  model is stored as an estimate — the safe direction, and the same cost §5 records for a hand
+  respelling, which stores it as typed. A unit renamed to or from the millilitre moves the group's
+  scale as D56 says: the form divides a per-100 ml figure by 100 on Save, exactly as for typing.
+- **What one weighs, accepted, is `AI_ESTIMATE`** with the confidence the review gave it —
+  `GramsPerUnit` with that provenance, through the same clear-then-write any changed group uses. A
+  weight put back or never suggested is his, as before: the stored one untouched, or `TYPED` when he
+  typed it. **The app still never derives a weight**: no arithmetic anywhere produces one (`FoodForm`
+  and `FoodFacts` keep saying so); a weight is typed, or proposed by the model on request, shown as a
+  suggestion and accepted by his tap. Logging through an estimated weight already labels the logged
+  row by the weaker of the two sources it was computed from (`LoggedFrom`), so a meal counted by the
+  tablespoon through an estimated 15 g is logged as an estimate, never as a measurement (D4).
+  **The weight line** (`foods_weight_never_guessed`, the page's caption under *What one of it
+  weighs*) now reads: *Nothing in the app works this out. A review may suggest one, which is kept as
+  an estimate. It is what turns grams into units and back, so a wrong one would follow into
+  everything you log afterwards.* The millilitre's line (`foods_weight_not_asked_ml`) is unchanged.
+- **The name.** An accepted name goes to the repository exactly as a name he typed would: `saveForm`
+  renames first, by `FoodKeys.nameKey` under the food's own brand. **Collision is handled as a hand
+  rename is**: when another food already holds that name and brand, the whole Save is refused and
+  rolled back — the name, the brand and every group, accepted figures included — and the sentence
+  above Save is today's *Another food is already called “{name}”. Join the two, or pick a different
+  name.* The page, its boxes and its acceptance stay as they were; **Undo** returns the name to
+  pending, and its **Back** returns it to his. A change of case or spacing only (the same `nameKey`)
+  is a rename of the name's shown form, as by hand.
+- **Nothing is stored until Save** (D6); *Leave it alone* stores nothing.
+
+*Invented example, continuing 12.6.* He saves. The name is unchanged — no rename. Per 100 g arrives
+with fat 9.6, accepted, the other three figures the label's: stored as all four, `AI_ESTIMATE`,
+`MEDIUM` (a label beside a guess is labelled by the guess). Per tablespoon and its unit arrive new,
+accepted: stored `AI_ESTIMATE`, `MEDIUM`. One tablespoon weighs 15 g, accepted: stored `AI_ESTIMATE`,
+`MEDIUM`. The page's origin lines read *This came an estimate* for all three, as they already can.
+
+**12.8 What a new food made with accepted suggestions does**, in the meal builder's *Make a food* —
+unchanged from §5: `findOrCreate`, as for a name he typed. An accepted name is the name the food is
+found or made by; if a food of that name and no brand exists, the panel's groups are offered to it
+through the guarded statements, so an accepted estimate does not replace a figure it holds better
+(he never saw it here), and D45's line says what was replaced. That is exactly what typing that name
+does.
+
+**12.9 The meal builder's *Make a food*: the same, for the boxes it has.** It has a name, the two
+groups and the unit, and no brand box and no weight box. It takes this section's behaviour for all of
+them — the in-box suggestions, the per-one bundle, Accept all / Dismiss all, Undo, the refusal to
+*Make it* with anything pending — through the same shared review state and the same composables, so
+the two editors cannot drift (§4's reason for sharing them). **What one weighs is not asked there**
+(`weightAsked` false, 12.2): the panel has nowhere to show it, and a suggestion he cannot see must not
+be stored. Adding a weight box to the panel is not part of this decision.
+
+**12.10 Costs accepted.**
+
+- **A packet's figure can be replaced by a guess in one tap** (Accept all), where before a label was
+  touched only when impossible or contradicted. It is shown in the box, in the suggestion colour,
+  with its reason and *Back to {the packet's figure}*, and it is stored as an estimate — never as a
+  label.
+- **A label's kept figures become an estimate beside one accepted change**, and a label's per-one
+  group becomes one when the model only respells its unit (12.7). Downgrades, never upgrades.
+- **An estimated weight is still a weight.** A wrong one follows into every gram-counted log of the
+  food, which is what the weight line warned of; it is now possible only by his tap on a suggestion
+  he can see, it is labelled an estimate on the page, and every row logged through it is labelled an
+  estimate.
+- **A name that collides is refused at Save, not when it is suggested** — one refused Save and a
+  **Back** or **Undo**, the same as a collision typed by hand. Checking the name when the answer
+  arrives was considered and left out: it is a second copy of the rename rule, and a food could take
+  the name between the check and the Save anyway.
+- **Save is refused while anything is pending** — one more step before saving a review's answer.
+- **The page is taller while suggestions are pending** (one box per row, a reason and a button under
+  each).
+- **A review costs somewhat more** — a larger schema and a longer answer on the same call, against
+  the same daily ceiling (§6).
+
+**12.11 What does not change.** What is sent (§2), the key, the model setting, the timeout, the
+failures and their sentences, the daily ceiling (§6), the problem log's silence about the food's name
+(§6, §8.3), **Show the model's answer** (§8.4), D42's ceilings, §8.1/§9.1's echo rules, §8.5's shown
+figures, D56's scale, the brand, the join, and every stored shape: **no schema version, no migration,
+no DAO statement, no backup-format change** — a food's weight already carries a source, a rank and a
+confidence, and `AI_ESTIMATE` is already a value it can hold.
+
+**12.12 Questions for the owner** (each has a default the build takes if unanswered):
+
+1. **Save with suggestions still pending.** *Default:* refused, with the sentence and **Accept all**
+   / **Dismiss all** above Save (12.6) — acceptance stays a tap of its own. *Other:* Save takes what
+   the boxes show, accepting everything pending as it saves — one tap fewer, but a guess could then
+   replace a label with no tap that said *accept*.
+2. **After Accept all.** *Default:* the boxes return to the normal colours, as decided, and one line
+   says *N changes accepted — not saved yet. Save to keep them, or Undo.* *Other:* no line and no
+   Undo — the page looks exactly as if he had typed the figures, and *Leave it alone* is the only way
+   back.
+
 ---
 
 ## What this amends
@@ -598,6 +937,16 @@ editors, My foods' and *Make a food*.
   written; an unchanged group is not touched (so, incidentally, Save no longer relabels an untouched
   label group `TYPED`).
 - **D2** — the model seam gains a second narrow interface, for a review, beside the meal estimator.
+- *(2026-09-25, §12)* **D4 as `GramsPerUnit` and `foods_weight_never_guessed` state it** — *the only
+  ways a weight is ever set are the owner typing it or a packet stating it* becomes: typed, stated
+  by a packet, or proposed by the model on request and accepted by his tap, stored as
+  `AI_ESTIMATE`. What stays: **nothing in the app computes a weight**, and every row logged through
+  one carries the weaker of its sources. The weight line on the page says so.
+- *(2026-09-25, §12)* **D41's brand rule is not amended**: a review never proposes a brand.
+- *(2026-09-25, §12)* **D54 itself** — §2's and §10.1's limits on changing a label, §2's *never
+  name a unit*, §3's reply shape, §4's and §11's presentation, and §5's *what one weighs is never
+  accepted*.
+- *(2026-09-25, §12)* **D55 §2** — the page's review block and its weight group (pointers there).
 
 Stated as unchanged, because each was checked: **D4** (every stored figure still says where it came
 from; a mixed group is labelled by its weakest member), **D6** (nothing is saved until Save),
@@ -615,7 +964,9 @@ replaced), **D53** (describing a meal is untouched).
   enough.
 - Describing a meal, scanning, *Type the numbers*, *Correct this item*, joining and the day are
   untouched.
-- **What one weighs is never guessed.** It is sent as context and cannot come back.
+- **What one weighs is never guessed.** It is sent as context and cannot come back. *(Amended
+  2026-09-25, §12: the app never works it out; the model may propose it on request, shown as a
+  suggestion, stored as an estimate when he accepts it.)*
 
 ## Cost accepted
 
