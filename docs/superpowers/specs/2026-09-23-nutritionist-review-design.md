@@ -134,6 +134,9 @@ twin of `EstimatePrompt`'s *NOTHING about the owner is sent*. *Invented example:
 ```
 
 **The instructions** (system message, temperature 0, the model from settings), in substance:
+*(Amended 2026-09-25: temperature 0 is sent only to a model that takes it; a reasoning model — the
+GPT-5 and GPT-6 families, o1, o3, o4 — refuses it, and is sent none and `reasoning_effort: "low"`
+instead, by one rule for every request (`ModelParams`).)*
 
 - You review the nutrition figures of **one food** as a nutritionist would, and return a complete
   set: keep what is right, fill what is missing, replace what is wrong.

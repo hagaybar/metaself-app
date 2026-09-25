@@ -150,7 +150,8 @@ object ReviewPrompt {
     /** The whole request: the instructions, the one food as JSON, and the reply's schema. */
     fun requestBody(model: String, request: ReviewRequest): String = buildJsonObject {
         put("model", model)
-        put("temperature", 0)
+        // Temperature 0, or none for a reasoning model that refuses it (ModelParams).
+        ModelParams.of(model).into(this)
         putJsonArray("messages") {
             add(
                 buildJsonObject {
