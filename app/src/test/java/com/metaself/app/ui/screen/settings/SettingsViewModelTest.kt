@@ -33,6 +33,7 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
+import com.metaself.app.domain.ai.aProposal
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.reminder.Reminder
@@ -309,6 +310,41 @@ class SettingsViewModelTest {
         assertThat(viewModel.state.value.testing).isFalse()
     }
 
+    /** D57 §6: after an answer, one line says what the saved model is now sent. */
+    @Test
+    fun `a test that worked says how the answered request was sent, as the answer carried it`() = runTest {
+        val viewModel = viewModel(estimator = Answers(SENT_AS))
+        watch(viewModel)
+
+        viewModel.test()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.testLearned).isEqualTo(SENT_AS)
+    }
+
+    @Test
+    fun `an answer that does not say how it was sent adds no line`() = runTest {
+        val viewModel = viewModel(estimator = Answers(sentAs = null))
+        watch(viewModel)
+
+        viewModel.test()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.testResult).startsWith("Connected.")
+        assertThat(viewModel.state.value.testLearned).isNull()
+    }
+
+    @Test
+    fun `a test that failed says nothing about what the model is sent`() = runTest {
+        val viewModel = viewModel(estimator = Throws())
+        watch(viewModel)
+
+        viewModel.test()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.testLearned).isNull()
+    }
+
     /** What is on screen is always about the latest thing he did. */
     @Test
     fun `the failure goes when dismissed, and when the next action starts`() = runTest {
@@ -444,6 +480,11 @@ class SettingsViewModelTest {
         override suspend fun recordCall() = Unit
     }
 
+    private class Answers(private val sentAs: String?) : MealEstimator {
+        override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
+            EstimateResult.Proposed(aProposal(), sentAs = sentAs)
+    }
+
     private class Throws : MealEstimator {
         override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
             throw IllegalStateException("broken")
@@ -496,5 +537,9 @@ class SettingsViewModelTest {
         }
 
         override suspend fun history(from: LocalDate, to: LocalDate): List<DayMovement> = emptyList()
+    }
+
+    private companion object {
+        const val SENT_AS = "gpt-6-luna works: no temperature, medium thinking, strict format."
     }
 }

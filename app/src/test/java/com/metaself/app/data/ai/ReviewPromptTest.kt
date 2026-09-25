@@ -161,24 +161,28 @@ class ReviewPromptTest {
     }
 
     /**
-     * The request's only inputs are the model's name and one [ReviewRequest], and a request holds
-     * one food's seven fields — no list, no id, no date, no second food. A new field, or a second
-     * way to build the body, fails here before it can leave the phone.
+     * The request's only inputs are the model's name, one [ReviewRequest] and how the model is sent
+     * it (D57: the app's parameters, nothing about the food), and a request holds one food's seven
+     * fields — no list, no id, no date, no second food. A new field, or a second way to build the
+     * body, fails here before it can leave the phone.
      */
     @Test
     fun `the body is built from one request, and a request holds one food and nothing else`() {
-        val build: (String, ReviewRequest) -> String = ReviewPrompt::requestBody
+        val build: (String, ReviewRequest, RequestProfile) -> String = ReviewPrompt::requestBody
 
         val ways = ReviewPrompt::class.java.declaredMethods.filter { it.name == "requestBody" }
         assertThat(ways).hasSize(1)
         assertThat(ways.single().parameterTypes.toList())
-            .containsExactly(String::class.java, ReviewRequest::class.java).inOrder()
+            .containsExactly(String::class.java, ReviewRequest::class.java, RequestProfile::class.java).inOrder()
 
         assertThat(fieldsOf(ReviewRequest::class.java)).containsExactly(
             "process", "name", "brand", "per100g", "unitName", "perUnit", "gramsPerUnit",
             // Never sent: it only chooses the instructions (D54 §12.2).
             "weightAsked",
         )
+        // How it is sent: three of the app's own parameters, and room for nothing else (D57 §7).
+        assertThat(fieldsOf(RequestProfile::class.java))
+            .containsExactly("temperature", "reasoningEffort", "strictFormat").inOrder()
         assertThat(fieldsOf(HeldGroup::class.java)).containsExactly("nutrients", "source", "confidence")
         assertThat(fieldsOf(HeldWeight::class.java)).containsExactly("grams", "source")
         assertThat(fieldsOf(Nutrients::class.java))
@@ -192,7 +196,7 @@ class ReviewPromptTest {
             ReviewProcess::class.java, FoodForm::class.java, FoodFacts::class.java,
             Boolean::class.javaPrimitiveType,
         ).inOrder()
-        assertThat(build("a-model", request())).contains("Oat biscuit")
+        assertThat(build("a-model", request(), RequestProfile.DETERMINISTIC)).contains("Oat biscuit")
     }
 
     @Test

@@ -182,20 +182,28 @@ class EstimatePromptTest {
 
     /**
      * D16, from the other side: the only inputs the request can be built from are the model's name,
-     * his words, his added sentence and the app's own retry list. The assignment below compiles only
-     * while that is the signature, and the count shows there is no second way in.
+     * his words, his added sentence, the app's own retry list, and how the model is sent it (D57:
+     * the app's parameters, nothing about him). The assignment below compiles only while that is
+     * the signature, and the count shows there is no second way in.
      */
     @Test
     fun `the request is built from the words alone`() {
-        val build: (String, String, String?, List<String>) -> String = EstimatePrompt::requestBody
+        val build: (String, String, String?, List<String>, RequestProfile) -> String =
+            EstimatePrompt::requestBody
 
         val ways = EstimatePrompt::class.java.declaredMethods
             .filter { it.name == "requestBody" }
         assertThat(ways).hasSize(1)
         assertThat(ways.single().parameterTypes.toList()).containsExactly(
             String::class.java, String::class.java, String::class.java, List::class.java,
+            RequestProfile::class.java,
         ).inOrder()
-        assertThat(build("a-model", "soup", null, emptyList())).contains("soup")
+        assertThat(build("a-model", "soup", null, emptyList(), RequestProfile.DETERMINISTIC)).contains("soup")
+        // How it is sent: three of the app's own parameters, and room for nothing else (D57 §7).
+        assertThat(
+            RequestProfile::class.java.declaredFields
+                .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }.map { it.name },
+        ).containsExactly("temperature", "reasoningEffort", "strictFormat").inOrder()
     }
 
     @Test

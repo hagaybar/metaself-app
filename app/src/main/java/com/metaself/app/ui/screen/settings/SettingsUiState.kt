@@ -21,6 +21,8 @@ data class SettingsUiState(
     val usedToday: Int = 0,
     val testing: Boolean = false,
     val testResult: String? = null,
+    /** After a Test it that worked, what the saved model is sent (D57 §6). */
+    val testLearned: String? = null,
     /** The one notification this app is allowed to send (D15). */
     val reminder: Reminder = Reminder(),
     /** What the last save or restore did, in counts. */

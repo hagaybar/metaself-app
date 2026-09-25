@@ -771,6 +771,13 @@ fun SettingsScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+            // What the saved model is sent, learned from its refusals if it had any (D57 §6).
+            state.testLearned?.let { learned ->
+                Text(
+                    text = learned,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
             RefusedHere(state.failed, SettingsPart.TEST, onDismissFailure)
         }
 

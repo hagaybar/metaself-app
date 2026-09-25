@@ -107,7 +107,7 @@ class OpenAiMealEstimatorTest {
     fun `a dropped connection is unreachable, and the owner keeps his words`() = runTest {
         server.enqueue(MockResponse().setSocketPolicy(SocketPolicy.DISCONNECT_AT_START))
 
-        assertThat(estimator().estimate("risotto")).isEqualTo(EstimateResult.Unreachable)
+        assertThat(estimator().estimate("risotto")).isEqualTo(EstimateResult.Unreachable())
     }
 
     /** D34: a reply that did not give amounts is asked again, once, naming what was missing. */
@@ -204,6 +204,7 @@ class OpenAiMealEstimatorTest {
             keys = FakeKeys("a-key"),
             settings = FakeSettings(),
             client = throwing,
+            profiles = FakeRequestProfileStore(),
             baseUrl = server.url("/v1/chat/completions").toString(),
         ).estimate("risotto")
 
@@ -219,6 +220,7 @@ class OpenAiMealEstimatorTest {
         keys = FakeKeys(key),
         settings = settings,
         client = OkHttpClient(),
+        profiles = FakeRequestProfileStore(),
         problems = problems,
         baseUrl = server.url("/v1/chat/completions").toString(),
     )

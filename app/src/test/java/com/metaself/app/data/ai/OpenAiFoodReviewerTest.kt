@@ -106,6 +106,20 @@ class OpenAiFoodReviewerTest {
         assertThat(settings.calls).isEqualTo(1)
     }
 
+    /** D57 §5: how a request was sent is remembered only once its answer was read. */
+    @Test
+    fun `how a review was asked for is remembered only when its answer was read`() = runTest {
+        val profiles = FakeRequestProfileStore()
+        server.enqueue(MockResponse().setBody(reply("not the shape")))
+        reviewer(profiles = profiles).review(REQUEST)
+        assertThat(profiles.writes).isEqualTo(0)
+
+        server.enqueue(MockResponse().setBody(reply(ONE_CHANGE)))
+        reviewer(profiles = profiles).review(REQUEST)
+        assertThat(profiles.remembered.value)
+            .containsExactly(AiSettings().model, RequestProfile.guess(AiSettings().model))
+    }
+
     @Test
     fun `a refusal carries the provider's own words, and is counted`() = runTest {
         val settings = FakeSettings()
@@ -128,7 +142,7 @@ class OpenAiFoodReviewerTest {
 
         val result = reviewer(settings = settings).review(REQUEST)
 
-        assertThat(result).isEqualTo(ReviewResult.Failed(EstimateResult.Unreachable))
+        assertThat(result).isEqualTo(ReviewResult.Failed(EstimateResult.Unreachable()))
         assertThat(settings.calls).isEqualTo(0)
     }
 
@@ -186,6 +200,7 @@ class OpenAiFoodReviewerTest {
             keys = FakeKeys("a-key"),
             settings = FakeSettings(),
             client = throwing,
+            profiles = FakeRequestProfileStore(),
             baseUrl = server.url("/v1/chat/completions").toString(),
         ).review(REQUEST)
 
@@ -197,10 +212,12 @@ class OpenAiFoodReviewerTest {
         key: String? = "a-key",
         settings: FakeSettings = FakeSettings(),
         problems: ProblemLog = ProblemLog.NONE,
+        profiles: RequestProfileStore = FakeRequestProfileStore(),
     ) = OpenAiFoodReviewer(
         keys = FakeKeys(key),
         settings = settings,
         client = OkHttpClient(),
+        profiles = profiles,
         problems = problems,
         baseUrl = server.url("/v1/chat/completions").toString(),
     )

@@ -25,7 +25,11 @@ interface MealEstimator {
  */
 sealed interface EstimateResult {
 
-    data class Proposed(val proposal: MealProposal) : EstimateResult
+    /**
+     * @property sentAs how the request that got this answer was sent, in one plain line for
+     *   Settings' Test it (D57 §6), such as *"gpt-6-luna works as sent."*; null where not known.
+     */
+    data class Proposed(val proposal: MealProposal, val sentAs: String? = null) : EstimateResult
 
     /** No key entered yet. The only failure with a fix the owner can act on immediately. */
     data object NoKey : EstimateResult
@@ -33,8 +37,14 @@ sealed interface EstimateResult {
     /** The daily ceiling has been reached. Local, self-inflicted, and resets tomorrow. */
     data object CeilingReached : EstimateResult
 
-    /** No network, or it timed out. */
-    data object Unreachable : EstimateResult
+    /**
+     * No network, or it timed out.
+     *
+     * @property afterRefusal the provider's words when it refused an earlier request of the same
+     *   call, one the app was answering by sending again (D57) — so a lost connection does not
+     *   hide why a second request was sent at all. Null when nothing was refused first.
+     */
+    data class Unreachable(val afterRefusal: String? = null) : EstimateResult
 
     /** The provider refused: a bad key, no credit, a rate limit. [detail] is theirs, not ours. */
     data class Refused(val detail: String) : EstimateResult

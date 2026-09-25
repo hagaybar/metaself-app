@@ -23,12 +23,13 @@ class OpenAiMealEstimator(
     keys: ApiKeyStore,
     private val settings: AiSettingsStore,
     client: OkHttpClient,
+    profiles: RequestProfileStore,
     private val problems: ProblemLog = ProblemLog.NONE,
     baseUrl: String = OPENAI_URL,
 ) : MealEstimator {
 
     /** The key, the ceiling, the POST, the counting and the failures — shared with a review (D54). */
-    private val call = OpenAiCall(keys, settings, client, baseUrl)
+    private val call = OpenAiCall(keys, settings, client, profiles, baseUrl)
 
     override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =
         withContext(Dispatchers.IO) { estimating(description, moreDetail).alsoRecorded() }
@@ -74,12 +75,26 @@ class OpenAiMealEstimator(
         missingAmounts: List<String>,
     ): EstimateResult =
         when (
-            val outcome = call.send { model ->
-                EstimatePrompt.requestBody(model, description, moreDetail, missingAmounts = missingAmounts)
+            val outcome = call.send { model, profile ->
+                EstimatePrompt.requestBody(model, description, moreDetail, missingAmounts, profile)
             }
         ) {
-            is OpenAiCall.Outcome.Body -> EstimateResponse.parse(outcome.text)
+            is OpenAiCall.Outcome.Body -> read(outcome)
             is OpenAiCall.Outcome.Failed -> outcome.failure
+        }
+
+    /**
+     * The answer as read, and — when it was read, its amounts given or not — how it was asked for
+     * is remembered (D57 §5). A proposal says how it was asked for, for Settings' Test it (§6).
+     */
+    private suspend fun read(answer: OpenAiCall.Outcome.Body): EstimateResult =
+        when (val result = EstimateResponse.parse(answer.text)) {
+            is EstimateResult.Proposed -> {
+                call.remember(answer)
+                result.copy(sentAs = RequestProfile.report(answer.model, answer.profile))
+            }
+            is EstimateResult.AmountMissing -> result.also { call.remember(answer) }
+            else -> result
         }
 
     companion object {

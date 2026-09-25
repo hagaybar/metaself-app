@@ -6,9 +6,11 @@ import androidx.datastore.preferences.core.Preferences
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.ai.ApiKeyStore
 import com.metaself.app.data.ai.DataStoreAiSettingsStore
+import com.metaself.app.data.ai.DataStoreRequestProfileStore
 import com.metaself.app.data.ai.EncryptedApiKeyStore
 import com.metaself.app.data.ai.OpenAiFoodReviewer
 import com.metaself.app.data.ai.OpenAiMealEstimator
+import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Today
@@ -65,6 +67,12 @@ object AiModule {
         today: Today,
     ): AiSettingsStore = DataStoreAiSettingsStore(store, today)
 
+    /** What each model accepts, learned from its refusals (D57), beside the model's name. */
+    @Provides
+    @Singleton
+    fun provideRequestProfileStore(store: DataStore<Preferences>): RequestProfileStore =
+        DataStoreRequestProfileStore(store)
+
     @Provides
     @Singleton
     fun provideProblemLog(@ApplicationContext context: Context): ProblemLog =
@@ -76,16 +84,18 @@ object AiModule {
         keys: ApiKeyStore,
         settings: AiSettingsStore,
         client: OkHttpClient,
+        profiles: RequestProfileStore,
         problems: ProblemLog,
-    ): MealEstimator = OpenAiMealEstimator(keys, settings, client, problems)
+    ): MealEstimator = OpenAiMealEstimator(keys, settings, client, profiles, problems)
 
-    /** A food's review (D54): the same key, ceiling, client and log as the estimator. */
+    /** A food's review (D54): the same key, ceiling, client, profiles and log as the estimator. */
     @Provides
     @Singleton
     fun provideFoodReviewer(
         keys: ApiKeyStore,
         settings: AiSettingsStore,
         client: OkHttpClient,
+        profiles: RequestProfileStore,
         problems: ProblemLog,
-    ): FoodReviewer = OpenAiFoodReviewer(keys, settings, client, problems)
+    ): FoodReviewer = OpenAiFoodReviewer(keys, settings, client, profiles, problems)
 }

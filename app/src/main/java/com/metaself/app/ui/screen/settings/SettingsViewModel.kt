@@ -174,15 +174,16 @@ class SettingsViewModel internal constructor(
 
     private val testing = MutableStateFlow(false)
     private val testResult = MutableStateFlow<String?>(null)
+    private val testLearned = MutableStateFlow<String?>(null)
     private val problemLines = MutableStateFlow(readProblems())
 
     val state: StateFlow<SettingsUiState> = combine(
         keys.key,
         settings.settings,
         testing,
-        testResult,
+        combine(testResult, testLearned, ::Pair),
         problemLines,
-    ) { key, aiSettings, isTesting, result, lines ->
+    ) { key, aiSettings, isTesting, (result, learned), lines ->
         SettingsUiState(
             problems = lines,
             hasKey = !key.isNullOrBlank(),
@@ -191,6 +192,7 @@ class SettingsViewModel internal constructor(
             usedToday = aiSettings.usedToday,
             testing = isTesting,
             testResult = result,
+            testLearned = learned,
         )
     }.combine(reminders.reminder) { current, reminder ->
         current.copy(reminder = reminder)
@@ -252,6 +254,7 @@ class SettingsViewModel internal constructor(
         act(SettingsPart.KEY, ActionRefused.NOTHING_CHANGED) {
             keys.save(key)
             testResult.value = null
+            testLearned.value = null
         }
     }
 
@@ -259,6 +262,7 @@ class SettingsViewModel internal constructor(
         act(SettingsPart.KEY, ActionRefused.NOTHING_CHANGED) {
             keys.clear()
             testResult.value = null
+            testLearned.value = null
         }
     }
 
@@ -678,8 +682,13 @@ class SettingsViewModel internal constructor(
         act(SettingsPart.TEST, ActionRefused.NOTHING_CHANGED, onRefused = { testing.value = false }) {
             testing.value = true
             testResult.value = null
+            testLearned.value = null
             val result = estimator.estimate("one apple")
             problemLines.value = readProblems()
+            if (result is EstimateResult.Proposed) {
+                // How the answered request was sent, as the call carried it (D57 §6).
+                testLearned.value = result.sentAs
+            }
             testResult.value = when (result) {
                 // What the answer would log as it came, worth times amount (D53 §1).
                 is EstimateResult.Proposed -> "Connected. It answered with " +

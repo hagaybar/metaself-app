@@ -85,7 +85,7 @@ object EstimatePrompt {
      * The request, and — when a previous answer left amounts out — a second instruction naming them.
      *
      * [missingAmounts] is for the one retry D34 asks for. At temperature 0 the same request gets
-     * much the same answer, and a reasoning model — sent no temperature ([ModelParams]) — is no
+     * much the same answer, and a reasoning model — sent no temperature ([RequestProfile]) — is no
      * likelier to change its mind unprompted, so asking again unchanged would most likely get the
      * same amountless reply; the correction says which items had none. It is an instruction from the app, sent as the app's own,
      * and never folded into the owner's words the way [moreDetail] is.
@@ -95,6 +95,7 @@ object EstimatePrompt {
         description: String,
         moreDetail: String? = null,
         missingAmounts: List<String> = emptyList(),
+        profile: RequestProfile = RequestProfile.guess(model),
     ): String {
         val userText = if (moreDetail.isNullOrBlank()) {
             description
@@ -102,47 +103,22 @@ object EstimatePrompt {
             "$description\n\nMore detail: $moreDetail"
         }
 
-        return buildJsonObject {
-            put("model", model)
-            // Temperature 0, or none for a reasoning model that refuses it (ModelParams).
-            ModelParams.of(model).into(this)
-            putJsonArray("messages") {
+        val messages = buildList {
+            add(ChatRequest.Message("system", INSTRUCTIONS))
+            add(ChatRequest.Message("user", userText))
+            if (missingAmounts.isNotEmpty()) {
                 add(
-                    buildJsonObject {
-                        put("role", "system")
-                        put("content", INSTRUCTIONS)
-                    },
+                    ChatRequest.Message(
+                        "system",
+                        "Your previous answer gave no amount for: " +
+                            missingAmounts.joinToString(", ") + ". Every item needs a " +
+                            "number greater than zero and a unit. Give your best estimate " +
+                            "and lower the confidence if you are unsure.",
+                    ),
                 )
-                add(
-                    buildJsonObject {
-                        put("role", "user")
-                        put("content", userText)
-                    },
-                )
-                if (missingAmounts.isNotEmpty()) {
-                    add(
-                        buildJsonObject {
-                            put("role", "system")
-                            put(
-                                "content",
-                                "Your previous answer gave no amount for: " +
-                                    missingAmounts.joinToString(", ") + ". Every item needs a " +
-                                    "number greater than zero and a unit. Give your best estimate " +
-                                    "and lower the confidence if you are unsure.",
-                            )
-                        },
-                    )
-                }
             }
-            putJsonObject("response_format") {
-                put("type", "json_schema")
-                putJsonObject("json_schema") {
-                    put("name", "meal_estimate")
-                    put("strict", true)
-                    put("schema", SCHEMA)
-                }
-            }
-        }.toString()
+        }
+        return ChatRequest.body(model, profile, messages, schemaName = "meal_estimate", schema = SCHEMA)
     }
 
     private val SCHEMA: JsonObject = buildJsonObject {
