@@ -794,15 +794,16 @@ line and its Undo are replaced by one act that accepts and saves, and one that c
   bundle typed over is taken out of the bundle; the unit's **Back** still takes the rest. Typing in
   any other box — the brand, a box the review did not touch — is his, as always, and takes no
   suggestion down.
-- **Typing into the unit box while a unit is pending takes the whole bundle down**: the unit is what
-  he typed, and every box still pending in the bundle — the four figures and the weight — goes back
-  to what it held before the answer, no longer pending. Figures stated for the model's unit must not
-  stand under a unit he chose instead.
+- **Typing a new unit takes down every suggestion tied to the unit**, whether or not the unit itself
+  was pending: the unit is what he typed, and every per-one figure and weight still pending goes
+  back to what it held before the answer, no longer pending. They were stated for a unit — the
+  model's, or the old one — and must not stand under a unit he chose instead.
 - **The weight goes with the unit it describes.** A weight suggestion goes back with the bundle it
   arrived in; and when the unit box ends up empty by a **Back**, a weight suggested for that unit
   goes back with it, so no weight of nothing is accepted.
 - **Saved meals that count the food by the piece are named.** When a unit is pending — named or
-  renamed — on a food that saved meals count in units, one line under the unit box says so: *2 saved
+  renamed — on a food that saved meals count **in units** (a meal counting it in grams is not
+  affected, and is not counted), one line under the unit box says so: *2 saved
   meals count this food in slices; after saving they will count it in tablespoons.* (invented; one
   meal: *1 saved meal counts…*). Their amounts do not change; what *2* means does.
 - **While anything is pending, the page has exactly two answers to it, in place of Save and Leave it

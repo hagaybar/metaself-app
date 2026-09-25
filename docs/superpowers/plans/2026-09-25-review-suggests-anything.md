@@ -27,7 +27,8 @@ No public issue exists for it yet.
 - **Nothing new is sent.** `ReviewPromptTest`'s *nothing else is sent* test must pass unchanged in
   what it forbids; `weightAsked` is never serialised.
 - **A group all of whose suggestions were put back reaches the repository exactly as it would have
-  with no review** — the stored doubles, so `Correction.Keep`, no statement.
+  with no review** — the stored doubles, so `Correction.Keep`, no statement. The one relabel of an
+  unchanged figure is the weight's, downward, and only when he accepted it (§12.7).
 
 **Branch:** `the-review-may-suggest-anything` (this plan and the spec are its first two commits).
 Version at the end: **0.50.0** (versionCode +1) — a new behaviour, not a fix.
@@ -48,8 +49,12 @@ Version at the end: **0.50.0** (versionCode +1) — a new behaviour, not a fix.
 | Words | `res/values/strings.xml` | New: pending state description, Back to / Clear and their spoken forms, Accept changes and save / …and make it, outcome rows, set-aside lines for name / weight. Changed: `foods_weight_never_guessed` (§12.7's text). Removed: `review_apply`, `review_keep_mine`, `review_undo`, `review_applied*`, `review_changed_box`, `review_changes_applied`. |
 | Simulated app | `test/.../sim/*`, `LiveFoodPage.kt` | Wiring moved to the new actions. |
 
-No change to `RoomFoodRepository`, `FoodDao`, `Correction`, the backup, `privacy.html` or
-`terms.html` (spec §12.2 and §12.11 say why).
+No change to `RoomFoodRepository`, `FoodDao`, the backup, `privacy.html` or `terms.html` (spec §12.2
+and §12.11 say why). **`Correction` gains exactly one case, for the weight only** (spec §12.7): an
+arriving `AI_ESTIMATE` weight over the same figure held at a higher rank is written, not kept. The
+form produces an `AI_ESTIMATE` weight only when he accepted one — a weight suggestion, or a weight
+echoed in an accepted unit bundle — so that is the only way the case fires; it is pinned in
+`CorrectionTest`, `FoodFormTest` and, in CI, `RoomFoodRepositoryTest`.
 
 ---
 
