@@ -14,8 +14,10 @@ class ActivityEnergyTest {
     /** The canonical body from `aProfile()`, so every figure below is a round one. */
     private val weightKg = 80.0
 
-    private fun day(steps: Int, activeKcal: Int? = null) =
-        ActivityEnergy.of(DayMovement(epochDay = 1, steps = steps, activeKcal = activeKcal), weightKg)
+    private fun day(steps: Int, activeKcal: Int? = null, typedKcal: Int = 0) = ActivityEnergy.of(
+        DayMovement(epochDay = 1, steps = steps, activeKcal = activeKcal, typedWorkoutsKcal = typedKcal),
+        weightKg,
+    )
 
     @Test
     fun `with no band the steps are the whole story`() {
@@ -79,5 +81,36 @@ class ActivityEnergyTest {
         assertThat(normal).isEqualTo(500)
         val anotherSwim = MovementCredit.of(day(3_000, 500), normal, capKcal = 275)
         assertThat(anotherSwim.kcal).isEqualTo(0)
+    }
+
+    /** D60: a run typed by hand on a day the phone also counted its steps is captured once. */
+    @Test
+    fun `a typed workout is a third reading, not an addition`() {
+        val ran = day(steps = 10_000, typedKcal = 350)
+
+        assertThat(ran.kcal).isEqualTo(350)
+        assertThat(ran.source).isEqualTo(MovementSource.TYPED_WORKOUT)
+        assertThat(ran.kcal).isNotEqualTo(300 + 350)
+    }
+
+    @Test
+    fun `the band still wins when it is the largest of the three`() {
+        val swamAndRan = day(steps = 10_000, activeKcal = 340, typedKcal = 320)
+
+        assertThat(swamAndRan.kcal).isEqualTo(340)
+        assertThat(swamAndRan.source).isEqualTo(MovementSource.ACTIVE_CALORIES)
+    }
+
+    /** A tie falls to the least-estimated reading, which is the step count. */
+    @Test
+    fun `a tie falls to the steps`() {
+        assertThat(day(steps = 10_000, typedKcal = 300).source).isEqualTo(MovementSource.STEPS)
+    }
+
+    @Test
+    fun `a day with nothing typed behaves exactly as before`() {
+        assertThat(day(steps = 10_000, activeKcal = 340)).isEqualTo(
+            ActivityEnergy.of(DayMovement(epochDay = 1, steps = 10_000, activeKcal = 340), weightKg),
+        )
     }
 }
