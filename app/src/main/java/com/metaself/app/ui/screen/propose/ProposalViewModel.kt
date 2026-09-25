@@ -6,12 +6,18 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.ToLog
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.ai.Asked
+import com.metaself.app.domain.ai.MealConversation
+import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
+import com.metaself.app.domain.ai.Next
+import com.metaself.app.domain.ai.StepResult
 import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.propose.ProposalWording
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,10 +26,17 @@ import java.math.BigDecimal
 import javax.inject.Inject
 
 /**
- * Describing a meal, correcting what came back, and accepting it.
+ * Describing a meal — in a short conversation when the model needs one (D58) — correcting what
+ * came back, and accepting it.
  *
- * One call to the model per press. No conversation: the rows ARE the clarification, and they cost
- * nothing and require no reply. "Tell it more" is the exception, and it is the owner's to press.
+ * *Work it out* sends one request. When the meal needs no question it is the estimate, as before;
+ * otherwise the model offers questions, and each answer below the offered number asks for the next
+ * one — one request each — until the final analysis. Which request comes next is
+ * [MealConversation]'s decision; this sends it and shows what came. **Nothing is stored before the
+ * owner's end choice, and the conversation never is.**
+ *
+ * **One live request** (D58 §12.1): each carries a generation, and a reply to a request that has
+ * since been superseded — by Back, by leaving — is dropped unread. Back while waiting cancels it.
  *
  * **Nothing here takes the app down.** The estimator reports its own failures as results; anything
  * it throws instead is caught by [guarded], written to the problem log, and leaves the owner where
@@ -36,6 +49,7 @@ class ProposalViewModel @Inject constructor(
     private val problems: ProblemLog,
     private val foods: FoodRepository,
     savedState: SavedStateHandle = SavedStateHandle(),
+    private val asker: MealConversationAsker,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<ProposalUiState>(ProposalUiState.Describing())
@@ -56,10 +70,93 @@ class ProposalViewModel @Inject constructor(
     var description: String = savedState.get<String>("text").orEmpty()
         private set
 
+    /** The request in flight, cancelled by Back (D58 §12.1). */
+    private var inFlight: Job? = null
+
+    /** Bumped by every request and by Back: a reply for an older generation is dropped. */
+    private var generation = 0L
+
+    /** *Work it out*: the first request, which estimates the meal or offers questions (D58 §2.2). */
     fun describe(text: String) {
         description = text
         if (text.isBlank()) return
-        ask(text, moreDetail = null)
+        send(
+            waiting = ProposalUiState.Waiting(),
+            onRefused = { ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED) },
+        ) {
+            when (val result = asker.open(text)) {
+                is StepResult.Estimate -> shown(result.result, afterConversation = null)
+                is StepResult.Failed -> described(result.failure)
+                is StepResult.Ask -> {
+                    val chat = MealConversation.open(text, result.question, result.planned, asker.remainingToday())
+                    if (chat == null) described(EstimateResult.CeilingReached) else ProposalUiState.Offer(chat)
+                }
+                // A first reply is never *no more questions*; read as needing none, it is the best guess.
+                StepResult.Enough -> null.also { go(MealConversation.bestGuess(asker.remainingToday()), null) }
+            }
+        }
+    }
+
+    /** *OK* on the offer: question one, already in hand — nothing is sent. */
+    fun acceptQuestions() {
+        val offer = _state.value as? ProposalUiState.Offer ?: return
+        _state.value = ProposalUiState.Asking(offer.chat)
+    }
+
+    /** *Use your best guess* on the offer: the final analysis with no answers (D58 §12.2). */
+    fun bestGuess() {
+        val offer = _state.value as? ProposalUiState.Offer ?: return
+        decide(offer) { MealConversation.bestGuess(it) }
+    }
+
+    /** He answered the question on screen — a tapped answer, or his *Other* words. */
+    fun answer(text: String) {
+        val asking = _state.value as? ProposalUiState.Asking ?: return
+        if (text.isBlank()) return
+        decide(asking) { MealConversation.answer(asking.chat, text, it) }
+    }
+
+    /** *That's enough, go ahead*. */
+    fun enough() {
+        val asking = _state.value as? ProposalUiState.Asking ?: return
+        decide(asking) { MealConversation.enough(asking.chat, it) }
+    }
+
+    /** *Try again*: the same request as the one that failed. */
+    fun retry() {
+        val failed = _state.value as? ProposalUiState.ConversationFailed ?: return
+        val again = failed.retry ?: return
+        _state.value = ProposalUiState.Waiting(returnTo = failed)
+        go(again, returnTo = failed)
+    }
+
+    /** *Use your best guess with what you've said so far*, after a question step failed (D58 §9). */
+    fun bestGuessSoFar() {
+        val failed = _state.value as? ProposalUiState.ConversationFailed ?: return
+        val asked = failed.bestGuessWith ?: return
+        decide(failed) { MealConversation.bestGuessSoFar(asked, it) }
+    }
+
+    /**
+     * Back, one stage (D58 §2.5, §12.1): a request in flight is cancelled; a question goes to the
+     * one before it, the first to the offer, the offer to his words. False when there is nothing to
+     * step back to, and the screen is left as it always was.
+     */
+    fun back(): Boolean {
+        val current = _state.value
+        val to: ProposalUiState = when (current) {
+            is ProposalUiState.Waiting -> current.returnTo ?: return false
+            is ProposalUiState.Asking -> MealConversation.back(current.chat)
+                ?.let { ProposalUiState.Asking(it) }
+                ?: ProposalUiState.Offer(current.chat)
+            is ProposalUiState.Offer -> ProposalUiState.Describing()
+            is ProposalUiState.ConversationFailed -> current.returnTo ?: ProposalUiState.Describing()
+            is ProposalUiState.Describing, is ProposalUiState.Proposed -> return false
+        }
+        inFlight?.cancel()
+        generation++
+        _state.value = to
+        return true
     }
 
     /**
@@ -67,42 +164,158 @@ class ProposalViewModel @Inject constructor(
      *
      * This is what handles what a typed amount cannot: the same bowl cooked richer. One extra call,
      * only when the owner decides the first answer was not close enough. It replaces every row.
+     * After a conversation it re-runs the final analysis with the same answers (D58 §5.1).
      */
     fun tellItMore(extra: String) {
         if (description.isBlank() || extra.isBlank()) return
-        ask(description, moreDetail = extra)
-    }
-
-    private fun ask(text: String, moreDetail: String?) {
-        guarded(
-            problems,
+        val proposed = _state.value as? ProposalUiState.Proposed
+        val asked = proposed?.afterConversation
+        val kept = proposed
+        send(
+            waiting = ProposalUiState.Waiting(kind = if (asked != null) WaitingFor.RESULT else WaitingFor.ANSWER),
             onRefused = {
-                _state.value = ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED)
+                kept?.copy(refused = ActionRefused.NOTHING_CHANGED)
+                    ?: ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED)
             },
         ) {
-            _state.value = ProposalUiState.Waiting
-            _state.value = when (val result = estimator.estimate(text, moreDetail)) {
-                is EstimateResult.Proposed -> {
-                    // Only now, with the answer in: his foods are read on the phone, once, and
-                    // never go anywhere (D16, D53 §4). A food made while the answer is on screen is
-                    // not seen until he asks again.
-                    val offered = foods.observeOffered().first()
-                    ProposalUiState.Proposed(
-                        rows = result.proposal.items.map { ProposalRow.of(it, offered) },
-                        note = result.proposal.note,
-                        dropped = result.proposal.dropped,
-                        answer = result.proposal.answer,
-                    )
-                }
-
-                else -> ProposalUiState.Describing(
-                    failure = ProposalWording.failure(result),
-                    needsKey = result is EstimateResult.NoKey,
-                    answer = (result as? EstimateResult.Unreadable)?.answer,
-                )
+            if (asked != null) {
+                val deep = asker.remainingToday() >= 2
+                shown(asker.finish(description, asked, moreDetail = extra, deep = deep), afterConversation = asked)
+            } else {
+                shown(estimator.estimate(description, extra), afterConversation = null)
             }
         }
     }
+
+    /** Decide the next request from the day's allowance, then send it; [from] is where Back returns. */
+    private fun decide(from: ProposalUiState, next: (remaining: Int) -> Next) {
+        // Taken synchronously, so a second tap in the same frame finds no question to answer.
+        _state.value = ProposalUiState.Waiting(kind = WaitingFor.QUESTION, returnTo = from)
+        val mine = ++generation
+        inFlight = guarded(problems, onRefused = { if (mine == generation) _state.value = refusedAt(from) }) {
+            val decided = next(asker.remainingToday())
+            if (mine == generation) go(decided, returnTo = from)
+        }
+    }
+
+    /** Send what [next] says, and show what came (D58 §2, §9). */
+    private fun go(next: Next, returnTo: ProposalUiState?) {
+        when (next) {
+            is Next.Show -> _state.value = ProposalUiState.Asking(next.chat)
+            Next.Ceiling -> _state.value = ProposalUiState.ConversationFailed(
+                failure = ProposalWording.failure(EstimateResult.CeilingReached),
+                asked = askedIn(returnTo),
+                returnTo = returnTo,
+            )
+            is Next.Step -> send(
+                waiting = ProposalUiState.Waiting(WaitingFor.QUESTION, returnTo),
+                onRefused = { refusedAt(returnTo) },
+            ) {
+                when (val result = asker.next(description, next.asked, next.chat.cap)) {
+                    // Onto the conversation as the request left it, later questions already dropped.
+                    is StepResult.Ask ->
+                        ProposalUiState.Asking(MealConversation.arrived(next.chat, result.question, result.planned))
+                    StepResult.Enough ->
+                        null.also { go(MealConversation.beforeFinal(next.asked, asker.remainingToday()), returnTo) }
+                    is StepResult.Failed -> ProposalUiState.ConversationFailed(
+                        failure = ProposalWording.failure(result.failure),
+                        asked = next.asked,
+                        answer = (result.failure as? EstimateResult.Unreadable)?.answer,
+                        retry = next,
+                        bestGuessWith = next.asked,
+                        returnTo = returnTo,
+                    )
+                    // A step never estimates; read as unusable.
+                    is StepResult.Estimate -> ProposalUiState.ConversationFailed(
+                        failure = ProposalWording.failure(EstimateResult.Unreadable("not a question")),
+                        asked = next.asked,
+                        retry = next,
+                        bestGuessWith = next.asked,
+                        returnTo = returnTo,
+                    )
+                }
+            }
+            is Next.Final -> send(
+                waiting = ProposalUiState.Waiting(WaitingFor.RESULT, returnTo, next.allowanceOnly),
+                onRefused = { refusedAt(returnTo) },
+            ) {
+                when (val result = asker.finish(description, next.asked, deep = next.deep)) {
+                    is EstimateResult.Proposed -> shown(result, afterConversation = next.asked)
+                    else -> ProposalUiState.ConversationFailed(
+                        failure = ProposalWording.failure(result),
+                        asked = next.asked,
+                        answer = (result as? EstimateResult.Unreadable)?.answer,
+                        retry = next.takeUnless { result is EstimateResult.CeilingReached },
+                        returnTo = returnTo,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * One request: [waiting] shown at once, the reply shown if it is still wanted. [block] returns
+     * the state to show, or null when it has handed on to another request itself.
+     */
+    private fun send(
+        waiting: ProposalUiState,
+        onRefused: () -> ProposalUiState,
+        block: suspend () -> ProposalUiState?,
+    ) {
+        _state.value = waiting
+        val mine = ++generation
+        inFlight = guarded(problems, onRefused = { if (mine == generation) _state.value = onRefused() }) {
+            val shown = block()
+            if (shown != null && mine == generation) _state.value = shown
+        }
+    }
+
+    /** A refusal said on the stage he was on, which is kept (D58 §12.3). */
+    private fun refusedAt(stage: ProposalUiState?): ProposalUiState = when (stage) {
+        is ProposalUiState.Asking -> stage.copy(refused = ActionRefused.NOTHING_CHANGED)
+        is ProposalUiState.Offer -> stage.copy(refused = ActionRefused.NOTHING_CHANGED)
+        is ProposalUiState.ConversationFailed -> stage
+        else -> ProposalUiState.Describing(refused = ActionRefused.NOTHING_CHANGED)
+    }
+
+    private fun askedIn(stage: ProposalUiState?): List<Asked> = when (stage) {
+        is ProposalUiState.Asking -> stage.chat.asked(stage.chat.answers.size.coerceAtMost(stage.chat.at))
+        is ProposalUiState.ConversationFailed -> stage.asked
+        else -> emptyList()
+    }
+
+    /** An answer on screen, or the failure it came to, with his words kept (D8). */
+    private suspend fun shown(result: EstimateResult, afterConversation: List<Asked>?): ProposalUiState =
+        when (result) {
+            is EstimateResult.Proposed -> {
+                // Only now, with the answer in: his foods are read on the phone, once, and
+                // never go anywhere (D16, D53 §4). A food made while the answer is on screen is
+                // not seen until he asks again.
+                val offered = foods.observeOffered().first()
+                ProposalUiState.Proposed(
+                    rows = result.proposal.items.map { ProposalRow.of(it, offered) },
+                    note = result.proposal.note,
+                    dropped = result.proposal.dropped,
+                    answer = result.proposal.answer,
+                    afterConversation = afterConversation,
+                )
+            }
+            else -> if (afterConversation != null) {
+                ProposalUiState.ConversationFailed(
+                    failure = ProposalWording.failure(result),
+                    asked = afterConversation,
+                    answer = (result as? EstimateResult.Unreadable)?.answer,
+                )
+            } else {
+                described(result)
+            }
+        }
+
+    private fun described(result: EstimateResult): ProposalUiState = ProposalUiState.Describing(
+        failure = ProposalWording.failure(result),
+        needsKey = result is EstimateResult.NoKey,
+        answer = (result as? EstimateResult.Unreadable)?.answer,
+    )
 
     /**
      * How much of it there was, as typed (D53 §1). Only the amount changes: the worth stays what it
@@ -219,6 +432,8 @@ class ProposalViewModel @Inject constructor(
     }
 
     fun startOver() {
+        inFlight?.cancel()
+        generation++
         description = ""
         _state.value = ProposalUiState.Describing()
     }

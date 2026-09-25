@@ -1,6 +1,9 @@
 package com.metaself.app.ui.screen.propose
 
 import com.metaself.app.data.food.ToLog
+import com.metaself.app.domain.ai.Asked
+import com.metaself.app.domain.ai.Chat
+import com.metaself.app.domain.ai.Next
 import com.metaself.app.domain.ai.ProposedItem
 import com.metaself.app.domain.amount.BelievableAmount
 import com.metaself.app.domain.amount.ItemToLog
@@ -276,7 +279,43 @@ sealed interface ProposalUiState {
         val answer: String? = null,
     ) : ProposalUiState
 
-    data object Waiting : ProposalUiState
+    /**
+     * A request is in flight.
+     *
+     * @property returnTo the stage Back returns to, cancelling the request (D58 §12.1); null on the
+     *   first request, where Back leaves as it always has.
+     * @property allowanceOnly the questions were cut short because only one of the day's requests
+     *   remained, which the screen says (D58 §7).
+     */
+    data class Waiting(
+        val kind: WaitingFor = WaitingFor.ANSWER,
+        val returnTo: ProposalUiState? = null,
+        val allowanceOnly: Boolean = false,
+    ) : ProposalUiState
+
+    /** *I'd like to ask up to N questions* — [chat] holds question one, already in hand (D58 §2.2). */
+    data class Offer(val chat: Chat, val refused: ActionRefused? = null) : ProposalUiState
+
+    /** A question on screen, with his remembered answer when he came back to it (D58 §2.3). */
+    data class Asking(val chat: Chat, val refused: ActionRefused? = null) : ProposalUiState
+
+    /**
+     * A conversation's request failed, or the day's allowance ran out (D58 §9). Nothing is stored;
+     * his description and answers are kept.
+     *
+     * @property retry the same request again, or null when nothing can be sent today.
+     * @property bestGuessWith the answers *Use your best guess with what you've said so far* sends,
+     *   when a question step failed; null otherwise.
+     * @property returnTo the stage Back returns to.
+     */
+    data class ConversationFailed(
+        val failure: String,
+        val asked: List<Asked>,
+        val answer: String? = null,
+        val retry: Next? = null,
+        val bestGuessWith: List<Asked>? = null,
+        val returnTo: ProposalUiState? = null,
+    ) : ProposalUiState
 
     data class Proposed(
         val rows: List<ProposalRow>,
@@ -285,6 +324,13 @@ sealed interface ProposalUiState {
         val dropped: List<String> = emptyList(),
         /** The answer as it came when an item was dropped, for *Show the model's answer*. Shown only. */
         val answer: String? = null,
+        /**
+         * The answers a conversation gave, so *Ask again* re-runs the final analysis with them (D58
+         * §5.1); null when the meal needed no question.
+         */
+        val afterConversation: List<Asked>? = null,
+        /** *Ask again* threw rather than answering; the rows stay (D58 §12.3). */
+        val refused: ActionRefused? = null,
     ) : ProposalUiState {
         /** What the rows that can be logged add up to; a row with no usable amount adds nothing. */
         val totalKcal: Int get() = rows.sumOf { it.numbers?.kcal ?: 0 }
@@ -296,6 +342,18 @@ sealed interface ProposalUiState {
         val blockedBy: Int?
             get() = rows.indexOfFirst { it.numbers == null }.takeIf { it >= 0 }
     }
+}
+
+/** What a request in flight is for, which the waiting line says (D58 §2). */
+enum class WaitingFor {
+    /** The first request, or today's describe. */
+    ANSWER,
+
+    /** The next question. */
+    QUESTION,
+
+    /** The final analysis. */
+    RESULT,
 }
 
 /**

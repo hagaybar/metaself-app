@@ -181,6 +181,9 @@ fun ProposalScreen(
                 }
             }
 
+            // The conversation's stages are drawn by D58's next step; until then, nothing.
+            is ProposalUiState.Offer, is ProposalUiState.Asking, is ProposalUiState.ConversationFailed -> Unit
+
             is ProposalUiState.Waiting -> {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
