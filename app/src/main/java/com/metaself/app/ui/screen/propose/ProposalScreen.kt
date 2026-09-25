@@ -82,6 +82,9 @@ fun ProposalScreen(
     onCancel: () -> Unit,
     // A conversation's stages (D58). No default, for the reason the naming sheet's have none.
     conversation: ConversationActions,
+    // D58 §5.2: which way he came in, which decides the filled button, and keeping without logging.
+    fromMyMeals: Boolean,
+    keepOnly: KeepOnlyActions,
     // Deliberately without defaults, all seven: the sheet is reachable from one place only, and a
     // default would let that one place forget a piece of the wiring and fail in silence on the
     // phone instead of at the compiler.
@@ -299,11 +302,11 @@ fun ProposalScreen(
                         )
                     }
 
-                    Button(
-                        onClick = onSave,
-                        enabled = !keepInFlight && blocked == null,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
+                    val canSave = !keepInFlight && blocked == null && state.keeping?.busy != true
+
+                    // Log it / Keep as a meal / Log it and keep as a meal (D58 §5.2), in that order
+                    // both ways in; the filled one is what that way in is for.
+                    EndButton(filled = !fromMyMeals, enabled = canSave, onClick = onSave) {
                         Text(stringResource(R.string.propose_save))
                     }
 
@@ -311,14 +314,23 @@ fun ProposalScreen(
                     // rule is read off the rows being drawn, so removing a row until one is left takes
                     // the offer away with it.
                     if (state.rows.size > 1) {
-                        Button(
+                        EndButton(filled = fromMyMeals, enabled = canSave, onClick = keepOnly.onOpen) {
+                            Text(stringResource(R.string.propose_keep_only))
+                        }
+                        EndButton(
+                            filled = false,
+                            enabled = canSave,
                             onClick = {
                                 taken = true
                                 onKeepAsMeal()
                             },
-                            enabled = !keepInFlight && blocked == null,
-                            modifier = Modifier.fillMaxWidth(),
                         ) { Text(stringResource(R.string.propose_keep_as_meal)) }
+                    } else {
+                        Text(
+                            text = stringResource(R.string.propose_one_item),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
 
                     // The offer was taken and the write threw, so the sheet the sentence normally sits
@@ -366,6 +378,25 @@ fun ProposalScreen(
     // the screen over, and the rows it is naming are the day's now, not the model's. It is the
     // day's own sheet — the same composable, the same words, the same refusal — so there is one way
     // of naming a meal and not two (D46, issue #24).
+    // Keep as a meal, logging nothing (D58 §5.2): the same sheet, saying where the rows go instead.
+    // The rows it lists are what would be logged, so the sheet and the kept meal cannot disagree.
+    val keepSheet = (state as? ProposalUiState.Proposed)?.keeping
+    var keepName by rememberSaveable { mutableStateOf("") }
+    if (keepSheet != null && state is ProposalUiState.Proposed) {
+        MealNamingSheet(
+            items = state.rows.mapNotNull { it.toLog()?.item },
+            isToday = true,
+            name = keepName,
+            refusal = keepSheet.refusal ?: keepSheet.refused?.let { stringResource(it.sentence) },
+            onNameChange = { keepName = it },
+            onConfirm = { keepOnly.onConfirm(keepName) },
+            onCancel = keepOnly.onCancel,
+            keepOnly = true,
+            onLogInstead = keepOnly.onLogInstead.takeIf { keepSheet.canLogInstead },
+            busy = keepSheet.busy,
+        )
+    }
+
     keeping?.let { sheet ->
         MealNamingSheet(
             items = sheet.rows,
@@ -592,5 +623,28 @@ private fun Small(label: String, onClick: () -> Unit, said: String? = null) {
         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
     ) {
         Text(text = label, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+/** *Keep as a meal*'s own actions (D58 §5.2): open the sheet, keep under a name, not now, log instead. */
+data class KeepOnlyActions(
+    val onOpen: () -> Unit,
+    val onConfirm: (String) -> Unit,
+    val onCancel: () -> Unit,
+    val onLogInstead: () -> Unit,
+)
+
+/** One of the three end buttons: filled for what this way in is for, outlined otherwise. */
+@Composable
+private fun EndButton(
+    filled: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    if (filled) {
+        Button(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), content = content)
+    } else {
+        OutlinedButton(onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth(), content = content)
     }
 }

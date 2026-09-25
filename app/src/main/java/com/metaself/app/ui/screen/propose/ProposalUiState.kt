@@ -331,6 +331,8 @@ sealed interface ProposalUiState {
         val afterConversation: List<Asked>? = null,
         /** *Ask again* threw rather than answering; the rows stay (D58 §12.3). */
         val refused: ActionRefused? = null,
+        /** *Keep as a meal*'s naming sheet, while it is open (D58 §5.2); null otherwise. */
+        val keeping: KeepOnly? = null,
     ) : ProposalUiState {
         /** What the rows that can be logged add up to; a row with no usable amount adds nothing. */
         val totalKcal: Int get() = rows.sumOf { it.numbers?.kcal ?: 0 }
@@ -343,6 +345,23 @@ sealed interface ProposalUiState {
             get() = rows.indexOfFirst { it.numbers == null }.takeIf { it >= 0 }
     }
 }
+
+/**
+ * *Keep as a meal* — naming what was described, to keep it in My meals and log nothing (D58 §5.2).
+ *
+ * @property refusal why nothing was kept, a finished sentence: the name taken, or parts that
+ *   cannot join; null when nothing was refused.
+ * @property canLogInstead the refusal was about parts that cannot join a meal, so *Log it instead*
+ *   is offered beside it (§12.7).
+ * @property refused keeping threw rather than answering.
+ * @property busy the keep is being written: the sheet's button waits, so nothing is kept twice.
+ */
+data class KeepOnly(
+    val refusal: String? = null,
+    val canLogInstead: Boolean = false,
+    val refused: ActionRefused? = null,
+    val busy: Boolean = false,
+)
 
 /** What a request in flight is for, which the waiting line says (D58 §2). */
 enum class WaitingFor {

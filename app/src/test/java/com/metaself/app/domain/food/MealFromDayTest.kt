@@ -200,6 +200,28 @@ class MealFromDayTest {
         assertThat(outcome.components).isEmpty()
     }
 
+    /**
+     * D58 §12.7: kept as a meal without logging, nothing was logged — and no refusal may say it was.
+     */
+    @Test
+    fun `refusals for a described meal kept without logging never say it was logged`() {
+        val outcome = MealFromDay.fromDescribed(
+            listOf(
+                row(name = "Bread", foodId = 2, amount = 1.0, unit = "roll"),
+                row(name = "Cucumber", foodId = 1, amount = 0.0, unit = "g", portion = "amount not stated"),
+                row(name = "Coffee with milk", foodId = null, amount = 1.0, unit = "cup"),
+            ),
+            foodsById,
+        )
+
+        assertThat(outcome.refusals).containsExactly(
+            "Bread is in roll, and your Bread is counted in slice.",
+            "Cucumber has no amount. Say how much, and it can join.",
+            "Coffee with milk could not be matched to a food.",
+        )
+        outcome.refusals.forEach { assertThat(it).doesNotContain("logged") }
+    }
+
     /** A food deleted since the row was logged leaves the pointer dangling, which is the same case. */
     @Test
     fun `a row pointing at a food that no longer exists is refused by name too`() {

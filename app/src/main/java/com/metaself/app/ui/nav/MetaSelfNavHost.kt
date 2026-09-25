@@ -38,6 +38,7 @@ import com.metaself.app.ui.screen.entry.EntryEditorScreen
 import com.metaself.app.ui.screen.entry.EntryFormState
 import com.metaself.app.ui.screen.settings.SettingsScreen
 import com.metaself.app.ui.screen.propose.ConversationActions
+import com.metaself.app.ui.screen.propose.KeepOnlyActions
 import com.metaself.app.ui.screen.propose.ProposalScreen
 import com.metaself.app.ui.screen.record.RecordScreen
 import com.metaself.app.ui.screen.record.RecordUiState
@@ -820,6 +821,24 @@ fun MetaSelfNavHost(
                     onStepBack = proposeViewModel::back,
                     onRetry = proposeViewModel::retry,
                     onBestGuessSoFar = proposeViewModel::bestGuessSoFar,
+                ),
+                fromMyMeals = false,
+                keepOnly = KeepOnlyActions(
+                    onOpen = proposeViewModel::openKeepOnly,
+                    // Kept, and nothing logged: he goes to where the meal is (D58 §5.3).
+                    onConfirm = { name ->
+                        proposeViewModel.keepOnly(name) {
+                            proposeViewModel.startOver()
+                            navController.popBackStack()
+                            navController.navigate(Destination.Foods.route)
+                        }
+                    },
+                    onCancel = proposeViewModel::closeKeepOnly,
+                    onLogInstead = {
+                        dayViewModel.logMeal(proposeViewModel.accepted())
+                        proposeViewModel.startOver()
+                        navController.popBackStack()
+                    },
                 ),
                 onSave = {
                     dayViewModel.logMeal(proposeViewModel.accepted())

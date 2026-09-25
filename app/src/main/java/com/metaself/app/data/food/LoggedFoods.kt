@@ -58,10 +58,17 @@ class LoggedFoods @Inject constructor(
         val retaught: List<FoodRetaught> get() = ReplacedFacts.collapse(rows)
     }
 
-    /** The rows of one meal, each with what its food is to be taught ([ToLog]). */
+    /**
+     * The rows of one meal, each with what its food is to be taught ([ToLog]).
+     *
+     * [strict] lets a storage failure out instead of leaving the row unattached — for keeping a meal
+     * without logging (D58 §12.7), where the attaching runs inside one transaction and a failure
+     * swallowed there would roll it all back while reporting success. Logging keeps swallowing it,
+     * so a row is still logged.
+     */
     @JvmName("attachToLog")
-    suspend fun attach(rows: List<ToLog>): Attached {
-        val each = rows.map { attach(it.item, brand = it.brand, taught = it.taught) }
+    suspend fun attach(rows: List<ToLog>, strict: Boolean = false): Attached {
+        val each = rows.map { attach(it.item, brand = it.brand, taught = it.taught, strict = strict) }
         return Attached(each.flatMap { it.items }, each.flatMap { it.rows })
     }
 
@@ -91,6 +98,7 @@ class LoggedFoods @Inject constructor(
         brand: String? = null,
         labelPer100g: Nutrients? = null,
         taught: FoodFacts? = null,
+        strict: Boolean = false,
     ): Attached {
         // A row already attached keeps its food. A repeated meal arrives carrying rows that were
         // resolved when they were first logged, and resolving them again would be asking the same
@@ -114,7 +122,7 @@ class LoggedFoods @Inject constructor(
         // one offer, not offered afterwards, so the food never holds the worked-back number even
         // for a moment. Everything else the row implies is left as derived — for a row in grams,
         // nothing about what one of it is worth or weighs.
-        val found = runCatching {
+        val finding: suspend () -> FoundOrCreated = {
             foods.findOrCreate(
                 name = item.name,
                 brand = brand,
@@ -128,7 +136,9 @@ class LoggedFoods @Inject constructor(
                 } ?: taught ?: derived.facts,
                 barcode = barcode,
             )
-        }.getOrNull() ?: return Attached(listOf(item), emptyList())
+        }
+        val found = if (strict) finding() else runCatching { finding() }.getOrNull()
+            ?: return Attached(listOf(item), emptyList())
 
         // The two snapshots this row saw, reported and not judged: what the food held immediately
         // before it was offered these facts, and what it holds now. Whether that is a replacement

@@ -151,7 +151,11 @@ class ConversationScreenRenderTest {
         onStepBack: () -> Boolean = { false },
     ) = NO_CONVERSATION.copy(onAnswer = onAnswer, onStepBack = onStepBack)
 
-    private fun draw(state: ProposalUiState, actions: ConversationActions = NO_CONVERSATION): List<String> =
+    private fun draw(
+        state: ProposalUiState,
+        actions: ConversationActions = NO_CONVERSATION,
+        fromMyMeals: Boolean = false,
+    ): List<String> =
         render.texts {
             ProposalScreen(
                 state = state,
@@ -168,6 +172,8 @@ class ConversationScreenRenderTest {
                 onRemove = {},
                 onTellItMore = {},
                 conversation = actions,
+                fromMyMeals = fromMyMeals,
+                keepOnly = NO_KEEP_ONLY,
                 onSave = {},
                 onTypeItMyself = {},
                 onAddKey = {},

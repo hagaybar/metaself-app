@@ -4,6 +4,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.food.FoodRepository
+import com.metaself.app.data.food.MealKeeper
 import com.metaself.app.data.food.ToLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.Asked
@@ -14,6 +15,7 @@ import com.metaself.app.domain.ai.Next
 import com.metaself.app.domain.ai.StepResult
 import com.metaself.app.domain.portion.Portions
 import com.metaself.app.ui.ActionRefused
+import com.metaself.app.ui.food.MealWording
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.propose.ProposalWording
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,6 +52,7 @@ class ProposalViewModel @Inject constructor(
     private val foods: FoodRepository,
     savedState: SavedStateHandle = SavedStateHandle(),
     private val asker: MealConversationAsker,
+    private val keeper: MealKeeper,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<ProposalUiState>(ProposalUiState.Describing())
@@ -451,6 +454,49 @@ class ProposalViewModel @Inject constructor(
      * [description], and in the field, which keeps whatever he typed since — so coming back is one
      * press of "Work it out", and without a key that press simply says so again.
      */
+    /** *Keep as a meal*: its naming sheet opens over the rows; nothing is written yet (D58 §5.2). */
+    fun openKeepOnly() {
+        val proposed = _state.value as? ProposalUiState.Proposed ?: return
+        if (proposed.rows.size < 2 || proposed.blockedBy != null) return
+        _state.value = proposed.copy(keeping = KeepOnly())
+    }
+
+    /** *Not now*: the sheet closes, the rows stay. */
+    fun closeKeepOnly() {
+        val proposed = _state.value as? ProposalUiState.Proposed ?: return
+        if (proposed.keeping?.busy == true) return
+        _state.value = proposed.copy(keeping = null)
+    }
+
+    /**
+     * Keep the rows as a meal called [name], logging nothing (D58 §5.2, §12.7) — all or nothing.
+     * [onKept] runs once it is kept, and is where the screen takes him to My meals.
+     */
+    fun keepOnly(name: String, onKept: () -> Unit) {
+        val proposed = _state.value as? ProposalUiState.Proposed ?: return
+        val sheet = proposed.keeping ?: return
+        if (sheet.busy || name.isBlank()) return
+        val rows = accepted()
+        if (rows.size < 2) return
+        _state.value = proposed.copy(keeping = KeepOnly(busy = true))
+        guarded(problems, onRefused = { keeping { KeepOnly(refused = ActionRefused.NOTHING_CHANGED) } }) {
+            when (val kept = keeper.keep(name, rows)) {
+                is MealKeeper.Kept.Made -> {
+                    keeping { null }
+                    onKept()
+                }
+                is MealKeeper.Kept.NameTaken -> keeping { KeepOnly(refusal = MealWording.nameTaken(kept.name)) }
+                is MealKeeper.Kept.Refused ->
+                    keeping { KeepOnly(refusal = kept.why.joinToString("\n"), canLogInstead = true) }
+            }
+        }
+    }
+
+    private fun keeping(change: () -> KeepOnly?) {
+        val proposed = _state.value as? ProposalUiState.Proposed ?: return
+        _state.value = proposed.copy(keeping = change())
+    }
+
     fun leaveToAddKey() {
         _state.value = ProposalUiState.Describing()
     }

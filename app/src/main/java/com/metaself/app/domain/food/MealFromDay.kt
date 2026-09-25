@@ -65,7 +65,16 @@ object MealFromDay {
      * side of the line. These refusals are the one place this app words a sentence in `domain/`, for
      * the reason above. All of it is affordable only while the app ships one language.
      */
-    fun from(items: List<FoodItem>, foodsById: (Long) -> Food?): Outcome {
+    fun from(items: List<FoodItem>, foodsById: (Long) -> Food?): Outcome = outcome(items, foodsById, described = false)
+
+    /**
+     * [from], for a described meal about to be kept as a meal without being logged (D58 §5.2,
+     * §12.7): the same rules, and refusals that never say anything was logged, since nothing was.
+     */
+    fun fromDescribed(items: List<FoodItem>, foodsById: (Long) -> Food?): Outcome =
+        outcome(items, foodsById, described = true)
+
+    private fun outcome(items: List<FoodItem>, foodsById: (Long) -> Food?, described: Boolean): Outcome {
         val components = mutableListOf<Component>()
         val refusals = mutableListOf<String>()
 
@@ -75,13 +84,17 @@ object MealFromDay {
             // happens the row is named rather than dropped (design §3.5).
             val food = item.foodId?.let(foodsById)
             if (food == null) {
-                refusals += "${item.label} is not attached to a food yet."
+                refusals += if (described) {
+                    "${item.label} could not be matched to a food."
+                } else {
+                    "${item.label} is not attached to a food yet."
+                }
                 return@forEach
             }
 
             val countedAs = countedAs(item, food)
             if (countedAs == null) {
-                refusals += cannotReadTheUnit(item, food)
+                refusals += cannotReadTheUnit(item, food, described)
                 return@forEach
             }
             // A row with NO PORTION AT ALL is one of whatever the food calls one. Truthful about
@@ -98,9 +111,13 @@ object MealFromDay {
                 // Names the way out, not only the problem (issue #23): the refusal was the first
                 // and only sign, and the fix — typing the amount the model left out — was one tap
                 // away on the day with nothing saying so.
-                refusals += "${item.label} was logged in ${item.portionUnit.trim()}, " +
-                    "and nothing said how much. Open it on the day and say how much, " +
-                    "and it can join."
+                refusals += if (described) {
+                    "${item.label} has no amount. Say how much, and it can join."
+                } else {
+                    "${item.label} was logged in ${item.portionUnit.trim()}, " +
+                        "and nothing said how much. Open it on the day and say how much, " +
+                        "and it can join."
+                }
                 return@forEach
             }
 
@@ -111,7 +128,7 @@ object MealFromDay {
             }
         }
 
-        return gatherPerFood(components, refusals)
+        return gatherPerFood(components, refusals, described)
     }
 
     /**
@@ -162,8 +179,15 @@ object MealFromDay {
     }
 
     /** Why that row's amount could not be read, naming the row and both units. */
-    private fun cannotReadTheUnit(item: FoodItem, food: Food): String {
+    private fun cannotReadTheUnit(item: FoodItem, food: Food, described: Boolean): String {
         val unit = item.portionUnit.trim()
+        if (described) {
+            return if (Portions.isMass(unit)) {
+                "${item.label} is in $unit, and nothing here turns $unit into grams."
+            } else {
+                "${item.label} is in $unit, and your ${food.name} is counted in ${countsIn(food)}."
+            }
+        }
         return if (Portions.isMass(unit)) {
             "${item.label} was logged in $unit, and nothing here turns $unit into grams."
         } else {
@@ -199,7 +223,7 @@ object MealFromDay {
      *
      * Order is the day's: each food sits where it was first eaten.
      */
-    private fun gatherPerFood(components: List<Component>, refusals: List<String>): Outcome {
+    private fun gatherPerFood(components: List<Component>, refusals: List<String>, described: Boolean): Outcome {
         val byFood = LinkedHashMap<Long, MutableList<Component>>()
         components.forEach { byFood.getOrPut(it.food.id) { mutableListOf() } += it }
 
@@ -208,8 +232,13 @@ object MealFromDay {
         byFood.values.forEach { ofOneFood ->
             val first = ofOneFood.first()
             if (ofOneFood.any { it.countedAs != first.countedAs }) {
-                stillRefused += "${first.food.name} is on this day both weighed and counted, " +
-                    "and a meal holds it one way or the other."
+                stillRefused += if (described) {
+                    "${first.food.name} is here both weighed and counted, " +
+                        "and a meal holds it one way or the other."
+                } else {
+                    "${first.food.name} is on this day both weighed and counted, " +
+                        "and a meal holds it one way or the other."
+                }
             } else {
                 gathered += first.copy(amount = ofOneFood.sumOf { it.amount })
             }

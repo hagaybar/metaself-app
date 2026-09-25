@@ -18,7 +18,22 @@ fun ProposalViewModel(
     problems: ProblemLog,
     foods: FoodRepository,
     savedState: SavedStateHandle = SavedStateHandle(),
-): ProposalViewModel = ProposalViewModel(estimator, problems, foods, savedState, EstimatingAsker(estimator))
+): ProposalViewModel =
+    ProposalViewModel(estimator, problems, foods, savedState, EstimatingAsker(estimator), KeepsNothing)
+
+/** A keeper for tests that never keep: *Keep as a meal* is refused with no reason. */
+object KeepsNothing : com.metaself.app.data.food.MealKeeper {
+    override suspend fun keep(name: String, rows: List<com.metaself.app.data.food.ToLog>) =
+        com.metaself.app.data.food.MealKeeper.Kept.Refused(emptyList())
+}
+
+/** A screen drawn where keeping without logging is not under test. */
+val NO_KEEP_ONLY = com.metaself.app.ui.screen.propose.KeepOnlyActions(
+    onOpen = {},
+    onConfirm = {},
+    onCancel = {},
+    onLogInstead = {},
+)
 
 /** A conversation that never asks: the first request is the estimate, as today's describe was. */
 class EstimatingAsker(private val estimator: MealEstimator) : MealConversationAsker {

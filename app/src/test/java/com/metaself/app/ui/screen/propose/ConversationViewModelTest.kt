@@ -418,7 +418,7 @@ class ConversationViewModelTest {
     }
 
     private fun viewModel(asker: ScriptedAsker, foods: FoodRepository = FakeFoodRepository()) =
-        ProposalViewModel(NoEstimator, ProblemLog.NONE, foods, SavedStateHandle(), asker)
+        ProposalViewModel(NoEstimator, ProblemLog.NONE, foods, SavedStateHandle(), asker, KeepsNothing)
 
     private object NoEstimator : MealEstimator {
         override suspend fun estimate(description: String, moreDetail: String?): EstimateResult =

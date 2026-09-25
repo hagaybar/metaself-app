@@ -205,8 +205,14 @@
     <string name="propose_count_it_in">Count it in %1$s</string>
     <string name="propose_grams">grams</string>
     <string name="propose_total">%1$s kcal in total</string>
-    <string name="propose_save">Save this meal</string>
-    <string name="propose_keep_as_meal">Save, and keep these as a meal</string>
+    <string name="propose_save">Log it</string>
+    <string name="propose_keep_as_meal">Log it and keep as a meal</string>
+    <!-- D58 §5.2: keep what was described as a meal in My meals, logging nothing. -->
+    <string name="propose_keep_only">Keep as a meal</string>
+    <string name="propose_one_item">One item is a food, not a meal — logging it keeps it in your foods.</string>
+    <string name="propose_keep_only_will">“%1$s” will be kept in My meals. Nothing is logged.</string>
+    <string name="propose_keep_only_will_unnamed">It will be kept in My meals under the name you give it. Nothing is logged.</string>
+    <string name="propose_log_instead">Log it instead</string>
     <string name="propose_tell_more_field">Anything it got wrong?</string>
     <string name="propose_tell_more_send">Ask again</string>
     <string name="propose_manual">Type the numbers myself</string>
