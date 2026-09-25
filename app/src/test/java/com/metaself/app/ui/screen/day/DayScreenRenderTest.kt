@@ -8,7 +8,9 @@ import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.movement.ActivityEnergy
 import com.metaself.app.domain.movement.DayMovement
+import com.metaself.app.domain.movement.ExerciseSession
 import com.metaself.app.domain.movement.MovementCredit
+import com.metaself.app.domain.movement.MovementSource
 import com.metaself.app.domain.movement.MovementToday
 import com.metaself.app.domain.streak.Streak
 import com.metaself.app.domain.window.DayMeasured
@@ -660,6 +662,28 @@ class DayScreenRenderTest {
         // 10,000 steps at 80 kg is 300 kcal, 144 above the usual day's 156, three quarters of
         // which is 108.
         assertThat(texts).contains("+108 kcal earned")
+    }
+
+    /**
+     * The KNOWN GAP of milestone 1 §6, closed: on a day the band's figure decided the credit, the
+     * line beneath the count speaks in that figure, not in steps.
+     */
+    @Test
+    fun `a band-driven day explains itself in movement energy`() {
+        val swam = MovementToday(
+            steps = 900,
+            normalSteps = 5_200,
+            energy = ActivityEnergy(580, MovementSource.ACTIVE_CALORIES),
+            normalEnergyKcal = 400,
+            sessions = listOf(ExerciseSession("Swimming", 45)),
+        )
+
+        val texts = draw(meals = emptyList(), movement = swam)
+
+        assertThat(texts).contains("900 steps")
+        assertThat(texts).contains("Swimming · 45 min")
+        assertThat(texts).contains("180 kcal more movement than your usual 400")
+        assertThat(texts).doesNotContain("Your usual day is 5,200")
     }
 
     @Test
