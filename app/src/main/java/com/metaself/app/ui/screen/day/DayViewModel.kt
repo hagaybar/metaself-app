@@ -893,13 +893,16 @@ class DayViewModel @Inject constructor(
 
                 val walked = inputs.movement?.byDay?.get(inputs.day)?.let { day ->
                     val normalEnergy = inputs.movement.normalEnergyKcal
+                    val energy = ActivityEnergy.of(day, inputs.movement.weightKg)
                     MovementToday(
                         steps = day.steps,
                         normalSteps = inputs.movement.normalSteps,
                         sessions = day.sessions,
+                        energy = energy,
+                        normalEnergyKcal = normalEnergy,
                         credit = if (isToday && normalEnergy != null) {
                             MovementCredit.of(
-                                today = ActivityEnergy.of(day, inputs.movement.weightKg),
+                                today = energy,
                                 normalEnergyKcal = normalEnergy,
                                 capKcal = inputs.movement.capKcal,
                             ).takeIf { it.kcal > 0 }

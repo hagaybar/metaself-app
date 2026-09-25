@@ -18,6 +18,13 @@ data class DayMovement(
     val steps: Int,
     val activeKcal: Int? = null,
     val sessions: List<ExerciseSession> = emptyList(),
+    /**
+     * What the workouts the owner typed for this day cost, by [MetEstimate] or his own figure —
+     * summed across them, since two typed sessions are two different things done. Zero until the
+     * store that holds typed workouts exists (phase 2). It is a THIRD reading beside steps and the
+     * band, never added to either (D60).
+     */
+    val typedWorkoutsKcal: Int = 0,
 )
 
 /** One workout the band recorded: what it was, and how long it went on. */
@@ -38,6 +45,12 @@ enum class MovementSource {
 
     /** The band's own figure for the day's non-resting energy, which beat the step count. */
     ACTIVE_CALORIES,
+
+    /**
+     * What the owner's typed workouts cost, by the MET table or his own figure, which beat both the
+     * other readings.
+     */
+    TYPED_WORKOUT,
 }
 
 /**
