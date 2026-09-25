@@ -425,11 +425,13 @@ stored as `energySource = MET_ESTIMATE` and shown as "about 150 kcal, estimated"
 **`ActivityEnergy` gains a third reading (D60):**
 
 ```kotlin
-fun of(day: DayMovement, weightKg: Double, typedWorkoutsKcal: Int): ActivityEnergy =
+// DayMovement gains `typedWorkoutsKcal: Int = 0` — the sum of that day's typed workouts' energy,
+// zero until the store exists — and the comparison reads it from there:
+fun of(day: DayMovement, weightKg: Double): ActivityEnergy =
     listOf(
         ActivityEnergy(stepsKcal(day, weightKg), MovementSource.STEPS),
         ActivityEnergy(day.activeKcal ?: 0, MovementSource.ACTIVE_CALORIES),
-        ActivityEnergy(typedWorkoutsKcal, MovementSource.TYPED_WORKOUT),
+        ActivityEnergy(day.typedWorkoutsKcal, MovementSource.TYPED_WORKOUT),
     ).maxBy { it.kcal }   // ties resolve to the earlier, i.e. steps — the least-estimated reading
 ```
 
