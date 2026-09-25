@@ -155,6 +155,9 @@ from a rounded row: per 100 g as the food's per-100 g figure; per one piece as i
 that piece; per 100 ml as its per-one figure in `ml`, divided by 100 — the same shapes
 `DerivedFoods` already makes, without the rounding.
 
+> *Added 2026-09-24, D56 (`2026-09-24-food-page-design.md`):* that stored shape is unchanged; a
+> food whose unit is the millilitre now shows and takes its per-one figures per 100 ml on its page.
+
 ### 4. His own foods, matched on the phone
 
 After the reply arrives — never before, and never sent anywhere (D16) — each item's **plain name** is
