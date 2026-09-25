@@ -180,6 +180,9 @@ class ReviewPromptTest {
             // Never sent: it only chooses the instructions (D54 §12.2).
             "weightAsked",
         )
+        // How it is sent: three of the app's own parameters, and room for nothing else (D57 §7).
+        assertThat(fieldsOf(RequestProfile::class.java))
+            .containsExactly("temperature", "reasoningEffort", "strictFormat").inOrder()
         assertThat(fieldsOf(HeldGroup::class.java)).containsExactly("nutrients", "source", "confidence")
         assertThat(fieldsOf(HeldWeight::class.java)).containsExactly("grams", "source")
         assertThat(fieldsOf(Nutrients::class.java))

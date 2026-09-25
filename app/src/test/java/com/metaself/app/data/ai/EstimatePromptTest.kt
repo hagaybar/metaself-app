@@ -199,6 +199,11 @@ class EstimatePromptTest {
             RequestProfile::class.java,
         ).inOrder()
         assertThat(build("a-model", "soup", null, emptyList(), RequestProfile.DETERMINISTIC)).contains("soup")
+        // How it is sent: three of the app's own parameters, and room for nothing else (D57 §7).
+        assertThat(
+            RequestProfile::class.java.declaredFields
+                .filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }.map { it.name },
+        ).containsExactly("temperature", "reasoningEffort", "strictFormat").inOrder()
     }
 
     @Test
