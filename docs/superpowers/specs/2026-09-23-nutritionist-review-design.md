@@ -658,16 +658,21 @@ top-level `required` lists all seven.
 **12.4 How it is read** (`ReviewResponse.parse`, pure, strict, as before). The answer is read as
 **four independent items**, each used whole or set aside whole, never repaired:
 
-1. **The name.** Kept when its value, trimmed, equals the name box trimmed. Otherwise a **change**:
-   it needs a non-blank reason and a value `FoodKeys.nameKey` accepts, or the item is set aside.
+1. **The name.** Kept when its value, trimmed, equals the name box trimmed — or differs from it only
+   in case or spacing (`FoodKeys.nameKey` equal) **and** comes with a blank reason: an echo is not a
+   proposal. Otherwise a **change**: it needs a non-blank reason and a value `FoodKeys.nameKey`
+   accepts, or the item is set aside. (A case or spacing change *with* a reason is a real proposal —
+   a capital put right.)
 2. **Per 100 g.** Exactly §3, §8.1, §8.2 and §9.1: an echo at the model's own precision is kept
    exactly as held; a change or fill is rounded to one decimal, needs a reason (its own or its
    group's first), and is judged by D42's per-100 g ceilings; the group is set aside whole otherwise.
 3. **The unit and per one — one item, the *per-one bundle*.** The unit that will stand decides the
    scale and the ceilings of the four figures, so the two are read together:
-   - `unit_name` is **kept** when it is `null`; when its value is the unit box's as Save stores it
-     (`FoodKeys.displayName`, exactly); and, for a food counted in millilitres, when it is any
-     millilitre spelling or *100 ml* (what §2 sends such a food as). A proposed *100 ml* is read as
+   - `unit_name` is **kept** when it is `null`; when its value is blank (an empty unit box echoed
+     back as `""`); when its value is the unit box's as Save stores it (`FoodKeys.displayName`,
+     exactly), or differs from it only in case or spacing with a blank reason (the name's rule);
+     and, for a food counted in millilitres, when it is any millilitre spelling or *100 ml* (what §2
+     sends such a food as). A proposed *100 ml* is read as
      *ml*, the spelling the one-tap switch writes (D56).
    - Otherwise it is a **rename** (a named unit replaced) or a **naming** (the box was empty). Either
      needs a non-blank reason, a value `FoodKeys.displayName` accepts, not a mass unit (12.1), not
@@ -690,11 +695,20 @@ top-level `required` lists all seven.
      so the bundle is set aside, and the weight item with it. A rename *to* the millilitre leaves the
      held weight where D56 §3 puts it — shown, with its line, until he clears it; the app deletes
      nothing — and any weight in the answer is set aside.
+   - **A rename *away from* the millilitre, on a food that still holds a weight** (D56 §3 keeps one
+     it held before), is allowed although that weight was never sent: when the answer proposes no
+     weight for the new unit, the page adds one pending suggestion of its own to the bundle — the
+     weight box **cleared**, with the reason *A weight per millilitre is not a weight per {new
+     unit}.* — so a weight stated per millilitre never silently becomes one per glass. It goes back
+     with the bundle.
+   - Each bundle carries a confidence: the `per_unit` answer's, which is present whenever a unit is
+     named or renamed (above).
 4. **What one weighs.** Read only when the request says a weight is asked (12.2); otherwise ignored,
    never shown. Kept when it is an echo of the held weight (§9.1's rules, grams at one decimal);
    otherwise a change or fill rounded to one decimal, needing a non-blank reason, greater than 0 and
-   within D42's ceiling for grams (5000 g), for a unit that will stand — held or proposed; set aside
-   otherwise, and set aside with the bundle when the bundle is (above).
+   within D42's ceiling for grams (5000 g), for **the unit that stands once the bundle is read** —
+   the one held, or the one proposed if the bundle was used; a weight with no standing unit, or for
+   the millilitre, is set aside; and it is set aside with the bundle when the bundle is (above).
 
 **Unusable** (§8.3) is now *every item that changed or filled something was set aside*. *No changes
 suggested* (§3) is every item kept or `null`. The set-aside lines are one per item: *Its suggestion
@@ -776,15 +790,29 @@ line and its Undo are replaced by one act that accepts and saves, and one that c
   respelled unit whose four figures were all kept is a bundle of one box, the unit's.) When the unit
   was kept, each per-one box has its own button, as every other box does.
 - **Typing into a pending box makes it his**: the normal colours, its reason and button go, and the
-  text he typed is his own figure (12.7). Nothing else moves. A pending box of the bundle typed over
-  is taken out of the bundle; the unit's **Back** still takes the rest. Typing in any other box —
-  the brand, a box the review did not touch — is his, as always, and takes no suggestion down.
+  text he typed is his own figure (12.7). Nothing else moves. A pending figure or weight box of the
+  bundle typed over is taken out of the bundle; the unit's **Back** still takes the rest. Typing in
+  any other box — the brand, a box the review did not touch — is his, as always, and takes no
+  suggestion down.
+- **Typing into the unit box while a unit is pending takes the whole bundle down**: the unit is what
+  he typed, and every box still pending in the bundle — the four figures and the weight — goes back
+  to what it held before the answer, no longer pending. Figures stated for the model's unit must not
+  stand under a unit he chose instead.
+- **The weight goes with the unit it describes.** A weight suggestion goes back with the bundle it
+  arrived in; and when the unit box ends up empty by a **Back**, a weight suggested for that unit
+  goes back with it, so no weight of nothing is accepted.
+- **Saved meals that count the food by the piece are named.** When a unit is pending — named or
+  renamed — on a food that saved meals count in units, one line under the unit box says so: *2 saved
+  meals count this food in slices; after saving they will count it in tablespoons.* (invented; one
+  meal: *1 saved meal counts…*). Their amounts do not change; what *2* means does.
 - **While anything is pending, the page has exactly two answers to it, in place of Save and Leave it
   alone** (the foot of the page; in *Make a food*, in place of **Make it** and **Cancel**):
   - **Accept changes and save** (*Accept changes and make it* in *Make a food*) — **one tap** that
     accepts every suggestion still pending, as it stands, and saves the food through the one Save
     there is (12.7). This is the deliberate act: nothing a model wrote is stored by any other.
-  - **Cancel** — every pending suggestion goes, nothing is saved, and **the page is put back exactly
+  - **Cancel** (*Cancel suggestions* in *Make a food*, whose own **Cancel** closes the panel, so
+    that no two buttons on one screen say *Cancel* and do different things) — every pending
+    suggestion goes, nothing is saved, and **the page is put back exactly
     as it was when he pressed Review the figures**: every box, his own unsaved typing from before the
     review included, and the review's answer taken down. Typing done after he pressed the button
     goes with it — it was typed on the model's answer, and a page half the model's and half restored
@@ -801,9 +829,10 @@ line and its Undo are replaced by one act that accepts and saves, and one that c
   form's own errors show under their boxes, as after any refused Save.
 - **Review the figures is not offered while anything is pending.** A second review would be sent the
   model's own figures as if they were the form's, labelled as his.
-- **While the request is out**, §4's rules stand: typing in a group withdraws that group's
-  suggestions, a new name or brand withdraws the whole answer, and an answer with nothing left says
-  *no suggestions left*. The snapshot **Cancel** returns to is the page as it stood when he pressed
+- **While the request is out**, §4's rules stand, extended to the new items: typing in per 100 g
+  withdraws that group; typing in the unit or a per-one box withdraws the bundle **and** any weight
+  suggestion; typing in the weight withdraws the weight; a new name or brand withdraws the whole
+  answer; and an answer with nothing left says *no suggestions left*. The snapshot **Cancel** returns to is the page as it stood when he pressed
   the button.
 - An answer that lands after the page began closing is dropped (D55 §8).
 - **The outcome line** (§9.4, §10.3) now reads, where it differs:
@@ -846,6 +875,13 @@ transaction, `Correction.plan` group by group — with these rules for what the 
   model is stored as an estimate — the safe direction, and the same cost §5 records for a hand
   respelling, which stores it as typed. A unit renamed to or from the millilitre moves the group's
   scale as D56 says: the form divides a per-100 ml figure by 100 on Save, exactly as for typing.
+- **A weight echoed under an accepted rename or naming is part of the bundle.** It now states what
+  one of the model's unit weighs, so it is stored by the weakest-member rule like the per-one group
+  beside it: `AI_ESTIMATE` with the bundle's confidence, or its own source where that ranks lower.
+  Because its figure did not change, `Correction` gains one case for the weight, and only for it:
+  **an arriving estimate over the same figure held at a higher rank is written**, not kept — the one
+  way an unchanged figure is relabelled, always downward. (Groups need no such case: an accepted
+  group always differs from the stored one, in a figure or in its unit name.)
 - **What one weighs, accepted, is `AI_ESTIMATE`** with the confidence the review gave it —
   `GramsPerUnit` with that provenance, through the same clear-then-write any changed group uses. A
   weight put back or never suggested is his, as before: the stored one untouched, or `TYPED` when he
@@ -914,6 +950,12 @@ be stored. Adding a weight box to the panel is not part of this decision.
   the ones he does not want, then accepts the rest; there is no *accept, then decide whether to
   save* in between.
 - **Cancel also discards his own typing from after he pressed Review the figures** (12.6).
+- **A unit rename changes what saved meals mean.** A saved meal counts a food by a number in its
+  unit; after an accepted rename, *2* means two of the new unit. The line under the unit box names
+  how many meals count it that way (12.6); their amounts are not rewritten.
+- **Figures in different groups are not tied.** Putting back a per-100 g figure that the model used
+  to work out its per-one figures leaves those per-one figures standing; only the unit, its figures
+  and its weight go back together.
 - **The page is taller while suggestions are pending** (one box per row, a reason and a button under
   each).
 - **A review costs somewhat more** — a larger schema and a longer answer on the same call, against

@@ -134,8 +134,8 @@ packet, or a model's proposal he accepted*.
 - Rename to ml accepted: the per-100 ml figures are stored ÷ 100 (decimal shift), per D56.
 - `LoggedFrom`: a food with `LABEL` per 100 g and `AI_ESTIMATE` weight, counted in units, logs as
   `AI_ESTIMATE` (the weaker) — a test that pins D4 through an estimated weight.
-- `FormOrigins` after an accepted weight says `AI_ESTIMATE` with its confidence (what a second
-  review is told).
+- `Correction.plan`: an arriving `AI_ESTIMATE` weight over the same figure held `TYPED` or `LABEL`
+  is `Replace`; over a `REPEATED` one, or an estimate, `Keep`. Groups unchanged.
 
 **How the red writes are verified, given Room's tests only run in CI.** Three layers:
 
@@ -150,7 +150,10 @@ packet, or a model's proposal he accepted*.
    any skip: an accepted estimate over a label group replaces it with `AI_ESTIMATE`; an untouched
    label group keeps source, confidence **and** `per100gSetAtMillis`; an `AI_ESTIMATE` weight
    replaces a `TYPED` weight and reads back with its confidence; `saveForm` with a colliding name and
-   an accepted group rolls **everything** back (group still `LABEL`, name unchanged). The PR is not
+   an accepted group rolls **everything** back (group still `LABEL`, name unchanged); a weight
+   echoed under an accepted rename is relabelled `AI_ESTIMATE` though its figure is unchanged. They
+   go into `RoomFoodRepositoryTest`, which already stands aside by `assumeSqliteRuntime()`, so the
+   list of eight classes that skip locally does not grow. The PR is not
    merged until CI shows these ran and passed — locally the eight known classes skip and nothing
    else does.
 
