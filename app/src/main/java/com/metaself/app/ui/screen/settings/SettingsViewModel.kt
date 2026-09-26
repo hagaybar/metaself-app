@@ -18,6 +18,7 @@ import com.metaself.app.data.drive.DriveBackup
 import com.metaself.app.data.drive.DriveOutcome
 import com.metaself.app.data.health.HealthRecordState
 import com.metaself.app.data.health.HealthRecordStatus
+import com.metaself.app.data.health.ReadingsArchive
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.domain.movement.NormalDay
@@ -109,6 +110,8 @@ class SettingsViewModel internal constructor(
     private val drive: DriveBackup,
     /** How far the health record reaches (D65). Defaulted so tests need not supply one. */
     private val healthStatus: HealthRecordStatus = HealthRecordStatus.NONE,
+    /** The detailed readings' month files in Drive (D71). Defaulted so tests need not supply one. */
+    private val archive: ReadingsArchive = ReadingsArchive.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -132,10 +135,11 @@ class SettingsViewModel internal constructor(
         meals: MealRepository,
         drive: DriveBackup,
         healthStatus: HealthRecordStatus,
+        archive: ReadingsArchive,
     ) : this(
         keys, settings, estimator, problems, reminders, scheduler, notifier, backups, files,
         SecretStoreOffAccount(secrets), profiles, backupFolder, automaticBackup, today, now, steps,
-        meals, drive, healthStatus,
+        meals, drive, healthStatus, archive,
     )
 
     /**
@@ -540,6 +544,15 @@ class SettingsViewModel internal constructor(
             }
 
             driveMessage.value = AutomaticBackupWording.drive(outcome)
+
+            // Switching Drive on sends the detailed readings' months now rather than tomorrow (D71).
+            // Quietly: the daily copy's line is the answer; a month that fails is in the problem log.
+            if (outcome is DriveOutcome.Written) {
+                quietly {
+                    archive.writeOutOfDate()
+                    problemLines.value = readProblems()
+                }
+            }
         }
     }
 
