@@ -21,11 +21,13 @@ import com.metaself.app.data.health.HealthConnectReader
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.HealthReadingDao
 import com.metaself.app.data.health.HealthRecordCopier
+import com.metaself.app.data.health.HealthRecordStatus
 import com.metaself.app.data.health.HealthRecordSync
 import com.metaself.app.data.health.HealthRows
 import com.metaself.app.data.health.HealthSource
 import com.metaself.app.data.health.HealthStore
 import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.RoomHealthRecordStatus
 import com.metaself.app.data.health.RoomHealthStore
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
@@ -214,6 +216,10 @@ object DataModule {
     @Provides
     @Singleton
     fun provideHealthRecordCopier(sync: HealthRecordSync): HealthRecordCopier = sync
+
+    @Provides
+    @Singleton
+    fun provideHealthRecordStatus(status: RoomHealthRecordStatus): HealthRecordStatus = status
 
     @Provides
     @Singleton

@@ -91,3 +91,22 @@ fun interface HealthRecordCopier {
         val NONE = HealthRecordCopier { }
     }
 }
+
+/** What Settings shows about the record. */
+data class HealthRecordState(
+    val days: Int = 0,
+    val earliest: Long? = null,
+    val lastCopiedMillis: Long? = null,
+    val catchingUp: Boolean = false,
+    val notAllowed: Set<HealthKind> = emptySet(),
+)
+
+interface HealthRecordStatus {
+    suspend fun current(): HealthRecordState
+
+    companion object {
+        val NONE = object : HealthRecordStatus {
+            override suspend fun current() = HealthRecordState()
+        }
+    }
+}

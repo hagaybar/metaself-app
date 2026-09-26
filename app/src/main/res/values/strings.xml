@@ -496,8 +496,8 @@
     <!-- Not "Keep tab on this ratio": that extends the hours button's label, and a prefix match
          would press the wrong one and silently save an hours window. -->
     <string name="settings_window_ratio_save">Save this ratio</string>
-    <string name="settings_steps_title">Steps</string>
-    <string name="settings_steps_connect">Allow MetaSelf to read your steps</string>
+    <string name="settings_steps_title">Movement</string>
+    <string name="settings_steps_connect">Allow MetaSelf to read your health data</string>
     <string name="settings_off_title">Open Food Facts account</string>
     <string name="settings_off_none">Not set. You can scan and log without one; it is only needed to send missing products up.</string>
     <string name="settings_off_set">Signed in as %1$s. The password is encrypted on this phone and never shown again.</string>

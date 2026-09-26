@@ -16,6 +16,8 @@ import com.metaself.app.data.backup.RestoreResult
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.drive.DriveBackup
 import com.metaself.app.data.drive.DriveOutcome
+import com.metaself.app.data.health.HealthRecordState
+import com.metaself.app.data.health.HealthRecordStatus
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.domain.movement.NormalDay
@@ -105,6 +107,8 @@ class SettingsViewModel internal constructor(
     private val steps: StepSource,
     private val meals: MealRepository,
     private val drive: DriveBackup,
+    /** How far the health record reaches (D65). Defaulted so tests need not supply one. */
+    private val healthStatus: HealthRecordStatus = HealthRecordStatus.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -127,10 +131,11 @@ class SettingsViewModel internal constructor(
         steps: StepSource,
         meals: MealRepository,
         drive: DriveBackup,
+        healthStatus: HealthRecordStatus,
     ) : this(
         keys, settings, estimator, problems, reminders, scheduler, notifier, backups, files,
         SecretStoreOffAccount(secrets), profiles, backupFolder, automaticBackup, today, now, steps,
-        meals, drive,
+        meals, drive, healthStatus,
     )
 
     /**
@@ -165,6 +170,7 @@ class SettingsViewModel internal constructor(
     )
 
     private val stepState = MutableStateFlow(Steps())
+    private val healthRecordState = MutableStateFlow(HealthRecordState())
 
     private val automaticMessage = MutableStateFlow<String?>(null)
 
@@ -217,6 +223,8 @@ class SettingsViewModel internal constructor(
             earliestStepDay = steps.earliest,
             daysWithBandEnergy = steps.daysWithEnergy,
         )
+    }.combine(healthRecordState) { current, healthRecord ->
+        current.copy(healthRecord = healthRecord)
     }.combine(
         combine(
             profiles.backupFolderUri,
@@ -440,6 +448,17 @@ class SettingsViewModel internal constructor(
                 daysWithEnergy = history.count { it.activeKcal != null },
             )
         }
+    }
+
+    /**
+     * How far the health record reaches, and what it is still waiting on (D65).
+     *
+     * Called when the screen opens and again after Connect returns, for the same reason
+     * [refreshSteps] is: what changed happened outside this view model. A read, so one that throws
+     * is recorded and the line stays as it was.
+     */
+    fun refreshHealthRecord() {
+        quietly { healthRecordState.value = healthStatus.current() }
     }
 
     /**
