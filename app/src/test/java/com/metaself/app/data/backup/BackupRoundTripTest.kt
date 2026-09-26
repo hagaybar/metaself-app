@@ -693,6 +693,7 @@ class BackupRoundTripTest {
         sleep = db.sleepDao(),
         days = db.healthDayDao(),
         corrections = db.movementCorrectionDao(),
+        bookkeeping = db.healthBookkeepingDao(),
         profiles = profiles,
         reminders = NoReminders(),
         scheduler = NoScheduler(),

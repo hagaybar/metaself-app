@@ -15,6 +15,7 @@ import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
 import com.metaself.app.data.weight.WeightDao
+import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.SleepDao
@@ -77,6 +78,7 @@ class BackupRestoreOrderTest {
                 "sleep.deleteAll",
                 "days.deleteAll",
                 "corrections.deleteAll",
+                "bookkeeping.clearSync",
                 "findOrCreate Yoghurt",
                 "create Breakfast",
                 "put",
@@ -252,6 +254,7 @@ class BackupRestoreOrderTest {
                 sleep = dao(prefix = "sleep.", failingOn = "insertStages"),
                 days = dao(prefix = "days."),
                 corrections = dao(prefix = "corrections."),
+                bookkeeping = dao(prefix = "bookkeeping."),
                 profiles = Profiles(),
                 reminders = Reminders(),
                 scheduler = Scheduler(),
@@ -358,6 +361,7 @@ class BackupRestoreOrderTest {
         sleep = dao(prefix = "sleep."),
         days = dao(prefix = "days."),
         corrections = dao(prefix = "corrections."),
+        bookkeeping = dao(prefix = "bookkeeping."),
         profiles = profiles,
         reminders = Reminders(),
         scheduler = Scheduler(),

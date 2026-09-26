@@ -6,6 +6,7 @@ import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
+import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.HealthDayEntity
 import com.metaself.app.data.health.MovementCorrectionDao
@@ -115,6 +116,7 @@ class BackupRepository @Inject constructor(
     private val sleep: SleepDao,
     private val days: HealthDayDao,
     private val corrections: MovementCorrectionDao,
+    private val bookkeeping: HealthBookkeepingDao,
     private val profiles: ProfileRepository,
     private val reminders: ReminderStore,
     private val scheduler: ReminderScheduler,
@@ -164,11 +166,7 @@ class BackupRepository @Inject constructor(
             foods = everyFood.map(BackupFoods::toBackup),
             savedMeals = builtMeals.map(BackupFoods::toBackup),
             workouts = workouts.all().map { it.toBackup() },
-            sleep = sleep.allStages().groupBy { it.sessionId }.let { stagesBySession ->
-                sleep.allSessions().map { night ->
-                    night.toBackup(stagesBySession[night.id].orEmpty())
-                }
-            },
+            sleep = sleep.allNights().map { night -> night.session.toBackup(night.stages) },
             healthDays = days.all().map { it.toBackup() },
             movementCorrections = corrections.all().map {
                 BackupMovementCorrection(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
@@ -233,6 +231,9 @@ class BackupRepository @Inject constructor(
                 sleep.deleteAll()
                 days.deleteAll()
                 corrections.deleteAll()
+                // The copying starts again from scratch: a record read again replaces its rows, so
+                // nothing is doubled, and nothing recorded after this file was made is missed.
+                bookkeeping.clearSync()
                 // The foods first, so every row restored after them has something to point at.
                 val restoredFoods = restoreFoods(prepared)
                 val savedMealIdByName = restoreSavedMeals(prepared, restoredFoods.byKey)
