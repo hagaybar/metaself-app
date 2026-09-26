@@ -18,6 +18,7 @@ import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.drive.DriveAccess
 import com.metaself.app.data.drive.DriveBackup
+import com.metaself.app.data.drive.DriveHttp
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
 import com.metaself.app.data.health.HealthBookkeepingDao
@@ -416,7 +417,7 @@ class SettingsViewModelTest {
     ): SettingsViewModel {
         val backups = backups(daos, profiles, snapshot)
         val folder = BackupFolder(context, problems)
-        val drive = DriveBackup(backups, DriveAccess(context, problems), problems)
+        val drive = DriveBackup(backups, DriveAccess(context, problems), problems, DriveHttp())
         return SettingsViewModel(
             keys = keys,
             settings = ai,

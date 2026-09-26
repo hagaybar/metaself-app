@@ -35,6 +35,12 @@ object DriveFiles {
     /** Search for this app's own backups. With `drive.file` there is nothing else to find. */
     fun listQuery(): String = "name contains 'metaself-' and trashed = false"
 
+    /**
+     * Search for this app's own month files of detailed readings (D71). The daily [listQuery] finds
+     * them too; [toDelete] never picks one, because their names do not end in `.json`.
+     */
+    fun archiveListQuery(): String = "name contains 'metaself-readings-' and trashed = false"
+
     /** The metadata half of the multipart upload: a name, and nothing else. */
     fun metadataFor(fileName: String): String = """{"name":"$fileName"}"""
 

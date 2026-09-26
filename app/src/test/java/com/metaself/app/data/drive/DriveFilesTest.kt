@@ -112,4 +112,10 @@ class DriveFilesTest {
         assertThat(AutomaticBackupWording.DRIVE_OFF).contains("only this app can see")
         assertThat(AutomaticBackupWording.DRIVE_OFF).contains("API key is not in them")
     }
+
+    @Test
+    fun `the archive listing asks only for month files`() {
+        assertThat(DriveFiles.archiveListQuery())
+            .isEqualTo("name contains 'metaself-readings-' and trashed = false")
+    }
 }

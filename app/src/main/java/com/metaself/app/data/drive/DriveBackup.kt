@@ -6,13 +6,7 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.backup.BackupSchedule
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.LocalDate
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -41,22 +35,16 @@ sealed interface DriveOutcome {
  * untouched and he still has yesterday. A backup that has one way to fail is not a backup.
  *
  * The upload goes through OkHttp, which this app already had, rather than Google's Java API client
- * libraries: one dependency instead of a tree of them, and a request whose contents can be read.
+ * libraries: one dependency instead of a tree of them, and a request whose contents can be read. The
+ * calls themselves are in [DriveHttp], shared with the month archive of detailed readings (D71).
  */
 @Singleton
 class DriveBackup @Inject constructor(
     private val backups: BackupRepository,
     private val access: DriveAccess,
     private val problems: ProblemLog,
+    private val http: DriveHttp,
 ) {
-
-    private val client: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .writeTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .readTimeout(TIMEOUT_SECONDS, TimeUnit.SECONDS)
-            .build()
-    }
 
     suspend fun write(today: LocalDate, nowMillis: Long): DriveOutcome =
         withContext(Dispatchers.IO) {
@@ -90,46 +78,10 @@ class DriveBackup @Inject constructor(
             }
         }
 
-    private fun list(token: String): List<DriveFile> {
-        val url = "${DriveFiles.FILES_URL}?q=${java.net.URLEncoder.encode(DriveFiles.listQuery(), "UTF-8")}" +
-            "&fields=files(id,name)&pageSize=100"
-        val request = Request.Builder().url(url).header("Authorization", "Bearer $token").build()
+    private fun list(token: String): List<DriveFile> = http.list(DriveFiles.listQuery(), token)
 
-        return client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) emptyList()
-            else DriveFiles.readListing(response.body?.string().orEmpty())
-        }
-    }
+    private fun upload(fileName: String, contents: String, token: String): Boolean =
+        http.upload(fileName, contents.toByteArray(Charsets.UTF_8), "application/json; charset=utf-8", token)
 
-    private fun upload(fileName: String, contents: String, token: String): Boolean {
-        val body = MultipartBody.Builder().setType("multipart/related".toMediaType())
-            .addPart(
-                DriveFiles.metadataFor(fileName)
-                    .toRequestBody("application/json; charset=UTF-8".toMediaType()),
-            )
-            .addPart(contents.toRequestBody("application/json".toMediaType()))
-            .build()
-
-        val request = Request.Builder()
-            .url(DriveFiles.UPLOAD_URL)
-            .header("Authorization", "Bearer $token")
-            .post(body)
-            .build()
-
-        return client.newCall(request).execute().use { it.isSuccessful }
-    }
-
-    private fun delete(id: String, token: String): Boolean {
-        val request = Request.Builder()
-            .url("${DriveFiles.FILES_URL}/$id")
-            .header("Authorization", "Bearer $token")
-            .delete()
-            .build()
-
-        return client.newCall(request).execute().use { it.isSuccessful }
-    }
-
-    private companion object {
-        const val TIMEOUT_SECONDS = 30L
-    }
+    private fun delete(id: String, token: String): Boolean = http.delete(id, token)
 }
