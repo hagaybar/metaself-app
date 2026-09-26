@@ -4,7 +4,9 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.time.Instant
 import java.time.ZoneId
@@ -229,19 +231,29 @@ class HealthRecordSync(
     }
 
     /**
-     * A failure that says "not now" rather than "never": an I/O failure, the binder's RemoteException or
-     * a subclass of it (matched by name, so pure tests need no Android class), or an
-     * IllegalStateException whose message says "rate limit", "rate-limit", "ratelimit" or "quota" in
-     * any case — not merely "rate", which is inside ordinary words.
+     * A failure that says "not now" rather than "never": an I/O failure, a [SecurityException] (Health
+     * Connect throws this for reads made while the app is in the background rather than for a
+     * genuinely refused permission; treating it as final would end a catch-up over nothing — the
+     * history limit still shows up as empty weeks, which the "catch-up finished" line records), the
+     * binder's RemoteException or a subclass of it (matched by name, so pure tests need no Android
+     * class), or an IllegalStateException whose message says "rate limit", "rate-limit", "ratelimit" or
+     * "quota" in any case — not merely "rate", which is inside ordinary words.
      */
     private fun transient(failure: Exception): Boolean =
         failure is IOException ||
+            failure is SecurityException ||
             generateSequence<Class<*>>(failure.javaClass) { it.superclass }.any { it.name == REMOTE_EXCEPTION } ||
             (failure is IllegalStateException && failure.message.let { message ->
                 message != null && RATE_LIMITED.any { message.contains(it, ignoreCase = true) }
             })
 
-    private fun note(detail: String) = problems.record(kind = "health", detail = detail)
+    /**
+     * The problem log writes a file (D8); `copyNow` is called from the caller's own dispatcher — Main,
+     * in the app — so the write is moved off it here rather than left to block the UI thread.
+     */
+    private suspend fun note(detail: String) = withContext(Dispatchers.IO) {
+        problems.record(kind = "health", detail = detail)
+    }
 
     private fun dateOf(millis: Long) = Instant.ofEpochMilli(millis).atZone(zone()).toLocalDate()
 
@@ -261,7 +273,7 @@ class HealthRecordSync(
         /** A choice: a week is a readable slice for any kind. */
         const val SLICE_DAYS = 7L
 
-        /** A choice matching Health Connect's documented 30-day read limit; not a measured quota. */
+        /** A choice, matching the documented 30-day life of a changes token; not a measured quota. */
         const val WINDOW_DAYS = 30L
 
         /** A choice: eight empty weeks in a row means the record has begun. */

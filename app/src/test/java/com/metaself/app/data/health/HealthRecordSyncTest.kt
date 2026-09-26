@@ -124,6 +124,7 @@ class HealthRecordSyncTest {
     fun `a refused read older than thirty days ends the catch-up and is recorded`() = runTest {
         source.granted = setOf(HealthKind.STEPS)
         source.refuseBefore = 65 * DAY
+        source.refusal = { IllegalArgumentException("refused") }
 
         sync.copyNow()
 
@@ -140,6 +141,20 @@ class HealthRecordSyncTest {
         source.granted = setOf(HealthKind.STEPS)
         source.refuseBefore = 65 * DAY
         source.refusal = { IOException("connection lost") }
+
+        sync.copyNow()
+
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis).isEqualTo(65 * DAY)
+        assertThat(problems.logged.single().detail).contains("will try again")
+    }
+
+    /** Rule 5: Health Connect throws this for a read made while the app is in the background. */
+    @Test
+    fun `a security exception on an old read is transient too`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.refuseBefore = 65 * DAY
+        source.refusal = { SecurityException("not allowed in background") }
 
         sync.copyNow()
 

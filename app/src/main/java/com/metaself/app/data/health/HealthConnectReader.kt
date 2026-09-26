@@ -106,17 +106,31 @@ class HealthConnectReader @Inject constructor(
         return out
     }
 
+    /**
+     * Which of the four totals the owner has allowed, checked once per call. A metric not granted is
+     * neither called nor logged (D8, the review of D66): a call Health Connect would refuse is not a
+     * failure, and refusing it here keeps the figure already stored instead of clearing it.
+     */
     override suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult = withContext(Dispatchers.IO) {
         val from = LocalDate.ofEpochDay(fromDay)
         val to = LocalDate.ofEpochDay(toDay)
-        val steps = daily(StepsRecord.COUNT_TOTAL, "steps", from, to) { it.toInt() }
-        val distance = daily(DistanceRecord.DISTANCE_TOTAL, "distance", from, to) { it.inMeters.roundToInt() }
-        val active = daily(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, "active calories", from, to) {
-            it.inKilocalories.roundToInt()
-        }
-        val total = daily(TotalCaloriesBurnedRecord.ENERGY_TOTAL, "total calories", from, to) {
-            it.inKilocalories.roundToInt()
-        }
+        val granted = grantedKinds()
+        val steps = if (HealthKind.STEPS in granted) {
+            daily(StepsRecord.COUNT_TOTAL, "steps", from, to) { it.toInt() }
+        } else null
+        val distance = if (HealthKind.DISTANCE in granted) {
+            daily(DistanceRecord.DISTANCE_TOTAL, "distance", from, to) { it.inMeters.roundToInt() }
+        } else null
+        val active = if (HealthKind.ACTIVE_KCAL in granted) {
+            daily(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, "active calories", from, to) {
+                it.inKilocalories.roundToInt()
+            }
+        } else null
+        val total = if (HealthKind.TOTAL_KCAL in granted) {
+            daily(TotalCaloriesBurnedRecord.ENERGY_TOTAL, "total calories", from, to) {
+                it.inKilocalories.roundToInt()
+            }
+        } else null
         val byMetric = mapOf(
             TotalMetric.STEPS to steps,
             TotalMetric.DISTANCE to distance,
@@ -128,6 +142,8 @@ class HealthConnectReader @Inject constructor(
             byDay = days.associateWith { day ->
                 DayTotals(steps?.get(day), distance?.get(day), active?.get(day), total?.get(day))
             },
+            // Null either because the metric was not granted (never called, never logged) or because
+            // its call failed (logged in `daily`); either way the stored figure stands.
             failed = byMetric.filterValues { it == null }.keys,
         )
     }
@@ -156,52 +172,69 @@ class HealthConnectReader @Inject constructor(
         null
     }
 
-    private suspend fun translate(records: List<Record>): List<ReadRecord> = records.mapNotNull { record ->
-        val origin = record.metadata.dataOrigin.packageName
-        val id = record.metadata.id
-        fun one(kind: HealthKind, at: Instant, value: Double) =
-            ReadRecord.Reading(kind, origin, id, listOf(Sample(at.toEpochMilli(), null, value)))
-        fun span(kind: HealthKind, start: Instant, end: Instant, value: Double) =
-            ReadRecord.Reading(kind, origin, id, listOf(Sample(start.toEpochMilli(), end.toEpochMilli(), value)))
-        when (record) {
-            is StepsRecord -> span(HealthKind.STEPS, record.startTime, record.endTime, record.count.toDouble())
-            is DistanceRecord -> span(HealthKind.DISTANCE, record.startTime, record.endTime, record.distance.inMeters)
-            is ActiveCaloriesBurnedRecord ->
-                span(HealthKind.ACTIVE_KCAL, record.startTime, record.endTime, record.energy.inKilocalories)
-            is TotalCaloriesBurnedRecord ->
-                span(HealthKind.TOTAL_KCAL, record.startTime, record.endTime, record.energy.inKilocalories)
-            is HeartRateRecord -> ReadRecord.Reading(
-                HealthKind.HEART_RATE, origin, id,
-                record.samples.map { Sample(it.time.toEpochMilli(), null, it.beatsPerMinute.toDouble()) },
-            )
-            is RestingHeartRateRecord ->
-                one(HealthKind.RESTING_HEART_RATE, record.time, record.beatsPerMinute.toDouble())
-            is HeartRateVariabilityRmssdRecord ->
-                one(HealthKind.HRV_RMSSD, record.time, record.heartRateVariabilityMillis)
-            is OxygenSaturationRecord -> one(HealthKind.OXYGEN_SATURATION, record.time, record.percentage.value)
-            is RespiratoryRateRecord -> one(HealthKind.RESPIRATORY_RATE, record.time, record.rate)
-            is WeightRecord -> one(HealthKind.WEIGHT, record.time, record.weight.inKilograms)
-            is BodyFatRecord -> one(HealthKind.BODY_FAT, record.time, record.percentage.value)
-            is SleepSessionRecord -> ReadRecord.Night(
-                origin, id, record.startTime.toEpochMilli(), record.endTime.toEpochMilli(), record.title,
-                record.stages.map { StageSpan(stageName(it.stage), it.startTime.toEpochMilli(), it.endTime.toEpochMilli()) },
-            )
-            is ExerciseSessionRecord -> session(record, origin, id)
-            else -> null
+    /**
+     * Granted permissions are checked once for the whole batch, not once per session (D8): a workout
+     * list of any length costs one extra call, not one per row.
+     */
+    private suspend fun translate(records: List<Record>): List<ReadRecord> {
+        val granted = if (records.any { it is ExerciseSessionRecord }) grantedKinds() else emptySet()
+        return records.mapNotNull { record ->
+            val origin = record.metadata.dataOrigin.packageName
+            val id = record.metadata.id
+            fun one(kind: HealthKind, at: Instant, value: Double) =
+                ReadRecord.Reading(kind, origin, id, listOf(Sample(at.toEpochMilli(), null, value)))
+            fun span(kind: HealthKind, start: Instant, end: Instant, value: Double) =
+                ReadRecord.Reading(kind, origin, id, listOf(Sample(start.toEpochMilli(), end.toEpochMilli(), value)))
+            when (record) {
+                is StepsRecord -> span(HealthKind.STEPS, record.startTime, record.endTime, record.count.toDouble())
+                is DistanceRecord -> span(HealthKind.DISTANCE, record.startTime, record.endTime, record.distance.inMeters)
+                is ActiveCaloriesBurnedRecord ->
+                    span(HealthKind.ACTIVE_KCAL, record.startTime, record.endTime, record.energy.inKilocalories)
+                is TotalCaloriesBurnedRecord ->
+                    span(HealthKind.TOTAL_KCAL, record.startTime, record.endTime, record.energy.inKilocalories)
+                is HeartRateRecord -> ReadRecord.Reading(
+                    HealthKind.HEART_RATE, origin, id,
+                    record.samples.map { Sample(it.time.toEpochMilli(), null, it.beatsPerMinute.toDouble()) },
+                )
+                is RestingHeartRateRecord ->
+                    one(HealthKind.RESTING_HEART_RATE, record.time, record.beatsPerMinute.toDouble())
+                is HeartRateVariabilityRmssdRecord ->
+                    one(HealthKind.HRV_RMSSD, record.time, record.heartRateVariabilityMillis)
+                is OxygenSaturationRecord -> one(HealthKind.OXYGEN_SATURATION, record.time, record.percentage.value)
+                is RespiratoryRateRecord -> one(HealthKind.RESPIRATORY_RATE, record.time, record.rate)
+                is WeightRecord -> one(HealthKind.WEIGHT, record.time, record.weight.inKilograms)
+                is BodyFatRecord -> one(HealthKind.BODY_FAT, record.time, record.percentage.value)
+                is SleepSessionRecord -> ReadRecord.Night(
+                    origin, id, record.startTime.toEpochMilli(), record.endTime.toEpochMilli(), record.title,
+                    record.stages.map { StageSpan(stageName(it.stage), it.startTime.toEpochMilli(), it.endTime.toEpochMilli()) },
+                )
+                is ExerciseSessionRecord -> session(record, origin, id, granted)
+                else -> null
+            }
         }
     }
 
     /**
-     * Distance and energy over the session's own time, each its own call (D4: null when none). A
-     * failed call leaves its figure null and is logged.
+     * Distance and energy over the session's own time, each its own call (D4: null when none), skipped
+     * entirely — no call, no log — when that reading is not granted (D8). A failed call leaves its
+     * figure null and is logged.
      *
      * These two aggregate calls are outside the copying's read budget: `HealthRecordSync` counts only
      * the change and window reads it makes itself. Accepted, because sessions are few.
      */
-    private suspend fun session(record: ExerciseSessionRecord, origin: String, id: String): ReadRecord.Session {
+    private suspend fun session(
+        record: ExerciseSessionRecord,
+        origin: String,
+        id: String,
+        granted: Set<HealthKind>,
+    ): ReadRecord.Session {
         val range = TimeRangeFilter.between(record.startTime, record.endTime)
-        val distance = sessionTotal(DistanceRecord.DISTANCE_TOTAL, "distance", range)
-        val energy = sessionTotal(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, "active calories", range)
+        val distance = if (HealthKind.DISTANCE in granted) {
+            sessionTotal(DistanceRecord.DISTANCE_TOTAL, "distance", range)
+        } else null
+        val energy = if (HealthKind.ACTIVE_KCAL in granted) {
+            sessionTotal(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, "active calories", range)
+        } else null
         return ReadRecord.Session(
             origin = origin,
             recordId = id,

@@ -166,7 +166,11 @@ class BackupRepository @Inject constructor(
             foods = everyFood.map(BackupFoods::toBackup),
             savedMeals = builtMeals.map(BackupFoods::toBackup),
             workouts = workouts.all().map { it.toBackup() },
-            sleep = sleep.allNights().map { night -> night.session.toBackup(night.stages) },
+            // A night's stages come back from the @Relation fetch in no promised order; sorted here so
+            // the file is written the same way regardless.
+            sleep = sleep.allNights().map { night ->
+                night.session.toBackup(night.stages.sortedWith(compareBy({ it.startMillis }, { it.id })))
+            },
             healthDays = days.all().map { it.toBackup() },
             movementCorrections = corrections.all().map {
                 BackupMovementCorrection(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
@@ -233,6 +237,9 @@ class BackupRepository @Inject constructor(
                 corrections.deleteAll()
                 // The copying starts again from scratch: a record read again replaces its rows, so
                 // nothing is doubled, and nothing recorded after this file was made is missed.
+                // Accepted: a copy running at the same moment may still write a bookmark back after
+                // this clears it (rare — a restore during a copy); the next expired token or window
+                // re-read heals it.
                 bookkeeping.clearSync()
                 // The foods first, so every row restored after them has something to point at.
                 val restoredFoods = restoreFoods(prepared)

@@ -99,7 +99,29 @@ data class HealthRecordState(
     val lastCopiedMillis: Long? = null,
     val catchingUp: Boolean = false,
     val notAllowed: Set<HealthKind> = emptySet(),
-)
+) {
+    companion object {
+        /**
+         * Worked out from what is stored (D65, D66) — pure, so it is tested without Room. With nothing
+         * granted at all, [notAllowed] is left empty: the existing "Off. Allow MetaSelf to read your
+         * steps and a long walk will add to that day's allowance" line and the Connect button already
+         * say it, and naming all thirteen kinds on top would be noise.
+         */
+        fun from(days: Int, earliest: Long?, syncRows: List<HealthSyncEntity>, granted: Set<HealthKind>): HealthRecordState {
+            val lastCopiedMillis = syncRows.mapNotNull { it.tokenAtMillis }.maxOrNull()
+            val syncByKind = syncRows.associateBy { HealthKind.parse(it.kind) }
+            val catchingUp = granted.any { kind -> syncByKind[kind]?.catchUpDone != true }
+            val notAllowed = if (granted.isEmpty()) emptySet() else HealthKind.entries.toSet() - granted
+            return HealthRecordState(
+                days = days,
+                earliest = earliest,
+                lastCopiedMillis = lastCopiedMillis,
+                catchingUp = catchingUp,
+                notAllowed = notAllowed,
+            )
+        }
+    }
+}
 
 interface HealthRecordStatus {
     suspend fun current(): HealthRecordState

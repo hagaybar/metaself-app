@@ -4,11 +4,12 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.health.HealthKind
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
+import java.time.ZoneOffset
 
-/** Every figure is invented. */
+/** Every figure is invented. "Now" is 2026-09-03 at midnight UTC, the shared test epoch day. */
 class HealthRecordWordingTest {
 
-    private val now = 1_000_000_000L
+    private val now = 1_788_393_600_000L
 
     @Test
     fun `nothing copied yet says so`() {
@@ -21,7 +22,7 @@ class HealthRecordWordingTest {
         assertThat(
             HealthRecordWording.status(
                 days = 52, earliest = LocalDate.of(2026, 8, 6),
-                lastCopiedMillis = now - 2 * 60_000, nowMillis = now, catchingUp = true,
+                lastCopiedMillis = now - 2 * 60_000, nowMillis = now, catchingUp = true, zone = ZoneOffset.UTC,
             ),
         ).isEqualTo("Health record: 52 days, from 6 August · last copied 2 minutes ago · still catching up")
     }
@@ -29,8 +30,19 @@ class HealthRecordWordingTest {
     @Test
     fun `one is not ones, and a fresh copy is just now`() {
         assertThat(
-            HealthRecordWording.status(1, LocalDate.of(2026, 9, 3), now - 10_000, now, catchingUp = false),
+            HealthRecordWording.status(1, LocalDate.of(2026, 9, 3), now - 10_000, now, catchingUp = false, zone = ZoneOffset.UTC),
         ).isEqualTo("Health record: 1 day, from 3 September · last copied just now")
+    }
+
+    /** The year is given only when it is not the year "now" is in, in the phone's own zone. */
+    @Test
+    fun `a date from an earlier year names the year`() {
+        assertThat(
+            HealthRecordWording.status(
+                days = 10, earliest = LocalDate.of(2025, 8, 6),
+                lastCopiedMillis = null, nowMillis = now, catchingUp = false, zone = ZoneOffset.UTC,
+            ),
+        ).isEqualTo("Health record: 10 days, from 6 August 2025")
     }
 
     @Test
@@ -43,10 +55,17 @@ class HealthRecordWordingTest {
     @Test
     fun `kinds not allowed are named, with how to allow them`() {
         assertThat(HealthRecordWording.notAllowed(setOf(HealthKind.HEART_RATE, HealthKind.SLEEP)))
-            .isEqualTo("Heart rate and sleep are not allowed — tap Connect to allow them.")
+            .isEqualTo("Reading heart rate and sleep is not allowed — tap Connect to allow them.")
         assertThat(HealthRecordWording.notAllowed(setOf(HealthKind.SLEEP)))
-            .isEqualTo("Sleep is not allowed — tap Connect to allow it.")
+            .isEqualTo("Reading sleep is not allowed — tap Connect to allow it.")
         assertThat(HealthRecordWording.notAllowed(emptySet())).isNull()
+    }
+
+    /** The threshold itself: exactly three names are still listed, not counted. */
+    @Test
+    fun `three names are still listed`() {
+        assertThat(HealthRecordWording.notAllowed(setOf(HealthKind.HEART_RATE, HealthKind.SLEEP, HealthKind.EXERCISE)))
+            .isEqualTo("Reading heart rate, sleep and workouts is not allowed — tap Connect to allow them.")
     }
 
     @Test
