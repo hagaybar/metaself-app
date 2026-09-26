@@ -185,9 +185,13 @@ class BackupRoundTripTest {
         assertThat(db.mealDao().observeLoggedDays().let { true }).isTrue()
     }
 
-    /** Invented figures. A band's run, a typed session, a night, a day and a correction survive a wipe. */
+    /**
+     * Invented figures. A band's run, a typed session, a night, a day and a correction are restored
+     * OVER themselves — no manual wipe first, so this is restore's own deletes and the sleep-stage
+     * cascade running for real, not a wipe this test staged for it.
+     */
     @Test
-    fun `the health record comes back from a wiped store as it was`() = runTest {
+    fun `the health record restored over itself comes back exactly as it was`() = runTest {
         val band = WorkoutEntity(
             epochDay = 20_699, startedAtMillis = 1_000, durationMinutes = 30, kind = "RUN",
             title = "Running", distanceM = 5_000, energyKcal = 300, energySource = "BAND",
@@ -202,10 +206,9 @@ class BackupRoundTripTest {
             avgHeartRate = null, maxHeartRate = null, zoneSeconds = null, zoneMaxSource = null,
         )
         db.workoutDao().insertAll(listOf(band, typed))
-        val nightId = db.sleepDao().insertSession(
-            SleepSessionEntity(epochDay = 20_699, startMillis = 1_000, endMillis = 3_000,
-                origin = "com.example.band", recordId = "s-1", title = null),
-        )
+        val originalNight = SleepSessionEntity(epochDay = 20_699, startMillis = 1_000, endMillis = 3_000,
+            origin = "com.example.band", recordId = "s-1", title = null)
+        val nightId = db.sleepDao().insertSession(originalNight)
         db.sleepDao().insertStages(
             listOf(
                 SleepStageEntity(sessionId = nightId, stage = "LIGHT", startMillis = 1_000, endMillis = 2_000),
@@ -215,23 +218,27 @@ class BackupRoundTripTest {
         val day = HealthDayEntity(epochDay = 20_699, computedAtMillis = 5_000, steps = 9_000,
             stepsSource = "TOTAL", sleepMinutes = 30, sleepSource = "COMPUTED")
         db.healthDayDao().put(day)
-        db.movementCorrectionDao().insertAll(listOf(MovementCorrectionEntity(20_699, 9_000, null, 2_000, null)))
+        val correction = MovementCorrectionEntity(20_699, 9_000, null, 2_000, null)
+        db.movementCorrectionDao().insertAll(listOf(correction))
 
         val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
-        db.workoutDao().deleteAll()
-        db.sleepDao().deleteAll()
-        db.healthDayDao().deleteAll()
-        db.movementCorrectionDao().deleteAll()
         val result = repository().restore(file)
 
         assertThat(result.workouts).isEqualTo(2)
         assertThat(result.healthDays).isEqualTo(1)
         assertThat(db.workoutDao().all().map { it.copy(id = 0) }).containsExactly(band, typed)
         val night = db.sleepDao().allSessions().single()
-        assertThat(night.recordId).isEqualTo("s-1")
-        assertThat(db.sleepDao().stagesOf(night.id).map { it.stage }).containsExactly("LIGHT", "DEEP").inOrder()
+        assertThat(night.copy(id = 0)).isEqualTo(originalNight)
+        assertThat(
+            db.sleepDao().stagesOf(night.id).map { Triple(it.stage, it.startMillis, it.endMillis) },
+        ).containsExactly(
+            Triple("LIGHT", 1_000L, 2_000L),
+            Triple("DEEP", 2_000L, 3_000L),
+        ).inOrder()
+        // The old night's own stages cascaded away with it: two remain, not four.
+        assertThat(db.sleepDao().allStages()).hasSize(2)
         assertThat(db.healthDayDao().day(20_699)).isEqualTo(day)
-        assertThat(db.movementCorrectionDao().all().single().steps).isEqualTo(9_000)
+        assertThat(db.movementCorrectionDao().all().single()).isEqualTo(correction)
     }
 
     // --- Version 2: the foods and the meals he built ------------------------------------------

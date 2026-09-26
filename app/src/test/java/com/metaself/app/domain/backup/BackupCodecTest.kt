@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test
 
 class BackupCodecTest {
 
+    /** Every figure below is invented, chosen only so each field can be told apart from the others. */
     private val full = Backup(
         version = Backup.CURRENT_VERSION,
         exportedAtMillis = 1_772_000_000_000,

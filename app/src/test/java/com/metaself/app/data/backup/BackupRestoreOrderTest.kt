@@ -190,6 +190,58 @@ class BackupRestoreOrderTest {
         )
     }
 
+    /** The bug this closes: only `health_days` rows were counted, so a night alone looked like nothing. */
+    @Test
+    fun `a file with only a night of sleep counts as having health data`() = runTest {
+        val file = aFile().copy(healthDays = emptyList(), movementCorrections = emptyList())
+
+        val result = restorer().restore(file)
+
+        assertThat(result.healthDays).isEqualTo(1)
+    }
+
+    /** Same bug, the other row a restore also deletes: a correction alone with no daily summary. */
+    @Test
+    fun `a file with only a correction counts as having health data`() = runTest {
+        val file = aFile().copy(healthDays = emptyList(), sleep = emptyList())
+
+        val result = restorer().restore(file)
+
+        assertThat(result.healthDays).isEqualTo(1)
+    }
+
+    /**
+     * A file can hold the same workout or the same night twice — a re-export, or one hand-edited.
+     * `prepare` resolves it before anything is written, or the unique index would abort the write
+     * partway through the transaction.
+     */
+    @Test
+    fun `a duplicated synced workout and a duplicated night restore each once`() = runTest {
+        val workout = BackupWorkout(
+            epochDay = TEST_EPOCH_DAY,
+            startedAtMillis = 1_000,
+            durationMinutes = 30,
+            kind = "RUN",
+            energySource = "BAND",
+            source = "SYNCED",
+            origin = "com.example.band",
+            originId = "abc-1",
+        )
+        val night = BackupSleep(
+            epochDay = TEST_EPOCH_DAY,
+            startMillis = 1_000,
+            endMillis = 3_000,
+            origin = "com.example.band",
+            recordId = "s-1",
+        )
+        val file = aFile().copy(workouts = listOf(workout, workout), sleep = listOf(night, night))
+
+        val result = restorer().restore(file)
+
+        assertThat(result.workouts).isEqualTo(1)
+        assertThat(log.count { it == "sleep.insertSession" }).isEqualTo(1)
+    }
+
     @Test
     fun `a health-record write that throws rolls back and puts the settings back`() = runTest {
         val failure = thrownBy<NothingRestored> {

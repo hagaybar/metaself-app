@@ -574,7 +574,11 @@ class SettingsViewModel internal constructor(
                         backup.weights.size,
                         backup.profile != null,
                         workouts = backup.workouts.size,
-                        healthDays = backup.healthDays.size,
+                        healthDays = Backup.healthDayCount(
+                            healthDayEpochDays = backup.healthDays.map { it.epochDay },
+                            sleepEpochDays = backup.sleep.map { it.epochDay },
+                            correctionEpochDays = backup.movementCorrections.map { it.epochDay },
+                        ),
                     ),
                 ) + " " + BackupWording.KEY_NOT_INCLUDED
             } else {
@@ -614,7 +618,11 @@ class SettingsViewModel internal constructor(
                         backup.weights.size,
                         backup.profile != null,
                         workouts = backup.workouts.size,
-                        healthDays = backup.healthDays.size,
+                        healthDays = Backup.healthDayCount(
+                            healthDayEpochDays = backup.healthDays.map { it.epochDay },
+                            sleepEpochDays = backup.sleep.map { it.epochDay },
+                            correctionEpochDays = backup.movementCorrections.map { it.epochDay },
+                        ),
                     ),
                 ),
             )

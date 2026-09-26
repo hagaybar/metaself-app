@@ -57,6 +57,22 @@ data class Backup(
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
+
+        /**
+         * How many distinct days hold any health data at all — the union of the days a daily
+         * summary, a night of sleep, or an owner's correction touches. One place, so a restore's
+         * "nothing here to lose" question, the counts it returns, and what a file reports before it
+         * is even restored all agree: a day is counted once no matter how many of the three name it.
+         */
+        fun healthDayCount(
+            healthDayEpochDays: Collection<Long>,
+            sleepEpochDays: Collection<Long>,
+            correctionEpochDays: Collection<Long>,
+        ): Int = buildSet {
+            addAll(healthDayEpochDays)
+            addAll(sleepEpochDays)
+            addAll(correctionEpochDays)
+        }.size
     }
 }
 
@@ -210,8 +226,8 @@ data class BackupWeight(
 
 /**
  * One workout, written verbatim — the band's or the owner's. Every enumeration is written as the
- * name the database holds, so a file from a later version restores rows this one cannot yet read
- * rather than dropping them.
+ * name the database holds, so an enumeration name this version does not know is kept verbatim
+ * rather than dropped.
  */
 @Serializable
 data class BackupWorkout(
@@ -235,7 +251,7 @@ data class BackupWorkout(
     @SerialName("zone_max_source") val zoneMaxSource: String? = null,
 )
 
-/** One night, under the day he woke up, with its stages inside it. */
+/** One night, under the day the night ended (the waking day), with its stages inside it. */
 @Serializable
 data class BackupSleep(
     @SerialName("epoch_day") val epochDay: Long,

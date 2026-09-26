@@ -67,6 +67,11 @@ import javax.inject.Singleton
  *
  * The two counts of the health record come last and defaulted, so every existing positional
  * construction still means what it did.
+ *
+ * @property healthDays the number of distinct DAYS that hold any health data — the union of the
+ *   days a daily summary, a night of sleep, or an owner's correction touches ([Backup.healthDayCount]).
+ *   Not a row count: a day with only a night of sleep, or only a correction and no daily summary at
+ *   all, still counts as one day, because a restore deletes all three.
  */
 data class RestoreResult(
     val meals: Int,
@@ -265,8 +270,14 @@ class BackupRepository @Inject constructor(
             meals = backup.meals.size,
             weights = backup.weights.size,
             hasProfile = backup.profile != null,
-            workouts = backup.workouts.size,
-            healthDays = backup.healthDays.size,
+            // What was actually written, after prepare() resolved the file's own duplicates —
+            // not what the file listed, which may have counted the same workout or night twice.
+            workouts = prepared.workouts.size,
+            healthDays = Backup.healthDayCount(
+                healthDayEpochDays = prepared.days.map { it.epochDay },
+                sleepEpochDays = prepared.nights.map { it.first.epochDay },
+                correctionEpochDays = prepared.corrections.map { it.epochDay },
+            ),
         )
     }
 
@@ -289,6 +300,13 @@ class BackupRepository @Inject constructor(
      * **A version-1 file creates no built meals**, for the same reason the upgrade created none: a
      * meal is only something the owner built, and restoring an old file must not manufacture the
      * meals the conversion refused to.
+     *
+     * **Duplicates in the file are resolved here too, before anything is written.** A workout or a
+     * night that appears twice — a re-exported file, or one hand-edited — would otherwise hit the
+     * unique index (`origin`/`originId`, or `origin`/`recordId`) partway through the transaction and
+     * roll the whole restore back. The first of a duplicate workout or night is kept; a duplicate
+     * health day or correction keeps the LAST, which is what `REPLACE` (the DAO's own conflict
+     * strategy) would leave in the table anyway.
      */
     private fun prepare(backup: Backup): Prepared {
         val fileFoods = backup.foods.mapNotNull { described ->
@@ -362,14 +380,14 @@ class BackupRepository @Inject constructor(
             milestones = backup.milestones.mapKeys { Milestone(it.key) },
             ai = backup.ai,
             reminder = backup.reminder?.let { Reminder(it.enabled, it.hour, it.minute) },
-            workouts = backup.workouts.map { it.toEntity() },
-            nights = backup.sleep.map { night ->
+            workouts = backup.workouts.dedupBySyncedOrigin().map { it.toEntity() },
+            nights = backup.sleep.dedupByRecord().map { night ->
                 night.toEntity() to night.stages.map {
                     SleepStageEntity(sessionId = 0, stage = it.stage, startMillis = it.startMillis, endMillis = it.endMillis)
                 }
             },
-            days = backup.healthDays.map { it.toEntity() },
-            corrections = backup.movementCorrections.map {
+            days = backup.healthDays.dedupHealthDaysKeepingLast().map { it.toEntity() },
+            corrections = backup.movementCorrections.dedupCorrectionsKeepingLast().map {
                 MovementCorrectionEntity(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
             },
         )
@@ -525,13 +543,22 @@ class BackupRepository @Inject constructor(
     )
 
     /** How much a restore would destroy, so the question asked is a real one. */
-    suspend fun whatIsHere(): RestoreResult = RestoreResult(
-        meals = meals.allMeals().size,
-        weights = weights.all().size,
-        hasProfile = profiles.profile.first() != null,
-        workouts = workouts.all().size,
-        healthDays = days.all().size,
-    )
+    suspend fun whatIsHere(): RestoreResult {
+        val allDays = days.all()
+        val allNights = sleep.allSessions()
+        val allCorrections = corrections.all()
+        return RestoreResult(
+            meals = meals.allMeals().size,
+            weights = weights.all().size,
+            hasProfile = profiles.profile.first() != null,
+            workouts = workouts.all().size,
+            healthDays = Backup.healthDayCount(
+                healthDayEpochDays = allDays.map { it.epochDay },
+                sleepEpochDays = allNights.map { it.epochDay },
+                correctionEpochDays = allCorrections.map { it.epochDay },
+            ),
+        )
+    }
 
     private companion object {
         /**
@@ -542,6 +569,34 @@ class BackupRepository @Inject constructor(
         const val ITEMS_PER_MEAL = 1_000
     }
 }
+
+/**
+ * Keeps the first of any two workouts sharing a non-null (origin, originId) — the pair the table's
+ * own unique index enforces. A workout with no origin, or no id, is never a duplicate of another: the
+ * index lets any number of rows share a null, and so does this.
+ */
+private fun List<BackupWorkout>.dedupBySyncedOrigin(): List<BackupWorkout> {
+    val seen = mutableSetOf<Pair<String, String>>()
+    return filter { workout ->
+        val origin = workout.origin
+        val originId = workout.originId
+        if (origin == null || originId == null) true else seen.add(origin to originId)
+    }
+}
+
+/** Keeps the first of any two nights sharing (origin, recordId) — the table's own unique index. */
+private fun List<BackupSleep>.dedupByRecord(): List<BackupSleep> {
+    val seen = mutableSetOf<Pair<String, String>>()
+    return filter { night -> seen.add(night.origin to night.recordId) }
+}
+
+/** Keeps the LAST of any two health days naming the same day — what `REPLACE` would leave in the table. */
+private fun List<BackupHealthDay>.dedupHealthDaysKeepingLast(): List<BackupHealthDay> =
+    associateBy { it.epochDay }.values.toList()
+
+/** Keeps the LAST of any two corrections naming the same day — what `REPLACE` would leave in the table. */
+private fun List<BackupMovementCorrection>.dedupCorrectionsKeepingLast(): List<BackupMovementCorrection> =
+    associateBy { it.epochDay }.values.toList()
 
 private fun Profile.toBackup() = BackupProfile(
     heightCm = heightCm,
