@@ -69,6 +69,8 @@ class SettingsTestItRenderTest {
             onRestore = {},
             onConfirmRestore = {},
             onCancelRestore = {},
+            onConfirmArchive = {},
+            onCancelArchive = {},
             onDismissBackupMessage = {},
             onCopyProblems = {},
             onClearProblems = {},

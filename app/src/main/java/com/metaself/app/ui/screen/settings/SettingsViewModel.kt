@@ -19,6 +19,7 @@ import com.metaself.app.data.drive.DriveOutcome
 import com.metaself.app.data.health.HealthRecordState
 import com.metaself.app.data.health.HealthRecordStatus
 import com.metaself.app.data.health.ReadingsArchive
+import com.metaself.app.ui.health.HealthRecordWording
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.domain.movement.NormalDay
@@ -180,6 +181,7 @@ class SettingsViewModel internal constructor(
 
     private val backupMessage = MutableStateFlow<String?>(null)
     private val pendingRestore = MutableStateFlow<PendingRestore?>(null)
+    private val pendingArchive = MutableStateFlow<String?>(null)
     private val busy = MutableStateFlow(false)
 
     private val testing = MutableStateFlow(false)
@@ -244,14 +246,15 @@ class SettingsViewModel internal constructor(
             automaticBackupMessage = message,
         )
     }.combine(
-        combine(backupMessage, pendingRestore, busy) { message, pending, working ->
-            Triple(message, pending, working)
+        combine(backupMessage, pendingRestore, pendingArchive, busy) { message, pending, archiveOffer, working ->
+            BackupLines(message, pending?.question, archiveOffer, working)
         },
-    ) { current, (message, pending, working) ->
+    ) { current, lines ->
         current.copy(
-            backupMessage = message,
-            pendingRestore = pending?.question,
-            busy = working,
+            backupMessage = lines.message,
+            pendingRestore = lines.pendingRestore,
+            pendingArchive = lines.pendingArchive,
+            busy = lines.busy,
         )
     }.combine(failed) { current, refusal ->
         current.copy(failed = refusal)
@@ -632,6 +635,7 @@ class SettingsViewModel internal constructor(
             busy.value = true
             backupMessage.value = null
             pendingRestore.value = null
+            pendingArchive.value = null
 
             val backup = files.read(uri)?.let { BackupCodec.decode(it) }
             if (backup == null) {
@@ -690,6 +694,7 @@ class SettingsViewModel internal constructor(
             backupMessage.value =
                 BackupWording.restored(result) + " " + BackupWording.KEY_NOT_INCLUDED
             busy.value = false
+            offerArchive()
         }
     }
 
@@ -697,11 +702,54 @@ class SettingsViewModel internal constructor(
         pendingRestore.value = null
     }
 
+    /**
+     * The daily file carries no raw readings (D71), so after a restore the months in Drive are
+     * offered separately — only with Drive backup on, and only when Drive holds some. Asked quietly:
+     * the restore has already happened and said so, and Drive not answering is no reason to say
+     * otherwise.
+     */
+    private fun offerArchive() {
+        quietly {
+            if (!profiles.driveBackupOn.first()) return@quietly
+            val months = archive.monthsInDrive() ?: return@quietly
+            if (months > 0) pendingArchive.value = HealthRecordWording.offerMonths(months)
+        }
+    }
+
+    /**
+     * Bring every month in Drive back. Through the record's own door, so nothing already here is
+     * removed and a record already here is replaced rather than doubled; one that throws may have
+     * brought some months back.
+     */
+    fun confirmArchive() {
+        if (pendingArchive.value == null) return
+        act(SettingsPart.BACKUP, ActionRefused.MAYBE_PARTIAL, onRefused = { busy.value = false }) {
+            busy.value = true
+            pendingArchive.value = null
+            val result = archive.restoreAll()
+            backupMessage.value = result?.let(HealthRecordWording::broughtBack) ?: HealthRecordWording.NOT_BROUGHT_BACK
+            problemLines.value = readProblems()
+            quietly { healthRecordState.value = healthStatus.current() }
+            busy.value = false
+        }
+    }
+
+    fun cancelArchive() {
+        pendingArchive.value = null
+    }
+
     fun dismissBackupMessage() {
         backupMessage.value = null
     }
 
     private data class PendingRestore(val backup: Backup, val question: String)
+
+    private data class BackupLines(
+        val message: String?,
+        val pendingRestore: String?,
+        val pendingArchive: String?,
+        val busy: Boolean,
+    )
 
     /**
      * Post the reminder now, so it can be checked without waiting for a day with nothing in it.

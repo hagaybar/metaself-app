@@ -75,6 +75,8 @@ class SettingsAtKeySessionTest {
             onRestore = {},
             onConfirmRestore = {},
             onCancelRestore = {},
+            onConfirmArchive = {},
+            onCancelArchive = {},
             onDismissBackupMessage = {},
             onCopyProblems = {},
             onClearProblems = {},

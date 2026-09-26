@@ -139,6 +139,8 @@ class SettingsModelSessionTest {
             onRestore = {},
             onConfirmRestore = {},
             onCancelRestore = {},
+            onConfirmArchive = {},
+            onCancelArchive = {},
             onDismissBackupMessage = {},
             onCopyProblems = {},
             onClearProblems = {},

@@ -90,6 +90,8 @@ fun SettingsScreen(
     onRestore: () -> Unit,
     onConfirmRestore: () -> Unit,
     onCancelRestore: () -> Unit,
+    onConfirmArchive: () -> Unit,
+    onCancelArchive: () -> Unit,
     onDismissBackupMessage: () -> Unit,
     onCopyProblems: () -> Unit,
     onClearProblems: () -> Unit,
@@ -300,7 +302,7 @@ fun SettingsScreen(
             }
             if (state.healthRecord.days > 0) {
                 Text(
-                    HealthRecordWording.NOT_BACKED_UP,
+                    HealthRecordWording.detailedBackup(driveOn = state.driveOn),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -511,6 +513,35 @@ fun SettingsScreen(
                             }
                             TextButton(onClick = onCancelRestore) {
                                 Text(stringResource(R.string.settings_backup_keep))
+                            }
+                        }
+                    }
+                }
+            }
+
+            // After a restore: the detailed readings are not in the daily file, so Drive's months are
+            // offered separately (D71). Nothing on the phone is removed by accepting, so no warning.
+            state.pendingArchive?.let { question ->
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(Spacing.Related),
+                        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+                    ) {
+                        Text(
+                            text = question,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                            Button(onClick = onConfirmArchive) {
+                                Text(stringResource(R.string.settings_archive_bring))
+                            }
+                            TextButton(onClick = onCancelArchive) {
+                                Text(stringResource(R.string.settings_archive_skip))
                             }
                         }
                     }
