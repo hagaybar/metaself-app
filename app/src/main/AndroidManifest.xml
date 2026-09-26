@@ -21,15 +21,28 @@
       alarm rather than nagging for a permission.
     -->
     <!--
-      Movement, out of Android's shared health store. Read only, and only the three things this app
-      can actually use: steps and active calories for the arithmetic, and exercise sessions so the
-      screen can say "Swimming" rather than "movement". No heart rate, no sleep, no weight — asking
-      for what cannot be used is how permission screens become things people dismiss without
-      reading.
+      The health record (D66): every kind that could serve the trainer is asked for once, so a new
+      device or a new band needs no app update. A kind no device ever writes just stays empty.
     -->
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_DISTANCE" />
+    <uses-permission android:name="android.permission.health.READ_TOTAL_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_HEART_RATE_VARIABILITY" />
+    <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION" />
+    <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE" />
+    <uses-permission android:name="android.permission.health.READ_WEIGHT" />
+    <uses-permission android:name="android.permission.health.READ_BODY_FAT" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+
+    <!-- Below Android 14 Health Connect is a separate app, and getSdkStatus can only see it if it is
+         declared here (activity spec §1.1). Harmless above. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 
     <!-- Reading a barcode. Asked for at the moment he presses Scan, never at startup. -->
     <uses-permission android:name="android.permission.CAMERA" />
