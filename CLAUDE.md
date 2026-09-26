@@ -89,9 +89,10 @@ over KSP. Exact versions: `gradle/libs.versions.toml`. `minSdk 26 · targetSdk 3
   with no aarch64 build, so every test needing a database stands aside via `assumeSqliteRuntime()` in
   `app/src/test/java/com/metaself/app/data/SqliteRuntime.kt`. **The condition is the processor, never
   a caught exception.** So **"0 skipped" is the CI invariant, not the local one** — CI's "No test
-  skipped" step fails the run on any skip. Locally, expect exactly these eight classes to skip and
+  skipped" step fails the run on any skip. Locally, expect exactly these nine classes to skip and
   nothing else: `MigrationTest`, `MealDaoTest`, `RoomMealRepositoryTest`, `RoomFoodRepositoryTest`,
-  `RoomSavedMealRepositoryTest`, `WeightDaoTest`, `RoomWeightRepositoryTest`, `BackupRoundTripTest`.
+  `RoomSavedMealRepositoryTest`, `WeightDaoTest`, `RoomWeightRepositoryTest`, `BackupRoundTripTest`,
+  `HealthRecordDaoTest`.
 - **A migration can be checked locally without Robolectric, and should be.** Extract its SQL and run
   it against Python's `sqlite3` from the previous version's exported schema. It proves the statements
   parse and the invariants hold; it does not prove what Room validates. `tools/check-migration-4-5.py`
