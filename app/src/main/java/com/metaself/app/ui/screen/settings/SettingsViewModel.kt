@@ -569,7 +569,13 @@ class SettingsViewModel internal constructor(
             val written = files.write(uri, BackupCodec.encode(backup))
             backupMessage.value = if (written) {
                 BackupWording.saved(
-                    RestoreResult(backup.meals.size, backup.weights.size, backup.profile != null),
+                    RestoreResult(
+                        backup.meals.size,
+                        backup.weights.size,
+                        backup.profile != null,
+                        workouts = backup.workouts.size,
+                        healthDays = backup.healthDays.size,
+                    ),
                 ) + " " + BackupWording.KEY_NOT_INCLUDED
             } else {
                 BackupWording.COULD_NOT_WRITE
@@ -607,6 +613,8 @@ class SettingsViewModel internal constructor(
                         backup.meals.size,
                         backup.weights.size,
                         backup.profile != null,
+                        workouts = backup.workouts.size,
+                        healthDays = backup.healthDays.size,
                     ),
                 ),
             )

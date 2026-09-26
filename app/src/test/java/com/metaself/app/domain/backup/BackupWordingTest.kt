@@ -50,4 +50,35 @@ class BackupWordingTest {
     fun `an unreadable file says plainly that nothing was changed`() {
         assertThat(BackupWording.UNREADABLE).contains("Nothing on this phone has been changed")
     }
+
+    /** A restore deletes the health record too; the question says so when there is one. */
+    @Test
+    fun `the confirmation names workouts and health days when either side has some`() {
+        val text = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 400, weights = 60, hasProfile = true, workouts = 12, healthDays = 30),
+            incoming = RestoreResult(meals = 400, weights = 50, hasProfile = true),
+        )
+
+        assertThat(text).contains("delete 400 meals, 60 weights, 12 workouts and 30 days of health data")
+        assertThat(text).contains("put back 400 meals, 50 weights, 0 workouts and 0 days of health data")
+    }
+
+    @Test
+    fun `a phone holding only health data still has something to lose`() {
+        val text = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 0, weights = 0, hasProfile = false, healthDays = 1),
+            incoming = RestoreResult(meals = 400, weights = 50, hasProfile = true),
+        )
+
+        assertThat(text).contains("1 day of health data")
+        assertThat(text).doesNotContain("nothing here to lose")
+    }
+
+    @Test
+    fun `saving and restoring name the health record only when there is one`() {
+        assertThat(BackupWording.restored(RestoreResult(1, 1, true, workouts = 1, healthDays = 3)))
+            .isEqualTo("Restored 1 meal, 1 weight, 1 workout and 3 days of health data.")
+        assertThat(BackupWording.saved(RestoreResult(1, 1, true)))
+            .isEqualTo("Saved 1 meal and 1 weight to the file.")
+    }
 }
