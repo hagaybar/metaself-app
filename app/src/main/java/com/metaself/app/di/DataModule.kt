@@ -16,6 +16,7 @@ import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
+import com.metaself.app.data.health.ArchiveRecord
 import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthConnectReader
 import com.metaself.app.data.health.HealthDayDao
@@ -212,6 +213,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideHealthStore(store: RoomHealthStore): HealthStore = store
+
+    /** The same instance as [provideHealthStore]'s: `RoomHealthStore` is itself a singleton. */
+    @Provides
+    @Singleton
+    fun provideArchiveRecord(store: RoomHealthStore): ArchiveRecord = store
 
     @Provides
     @Singleton

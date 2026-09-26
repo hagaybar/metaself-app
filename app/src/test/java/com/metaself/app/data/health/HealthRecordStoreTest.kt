@@ -291,6 +291,47 @@ class HealthRecordStoreTest {
         assertThat(db.healthBookkeepingDao().monthsOutOfDate()).isEmpty()
     }
 
+    /** D71: the Drive month file holds every simple reading filed on the month's days, and only those. */
+    @Test
+    fun `a month's readings are every kind's rows on its days, and no other month's`() = runTest {
+        val lastOfAugust = LocalDate.of(2026, 8, 31).toEpochDay()
+        val firstOfSeptember = LocalDate.of(2026, 9, 1).toEpochDay()
+        val lastOfSeptember = LocalDate.of(2026, 9, 30).toEpochDay()
+        val firstOfOctober = LocalDate.of(2026, 10, 1).toEpochDay()
+        store.apply(
+            listOf(
+                heart("hr-aug", listOf(60.0), at = lastOfAugust * DAY + HOUR),
+                steps("st-aug", at = lastOfAugust * DAY + HOUR),
+                heart("hr-sep-1", listOf(60.0, 62.0), at = firstOfSeptember * DAY + HOUR),
+                steps("st-sep-1", at = firstOfSeptember * DAY + HOUR),
+                heart("hr-sep-30", listOf(64.0), at = lastOfSeptember * DAY + HOUR),
+                steps("st-sep-30", at = lastOfSeptember * DAY + HOUR),
+                heart("hr-oct", listOf(60.0), at = firstOfOctober * DAY + HOUR),
+            ),
+            emptyList(),
+        )
+
+        val september = store.readingsIn("2026-09")
+
+        assertThat(september.map { it.recordId }.toSet())
+            .containsExactly("hr-sep-1", "st-sep-1", "hr-sep-30", "st-sep-30")
+        assertThat(september).hasSize(5)
+        assertThat(september.map { it.epochDay }.toSet()).containsExactly(firstOfSeptember, lastOfSeptember)
+    }
+
+    /** D71: a month stays out of date until it is written as it stood at or after its last change. */
+    @Test
+    fun `a month written after its last change is no longer out of date, one changed since is`() = runTest {
+        store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
+        assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
+
+        store.markWritten("2026-09", STAMP + 1)
+        assertThat(store.monthsOutOfDate()).isEmpty()
+
+        store.markWritten("2026-09", STAMP - 1)
+        assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
+    }
+
     // --- Helpers -----------------------------------------------------------------------------------
 
     private fun totals(onDay: DayTotals) = TotalsResult(byDay = mapOf(day to onDay))
@@ -305,6 +346,14 @@ class HealthRecordStoreTest {
         origin = ORIGIN,
         recordId = id,
         samples = bpm.mapIndexed { index, value -> Sample(at + index * MINUTE, null, value) },
+    )
+
+    /** One step count over the minute from [at]. */
+    private fun steps(id: String, at: Long) = ReadRecord.Reading(
+        kind = HealthKind.STEPS,
+        origin = ORIGIN,
+        recordId = id,
+        samples = listOf(Sample(at, at + MINUTE, 100.0)),
     )
 
     /** A night from an hour before [day] began to an hour after, so it belongs to [day]. */

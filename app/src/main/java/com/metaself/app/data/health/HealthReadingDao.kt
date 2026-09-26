@@ -28,6 +28,13 @@ interface HealthReadingDao {
     )
     suspend fun ofKindOnDay(kind: String, epochDay: Long): List<HealthReadingEntity>
 
+    /** One kind's rows over a day range: the `(kind, epochDay, startMillis)` index applies. */
+    @Query(
+        "SELECT * FROM health_readings WHERE kind = :kind AND epochDay BETWEEN :fromDay AND :toDay " +
+            "ORDER BY startMillis, sampleIndex",
+    )
+    suspend fun ofKindInDays(kind: String, fromDay: Long, toDay: Long): List<HealthReadingEntity>
+
     /** A record's days, through the `(origin, recordId, sampleIndex)` index. */
     @Query("SELECT DISTINCT epochDay FROM health_readings WHERE origin = :origin AND recordId = :recordId")
     suspend fun daysOf(origin: String, recordId: String): List<Long>

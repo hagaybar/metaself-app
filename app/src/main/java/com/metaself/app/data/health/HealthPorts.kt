@@ -83,6 +83,18 @@ interface HealthStore {
     suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long)
 }
 
+/** What the Drive archive needs from the record (D71). */
+interface ArchiveRecord {
+    /** Months never written, or changed since, oldest first, as "YYYY-MM". */
+    suspend fun monthsOutOfDate(): List<String>
+
+    /** Every raw reading filed on a day of [month], kind by kind, each kind in time order. */
+    suspend fun readingsIn(month: String): List<HealthReadingEntity>
+
+    /** [month] is in Drive as it stood at [atMillis]. A month the record has never marked is left alone. */
+    suspend fun markWritten(month: String, atMillis: Long)
+}
+
 /** The one thing the day screen asks for. */
 fun interface HealthRecordCopier {
     suspend fun copyNow()
