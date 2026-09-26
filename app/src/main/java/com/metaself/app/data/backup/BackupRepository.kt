@@ -6,6 +6,15 @@ import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
+import com.metaself.app.data.health.HealthDayDao
+import com.metaself.app.data.health.HealthDayEntity
+import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.MovementCorrectionEntity
+import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.SleepSessionEntity
+import com.metaself.app.data.health.SleepStageEntity
+import com.metaself.app.data.health.WorkoutDao
+import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
@@ -14,13 +23,18 @@ import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupAi
 import com.metaself.app.domain.backup.BackupArrival
+import com.metaself.app.domain.backup.BackupHealthDay
 import com.metaself.app.domain.backup.BackupItem
 import com.metaself.app.domain.backup.BackupMeal
+import com.metaself.app.domain.backup.BackupMovementCorrection
 import com.metaself.app.domain.backup.BackupProfile
 import com.metaself.app.domain.backup.BackupReminder
 import com.metaself.app.domain.backup.BackupRevision
 import com.metaself.app.domain.backup.BackupSavedMeal
+import com.metaself.app.domain.backup.BackupSleep
+import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupWeight
+import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
@@ -48,8 +62,19 @@ import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** What a restore did, so the owner is told in numbers rather than reassured in adjectives. */
-data class RestoreResult(val meals: Int, val weights: Int, val hasProfile: Boolean)
+/**
+ * What a restore did, so the owner is told in numbers rather than reassured in adjectives.
+ *
+ * The two counts of the health record come last and defaulted, so every existing positional
+ * construction still means what it did.
+ */
+data class RestoreResult(
+    val meals: Int,
+    val weights: Int,
+    val hasProfile: Boolean,
+    val workouts: Int = 0,
+    val healthDays: Int = 0,
+)
 
 /**
  * A restore that failed and left the phone exactly as it was: nothing had been written yet, or the
@@ -81,6 +106,10 @@ class NothingRestored(cause: Throwable) :
 class BackupRepository @Inject constructor(
     private val meals: MealDao,
     private val weights: WeightDao,
+    private val workouts: WorkoutDao,
+    private val sleep: SleepDao,
+    private val days: HealthDayDao,
+    private val corrections: MovementCorrectionDao,
     private val profiles: ProfileRepository,
     private val reminders: ReminderStore,
     private val scheduler: ReminderScheduler,
@@ -129,11 +158,22 @@ class BackupRepository @Inject constructor(
             ai = BackupAi(aiSettings.model, aiSettings.dailyCeiling),
             foods = everyFood.map(BackupFoods::toBackup),
             savedMeals = builtMeals.map(BackupFoods::toBackup),
+            workouts = workouts.all().map { it.toBackup() },
+            sleep = sleep.allStages().groupBy { it.sessionId }.let { stagesBySession ->
+                sleep.allSessions().map { night ->
+                    night.toBackup(stagesBySession[night.id].orEmpty())
+                }
+            },
+            healthDays = days.all().map { it.toBackup() },
+            movementCorrections = corrections.all().map {
+                BackupMovementCorrection(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
+            },
         )
     }
 
     /**
-     * **The meals and the weights are replaced; the foods are merged into.**
+     * **The meals, the weights and the health record's structured part are replaced; the foods are
+     * merged into.**
      *
      * The difference is deliberate and worth stating. Two records of the same meal, or two weights
      * for one day, have no correct resolution, so replacing is the only thing that has exactly one
@@ -164,6 +204,9 @@ class BackupRepository @Inject constructor(
      * SQLite undoes the transaction when the database is next opened; the settings already written
      * stay. The two stores are separate files and nothing short of moving the settings into the
      * database closes that.
+     *
+     * **The raw readings are not touched by a restore.** They are not in the file (D71); they stay
+     * on the phone, and the daily summaries can be recomputed from them.
      */
     suspend fun restore(backup: Backup): RestoreResult {
         val prepared = try {
@@ -181,11 +224,22 @@ class BackupRepository @Inject constructor(
             transaction.run {
                 meals.deleteAllMeals()
                 weights.deleteAll()
+                workouts.deleteAll()
+                sleep.deleteAll()
+                days.deleteAll()
+                corrections.deleteAll()
                 // The foods first, so every row restored after them has something to point at.
                 val restoredFoods = restoreFoods(prepared)
                 val savedMealIdByName = restoreSavedMeals(prepared, restoredFoods.byKey)
                 restoreMeals(prepared, restoredFoods, savedMealIdByName)
                 prepared.weights.forEach { weights.upsert(it) }
+                workouts.insertAll(prepared.workouts)
+                prepared.nights.forEach { (night, stages) ->
+                    val id = sleep.insertSession(night)
+                    sleep.insertStages(stages.map { it.copy(sessionId = id) })
+                }
+                days.insertAll(prepared.days)
+                corrections.insertAll(prepared.corrections)
                 // Last, and inside: a throw here is still a throw out of the transaction.
                 restoreSettings(prepared)
             }
@@ -211,6 +265,8 @@ class BackupRepository @Inject constructor(
             meals = backup.meals.size,
             weights = backup.weights.size,
             hasProfile = backup.profile != null,
+            workouts = backup.workouts.size,
+            healthDays = backup.healthDays.size,
         )
     }
 
@@ -306,6 +362,16 @@ class BackupRepository @Inject constructor(
             milestones = backup.milestones.mapKeys { Milestone(it.key) },
             ai = backup.ai,
             reminder = backup.reminder?.let { Reminder(it.enabled, it.hour, it.minute) },
+            workouts = backup.workouts.map { it.toEntity() },
+            nights = backup.sleep.map { night ->
+                night.toEntity() to night.stages.map {
+                    SleepStageEntity(sessionId = 0, stage = it.stage, startMillis = it.startMillis, endMillis = it.endMillis)
+                }
+            },
+            days = backup.healthDays.map { it.toEntity() },
+            corrections = backup.movementCorrections.map {
+                MovementCorrectionEntity(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
+            },
         )
     }
 
@@ -451,6 +517,11 @@ class BackupRepository @Inject constructor(
         val milestones: Map<Milestone, Long>,
         val ai: BackupAi?,
         val reminder: Reminder?,
+        val workouts: List<WorkoutEntity>,
+        /** Each night with its stages; the stages learn their night's id when it is inserted. */
+        val nights: List<Pair<SleepSessionEntity, List<SleepStageEntity>>>,
+        val days: List<HealthDayEntity>,
+        val corrections: List<MovementCorrectionEntity>,
     )
 
     /** How much a restore would destroy, so the question asked is a real one. */
@@ -458,6 +529,8 @@ class BackupRepository @Inject constructor(
         meals = meals.allMeals().size,
         weights = weights.all().size,
         hasProfile = profiles.profile.first() != null,
+        workouts = workouts.all().size,
+        healthDays = days.all().size,
     )
 
     private companion object {
@@ -533,3 +606,130 @@ private fun BackupItem.toDomainOrNull(): FoodItem? = runCatching {
         confidence = confidence?.let { name -> Confidence.entries.firstOrNull { it.name == name } },
     )
 }.getOrNull()
+
+/** Verbatim: the file keeps what the table holds, including names this version cannot read. */
+private fun WorkoutEntity.toBackup() = BackupWorkout(
+    epochDay = epochDay,
+    startedAtMillis = startedAtMillis,
+    durationMinutes = durationMinutes,
+    kind = kind,
+    title = title,
+    distanceM = distanceM,
+    energyKcal = energyKcal,
+    energySource = energySource,
+    effort = effort,
+    source = source,
+    origin = origin,
+    originId = originId,
+    hidden = hidden,
+    note = note,
+    avgHeartRate = avgHeartRate,
+    maxHeartRate = maxHeartRate,
+    zoneSeconds = zoneSeconds,
+    zoneMaxSource = zoneMaxSource,
+)
+
+/** Id 0, so the table numbers the rows afresh, as a restored meal's are. */
+private fun BackupWorkout.toEntity() = WorkoutEntity(
+    epochDay = epochDay,
+    startedAtMillis = startedAtMillis,
+    durationMinutes = durationMinutes,
+    kind = kind,
+    title = title,
+    distanceM = distanceM,
+    energyKcal = energyKcal,
+    energySource = energySource,
+    effort = effort,
+    source = source,
+    origin = origin,
+    originId = originId,
+    hidden = hidden,
+    note = note,
+    avgHeartRate = avgHeartRate,
+    maxHeartRate = maxHeartRate,
+    zoneSeconds = zoneSeconds,
+    zoneMaxSource = zoneMaxSource,
+)
+
+private fun SleepSessionEntity.toBackup(stages: List<SleepStageEntity>) = BackupSleep(
+    epochDay = epochDay,
+    startMillis = startMillis,
+    endMillis = endMillis,
+    origin = origin,
+    recordId = recordId,
+    title = title,
+    stages = stages.map { BackupSleepStage(it.stage, it.startMillis, it.endMillis) },
+)
+
+private fun BackupSleep.toEntity() = SleepSessionEntity(
+    epochDay = epochDay,
+    startMillis = startMillis,
+    endMillis = endMillis,
+    origin = origin,
+    recordId = recordId,
+    title = title,
+)
+
+private fun HealthDayEntity.toBackup() = BackupHealthDay(
+    epochDay = epochDay,
+    computedAtMillis = computedAtMillis,
+    steps = steps,
+    stepsSource = stepsSource,
+    distanceM = distanceM,
+    distanceSource = distanceSource,
+    activeKcal = activeKcal,
+    activeKcalSource = activeKcalSource,
+    totalKcal = totalKcal,
+    totalKcalSource = totalKcalSource,
+    restingHeartRate = restingHeartRate,
+    restingHeartRateSource = restingHeartRateSource,
+    avgHeartRate = avgHeartRate,
+    avgHeartRateSource = avgHeartRateSource,
+    hrvMs = hrvMs,
+    hrvSource = hrvSource,
+    oxygenPct = oxygenPct,
+    oxygenSource = oxygenSource,
+    respiratoryRate = respiratoryRate,
+    respiratoryRateSource = respiratoryRateSource,
+    sleepMinutes = sleepMinutes,
+    deepMinutes = deepMinutes,
+    lightMinutes = lightMinutes,
+    remMinutes = remMinutes,
+    awakeMinutes = awakeMinutes,
+    sleepSource = sleepSource,
+    workoutCount = workoutCount,
+    workoutMinutes = workoutMinutes,
+    workoutSource = workoutSource,
+)
+
+private fun BackupHealthDay.toEntity() = HealthDayEntity(
+    epochDay = epochDay,
+    computedAtMillis = computedAtMillis,
+    steps = steps,
+    stepsSource = stepsSource,
+    distanceM = distanceM,
+    distanceSource = distanceSource,
+    activeKcal = activeKcal,
+    activeKcalSource = activeKcalSource,
+    totalKcal = totalKcal,
+    totalKcalSource = totalKcalSource,
+    restingHeartRate = restingHeartRate,
+    restingHeartRateSource = restingHeartRateSource,
+    avgHeartRate = avgHeartRate,
+    avgHeartRateSource = avgHeartRateSource,
+    hrvMs = hrvMs,
+    hrvSource = hrvSource,
+    oxygenPct = oxygenPct,
+    oxygenSource = oxygenSource,
+    respiratoryRate = respiratoryRate,
+    respiratoryRateSource = respiratoryRateSource,
+    sleepMinutes = sleepMinutes,
+    deepMinutes = deepMinutes,
+    lightMinutes = lightMinutes,
+    remMinutes = remMinutes,
+    awakeMinutes = awakeMinutes,
+    sleepSource = sleepSource,
+    workoutCount = workoutCount,
+    workoutMinutes = workoutMinutes,
+    workoutSource = workoutSource,
+)

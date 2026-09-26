@@ -43,6 +43,11 @@ import java.time.LocalDateTime
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomDatabaseTransaction
 import com.metaself.app.data.day.toEntities
+import com.metaself.app.data.health.HealthDayEntity
+import com.metaself.app.data.health.MovementCorrectionEntity
+import com.metaself.app.data.health.SleepSessionEntity
+import com.metaself.app.data.health.SleepStageEntity
+import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
@@ -178,6 +183,55 @@ class BackupRoundTripTest {
 
         assertThat(db.mealDao().allMeals()).isEmpty()
         assertThat(db.mealDao().observeLoggedDays().let { true }).isTrue()
+    }
+
+    /** Invented figures. A band's run, a typed session, a night, a day and a correction survive a wipe. */
+    @Test
+    fun `the health record comes back from a wiped store as it was`() = runTest {
+        val band = WorkoutEntity(
+            epochDay = 20_699, startedAtMillis = 1_000, durationMinutes = 30, kind = "RUN",
+            title = "Running", distanceM = 5_000, energyKcal = 300, energySource = "BAND",
+            effort = null, source = "SYNCED", origin = "com.example.band", originId = "abc-1",
+            hidden = true, note = "not a run", avgHeartRate = 140, maxHeartRate = 160,
+            zoneSeconds = "0,300,900,600,0", zoneMaxSource = "ESTIMATED",
+        )
+        val typed = band.copy(
+            kind = "STRENGTH", title = "Strength", distanceM = null, energyKcal = 150,
+            energySource = "MET_ESTIMATE", effort = "MODERATE", source = "TYPED",
+            origin = null, originId = null, hidden = false, note = null,
+            avgHeartRate = null, maxHeartRate = null, zoneSeconds = null, zoneMaxSource = null,
+        )
+        db.workoutDao().insertAll(listOf(band, typed))
+        val nightId = db.sleepDao().insertSession(
+            SleepSessionEntity(epochDay = 20_699, startMillis = 1_000, endMillis = 3_000,
+                origin = "com.example.band", recordId = "s-1", title = null),
+        )
+        db.sleepDao().insertStages(
+            listOf(
+                SleepStageEntity(sessionId = nightId, stage = "LIGHT", startMillis = 1_000, endMillis = 2_000),
+                SleepStageEntity(sessionId = nightId, stage = "DEEP", startMillis = 2_000, endMillis = 3_000),
+            ),
+        )
+        val day = HealthDayEntity(epochDay = 20_699, computedAtMillis = 5_000, steps = 9_000,
+            stepsSource = "TOTAL", sleepMinutes = 30, sleepSource = "COMPUTED")
+        db.healthDayDao().put(day)
+        db.movementCorrectionDao().insertAll(listOf(MovementCorrectionEntity(20_699, 9_000, null, 2_000, null)))
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        db.workoutDao().deleteAll()
+        db.sleepDao().deleteAll()
+        db.healthDayDao().deleteAll()
+        db.movementCorrectionDao().deleteAll()
+        val result = repository().restore(file)
+
+        assertThat(result.workouts).isEqualTo(2)
+        assertThat(result.healthDays).isEqualTo(1)
+        assertThat(db.workoutDao().all().map { it.copy(id = 0) }).containsExactly(band, typed)
+        val night = db.sleepDao().allSessions().single()
+        assertThat(night.recordId).isEqualTo("s-1")
+        assertThat(db.sleepDao().stagesOf(night.id).map { it.stage }).containsExactly("LIGHT", "DEEP").inOrder()
+        assertThat(db.healthDayDao().day(20_699)).isEqualTo(day)
+        assertThat(db.movementCorrectionDao().all().single().steps).isEqualTo(9_000)
     }
 
     // --- Version 2: the foods and the meals he built ------------------------------------------
@@ -628,6 +682,10 @@ class BackupRoundTripTest {
     ): BackupRepository = BackupRepository(
         meals = db.mealDao(),
         weights = db.weightDao(),
+        workouts = db.workoutDao(),
+        sleep = db.sleepDao(),
+        days = db.healthDayDao(),
+        corrections = db.movementCorrectionDao(),
         profiles = profiles,
         reminders = NoReminders(),
         scheduler = NoScheduler(),
