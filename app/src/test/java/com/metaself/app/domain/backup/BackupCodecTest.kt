@@ -58,11 +58,82 @@ class BackupCodecTest {
         milestones = mapOf("FIRST_KG" to 20_710L),
         reminder = BackupReminder(enabled = true, hour = 20, minute = 0),
         ai = BackupAi(model = "gpt-4o-mini", dailyCeiling = 30),
+        workouts = listOf(
+            BackupWorkout(
+                epochDay = 20_699,
+                startedAtMillis = 1_000,
+                durationMinutes = 30,
+                kind = "RUN",
+                title = "Running",
+                distanceM = 5_000,
+                energyKcal = 300,
+                energySource = "BAND",
+                source = "SYNCED",
+                origin = "com.example.band",
+                originId = "abc-1",
+                avgHeartRate = 140,
+                maxHeartRate = 160,
+                zoneSeconds = "0,300,900,600,0",
+                zoneMaxSource = "ESTIMATED",
+            ),
+        ),
+        sleep = listOf(
+            BackupSleep(
+                epochDay = 20_699,
+                startMillis = 1_000,
+                endMillis = 3_000,
+                origin = "com.example.band",
+                recordId = "s-1",
+                stages = listOf(BackupSleepStage("DEEP", 1_000, 2_000)),
+            ),
+        ),
+        healthDays = listOf(
+            BackupHealthDay(epochDay = 20_699, computedAtMillis = 5_000, steps = 9_000, stepsSource = "TOTAL"),
+        ),
+        movementCorrections = listOf(
+            BackupMovementCorrection(epochDay = 20_699, steps = 9_000, setAtMillis = 2_000),
+        ),
     )
 
     @Test
     fun `everything survives a round trip`() {
         assertThat(BackupCodec.decode(BackupCodec.encode(full))).isEqualTo(full)
+    }
+
+    @Test
+    fun `the health record is written in words a person can check`() {
+        val text = BackupCodec.encode(full)
+
+        assertThat(text).contains("\"workouts\"")
+        assertThat(text).contains("\"energy_source\": \"BAND\"")
+        assertThat(text).contains("\"sleep\"")
+        assertThat(text).contains("\"health_days\"")
+        assertThat(text).contains("\"steps_source\": \"TOTAL\"")
+        assertThat(text).contains("\"movement_corrections\"")
+    }
+
+    /** D71: the raw readings go to Drive by month, never into the daily file. */
+    @Test
+    fun `the daily file has no raw readings`() {
+        assertThat(BackupCodec.encode(full)).doesNotContain("readings")
+    }
+
+    /** Every file written before the health record existed stays restorable, and brings none. */
+    @Test
+    fun `a version 2 file still reads, with no health record`() {
+        val version2 = """{"version": 2, "exported_at": 1000, "meals": [], "weights": []}"""
+
+        val read = BackupCodec.decode(version2)!!
+
+        assertThat(read.workouts).isEmpty()
+        assertThat(read.sleep).isEmpty()
+        assertThat(read.healthDays).isEmpty()
+        assertThat(read.movementCorrections).isEmpty()
+    }
+
+    @Test
+    fun `the format is version 3`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(3)
     }
 
     /**

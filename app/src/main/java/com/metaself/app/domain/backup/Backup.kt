@@ -31,6 +31,11 @@ data class Backup(
     val ai: BackupAi? = null,
     val foods: List<BackupFood> = emptyList(),
     @SerialName("saved_meals") val savedMeals: List<BackupSavedMeal> = emptyList(),
+    val workouts: List<BackupWorkout> = emptyList(),
+    val sleep: List<BackupSleep> = emptyList(),
+    @SerialName("health_days") val healthDays: List<BackupHealthDay> = emptyList(),
+    @SerialName("movement_corrections")
+    val movementCorrections: List<BackupMovementCorrection> = emptyList(),
 ) {
     companion object {
         /**
@@ -42,8 +47,13 @@ data class Backup(
          * restorable for ever**: it has neither block, and the same conversion the upgrade ran over
          * the record is run over the file's items instead, so a restore never leaves the history
          * detached from the food list.
+         *
+         * Version 3 adds the health record's structured part — workouts, nights of sleep with their
+         * stages, daily summaries and the owner's corrections (D71). The raw readings are not here:
+         * they go to Drive by month. A version 1 or 2 file has none of it, and restoring one leaves
+         * the phone with none — a restore replaces, and the confirmation says what it will delete.
          */
-        const val CURRENT_VERSION = 2
+        const val CURRENT_VERSION = 3
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -196,6 +206,96 @@ data class BackupItem(
 data class BackupWeight(
     @SerialName("epoch_day") val epochDay: Long,
     val kg: Double,
+)
+
+/**
+ * One workout, written verbatim — the band's or the owner's. Every enumeration is written as the
+ * name the database holds, so a file from a later version restores rows this one cannot yet read
+ * rather than dropping them.
+ */
+@Serializable
+data class BackupWorkout(
+    @SerialName("epoch_day") val epochDay: Long,
+    @SerialName("started_at") val startedAtMillis: Long,
+    @SerialName("duration_minutes") val durationMinutes: Int,
+    val kind: String,
+    val title: String? = null,
+    @SerialName("distance_m") val distanceM: Int? = null,
+    @SerialName("energy_kcal") val energyKcal: Int? = null,
+    @SerialName("energy_source") val energySource: String,
+    val effort: String? = null,
+    val source: String,
+    val origin: String? = null,
+    @SerialName("origin_id") val originId: String? = null,
+    val hidden: Boolean = false,
+    val note: String? = null,
+    @SerialName("avg_heart_rate") val avgHeartRate: Int? = null,
+    @SerialName("max_heart_rate") val maxHeartRate: Int? = null,
+    @SerialName("zone_seconds") val zoneSeconds: String? = null,
+    @SerialName("zone_max_source") val zoneMaxSource: String? = null,
+)
+
+/** One night, under the day he woke up, with its stages inside it. */
+@Serializable
+data class BackupSleep(
+    @SerialName("epoch_day") val epochDay: Long,
+    @SerialName("start") val startMillis: Long,
+    @SerialName("end") val endMillis: Long,
+    val origin: String,
+    @SerialName("record_id") val recordId: String,
+    val title: String? = null,
+    val stages: List<BackupSleepStage> = emptyList(),
+)
+
+@Serializable
+data class BackupSleepStage(
+    val stage: String,
+    @SerialName("start") val startMillis: Long,
+    @SerialName("end") val endMillis: Long,
+)
+
+/** One day of the health record, summarised; each figure beside where it came from (D69). */
+@Serializable
+data class BackupHealthDay(
+    @SerialName("epoch_day") val epochDay: Long,
+    @SerialName("computed_at") val computedAtMillis: Long,
+    val steps: Int? = null,
+    @SerialName("steps_source") val stepsSource: String? = null,
+    @SerialName("distance_m") val distanceM: Int? = null,
+    @SerialName("distance_source") val distanceSource: String? = null,
+    @SerialName("active_kcal") val activeKcal: Int? = null,
+    @SerialName("active_kcal_source") val activeKcalSource: String? = null,
+    @SerialName("total_kcal") val totalKcal: Int? = null,
+    @SerialName("total_kcal_source") val totalKcalSource: String? = null,
+    @SerialName("resting_heart_rate") val restingHeartRate: Int? = null,
+    @SerialName("resting_heart_rate_source") val restingHeartRateSource: String? = null,
+    @SerialName("avg_heart_rate") val avgHeartRate: Int? = null,
+    @SerialName("avg_heart_rate_source") val avgHeartRateSource: String? = null,
+    @SerialName("hrv_ms") val hrvMs: Double? = null,
+    @SerialName("hrv_source") val hrvSource: String? = null,
+    @SerialName("oxygen_pct") val oxygenPct: Double? = null,
+    @SerialName("oxygen_source") val oxygenSource: String? = null,
+    @SerialName("respiratory_rate") val respiratoryRate: Double? = null,
+    @SerialName("respiratory_rate_source") val respiratoryRateSource: String? = null,
+    @SerialName("sleep_minutes") val sleepMinutes: Int? = null,
+    @SerialName("deep_minutes") val deepMinutes: Int? = null,
+    @SerialName("light_minutes") val lightMinutes: Int? = null,
+    @SerialName("rem_minutes") val remMinutes: Int? = null,
+    @SerialName("awake_minutes") val awakeMinutes: Int? = null,
+    @SerialName("sleep_source") val sleepSource: String? = null,
+    @SerialName("workout_count") val workoutCount: Int? = null,
+    @SerialName("workout_minutes") val workoutMinutes: Int? = null,
+    @SerialName("workout_source") val workoutSource: String? = null,
+)
+
+/** The owner's own figure for a day's movement (D12d). A null reading was left alone. */
+@Serializable
+data class BackupMovementCorrection(
+    @SerialName("epoch_day") val epochDay: Long,
+    val steps: Int? = null,
+    @SerialName("active_kcal") val activeKcal: Int? = null,
+    @SerialName("set_at") val setAtMillis: Long,
+    val note: String? = null,
 )
 
 @Serializable
