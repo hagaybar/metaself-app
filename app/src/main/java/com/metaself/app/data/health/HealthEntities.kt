@@ -87,7 +87,7 @@ data class WorkoutEntity(
     val zoneMaxSource: String? = null,
 )
 
-/** One night (D68): it belongs to [epochDay], the day he woke up. */
+/** One night (D68): it belongs to [epochDay], the day the night ended (the waking day). */
 @Entity(
     tableName = "sleep_sessions",
     indices = [

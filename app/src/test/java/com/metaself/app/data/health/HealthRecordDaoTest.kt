@@ -99,7 +99,7 @@ class HealthRecordDaoTest {
     }
 
     @Test
-    fun `the synced ids in a window are listed, and typed rows are not`() = runTest {
+    fun `the synced ids in a window are listed, and nothing else`() = runTest {
         val dao = db.workoutDao()
         dao.insert(synced("abc-1"))
         dao.insert(synced("abc-2", day = TEST_EPOCH_DAY - 40))
@@ -123,14 +123,17 @@ class HealthRecordDaoTest {
     }
 
     @Test
-    fun `when nothing is read any more, every visible synced session in the window goes`() = runTest {
+    fun `when nothing is read any more, every visible synced session in the window goes, and no typed one`() = runTest {
         val dao = db.workoutDao()
         dao.insert(synced("gone"))
         dao.insert(synced("older", day = TEST_EPOCH_DAY - 40))
+        // With an empty list, `originId NOT IN ()` is true even for a typed row's null: only the
+        // query's `source = 'SYNCED'` stands between this call and every typed workout in the window.
+        dao.insert(typed())
 
         dao.dropSyncedNotIn(TEST_EPOCH_DAY - 29, TEST_EPOCH_DAY, keep = emptyList())
 
-        assertThat(dao.all().map { it.originId }).containsExactly("older")
+        assertThat(dao.all().map { it.originId }).containsExactly("older", null)
     }
 
     @Test
@@ -210,6 +213,7 @@ class HealthRecordDaoTest {
                 beat("hr-1", 1, 62.0, at = 2_000),
                 beat("hr-1", 0, 60.0, at = 1_000),
                 beat("hr-9", 0, 70.0, day = TEST_EPOCH_DAY + 1),
+                beat("st-1", 0, 400.0).copy(kind = "STEPS", unit = "count"),
             ),
         )
 
@@ -249,7 +253,7 @@ class HealthRecordDaoTest {
     }
 
     @Test
-    fun `nights are found by the day he woke up`() = runTest {
+    fun `nights are found by the day they ended`() = runTest {
         val dao = db.sleepDao()
         dao.insertSession(night("s-1"))
         dao.insertSession(night("s-2").copy(epochDay = TEST_EPOCH_DAY + 1))

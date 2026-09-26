@@ -626,3 +626,7 @@ via `~/bin/ms-release`, checked on the phone before the next starts.
    then the owner hides one. If it turns out to be common, the fix is an offer to merge when the sync
    arrives.
 3. **The screen is called "Movement"**, the word Settings already uses.
+4. **A typed workout always has an effort** (settled 2026-09-26). The log sheet's effort control
+   starts on Moderate and cannot be cleared, so `MetEstimate.netKcal` is never asked to price a typed
+   workout without one and nothing in code guesses. `effort` stays nullable in the table because a
+   synced session has none.

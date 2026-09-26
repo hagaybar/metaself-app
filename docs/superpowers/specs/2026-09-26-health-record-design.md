@@ -136,7 +136,7 @@ before: `epochDay` as `Long`, moments as `…Millis`, enumerations as strings, n
 @Entity(
     tableName = "health_readings",
     indices = [
-        Index(value = ["kind", "startMillis"]),
+        Index(value = ["kind", "epochDay", "startMillis"]),
         Index(value = ["origin", "recordId", "sampleIndex"], unique = true),
     ],
 )
@@ -233,7 +233,7 @@ Plus `computedAtMillis`. A correction (§2.5) replaces `steps` or `activeKcal` a
 
 ### 2.6 Bookkeeping — not backed up
 
-- `health_sync(kind PRIMARY KEY, changesToken TEXT?, tokenAtMillis, catchUpCursorMillis?,
+- `health_sync(kind PRIMARY KEY, changesToken TEXT?, tokenAtMillis?, catchUpCursorMillis?,
   catchUpDone INTEGER)` — per kind, where copying stands.
 - `archive_months(month TEXT PRIMARY KEY, changedAtMillis, writtenAtMillis?)` — which Drive month
   files are out of date.
