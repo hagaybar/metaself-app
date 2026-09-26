@@ -26,6 +26,7 @@ import com.metaself.app.data.movement.HealthConnectSteps
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.day.MIGRATION_4_5
+import com.metaself.app.data.day.MIGRATION_5_6
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomMealRepository
 import com.metaself.app.data.weight.RoomWeightRepository
@@ -108,6 +109,7 @@ object DataModule {
         MetaSelfDatabase.MIGRATION_2_3,
         MetaSelfDatabase.MIGRATION_3_4,
         MIGRATION_4_5,
+        MIGRATION_5_6,
     ).build()
 
     @Provides
