@@ -10,6 +10,20 @@ import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.FoodNameEntity
 import com.metaself.app.data.food.SavedMealComponentEntity
 import com.metaself.app.data.food.SavedMealEntity
+import com.metaself.app.data.health.ArchiveMonthEntity
+import com.metaself.app.data.health.HealthBookkeepingDao
+import com.metaself.app.data.health.HealthDayDao
+import com.metaself.app.data.health.HealthDayEntity
+import com.metaself.app.data.health.HealthReadingDao
+import com.metaself.app.data.health.HealthReadingEntity
+import com.metaself.app.data.health.HealthSyncEntity
+import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.MovementCorrectionEntity
+import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.SleepSessionEntity
+import com.metaself.app.data.health.SleepStageEntity
+import com.metaself.app.data.health.WorkoutDao
+import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.product.ProductDao
 import com.metaself.app.data.product.ProductEntity
 import com.metaself.app.data.weight.WeightDao
@@ -36,8 +50,16 @@ import com.metaself.app.domain.portion.Portions
         FoodNameEntity::class,
         SavedMealEntity::class,
         SavedMealComponentEntity::class,
+        HealthReadingEntity::class,
+        WorkoutEntity::class,
+        SleepSessionEntity::class,
+        SleepStageEntity::class,
+        HealthDayEntity::class,
+        MovementCorrectionEntity::class,
+        HealthSyncEntity::class,
+        ArchiveMonthEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {
@@ -51,6 +73,18 @@ abstract class MetaSelfDatabase : RoomDatabase() {
     abstract fun foodDao(): FoodDao
 
     abstract fun savedMealDao(): SavedMealDao
+
+    abstract fun workoutDao(): WorkoutDao
+
+    abstract fun healthReadingDao(): HealthReadingDao
+
+    abstract fun sleepDao(): SleepDao
+
+    abstract fun healthDayDao(): HealthDayDao
+
+    abstract fun movementCorrectionDao(): MovementCorrectionDao
+
+    abstract fun healthBookkeepingDao(): HealthBookkeepingDao
 
     companion object {
 

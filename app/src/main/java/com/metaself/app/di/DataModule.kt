@@ -16,10 +16,17 @@ import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
+import com.metaself.app.data.health.HealthBookkeepingDao
+import com.metaself.app.data.health.HealthDayDao
+import com.metaself.app.data.health.HealthReadingDao
+import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.movement.HealthConnectSteps
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.day.MIGRATION_4_5
+import com.metaself.app.data.day.MIGRATION_5_6
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomMealRepository
 import com.metaself.app.data.weight.RoomWeightRepository
@@ -102,6 +109,7 @@ object DataModule {
         MetaSelfDatabase.MIGRATION_2_3,
         MetaSelfDatabase.MIGRATION_3_4,
         MIGRATION_4_5,
+        MIGRATION_5_6,
     ).build()
 
     @Provides
@@ -160,6 +168,27 @@ object DataModule {
 
     @Provides
     fun provideSavedMealDao(database: MetaSelfDatabase): SavedMealDao = database.savedMealDao()
+
+    @Provides
+    fun provideWorkoutDao(database: MetaSelfDatabase): WorkoutDao = database.workoutDao()
+
+    @Provides
+    fun provideHealthReadingDao(database: MetaSelfDatabase): HealthReadingDao =
+        database.healthReadingDao()
+
+    @Provides
+    fun provideSleepDao(database: MetaSelfDatabase): SleepDao = database.sleepDao()
+
+    @Provides
+    fun provideHealthDayDao(database: MetaSelfDatabase): HealthDayDao = database.healthDayDao()
+
+    @Provides
+    fun provideMovementCorrectionDao(database: MetaSelfDatabase): MovementCorrectionDao =
+        database.movementCorrectionDao()
+
+    @Provides
+    fun provideHealthBookkeepingDao(database: MetaSelfDatabase): HealthBookkeepingDao =
+        database.healthBookkeepingDao()
 
     @Provides
     @Singleton

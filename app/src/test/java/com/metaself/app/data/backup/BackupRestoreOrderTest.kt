@@ -15,19 +15,28 @@ import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
 import com.metaself.app.data.weight.WeightDao
+import com.metaself.app.data.health.HealthDayDao
+import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupAi
 import com.metaself.app.domain.backup.BackupArrival
 import com.metaself.app.domain.backup.BackupFood
+import com.metaself.app.domain.backup.BackupHealthDay
 import com.metaself.app.domain.backup.BackupItem
 import com.metaself.app.domain.backup.BackupMeal
 import com.metaself.app.domain.backup.BackupMealComponent
+import com.metaself.app.domain.backup.BackupMovementCorrection
 import com.metaself.app.domain.backup.BackupNutrients
 import com.metaself.app.domain.backup.BackupProfile
 import com.metaself.app.domain.backup.BackupReminder
 import com.metaself.app.domain.backup.BackupRevision
 import com.metaself.app.domain.backup.BackupSavedMeal
+import com.metaself.app.domain.backup.BackupSleep
+import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupWeight
+import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.goal.GoalArrival
@@ -64,12 +73,21 @@ class BackupRestoreOrderTest {
                 "begin",
                 "deleteAllMeals",
                 "weights.deleteAll",
+                "workouts.deleteAll",
+                "sleep.deleteAll",
+                "days.deleteAll",
+                "corrections.deleteAll",
                 "findOrCreate Yoghurt",
                 "create Breakfast",
                 "put",
                 "insertMeal",
                 "insertItems",
                 "weights.upsert",
+                "workouts.insertAll",
+                "sleep.insertSession",
+                "sleep.insertStages",
+                "days.insertAll",
+                "corrections.insertAll",
                 "profile.save",
                 "saveRevision",
                 "saveArrival",
@@ -167,7 +185,87 @@ class BackupRestoreOrderTest {
     fun `a restore that commits says what it restored`() = runTest {
         val result = restorer().restore(aFile())
 
-        assertThat(result).isEqualTo(RestoreResult(meals = 1, weights = 1, hasProfile = true))
+        assertThat(result).isEqualTo(
+            RestoreResult(meals = 1, weights = 1, hasProfile = true, workouts = 1, healthDays = 1),
+        )
+    }
+
+    /** The bug this closes: only `health_days` rows were counted, so a night alone looked like nothing. */
+    @Test
+    fun `a file with only a night of sleep counts as having health data`() = runTest {
+        val file = aFile().copy(healthDays = emptyList(), movementCorrections = emptyList())
+
+        val result = restorer().restore(file)
+
+        assertThat(result.healthDays).isEqualTo(1)
+    }
+
+    /** Same bug, the other row a restore also deletes: a correction alone with no daily summary. */
+    @Test
+    fun `a file with only a correction counts as having health data`() = runTest {
+        val file = aFile().copy(healthDays = emptyList(), sleep = emptyList())
+
+        val result = restorer().restore(file)
+
+        assertThat(result.healthDays).isEqualTo(1)
+    }
+
+    /**
+     * A file can hold the same workout or the same night twice — a re-export, or one hand-edited.
+     * `prepare` resolves it before anything is written, or the unique index would abort the write
+     * partway through the transaction.
+     */
+    @Test
+    fun `a duplicated synced workout and a duplicated night restore each once`() = runTest {
+        val workout = BackupWorkout(
+            epochDay = TEST_EPOCH_DAY,
+            startedAtMillis = 1_000,
+            durationMinutes = 30,
+            kind = "RUN",
+            energySource = "BAND",
+            source = "SYNCED",
+            origin = "com.example.band",
+            originId = "abc-1",
+        )
+        val night = BackupSleep(
+            epochDay = TEST_EPOCH_DAY,
+            startMillis = 1_000,
+            endMillis = 3_000,
+            origin = "com.example.band",
+            recordId = "s-1",
+        )
+        val file = aFile().copy(workouts = listOf(workout, workout), sleep = listOf(night, night))
+
+        val result = restorer().restore(file)
+
+        assertThat(result.workouts).isEqualTo(1)
+        assertThat(log.count { it == "sleep.insertSession" }).isEqualTo(1)
+    }
+
+    @Test
+    fun `a health-record write that throws rolls back and puts the settings back`() = runTest {
+        val failure = thrownBy<NothingRestored> {
+            BackupRepository(
+                meals = dao(),
+                weights = dao(prefix = "weights."),
+                workouts = dao(prefix = "workouts."),
+                sleep = dao(prefix = "sleep.", failingOn = "insertStages"),
+                days = dao(prefix = "days."),
+                corrections = dao(prefix = "corrections."),
+                profiles = Profiles(),
+                reminders = Reminders(),
+                scheduler = Scheduler(),
+                ai = Ai(),
+                foods = Foods(),
+                savedMeals = SavedMeals(),
+                transaction = Transaction(),
+                snapshot = Snapshot(),
+            ).restore(aFile())
+        }
+
+        assertThat(failure.cause).hasMessageThat().isEqualTo("disk full")
+        assertThat(log).containsAtLeast("sleep.insertStages", "rollback", "put back").inOrder()
+        assertThat(log).doesNotContain("profile.save")
     }
 
     /** What [block] threw, which must be a [T]. `assertThrows` takes no suspending block. */
@@ -219,6 +317,32 @@ class BackupRestoreOrderTest {
         arrival = BackupArrival(75.0, TEST_EPOCH_DAY),
         reminder = BackupReminder(enabled = true, hour = 20, minute = 0),
         ai = BackupAi("some-model", 30),
+        workouts = listOf(
+            BackupWorkout(
+                epochDay = TEST_EPOCH_DAY,
+                startedAtMillis = 1_000,
+                durationMinutes = 45,
+                kind = "STRENGTH",
+                energyKcal = 150,
+                energySource = "MET_ESTIMATE",
+                effort = "MODERATE",
+                source = "TYPED",
+            ),
+        ),
+        sleep = listOf(
+            BackupSleep(
+                epochDay = TEST_EPOCH_DAY,
+                startMillis = 1_000,
+                endMillis = 3_000,
+                origin = "com.example.band",
+                recordId = "s-1",
+                stages = listOf(BackupSleepStage("DEEP", 1_000, 2_000)),
+            ),
+        ),
+        healthDays = listOf(BackupHealthDay(epochDay = TEST_EPOCH_DAY, computedAtMillis = 1_000)),
+        movementCorrections = listOf(
+            BackupMovementCorrection(epochDay = TEST_EPOCH_DAY, steps = 9_000, setAtMillis = 1_000),
+        ),
     )
 
     // --- The stores, recording into one log ------------------------------------------------------
@@ -230,6 +354,10 @@ class BackupRestoreOrderTest {
     ) = BackupRepository(
         meals = meals,
         weights = dao(prefix = "weights."),
+        workouts = dao(prefix = "workouts."),
+        sleep = dao(prefix = "sleep."),
+        days = dao(prefix = "days."),
+        corrections = dao(prefix = "corrections."),
         profiles = profiles,
         reminders = Reminders(),
         scheduler = Scheduler(),
@@ -270,16 +398,16 @@ class BackupRestoreOrderTest {
      */
     private inline fun <reified T> dao(prefix: String = "", failingOn: String? = null): T =
         Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
-            when (method.name) {
-                "toString" -> T::class.java.simpleName
-                "hashCode" -> 0
-                "equals" -> false
-                "allMeals", "all" -> emptyList<Any>()
+            when {
+                method.name == "toString" -> T::class.java.simpleName
+                method.name == "hashCode" -> 0
+                method.name == "equals" -> false
+                method.name.startsWith("all") -> emptyList<Any>()
                 else -> {
                     log += prefix + method.name
                     if (method.name == failingOn) throw IllegalStateException("disk full")
                     when (method.name) {
-                        "insertMeal" -> 1L
+                        "insertMeal", "insertSession" -> 1L
                         "insertItems" -> listOf(1L)
                         else -> Unit
                     }

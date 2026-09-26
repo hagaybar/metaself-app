@@ -5,6 +5,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.day.MIGRATION_4_5
+import com.metaself.app.data.day.MIGRATION_5_6
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -548,6 +549,41 @@ class MigrationTest {
 
         assertThat(migrated.countOf("SELECT COUNT(*) FROM weights")).isEqualTo(1)
         assertThat(migrated.countOf("SELECT COUNT(*) FROM products")).isEqualTo(1)
+        migrated.close()
+    }
+
+    /**
+     * Version 6 adds the health record's eight tables, empty. A meal and a weight already there
+     * come through as they were. Invented figures.
+     */
+    @Test
+    fun `a version 5 database migrates to version 6, keeps its record, and has room for health data`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 5).use { db ->
+            db.execSQL("INSERT INTO meals (id, epochDay, loggedAtMillis, note) VALUES (1, 20699, 1000, NULL)")
+            db.execSQL("INSERT INTO weights (epochDay, kg) VALUES (20699, 80.0)")
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 6, true, MIGRATION_5_6)
+
+        migrated.query("SELECT COUNT(*) FROM meals").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(1)
+        }
+        migrated.query("SELECT kg FROM weights").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getDouble(0)).isEqualTo(80.0)
+        }
+        listOf(
+            "health_readings", "workouts", "sleep_sessions", "sleep_stages", "health_days",
+            "movement_corrections", "health_sync", "archive_months",
+        ).forEach { table ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(0)
+            }
+        }
         migrated.close()
     }
 

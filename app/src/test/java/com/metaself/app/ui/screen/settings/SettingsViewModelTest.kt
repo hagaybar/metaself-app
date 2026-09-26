@@ -20,6 +20,10 @@ import com.metaself.app.data.drive.DriveAccess
 import com.metaself.app.data.drive.DriveBackup
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
+import com.metaself.app.data.health.HealthDayDao
+import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.domain.movement.DayMovement
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
@@ -379,6 +383,10 @@ class SettingsViewModelTest {
         BackupRepository(
             meals = daos.meals,
             weights = daos.weights,
+            workouts = daos.workouts,
+            sleep = daos.sleep,
+            days = daos.days,
+            corrections = daos.corrections,
             profiles = profiles,
             reminders = Reminders(),
             scheduler = Scheduler(),
@@ -438,6 +446,10 @@ class SettingsViewModelTest {
     private class Daos(failing: Set<String> = emptySet()) {
         val meals: MealDao = table(failing)
         val weights: WeightDao = table(failing)
+        val workouts: WorkoutDao = table(failing)
+        val sleep: SleepDao = table(failing)
+        val days: HealthDayDao = table(failing)
+        val corrections: MovementCorrectionDao = table(failing)
 
         private inline fun <reified T> table(failing: Set<String>): T = Proxy.newProxyInstance(
             T::class.java.classLoader,
@@ -450,7 +462,8 @@ class SettingsViewModelTest {
                 method.name == "equals" -> false
                 List::class.java.isAssignableFrom(method.returnType) -> emptyList<Any>()
                 // A suspend function's declared return is Object; these are the reads of a table.
-                method.name == "allMeals" || method.name == "all" -> emptyList<Any>()
+                method.name.startsWith("all") -> emptyList<Any>()
+                method.name == "insertSession" -> 1L
                 else -> Unit
             }
         } as T
