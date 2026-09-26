@@ -333,7 +333,7 @@ class BackupRoundTripTest {
         savedMeals().put(mealId, yoghurt.id, 180.0, CountedAs.GRAMS)
 
         val exported = repository.export(nowMillis = 2_000)
-        assertThat(exported.version).isEqualTo(2)
+        assertThat(exported.version).isEqualTo(Backup.CURRENT_VERSION)
         assertThat(exported.foods.map { it.key }).contains("yoghurt|na")
         assertThat(exported.savedMeals.single().name).isEqualTo("Breakfast")
 
