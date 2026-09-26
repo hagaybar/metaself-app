@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 
 /**
  * Nights and their stages. A night and its stages are written together inside a transaction the
@@ -36,4 +37,24 @@ interface SleepDao {
 
     @Query("DELETE FROM sleep_sessions")
     suspend fun deleteAll()
+
+    @Transaction
+    @Query("SELECT * FROM sleep_sessions WHERE epochDay = :epochDay ORDER BY startMillis")
+    suspend fun nightsOn(epochDay: Long): List<SleepNight>
+
+    @Transaction
+    @Query("SELECT * FROM sleep_sessions ORDER BY startMillis, id")
+    suspend fun allNights(): List<SleepNight>
+
+    @Query("SELECT DISTINCT epochDay FROM sleep_sessions WHERE recordId = :recordId")
+    suspend fun daysOf(recordId: String): List<Long>
+
+    @Query("DELETE FROM sleep_sessions WHERE recordId = :recordId")
+    suspend fun deleteByRecordId(recordId: String)
+
+    @Query("SELECT DISTINCT epochDay FROM sleep_sessions WHERE startMillis >= :from AND startMillis < :to")
+    suspend fun daysBetween(from: Long, to: Long): List<Long>
+
+    @Query("DELETE FROM sleep_sessions WHERE startMillis >= :from AND startMillis < :to")
+    suspend fun deleteBetween(from: Long, to: Long)
 }

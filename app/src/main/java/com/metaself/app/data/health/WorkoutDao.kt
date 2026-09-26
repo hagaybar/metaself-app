@@ -70,4 +70,26 @@ interface WorkoutDao {
 
     @Query("DELETE FROM workouts")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM workouts WHERE epochDay = :epochDay ORDER BY startedAtMillis")
+    suspend fun onDay(epochDay: Long): List<WorkoutEntity>
+
+    @Query("SELECT DISTINCT epochDay FROM workouts WHERE source = 'SYNCED' AND originId = :originId")
+    suspend fun daysOfSynced(originId: String): List<Long>
+
+    /** Deleted in the writing app. A hidden row is kept: it was hidden on purpose. */
+    @Query("DELETE FROM workouts WHERE source = 'SYNCED' AND originId = :originId AND hidden = 0")
+    suspend fun deleteSynced(originId: String)
+
+    @Query(
+        "SELECT DISTINCT epochDay FROM workouts WHERE source = 'SYNCED' AND hidden = 0 " +
+            "AND startedAtMillis >= :from AND startedAtMillis < :to",
+    )
+    suspend fun daysOfSyncedBetween(from: Long, to: Long): List<Long>
+
+    @Query(
+        "DELETE FROM workouts WHERE source = 'SYNCED' AND hidden = 0 " +
+            "AND startedAtMillis >= :from AND startedAtMillis < :to",
+    )
+    suspend fun deleteSyncedBetween(from: Long, to: Long)
 }

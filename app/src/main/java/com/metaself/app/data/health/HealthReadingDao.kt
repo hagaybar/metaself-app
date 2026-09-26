@@ -27,4 +27,22 @@ interface HealthReadingDao {
             "ORDER BY startMillis, sampleIndex",
     )
     suspend fun ofKindOnDay(kind: String, epochDay: Long): List<HealthReadingEntity>
+
+    @Query("SELECT DISTINCT epochDay FROM health_readings WHERE recordId = :recordId")
+    suspend fun daysOf(recordId: String): List<Long>
+
+    @Query("DELETE FROM health_readings WHERE recordId = :recordId")
+    suspend fun deleteByRecordId(recordId: String)
+
+    @Query("SELECT DISTINCT epochDay FROM health_readings WHERE kind = :kind AND startMillis >= :from AND startMillis < :to")
+    suspend fun daysOfKindBetween(kind: String, from: Long, to: Long): List<Long>
+
+    @Query("DELETE FROM health_readings WHERE kind = :kind AND startMillis >= :from AND startMillis < :to")
+    suspend fun deleteKindBetween(kind: String, from: Long, to: Long)
+
+    @Query(
+        "SELECT * FROM health_readings WHERE kind = :kind AND startMillis >= :from AND startMillis < :to " +
+            "ORDER BY startMillis, sampleIndex",
+    )
+    suspend fun ofKindBetween(kind: String, from: Long, to: Long): List<HealthReadingEntity>
 }

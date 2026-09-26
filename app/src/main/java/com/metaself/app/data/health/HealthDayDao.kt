@@ -27,4 +27,13 @@ interface HealthDayDao {
 
     @Query("DELETE FROM health_days")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM health_days WHERE epochDay = :epochDay")
+    suspend fun delete(epochDay: Long)
+
+    @Query("SELECT COUNT(*) FROM health_days")
+    fun observeCount(): Flow<Int>
+
+    @Query("SELECT MIN(epochDay) FROM health_days")
+    fun observeEarliest(): Flow<Long?>
 }

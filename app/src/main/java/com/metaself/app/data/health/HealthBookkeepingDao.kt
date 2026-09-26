@@ -4,6 +4,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import kotlinx.coroutines.flow.Flow
 
 /** Where copying stands, and which Drive month files are out of date. Never backed up. */
 @Dao
@@ -24,4 +25,13 @@ interface HealthBookkeepingDao {
             "OR writtenAtMillis < changedAtMillis ORDER BY month",
     )
     suspend fun monthsOutOfDate(): List<ArchiveMonthEntity>
+
+    @Query("SELECT * FROM health_sync")
+    fun observeSync(): Flow<List<HealthSyncEntity>>
+
+    @Query("DELETE FROM health_sync")
+    suspend fun clearSync()
+
+    @Query("SELECT * FROM archive_months WHERE month = :month")
+    suspend fun month(month: String): ArchiveMonthEntity?
 }
