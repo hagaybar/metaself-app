@@ -16,6 +16,12 @@ import com.metaself.app.data.food.LoggedFoods
 import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
+import com.metaself.app.data.health.HealthBookkeepingDao
+import com.metaself.app.data.health.HealthDayDao
+import com.metaself.app.data.health.HealthReadingDao
+import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.movement.HealthConnectSteps
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.data.day.MealRepository
@@ -160,6 +166,27 @@ object DataModule {
 
     @Provides
     fun provideSavedMealDao(database: MetaSelfDatabase): SavedMealDao = database.savedMealDao()
+
+    @Provides
+    fun provideWorkoutDao(database: MetaSelfDatabase): WorkoutDao = database.workoutDao()
+
+    @Provides
+    fun provideHealthReadingDao(database: MetaSelfDatabase): HealthReadingDao =
+        database.healthReadingDao()
+
+    @Provides
+    fun provideSleepDao(database: MetaSelfDatabase): SleepDao = database.sleepDao()
+
+    @Provides
+    fun provideHealthDayDao(database: MetaSelfDatabase): HealthDayDao = database.healthDayDao()
+
+    @Provides
+    fun provideMovementCorrectionDao(database: MetaSelfDatabase): MovementCorrectionDao =
+        database.movementCorrectionDao()
+
+    @Provides
+    fun provideHealthBookkeepingDao(database: MetaSelfDatabase): HealthBookkeepingDao =
+        database.healthBookkeepingDao()
 
     @Provides
     @Singleton
