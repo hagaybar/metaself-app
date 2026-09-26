@@ -17,9 +17,18 @@ import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.health.HealthBookkeepingDao
+import com.metaself.app.data.health.HealthConnectReader
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.HealthReadingDao
+import com.metaself.app.data.health.HealthRecordCopier
+import com.metaself.app.data.health.HealthRecordStatus
+import com.metaself.app.data.health.HealthRecordSync
+import com.metaself.app.data.health.HealthRows
+import com.metaself.app.data.health.HealthSource
+import com.metaself.app.data.health.HealthStore
 import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.RoomHealthRecordStatus
+import com.metaself.app.data.health.RoomHealthStore
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.movement.HealthConnectSteps
@@ -189,6 +198,28 @@ object DataModule {
     @Provides
     fun provideHealthBookkeepingDao(database: MetaSelfDatabase): HealthBookkeepingDao =
         database.healthBookkeepingDao()
+
+    /** The zone the health record files rows under (D68). A lambda, so a travelling phone uses the
+     * zone it is in now, never the one it was installed in. */
+    @Provides
+    @Singleton
+    fun provideHealthRows(): HealthRows = HealthRows { java.time.ZoneId.systemDefault() }
+
+    @Provides
+    @Singleton
+    fun provideHealthSource(reader: HealthConnectReader): HealthSource = reader
+
+    @Provides
+    @Singleton
+    fun provideHealthStore(store: RoomHealthStore): HealthStore = store
+
+    @Provides
+    @Singleton
+    fun provideHealthRecordCopier(sync: HealthRecordSync): HealthRecordCopier = sync
+
+    @Provides
+    @Singleton
+    fun provideHealthRecordStatus(status: RoomHealthRecordStatus): HealthRecordStatus = status
 
     @Provides
     @Singleton

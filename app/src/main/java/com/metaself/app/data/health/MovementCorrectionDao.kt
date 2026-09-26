@@ -5,7 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 
-/** The backup's three calls. Reading a correction for a day arrives with the corrections phase. */
+/** The backup's three calls, and one day's correction for that day's summary. */
 @Dao
 interface MovementCorrectionDao {
 
@@ -18,4 +18,7 @@ interface MovementCorrectionDao {
 
     @Query("DELETE FROM movement_corrections")
     suspend fun deleteAll()
+
+    @Query("SELECT * FROM movement_corrections WHERE epochDay = :epochDay")
+    suspend fun day(epochDay: Long): MovementCorrectionEntity?
 }

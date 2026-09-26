@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.day.DeletedEntry
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.health.HealthRecordCopier
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.DetachedRows
@@ -124,6 +125,8 @@ class DayViewModel @Inject constructor(
     private val currentHour: CurrentHour,
     private val loggedFoods: LoggedFoods,
     private val problems: ProblemLog,
+    /** Copying the health record (D67). Defaulted so tests and the walk need not supply one. */
+    private val healthRecord: HealthRecordCopier = HealthRecordCopier.NONE,
 ) : ViewModel() {
 
     /**
@@ -259,6 +262,7 @@ class DayViewModel @Inject constructor(
         markMilestonesOnce()
         takeTheDailyCopy()
         readTodaysSteps()
+        copyTheHealthRecord()
         noticeSomethingGood()
         followTheOpenStretch()
         putBackDetachedRows()
@@ -629,6 +633,7 @@ class DayViewModel @Inject constructor(
             _refreshing.value = true
             try {
                 readMovement()
+                healthRecord.copyNow()
             } finally {
                 _refreshing.value = false
             }
@@ -637,6 +642,14 @@ class DayViewModel @Inject constructor(
 
     private fun readTodaysSteps() {
         quietly { readMovement() }
+    }
+
+    /**
+     * The health record, copied on open (D67). Like the daily backup, nothing it does reaches the
+     * screen, and nothing it fails at stops anything else.
+     */
+    private fun copyTheHealthRecord() {
+        quietly { healthRecord.copyNow() }
     }
 
     private suspend fun readMovement() {

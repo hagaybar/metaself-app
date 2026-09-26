@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.settings
 
+import com.metaself.app.data.health.HealthRecordState
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.domain.reminder.Reminder
 import com.metaself.app.domain.window.WindowRule
@@ -43,6 +44,8 @@ data class SettingsUiState(
     val stepDaysSoFar: Int = 0,
     val earliestStepDay: LocalDate? = null,
     val daysWithBandEnergy: Int = 0,
+    /** How far the health record reaches, and which kinds are not yet allowed (D65, D66). */
+    val healthRecord: HealthRecordState = HealthRecordState(),
     /** The rule in force, of either kind, and how it has been going (D27, D29). */
     val windowRule: WindowRule? = null,
     val windowKept: Int = 0,

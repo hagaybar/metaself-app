@@ -241,6 +241,32 @@ class BackupRoundTripTest {
         assertThat(db.movementCorrectionDao().all().single()).isEqualTo(correction)
     }
 
+    /**
+     * The `@Relation` fetch behind a night's stages makes no promise about their order; export sorts
+     * them itself, by start time and then by row id, so two stages sharing one instant still come back
+     * in the order they were recorded rather than however SQLite happened to return them.
+     */
+    @Test
+    fun `export sorts a night's stages by time, then by row id`() = runTest {
+        val night = SleepSessionEntity(epochDay = 20_699, startMillis = 1_000, endMillis = 4_000,
+            origin = "com.example.band", recordId = "s-2", title = null)
+        val nightId = db.sleepDao().insertSession(night)
+        db.sleepDao().insertStages(
+            listOf(
+                SleepStageEntity(sessionId = nightId, stage = "REM", startMillis = 3_000, endMillis = 4_000),
+                SleepStageEntity(sessionId = nightId, stage = "DEEP", startMillis = 2_000, endMillis = 2_500),
+                SleepStageEntity(sessionId = nightId, stage = "LIGHT", startMillis = 2_000, endMillis = 2_500),
+                SleepStageEntity(sessionId = nightId, stage = "AWAKE", startMillis = 1_000, endMillis = 2_000),
+            ),
+        )
+
+        val exported = repository().export(nowMillis = 5_000)
+
+        assertThat(exported.sleep.single().stages.map { it.stage })
+            .containsExactly("AWAKE", "DEEP", "LIGHT", "REM")
+            .inOrder()
+    }
+
     // --- Version 2: the foods and the meals he built ------------------------------------------
 
     private fun foods(): FoodRepository =
@@ -693,6 +719,7 @@ class BackupRoundTripTest {
         sleep = db.sleepDao(),
         days = db.healthDayDao(),
         corrections = db.movementCorrectionDao(),
+        bookkeeping = db.healthBookkeepingDao(),
         profiles = profiles,
         reminders = NoReminders(),
         scheduler = NoScheduler(),

@@ -20,6 +20,7 @@ import com.metaself.app.data.drive.DriveAccess
 import com.metaself.app.data.drive.DriveBackup
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
+import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.SleepDao
@@ -387,6 +388,7 @@ class SettingsViewModelTest {
             sleep = daos.sleep,
             days = daos.days,
             corrections = daos.corrections,
+            bookkeeping = daos.bookkeeping,
             profiles = profiles,
             reminders = Reminders(),
             scheduler = Scheduler(),
@@ -450,6 +452,7 @@ class SettingsViewModelTest {
         val sleep: SleepDao = table(failing)
         val days: HealthDayDao = table(failing)
         val corrections: MovementCorrectionDao = table(failing)
+        val bookkeeping: HealthBookkeepingDao = table(failing)
 
         private inline fun <reified T> table(failing: Set<String>): T = Proxy.newProxyInstance(
             T::class.java.classLoader,

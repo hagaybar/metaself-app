@@ -6,6 +6,7 @@ import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
+import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.HealthDayEntity
 import com.metaself.app.data.health.MovementCorrectionDao
@@ -115,6 +116,7 @@ class BackupRepository @Inject constructor(
     private val sleep: SleepDao,
     private val days: HealthDayDao,
     private val corrections: MovementCorrectionDao,
+    private val bookkeeping: HealthBookkeepingDao,
     private val profiles: ProfileRepository,
     private val reminders: ReminderStore,
     private val scheduler: ReminderScheduler,
@@ -164,10 +166,10 @@ class BackupRepository @Inject constructor(
             foods = everyFood.map(BackupFoods::toBackup),
             savedMeals = builtMeals.map(BackupFoods::toBackup),
             workouts = workouts.all().map { it.toBackup() },
-            sleep = sleep.allStages().groupBy { it.sessionId }.let { stagesBySession ->
-                sleep.allSessions().map { night ->
-                    night.toBackup(stagesBySession[night.id].orEmpty())
-                }
+            // A night's stages come back from the @Relation fetch in no promised order; sorted here so
+            // the file is written the same way regardless.
+            sleep = sleep.allNights().map { night ->
+                night.session.toBackup(night.stages.sortedWith(compareBy({ it.startMillis }, { it.id })))
             },
             healthDays = days.all().map { it.toBackup() },
             movementCorrections = corrections.all().map {
@@ -233,6 +235,12 @@ class BackupRepository @Inject constructor(
                 sleep.deleteAll()
                 days.deleteAll()
                 corrections.deleteAll()
+                // The copying starts again from scratch: a record read again replaces its rows, so
+                // nothing is doubled, and nothing recorded after this file was made is missed.
+                // Accepted: a copy running at the same moment may still write a bookmark back after
+                // this clears it (rare — a restore during a copy); the next expired token or window
+                // re-read heals it.
+                bookkeeping.clearSync()
                 // The foods first, so every row restored after them has something to point at.
                 val restoredFoods = restoreFoods(prepared)
                 val savedMealIdByName = restoreSavedMeals(prepared, restoredFoods.byKey)

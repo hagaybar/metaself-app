@@ -47,6 +47,7 @@ import com.metaself.app.domain.window.MeasuredWindow
 import com.metaself.app.domain.window.WindowRule
 import com.metaself.app.ui.day.ReminderWording
 import com.metaself.app.data.movement.StepAccess
+import com.metaself.app.ui.health.HealthRecordWording
 import com.metaself.app.ui.movement.MovementWording
 import com.metaself.app.ui.window.WindowWording
 import com.metaself.app.ui.MetaSelfScreen
@@ -283,7 +284,29 @@ fun SettingsScreen(
                 )
             }
 
-            if (state.stepAccess == StepAccess.NOT_PERMITTED) {
+            Text(
+                text = HealthRecordWording.status(
+                    days = state.healthRecord.days,
+                    earliest = state.healthRecord.earliest?.let(LocalDate::ofEpochDay),
+                    lastCopiedMillis = state.healthRecord.lastCopiedMillis,
+                    nowMillis = System.currentTimeMillis(),
+                    catchingUp = state.healthRecord.catchingUp,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            HealthRecordWording.notAllowed(state.healthRecord.notAllowed)?.let { line ->
+                Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (state.healthRecord.days > 0) {
+                Text(
+                    HealthRecordWording.NOT_BACKED_UP,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (state.stepAccess == StepAccess.NOT_PERMITTED || state.healthRecord.notAllowed.isNotEmpty()) {
                 Button(onClick = onConnectSteps) {
                     Text(stringResource(R.string.settings_steps_connect))
                 }

@@ -58,7 +58,7 @@ import com.metaself.app.ui.screen.repeat.RepeatScreen
 import com.metaself.app.ui.screen.repeat.RepeatViewModel
 import com.metaself.app.ui.screen.propose.ProposalViewModel
 import androidx.health.connect.client.PermissionController
-import com.metaself.app.data.movement.HealthConnectSteps
+import com.metaself.app.data.health.HealthPermissions
 import com.metaself.app.ui.screen.scan.ScanScreen
 import com.metaself.app.ui.screen.scan.ScanViewModel
 import com.metaself.app.ui.screen.settings.SettingsViewModel
@@ -371,11 +371,15 @@ fun MetaSelfNavHost(
             // than assuming it got what it wanted.
             val askForSteps = rememberLauncherForActivityResult(
                 PermissionController.createRequestPermissionResultContract(),
-            ) { settingsViewModel.refreshSteps() }
+            ) {
+                settingsViewModel.refreshSteps()
+                settingsViewModel.refreshHealthRecord()
+            }
 
             LaunchedEffect(Unit) {
                 settingsViewModel.refreshSteps()
                 settingsViewModel.refreshWindow()
+                settingsViewModel.refreshHealthRecord()
             }
 
             // Google's consent screen, shown once. A view model cannot start an activity, so it
@@ -416,7 +420,7 @@ fun MetaSelfNavHost(
                 onSetWindow = settingsViewModel::setEatingWindow,
                 onSetRatio = settingsViewModel::setMeasuredWindow,
                 onClearWindow = settingsViewModel::clearEatingWindow,
-                onConnectSteps = { askForSteps.launch(HealthConnectSteps.PERMISSIONS) },
+                onConnectSteps = { askForSteps.launch(HealthPermissions.ALL) },
                 onPickBackupFolder = { chooseBackupFolder.launch(null) },
                 onForgetBackupFolder = settingsViewModel::forgetBackupFolder,
                 onBackUpNow = settingsViewModel::backUpNow,
