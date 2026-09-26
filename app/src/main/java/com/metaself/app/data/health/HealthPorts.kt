@@ -91,6 +91,12 @@ interface ArchiveRecord {
     /** Every raw reading filed on a day of [month], kind by kind, each kind in time order. */
     suspend fun readingsIn(month: String): List<HealthReadingEntity>
 
+    /**
+     * Whether this phone has ever written [month] to Drive. False after a new install or cleared data,
+     * when Drive's copy of the month may be the fuller one.
+     */
+    suspend fun everWritten(month: String): Boolean
+
     /** [month] is in Drive as it stood at [atMillis]. A month the record has never marked is left alone. */
     suspend fun markWritten(month: String, atMillis: Long)
 }

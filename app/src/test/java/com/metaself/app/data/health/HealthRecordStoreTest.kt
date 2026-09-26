@@ -332,6 +332,20 @@ class HealthRecordStoreTest {
         assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
     }
 
+    /** The archive reads Drive's copy first for a month this phone has never written (D71). */
+    @Test
+    fun `a month is written by this phone only once it has been marked, and stays so when changed`() = runTest {
+        assertThat(store.everWritten("2026-09")).isFalse()
+        store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
+        assertThat(store.everWritten("2026-09")).isFalse()
+
+        store.markWritten("2026-09", STAMP + 1)
+        assertThat(store.everWritten("2026-09")).isTrue()
+
+        store.apply(listOf(heart("hr-2", listOf(62.0))), emptyList())
+        assertThat(store.everWritten("2026-09")).isTrue()
+    }
+
     // --- Helpers -----------------------------------------------------------------------------------
 
     private fun totals(onDay: DayTotals) = TotalsResult(byDay = mapOf(day to onDay))

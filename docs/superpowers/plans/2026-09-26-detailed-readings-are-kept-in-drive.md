@@ -819,3 +819,14 @@ Replace `NOT_BACKED_UP` with `detailedBackup(driveOn)` everywhere (and its test)
   send the APK. **Phone checks:** with Drive backup on, after the next daily backup (or switching Drive
   off and on), the owner's Drive holds `metaself-readings-2026-09.json.gz` (and August if the record
   reaches it); Settings → Movement says the readings are copied to Drive.
+
+## Amended during build (2026-09-26)
+
+- **A month in Drive is never replaced by a thinner one** (controller's decision). When a month has a
+  file in Drive and this phone has never written it (`ArchiveRecord.everWritten` false: its
+  `archive_months` row has no `writtenAtMillis`), `HealthArchive.writeOutOfDate` downloads Drive's copy
+  first and uploads the union — every record the phone has, as it has it, plus every record, keyed by
+  (origin, record id), only Drive has. If Drive's copy cannot be downloaded or read, that month is not
+  uploaded this time and stays out of date. A month this phone has written before is replaced as
+  before. `ArchiveRestore` gains `unreachable` (download failed), counted apart from `unreadable`
+  (decode failed), and the restore message says which.

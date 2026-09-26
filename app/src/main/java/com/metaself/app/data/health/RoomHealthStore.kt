@@ -240,6 +240,9 @@ class RoomHealthStore @Inject constructor(
         }
     }
 
+    override suspend fun everWritten(month: String): Boolean =
+        bookkeepingDao.month(month)?.writtenAtMillis != null
+
     /**
      * Written as it stood at [atMillis] — the moment its rows were read, taken BEFORE reading, so a
      * change made while the file was being written leaves `changedAt` later and the month out of date.

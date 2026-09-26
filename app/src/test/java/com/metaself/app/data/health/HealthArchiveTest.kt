@@ -26,6 +26,7 @@ class HealthArchiveTest {
         record.outOfDate = listOf("2026-08", "2026-09")
         record.rows["2026-08"] = listOf(beat("hr-1", day = 20_690))
         record.rows["2026-09"] = listOf(beat("hr-2", day = 20_699))
+        record.writtenBefore += "2026-09"
         drive.put("metaself-readings-2026-09.json.gz", byteArrayOf(0))
 
         val written = archive.writeOutOfDate()
@@ -46,6 +47,7 @@ class HealthArchiveTest {
     fun `the old copy of a month is removed only after the new one is up`() = runTest {
         record.outOfDate = listOf("2026-09")
         record.rows["2026-09"] = listOf(beat("hr-1", day = 20_699))
+        record.writtenBefore += "2026-09"
         drive.put("metaself-readings-2026-09.json.gz", byteArrayOf(0))
 
         archive.writeOutOfDate()
@@ -60,6 +62,7 @@ class HealthArchiveTest {
     fun `a month whose upload failed is not marked, so it is tried again`() = runTest {
         record.outOfDate = listOf("2026-09")
         record.rows["2026-09"] = listOf(beat("hr-1", day = 20_699))
+        record.writtenBefore += "2026-09"
         drive.put("metaself-readings-2026-09.json.gz", byteArrayOf(0))
         drive.refuseUploads = true
 
@@ -69,6 +72,94 @@ class HealthArchiveTest {
         assertThat(problems.logged.single().kind).isEqualTo("drive")
         // The copy already there is kept when its replacement did not go up.
         assertThat(drive.files).containsKey("metaself-readings-2026-09.json.gz")
+    }
+
+    /**
+     * A phone that has never written a month (a new install, or a restore from the daily file) may
+     * hold less of it than Drive does. Drive's copy is read first and kept: what the phone lacks is
+     * carried into the new file.
+     */
+    @Test
+    fun `a month this phone never wrote keeps what only Drive has`() = runTest {
+        drive.put("metaself-readings-2026-09.json.gz", ReadingArchive.encode("2026-09", listOf(beat("hr-1", day = 20_697))))
+        record.outOfDate = listOf("2026-09")
+        record.rows["2026-09"] = listOf(beat("hr-2", day = 20_699))
+
+        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+
+        val month = ReadingArchive.decode(drive.files.getValue("metaself-readings-2026-09.json.gz"))!!
+        assertThat(month.readings.map { it.recordId }).containsExactly("hr-1", "hr-2")
+        assertThat(drive.stored.count { it.name == "metaself-readings-2026-09.json.gz" }).isEqualTo(1)
+        assertThat(record.written.keys).containsExactly("2026-09")
+    }
+
+    /**
+     * On a record both hold, the phone's copy is the one kept, whole: the phone read it from Health
+     * Connect as it stands now, and a sample Drive has that the phone's copy lacks is not added to it.
+     */
+    @Test
+    fun `on a record both hold, the phone's copy wins whole`() = runTest {
+        drive.put(
+            "metaself-readings-2026-09.json.gz",
+            ReadingArchive.encode(
+                "2026-09",
+                listOf(
+                    beat("hr-1", day = 20_699, index = 0, bpm = 50.0),
+                    beat("hr-1", day = 20_699, index = 1, bpm = 50.0),
+                ),
+            ),
+        )
+        record.outOfDate = listOf("2026-09")
+        record.rows["2026-09"] = listOf(beat("hr-1", day = 20_699, index = 0, bpm = 70.0))
+
+        archive.writeOutOfDate()
+
+        val month = ReadingArchive.decode(drive.files.getValue("metaself-readings-2026-09.json.gz"))!!
+        assertThat(month.readings.map { it.sampleIndex to it.value }).containsExactly(0 to 70.0)
+    }
+
+    /** Never replace a Drive month that could not be read: it may be fuller than the phone. */
+    @Test
+    fun `a Drive copy that cannot be read is left alone, and the month is not marked`() = runTest {
+        drive.put("metaself-readings-2026-09.json.gz", byteArrayOf(1, 2, 3))
+        record.outOfDate = listOf("2026-09")
+        record.rows["2026-09"] = listOf(beat("hr-1", day = 20_699))
+
+        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+
+        assertThat(drive.calls.filter { it.startsWith("upload") || it.startsWith("delete") }).isEmpty()
+        assertThat(drive.files.getValue("metaself-readings-2026-09.json.gz")).isEqualTo(byteArrayOf(1, 2, 3))
+        assertThat(record.written).isEmpty()
+        assertThat(problems.logged.single().kind).isEqualTo("drive")
+    }
+
+    @Test
+    fun `a Drive copy that cannot be downloaded is left alone, and the month is not marked`() = runTest {
+        drive.put("metaself-readings-2026-09.json.gz", ReadingArchive.encode("2026-09", listOf(beat("hr-1", day = 20_697))))
+        drive.refuseDownloads = true
+        record.outOfDate = listOf("2026-09")
+        record.rows["2026-09"] = listOf(beat("hr-2", day = 20_699))
+
+        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+
+        assertThat(drive.calls.filter { it.startsWith("upload") || it.startsWith("delete") }).isEmpty()
+        assertThat(record.written).isEmpty()
+        assertThat(problems.logged.single().kind).isEqualTo("drive")
+    }
+
+    /** A month this phone wrote before is its own: replaced as it stands, without reading Drive's. */
+    @Test
+    fun `a month this phone wrote before is replaced without being read`() = runTest {
+        drive.put("metaself-readings-2026-09.json.gz", ReadingArchive.encode("2026-09", listOf(beat("hr-1", day = 20_697))))
+        record.writtenBefore += "2026-09"
+        record.outOfDate = listOf("2026-09")
+        record.rows["2026-09"] = listOf(beat("hr-2", day = 20_699))
+
+        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+
+        assertThat(drive.calls.filter { it.startsWith("download") }).isEmpty()
+        val month = ReadingArchive.decode(drive.files.getValue("metaself-readings-2026-09.json.gz"))!!
+        assertThat(month.readings.map { it.recordId }).containsExactly("hr-2")
     }
 
     @Test
@@ -144,7 +235,7 @@ class HealthArchiveTest {
 
         val result = archive.restoreAll()!!
 
-        assertThat(result).isEqualTo(ArchiveRestore(months = 1, readings = 3, unreadable = 0))
+        assertThat(result).isEqualTo(ArchiveRestore(months = 1, readings = 3, unreadable = 0, unreachable = 0))
         val applied = store.applied.flatten().filterIsInstance<ReadRecord.Reading>()
         assertThat(applied.map { it.recordId }).containsExactly("hr-1", "hr-2")
         assertThat(applied.first { it.recordId == "hr-1" }.samples).hasSize(2)
@@ -174,8 +265,22 @@ class HealthArchiveTest {
 
         assertThat(result.months).isEqualTo(1)
         assertThat(result.unreadable).isEqualTo(1)
+        assertThat(result.unreachable).isEqualTo(0)
         assertThat(store.applied).hasSize(1)
         assertThat(record.written.keys).containsExactly("2026-09")
+    }
+
+    /** Could not be fetched is not the same as could not be read: the first may work tomorrow. */
+    @Test
+    fun `a month that could not be downloaded is counted apart from one that could not be read`() = runTest {
+        drive.put("metaself-readings-2026-09.json.gz", ReadingArchive.encode("2026-09", listOf(beat("hr-1", day = 20_699))))
+        drive.refuseDownloads = true
+
+        val result = archive.restoreAll()!!
+
+        assertThat(result).isEqualTo(ArchiveRestore(months = 0, readings = 0, unreadable = 0, unreachable = 1))
+        assertThat(store.applied).isEmpty()
+        assertThat(record.written).isEmpty()
     }
 
     @Test
@@ -191,8 +296,8 @@ class HealthArchiveTest {
     // --- Helpers -----------------------------------------------------------------------------------
 
     /** A heart-rate sample at minute [index] of [day], UTC. */
-    private fun beat(record: String, day: Long, index: Int = 0) = HealthReadingEntity(
-        kind = "HEART_RATE", startMillis = day * DAY + index * 60_000L, endMillis = null, value = 60.0,
+    private fun beat(record: String, day: Long, index: Int = 0, bpm: Double = 60.0) = HealthReadingEntity(
+        kind = "HEART_RATE", startMillis = day * DAY + index * 60_000L, endMillis = null, value = bpm,
         unit = "bpm", origin = "com.example.band", recordId = record, sampleIndex = index, epochDay = day,
     )
 
@@ -207,6 +312,7 @@ class HealthArchiveTest {
         val calls = mutableListOf<String>()
         var tokenAvailable = true
         var refuseUploads = false
+        var refuseDownloads = false
         var listThrows = false
         private var nextId = 0
 
@@ -237,6 +343,7 @@ class HealthArchiveTest {
 
         override suspend fun download(id: String, token: String): ByteArray? {
             calls += "download $id"
+            if (refuseDownloads) return null
             return stored.firstOrNull { it.id == id }?.bytes
         }
 
@@ -251,7 +358,11 @@ class HealthArchiveTest {
         val rows = mutableMapOf<String, List<HealthReadingEntity>>()
         val written = mutableMapOf<String, Long>()
 
+        /** Months this phone had written before the test began. */
+        val writtenBefore = mutableSetOf<String>()
+
         override suspend fun monthsOutOfDate() = outOfDate
+        override suspend fun everWritten(month: String) = month in writtenBefore || month in written
         override suspend fun readingsIn(month: String) = rows[month].orEmpty()
         override suspend fun markWritten(month: String, atMillis: Long) {
             written[month] = atMillis
