@@ -66,6 +66,10 @@ interface ReadingsArchive {
  * a Drive month nobody could read is never replaced. A month this phone has written before is its
  * own and is replaced as it stands.
  *
+ * The records only Drive had are also applied back to the phone's own store, through the same door a
+ * restore uses, so a later write of the same month — now the phone's own, since this write marks it
+ * written — does not send the record's rows alone and drop Drive's contribution again.
+ *
  * A restore brings every month back through the record's own door, so a record already here is
  * replaced, never doubled, and nothing the phone has that the file lacks is removed.
  * Never throws upwards (D8); failures go to the problem log as `"drive"`.
@@ -86,8 +90,6 @@ class HealthArchive @Inject constructor(
         val existing = drive.list(token)
         var written = 0
         for (month in months) {
-            // Taken BEFORE the rows are read: a change made meanwhile leaves the month out of date.
-            val asOf = now()
             val name = ReadingArchive.fileName(month)
             val inDrive = existing.filter { it.name == name }
             val phone = record.readingsIn(month)
@@ -99,8 +101,22 @@ class HealthArchive @Inject constructor(
                     log("month $month in Drive could not be read; left as it is, not replaced")
                     continue
                 }
-                union(phone, drives.flatMap { it!!.readings })
+                val driveRows = drives.flatMap { it!!.readings }
+                val onlyDrive = driveOnly(phone, driveRows)
+                if (onlyDrive.isNotEmpty()) {
+                    // Fed back to the phone's own store now, not just uploaded: see the class KDoc.
+                    val touched = store.apply(groupIntoRecords(onlyDrive), emptyList())
+                    store.summarise(touched, TotalsResult.ALL_FAILED, now())
+                }
+                union(phone, driveRows)
             }
+            // Taken AFTER the rows are read and, in the union branch, after applying Drive's extra
+            // records to the phone: `store.apply` marks the month changed, and taking `asOf` before it
+            // would leave that change looking like it happened after this write, so the month would
+            // stay "out of date" and be uploaded again next time for no reason. Taken here, `asOf`
+            // covers the apply too, and the uploaded union reflects the phone exactly as this write
+            // leaves it.
+            val asOf = now()
             val bytes = ReadingArchive.encode(month, rows)
             if (!drive.upload(name, bytes, token)) {
                 log("month $month could not be uploaded")
@@ -120,11 +136,33 @@ class HealthArchive @Inject constructor(
      * it from Health Connect as it stands now — taking Drive's extra samples into it would make a
      * record neither side ever had. In (kind, time, sample) order, so the file reads straight.
      */
-    private fun union(phone: List<HealthReadingEntity>, drive: List<HealthReadingEntity>): List<HealthReadingEntity> {
-        val held = phone.map { it.origin to it.recordId }.toSet()
-        return (phone + drive.filter { (it.origin to it.recordId) !in held })
+    private fun union(phone: List<HealthReadingEntity>, drive: List<HealthReadingEntity>): List<HealthReadingEntity> =
+        (phone + driveOnly(phone, drive))
             .sortedWith(compareBy({ it.kind }, { it.startMillis }, { it.sampleIndex }))
+
+    /** The rows of [drive], keyed by (origin, record id), that [phone] does not already hold. */
+    private fun driveOnly(phone: List<HealthReadingEntity>, drive: List<HealthReadingEntity>): List<HealthReadingEntity> {
+        val held = phone.map { it.origin to it.recordId }.toSet()
+        return drive.filter { (it.origin to it.recordId) !in held }
     }
+
+    /**
+     * [rows], one file's or one batch's worth, grouped back into the records `HealthStore.apply`
+     * expects: one [ReadRecord.Reading] per (kind, origin, record id), its samples in order. A row of
+     * a kind this version does not know, or that is not a reading, is left out.
+     */
+    private fun groupIntoRecords(rows: List<HealthReadingEntity>): List<ReadRecord.Reading> =
+        rows.mapNotNull { row -> HealthKind.parse(row.kind)?.takeIf { it.isReading }?.let { it to row } }
+            .groupBy { (kind, row) -> Triple(kind, row.origin, row.recordId) }
+            .map { (key, grouped) ->
+                ReadRecord.Reading(
+                    kind = key.first,
+                    origin = key.second,
+                    recordId = key.third,
+                    samples = grouped.map { it.second }.sortedBy { it.sampleIndex }
+                        .map { Sample(it.startMillis, it.endMillis, it.value) },
+                )
+            }
 
     override suspend fun monthsInDrive(): Int? = guarded(null) {
         val token = drive.token() ?: return@guarded null
@@ -150,18 +188,7 @@ class HealthArchive @Inject constructor(
                 unreadable++
                 continue
             }
-            val records = month.readings
-                .mapNotNull { row -> HealthKind.parse(row.kind)?.takeIf { it.isReading }?.let { it to row } }
-                .groupBy { (kind, row) -> Triple(kind, row.origin, row.recordId) }
-                .map { (key, rows) ->
-                    ReadRecord.Reading(
-                        kind = key.first,
-                        origin = key.second,
-                        recordId = key.third,
-                        samples = rows.map { it.second }.sortedBy { it.sampleIndex }
-                            .map { Sample(it.startMillis, it.endMillis, it.value) },
-                    )
-                }
+            val records = groupIntoRecords(month.readings)
             touched += store.apply(records, emptyList())
             record.markWritten(month.month, now())
             readings += records.sumOf { it.samples.size }

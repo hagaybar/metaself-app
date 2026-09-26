@@ -94,6 +94,51 @@ class HealthArchiveTest {
     }
 
     /**
+     * The record only Drive had is not just uploaded back to Drive: it is also applied to the phone's
+     * own store, through the same door a restore uses, and the day it falls on is re-summarised. Only
+     * a later write of this month, using the record's own copy, proves it was kept (next test).
+     */
+    @Test
+    fun `writing the union also applies Drive's extra record to the phone's own store`() = runTest {
+        drive.put("metaself-readings-2026-09.json.gz", ReadingArchive.encode("2026-09", listOf(beat("hr-1", day = 20_697))))
+        record.outOfDate = listOf("2026-09")
+        record.rows["2026-09"] = listOf(beat("hr-2", day = 20_699))
+
+        archive.writeOutOfDate()
+
+        val applied = store.applied.flatten().filterIsInstance<ReadRecord.Reading>()
+        assertThat(applied.map { it.recordId }).containsExactly("hr-1")
+        assertThat(store.summarised.single().first).containsExactly(20_697L)
+        // Totals are not asked for: every metric is marked failed, so the restored daily figure stands.
+        assertThat(store.summarised.single().second.failed).containsExactlyElementsIn(TotalMetric.entries)
+    }
+
+    /**
+     * The bug this guards: the first union write marked the month written without the record ever
+     * gaining Drive's extra reading, so the second write — now going through the "phone wrote this
+     * before" branch, reading only the record — sent the record's rows alone and Drive's contribution
+     * was gone for good. Applying it back to the phone (previous test) is what the second write relies
+     * on: this test stands in for that record now holding it.
+     */
+    @Test
+    fun `a second write of an already-written month keeps what only Drive had`() = runTest {
+        drive.put("metaself-readings-2026-09.json.gz", ReadingArchive.encode("2026-09", listOf(beat("hr-1", day = 20_697))))
+        record.outOfDate = listOf("2026-09")
+        record.rows["2026-09"] = listOf(beat("hr-2", day = 20_699))
+
+        archive.writeOutOfDate()
+        // Stands in for `store.apply` having reached the record: the phone now holds both readings.
+        // `everWritten` is already true from the first write, so this goes through the "phone wrote
+        // this before" branch, reading only the record, never Drive.
+        record.rows["2026-09"] = listOf(beat("hr-2", day = 20_699), beat("hr-1", day = 20_697))
+
+        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+
+        val month = ReadingArchive.decode(drive.files.getValue("metaself-readings-2026-09.json.gz"))!!
+        assertThat(month.readings.map { it.recordId }).containsExactly("hr-2", "hr-1")
+    }
+
+    /**
      * On a record both hold, the phone's copy is the one kept, whole: the phone read it from Health
      * Connect as it stands now, and a sample Drive has that the phone's copy lacks is not added to it.
      */

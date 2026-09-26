@@ -830,3 +830,11 @@ Replace `NOT_BACKED_UP` with `detailedBackup(driveOn)` everywhere (and its test)
   uploaded this time and stays out of date. A month this phone has written before is replaced as
   before. `ArchiveRestore` gains `unreachable` (download failed), counted apart from `unreadable`
   (decode failed), and the restore message says which.
+- **The union write also feeds Drive's extra records back to the phone** (controller's decision).
+  Uploading the union alone left the next write of that month — now `everWritten` — reading only the
+  record and sending the phone's rows alone, so Drive's contribution was lost on the write after this
+  one. `HealthArchive.writeOutOfDate` now applies the Drive-only rows to `store` through the same
+  grouping `restoreAll` uses (pulled out as `groupIntoRecords`, shared by both), then summarises the
+  days they touch with every total marked failed, before uploading. Because that `apply` marks the
+  month changed, `asOf` is now taken after the rows are built (previously before), so `markWritten`
+  is not immediately stale.
