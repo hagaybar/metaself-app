@@ -214,7 +214,9 @@ data class SleepStageEntity(
 ### 2.4 `health_days` — the daily summary
 
 One row per day. Every figure is nullable (no data is not zero) and has a source column beside it
-holding `TOTAL`, `READ`, `COMPUTED` or `CORRECTED` (D69).
+holding `TOTAL`, `READ`, `COMPUTED` or `CORRECTED` (D69) — except the five sleep figures, which share
+`sleepSource`, and the two workout figures, which share `workoutSource`, because each group is
+computed together from one source and cannot differ within it.
 
 | Figure | Source rule |
 |---|---|
