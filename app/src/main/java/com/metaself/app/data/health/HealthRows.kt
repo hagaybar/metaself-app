@@ -5,11 +5,15 @@ import java.time.ZoneId
 
 /**
  * Read records → rows, with every day in the phone's own zone (D68: a reading or a workout belongs to
- * the local day it starts; a night to the local day it ends).
+ * the local day it starts; a night to the local day it ends). The zone is asked for at each row, so a
+ * phone that travels files new rows by the zone it is in now. A workout's length is rounded to the
+ * nearest minute, half a minute up.
  */
-class HealthRows(private val zone: ZoneId) {
+class HealthRows(private val zoneOf: () -> ZoneId) {
 
-    fun dayOf(millis: Long): Long = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate().toEpochDay()
+    constructor(zone: ZoneId) : this({ zone })
+
+    fun dayOf(millis: Long): Long = Instant.ofEpochMilli(millis).atZone(zoneOf()).toLocalDate().toEpochDay()
 
     fun readings(record: ReadRecord.Reading): List<HealthReadingEntity> =
         record.samples.mapIndexed { index, sample ->
@@ -42,7 +46,7 @@ class HealthRows(private val zone: ZoneId) {
     fun workout(record: ReadRecord.Session): WorkoutEntity = WorkoutEntity(
         epochDay = dayOf(record.startMillis),
         startedAtMillis = record.startMillis,
-        durationMinutes = ((record.endMillis - record.startMillis) / 60_000).toInt(),
+        durationMinutes = ((record.endMillis - record.startMillis + 30_000) / 60_000).toInt(),
         kind = record.kind,
         title = record.title,
         distanceM = record.distanceM,

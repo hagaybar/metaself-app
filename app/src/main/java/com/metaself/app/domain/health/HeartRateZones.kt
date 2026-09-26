@@ -30,29 +30,35 @@ object HeartRateZones {
     }
 
     /**
-     * @param samples moment in epoch millis to beats per minute, in time order.
+     * @param samples moment in epoch millis to beats per minute, in any order.
      * @param endMillis when the stretch ends; the last sample lasts until then.
      * @return null when there are no samples: nothing measured is not zero.
      */
     fun of(samples: List<Pair<Long, Double>>, endMillis: Long, maxHeartRate: Int): Figures? {
         if (samples.isEmpty()) return null
-        val zones = IntArray(5)
-        samples.forEachIndexed { index, (at, bpm) ->
-            val until = samples.getOrNull(index + 1)?.first ?: endMillis
-            val seconds = ((until - at) / 1000).toInt().coerceIn(0, LONGEST_SAMPLE_SECONDS)
-            zoneOf(bpm, maxHeartRate)?.let { zones[it] += seconds }
+        val ordered = samples.sortedBy { it.first }
+        val zoneMillis = LongArray(5)
+        ordered.forEachIndexed { index, (at, bpm) ->
+            val until = ordered.getOrNull(index + 1)?.first ?: endMillis
+            val span = (until - at).coerceIn(0, LONGEST_SAMPLE_SECONDS * 1_000L)
+            zoneOf(bpm, maxHeartRate)?.let { zoneMillis[it] += span }
         }
         return Figures(
-            average = samples.map { it.second }.average().roundToInt(),
-            maximum = samples.maxOf { it.second }.roundToInt(),
-            zoneSeconds = zones.toList(),
+            average = ordered.map { it.second }.average().roundToInt(),
+            maximum = ordered.maxOf { it.second }.roundToInt(),
+            zoneSeconds = zoneMillis.map { ((it + 500) / 1_000).toInt() },
         )
     }
 
-    /** 0 to 4 for zones 1 to 5, or null below half the maximum. */
+    /**
+     * 0 to 4 for zones 1 to 5, or null below half the maximum. Compared as tenths, `bpm × 10` against
+     * `max × k`, so a rate exactly on a boundary is not put a zone low by a division's rounding.
+     */
     private fun zoneOf(bpm: Double, max: Int): Int? {
-        val fraction = bpm / max
-        if (fraction < 0.5) return null
-        return ((fraction - 0.5) / 0.1).toInt().coerceAtMost(4)
+        val tenths = bpm * 10
+        for (k in 9 downTo 5) {
+            if (tenths >= max * k) return k - 5
+        }
+        return null
     }
 }

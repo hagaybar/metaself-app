@@ -95,6 +95,66 @@ class DaySummaryTest {
         assertThat(summary.deepMinutes).isNull()
     }
 
+    /** Two apps recording the same night: the longer record is the night, counted once. */
+    @Test
+    fun `the same night from two apps counts once`() {
+        val band = SleepNight(SleepSessionEntity(1, day, 0, 480 * MINUTE, ORIGIN, "s-1", null), emptyList())
+        val other = SleepNight(
+            SleepSessionEntity(2, day, 30 * MINUTE, 450 * MINUTE, "com.example.other", "s-2", null),
+            listOf(stage("LIGHT", 30, 450, sessionId = 2)),
+        )
+
+        val summary = DaySummary.of(day, DayTotals(), emptyList(), listOf(band, other), emptyList(), null, 1_000)!!
+
+        assertThat(summary.sleepMinutes).isEqualTo(480)
+        assertThat(summary.lightMinutes).isNull()
+    }
+
+    @Test
+    fun `a night with stages and a separate nap without them both count`() {
+        val night = SleepNight(
+            SleepSessionEntity(1, day, 0, 480 * MINUTE, ORIGIN, "s-1", null),
+            listOf(stage("LIGHT", 0, 480)),
+        )
+        val nap = SleepNight(SleepSessionEntity(2, day, 780 * MINUTE, 840 * MINUTE, ORIGIN, "s-2", null), emptyList())
+
+        val summary = DaySummary.of(day, DayTotals(), emptyList(), listOf(night, nap), emptyList(), null, 1_000)!!
+
+        assertThat(summary.sleepMinutes).isEqualTo(540)
+        assertThat(summary.lightMinutes).isEqualTo(480)
+    }
+
+    /** UNKNOWN is a stretch inside a sleep session that the app did not classify: still asleep. */
+    @Test
+    fun `a night of unclassified stages counts them as sleep`() {
+        val night = SleepNight(
+            SleepSessionEntity(1, day, 0, 400 * MINUTE, ORIGIN, "s-1", null),
+            listOf(stage("UNKNOWN", 0, 400)),
+        )
+
+        val summary = DaySummary.of(day, DayTotals(), emptyList(), listOf(night), emptyList(), null, 1_000)!!
+
+        assertThat(summary.sleepMinutes).isEqualTo(400)
+    }
+
+    /** Three stages of thirty seconds are ninety seconds, which rounds to two minutes, not zero. */
+    @Test
+    fun `stage time is added up before it is rounded to minutes`() {
+        val night = SleepNight(
+            SleepSessionEntity(1, day, 0, 90_000, ORIGIN, "s-1", null),
+            listOf(
+                SleepStageEntity(sessionId = 1, stage = "LIGHT", startMillis = 0, endMillis = 30_000),
+                SleepStageEntity(sessionId = 1, stage = "LIGHT", startMillis = 30_000, endMillis = 60_000),
+                SleepStageEntity(sessionId = 1, stage = "LIGHT", startMillis = 60_000, endMillis = 90_000),
+            ),
+        )
+
+        val summary = DaySummary.of(day, DayTotals(), emptyList(), listOf(night), emptyList(), null, 1_000)!!
+
+        assertThat(summary.sleepMinutes).isEqualTo(2)
+        assertThat(summary.lightMinutes).isEqualTo(2)
+    }
+
     @Test
     fun `hidden workouts are not counted`() {
         val summary = DaySummary.of(
@@ -127,8 +187,8 @@ class DaySummaryTest {
         origin = ORIGIN, recordId = "r-$kind-$at-$value", epochDay = day,
     )
 
-    private fun stage(name: String, fromMinute: Int, toMinute: Int) =
-        SleepStageEntity(sessionId = 1, stage = name, startMillis = fromMinute * MINUTE, endMillis = toMinute * MINUTE)
+    private fun stage(name: String, fromMinute: Int, toMinute: Int, sessionId: Long = 1) =
+        SleepStageEntity(sessionId = sessionId, stage = name, startMillis = fromMinute * MINUTE, endMillis = toMinute * MINUTE)
 
     private fun workout(minutes: Int) = WorkoutEntity(
         epochDay = day, startedAtMillis = 0, durationMinutes = minutes, kind = "RUN", title = null,

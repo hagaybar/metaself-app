@@ -45,6 +45,47 @@ class HeartRateZonesTest {
         assertThat(figures.zoneSeconds).containsExactly(0, 0, 0, 0, 60).inOrder()
     }
 
+    /**
+     * Maximum 200: each zone starts exactly at 100, 120, 140, 160 and 180 bpm, and a rate exactly on a
+     * boundary belongs to the zone above it. 99 is below half and in none.
+     */
+    @Test
+    fun `a rate exactly on a boundary is in the zone it starts`() {
+        val figures = HeartRateZones.of(
+            samples = listOf(
+                0L to 99.0, 60_000L to 100.0, 120_000L to 120.0,
+                180_000L to 140.0, 240_000L to 160.0, 300_000L to 180.0,
+            ),
+            endMillis = 360_000,
+            maxHeartRate = 200,
+        )!!
+
+        assertThat(figures.zoneSeconds).containsExactly(60, 60, 60, 60, 60).inOrder()
+    }
+
+    /** Samples a second and a half apart: time is added up before it is rounded, not per sample. */
+    @Test
+    fun `short samples add up to their real time`() {
+        val figures = HeartRateZones.of(
+            samples = listOf(0L to 110.0, 1_500L to 110.0, 3_000L to 110.0),
+            endMillis = 4_000,
+            maxHeartRate = 200,
+        )!!
+
+        assertThat(figures.zoneSeconds[0]).isEqualTo(4)
+    }
+
+    @Test
+    fun `samples out of order are put in order first`() {
+        val figures = HeartRateZones.of(
+            samples = listOf(120_000L to 190.0, 0L to 110.0, 60_000L to 130.0),
+            endMillis = 180_000,
+            maxHeartRate = 200,
+        )!!
+
+        assertThat(figures.zoneSeconds).containsExactly(60, 60, 0, 0, 60).inOrder()
+    }
+
     /** A gap with no sample is not time spent at the last rate seen. */
     @Test
     fun `a sample never counts for longer than the longest span allowed`() {

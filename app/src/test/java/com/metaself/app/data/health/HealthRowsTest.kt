@@ -94,6 +94,29 @@ class HealthRowsTest {
     }
 
     @Test
+    fun `a workout's length is rounded to the nearest minute`() {
+        val start = at(day, 7)
+        val session = ReadRecord.Session(ORIGIN, "w-3", start, start + 29 * 60_000 + 45_000, "RUN", null, null, null)
+
+        assertThat(rows.workout(session).durationMinutes).isEqualTo(30)
+    }
+
+    /** A phone that travels files each row by the zone it is in when the row is made. */
+    @Test
+    fun `the zone is asked for each time, not fixed once`() {
+        var current: ZoneId = ZoneOffset.UTC
+        val travelling = HealthRows { current }
+        val lateEvening = day.atTime(22, 0).atZone(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+        val before = travelling.dayOf(lateEvening)
+        current = ZoneOffset.ofHours(3)
+        val after = travelling.dayOf(lateEvening)
+
+        assertThat(before).isEqualTo(day.toEpochDay())
+        assertThat(after).isEqualTo(day.plusDays(1).toEpochDay())
+    }
+
+    @Test
     fun `a session with no energy says so rather than guessing`() {
         val session = ReadRecord.Session(ORIGIN, "w-2", at(day, 7), at(day, 8), "OTHER", null, null, null)
 

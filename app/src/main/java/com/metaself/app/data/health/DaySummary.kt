@@ -11,7 +11,8 @@ import kotlin.math.roundToInt
  */
 object DaySummary {
 
-    private val ASLEEP = setOf("LIGHT", "DEEP", "REM", "SLEEPING")
+    /** UNKNOWN is a stretch inside a sleep session its app did not classify, so it is asleep. */
+    private val ASLEEP = setOf("LIGHT", "DEEP", "REM", "SLEEPING", "UNKNOWN")
     private val AWAKE = setOf("AWAKE", "AWAKE_IN_BED", "OUT_OF_BED")
 
     fun of(
@@ -26,13 +27,22 @@ object DaySummary {
         fun mean(kind: String): Double? =
             readings.filter { it.kind == kind }.map { it.value }.takeIf { it.isNotEmpty() }?.average()
 
+        val heartRate = mean("HEART_RATE")?.roundToInt()
+        val hrv = mean("HRV_RMSSD")
+        val oxygen = mean("OXYGEN_SATURATION")
+        val breathing = mean("RESPIRATORY_RATE")
         val resting = readings.filter { it.kind == "RESTING_HEART_RATE" }.maxByOrNull { it.startMillis }
         val steps = correction?.steps ?: totals.steps
         val active = correction?.activeKcal ?: totals.activeKcal
         val visible = workouts.filterNot { it.hidden }
         val sleep = sleepOf(nights)
 
-        val day = HealthDayEntity(
+        val nothing = steps == null && totals.distanceM == null && active == null && totals.totalKcal == null &&
+            resting == null && heartRate == null && hrv == null && oxygen == null && breathing == null &&
+            sleep == null && visible.isEmpty()
+        if (nothing) return null
+
+        return HealthDayEntity(
             epochDay = epochDay,
             computedAtMillis = nowMillis,
             steps = steps,
@@ -45,14 +55,14 @@ object DaySummary {
             totalKcalSource = totals.totalKcal?.let { "TOTAL" },
             restingHeartRate = resting?.value?.roundToInt(),
             restingHeartRateSource = resting?.let { "READ" },
-            avgHeartRate = mean("HEART_RATE")?.roundToInt(),
-            avgHeartRateSource = mean("HEART_RATE")?.let { "COMPUTED" },
-            hrvMs = mean("HRV_RMSSD"),
-            hrvSource = mean("HRV_RMSSD")?.let { "COMPUTED" },
-            oxygenPct = mean("OXYGEN_SATURATION"),
-            oxygenSource = mean("OXYGEN_SATURATION")?.let { "COMPUTED" },
-            respiratoryRate = mean("RESPIRATORY_RATE"),
-            respiratoryRateSource = mean("RESPIRATORY_RATE")?.let { "COMPUTED" },
+            avgHeartRate = heartRate,
+            avgHeartRateSource = heartRate?.let { "COMPUTED" },
+            hrvMs = hrv,
+            hrvSource = hrv?.let { "COMPUTED" },
+            oxygenPct = oxygen,
+            oxygenSource = oxygen?.let { "COMPUTED" },
+            respiratoryRate = breathing,
+            respiratoryRateSource = breathing?.let { "COMPUTED" },
             sleepMinutes = sleep?.asleep,
             deepMinutes = sleep?.stage("DEEP"),
             lightMinutes = sleep?.stage("LIGHT"),
@@ -63,7 +73,6 @@ object DaySummary {
             workoutMinutes = visible.sumOf { it.durationMinutes }.takeIf { visible.isNotEmpty() },
             workoutSource = "COMPUTED".takeIf { visible.isNotEmpty() },
         )
-        return day.takeUnless { it.copy(computedAtMillis = 0) == HealthDayEntity(epochDay, 0) }
     }
 
     private fun source(value: Int?, corrected: Boolean, otherwise: String): String? = when {
@@ -76,23 +85,52 @@ object DaySummary {
         fun stage(name: String): Int? = byStage[name]
     }
 
-    /** Stage minutes when there are stages; the whole night as sleep when there are none. */
+    /**
+     * The day's sleep. Nights that overlap are one night recorded by more than one app, so only one
+     * of them counts: the longest, then the one with more stages, then the smaller record id. Each
+     * night kept is counted on its own — its stages when it has any, its whole length as sleep when
+     * it has none — and the milliseconds are added up before they are rounded to minutes.
+     */
     private fun sleepOf(nights: List<SleepNight>): Sleep? {
         if (nights.isEmpty()) return null
-        val stages = nights.flatMap { it.stages }
-        if (stages.isEmpty()) {
-            val whole = nights.sumOf { minutes(it.session.startMillis, it.session.endMillis) }
-            return Sleep(asleep = whole, awake = null, byStage = emptyMap())
+        val stageMillis = mutableMapOf<String, Long>()
+        var wholeMillis = 0L
+        for (night in distinct(nights)) {
+            if (night.stages.isEmpty()) {
+                wholeMillis += night.session.endMillis - night.session.startMillis
+            } else {
+                night.stages.forEach { stageMillis.merge(it.stage, it.endMillis - it.startMillis, Long::plus) }
+            }
         }
-        val byStage = stages.groupBy { it.stage }.mapValues { (_, spans) ->
-            spans.sumOf { minutes(it.startMillis, it.endMillis) }
-        }
+        val byStage = stageMillis.mapValues { (_, millis) -> minutes(millis) }
+        val asleep = wholeMillis + stageMillis.filterKeys { it in ASLEEP }.values.sum()
+        val awake = stageMillis.filterKeys { it in AWAKE }
         return Sleep(
-            asleep = byStage.filterKeys { it in ASLEEP }.values.sum(),
-            awake = byStage.filterKeys { it in AWAKE }.values.sum().takeIf { byStage.keys.any { it in AWAKE } },
+            asleep = minutes(asleep),
+            awake = awake.takeIf { it.isNotEmpty() }?.let { minutes(it.values.sum()) },
             byStage = byStage,
         )
     }
 
-    private fun minutes(from: Long, to: Long): Int = ((to - from) / 60_000).toInt()
+    /** Groups nights whose [start, end) spans overlap, and keeps the best of each group. */
+    private fun distinct(nights: List<SleepNight>): List<SleepNight> {
+        val best = compareByDescending<SleepNight> { it.session.endMillis - it.session.startMillis }
+            .thenByDescending { it.stages.size }
+            .thenBy { it.session.recordId }
+        val groups = mutableListOf<MutableList<SleepNight>>()
+        var groupEnd = Long.MIN_VALUE
+        for (night in nights.sortedBy { it.session.startMillis }) {
+            if (groups.isEmpty() || night.session.startMillis >= groupEnd) {
+                groups += mutableListOf(night)
+                groupEnd = night.session.endMillis
+            } else {
+                groups.last() += night
+                groupEnd = maxOf(groupEnd, night.session.endMillis)
+            }
+        }
+        return groups.map { it.sortedWith(best).first() }
+    }
+
+    /** Whole minutes, half a minute rounding up. */
+    private fun minutes(millis: Long): Int = ((millis + 30_000) / 60_000).toInt()
 }

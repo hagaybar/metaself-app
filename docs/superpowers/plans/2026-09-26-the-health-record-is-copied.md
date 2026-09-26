@@ -2542,3 +2542,17 @@ Add `bookkeeping = db.healthBookkeepingDao()` to `BackupRoundTripTest.repository
   reopening the app a few times, the status line counts days and stops saying "still catching up";
   Settings → Recent problems shows the `health` line saying from which date reading was refused (the
   history limit, measured).
+
+## Amended after review (2026-09-26)
+
+A review of Tasks 1–4 changed these rules; the code and its tests are the record of each.
+
+1. **Zones:** boundaries compared exactly (`bpm × 10` against `max × k`), so a rate exactly on 60 % or 70 % is no longer a zone low; time is summed in milliseconds and rounded once; samples are sorted first; each sample still capped at `LONGEST_SAMPLE_SECONDS`.
+2. **Expired token:** the fresh token is taken first, then the window is re-read and replaced, then the bookmark saved.
+3. **Order of work:** phase A takes a token for every granted kind (uncounted) or drains its changes (counted, until the budget is spent); phase B catches up round-robin, one week per kind per turn, newest first; days touched are summarised after phase A and after each turn. Accepted: a crash between a saved bookmark and its summarise leaves that day stale until it changes again.
+4. **Cancellation:** the totals call rethrows cancellation; `copyNow` catches any `Throwable` except cancellation, so an error from the client never escapes (D8).
+5. **Refusals:** an old refusal ends the catch-up only when it is not transient (I/O, RemoteException, or a rate limit); a transient one keeps the cursor. The end of a catch-up by empty weeks or by two years is logged with its date; log dates are in the phone's zone.
+6. **Tests added** for one copy at a time, the two-year stop, and the next open resuming from the cursor.
+7. **Sleep:** overlapping nights from different apps count once (the longest); each night kept is counted by its stages or, with none, its whole length; milliseconds are summed and rounded once; UNKNOWN counts as asleep.
+8. **An empty day** is decided by checking every figure is null; each mean is computed once.
+9. **Rows:** the zone is asked for at each row, so a travelling phone files by its current zone; a workout's length is rounded to the nearest minute.

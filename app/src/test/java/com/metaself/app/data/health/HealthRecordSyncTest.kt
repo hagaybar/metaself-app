@@ -4,12 +4,18 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.Problem
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.health.HealthKind
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.io.IOException
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * The copying rules (D67), with no Health Connect and no database. Every figure is invented; "now" is
- * day 100 at midnight UTC, so windows are easy to read.
+ * day 100 at midnight UTC (1970-04-11), so windows are easy to read, and the log's dates are UTC.
  */
 class HealthRecordSyncTest {
 
@@ -17,7 +23,7 @@ class HealthRecordSyncTest {
     private val source = FakeSource()
     private val store = FakeStore()
     private val problems = RecordingProblems()
-    private val sync = HealthRecordSync(source, store, problems, now = { now })
+    private val sync = HealthRecordSync(source, store, problems, now = { now }, zone = { ZoneOffset.UTC })
 
     @Test
     fun `nothing granted, nothing read`() = runTest {
@@ -47,6 +53,27 @@ class HealthRecordSyncTest {
         assertThat(windows).hasSize(8)
         assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
         assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis).isEqualTo(44 * DAY)
+        assertThat(problems.logged.map { it.detail })
+            .containsExactly("STEPS: nothing before 1970-04-11; catch-up finished")
+    }
+
+    /** Rule 4: two years back is as far as the catch-up goes, even when every week has data. */
+    @Test
+    fun `catch-up stops two years back even when every week has data`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        store.bookmarks[HealthKind.STEPS] = HealthSyncEntity(
+            kind = "STEPS", changesToken = "t", tokenAtMillis = 0, catchUpCursorMillis = -620 * DAY, catchUpDone = false,
+        )
+        source.windowRecords = { from, _ -> listOf(steps("st-$from", from)) }
+
+        sync.copyNow()
+
+        assertThat(source.calls.filter { it.startsWith("window") })
+            .containsExactly("window STEPS ${-627 * DAY}..${-620 * DAY}", "window STEPS ${-634 * DAY}..${-627 * DAY}")
+            .inOrder()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
+        assertThat(problems.logged.map { it.detail })
+            .contains("STEPS: nothing before ${LocalDate.ofEpochDay(-634)}; catch-up finished")
     }
 
     @Test
@@ -85,6 +112,9 @@ class HealthRecordSyncTest {
 
         sync.copyNow()
 
+        assertThat(source.calls.take(3))
+            .containsExactly("changes STEPS t-old", "token STEPS", "window STEPS ${70 * DAY}..${100 * DAY}")
+            .inOrder()
         assertThat(store.replaced).containsExactly("STEPS ${70 * DAY}..${100 * DAY}")
         assertThat(store.bookmarks.getValue(HealthKind.STEPS).changesToken).isEqualTo("t-STEPS-1")
     }
@@ -100,6 +130,33 @@ class HealthRecordSyncTest {
         assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
         assertThat(problems.logged.single().kind).isEqualTo("health")
         assertThat(problems.logged.single().detail).contains("STEPS")
+        assertThat(problems.logged.single().detail).contains("1970-03-07")
+        assertThat(problems.logged.single().detail).contains("history limit")
+    }
+
+    /** Rule 5: a failure that says "try later" is not the history limit, however old the week. */
+    @Test
+    fun `a transient failure of an old read keeps the catch-up going`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.refuseBefore = 65 * DAY
+        source.refusal = { IOException("connection lost") }
+
+        sync.copyNow()
+
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis).isEqualTo(65 * DAY)
+        assertThat(problems.logged.single().detail).contains("will try again")
+    }
+
+    @Test
+    fun `a rate limit on an old read is transient too`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.refuseBefore = 65 * DAY
+        source.refusal = { IllegalStateException("Request Rate limited") }
+
+        sync.copyNow()
+
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
     }
 
     @Test
@@ -119,23 +176,105 @@ class HealthRecordSyncTest {
 
         sync.copyNow()
 
-        assertThat(source.calls.count { !it.startsWith("token") }).isAtMost(HealthRecordSync.READS_PER_OPEN)
+        assertThat(source.calls.count { it.startsWith("window") || it.startsWith("changes") })
+            .isEqualTo(HealthRecordSync.READS_PER_OPEN)
+        assertThat(source.calls.count { it.startsWith("token") }).isEqualTo(HealthKind.entries.size)
     }
 
+    /** Every kind gets its token at once, however much catch-up the kinds before it still owe. */
     @Test
-    fun `touched days are summarised once, with totals asked for their whole range`() = runTest {
-        source.granted = setOf(HealthKind.STEPS, HealthKind.HEART_RATE)
-        store.bookmarks[HealthKind.STEPS] = done("a")
-        store.bookmarks[HealthKind.HEART_RATE] = done("b", HealthKind.HEART_RATE)
-        source.pages = mutableListOf(
-            ChangesPage(listOf(steps("st-1", 97 * DAY)), emptyList(), "a2", false, false),
-            ChangesPage(listOf(steps("st-2", 99 * DAY)), emptyList(), "b2", false, false),
-        )
+    fun `every granted kind takes its token before any catch-up`() = runTest {
+        source.granted = HealthKind.entries.toSet()
 
         sync.copyNow()
 
-        assertThat(source.calls.filter { it.startsWith("totals") }).containsExactly("totals 97..99")
-        assertThat(store.summarised).containsExactly(setOf(97L, 99L))
+        assertThat(source.calls.take(HealthKind.entries.size))
+            .containsExactlyElementsIn(HealthKind.entries.map { "token $it" })
+            .inOrder()
+    }
+
+    /** Kinds share the budget: one week each in turn, newest first, so no kind waits for another. */
+    @Test
+    fun `catch-up takes one week of each kind in turn`() = runTest {
+        source.granted = setOf(HealthKind.HEART_RATE, HealthKind.STEPS)
+
+        sync.copyNow()
+
+        assertThat(source.calls.filter { it.startsWith("window") }.take(4)).containsExactly(
+            "window STEPS ${93 * DAY}..${100 * DAY}",
+            "window HEART_RATE ${93 * DAY}..${100 * DAY}",
+            "window STEPS ${86 * DAY}..${93 * DAY}",
+            "window HEART_RATE ${86 * DAY}..${93 * DAY}",
+        ).inOrder()
+    }
+
+    /** Rule 6: an open that runs out of budget leaves a cursor, and the next open starts there. */
+    @Test
+    fun `the next open carries on from where the budget ran out`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.windowRecords = { from, _ -> listOf(steps("st-$from", from)) }
+
+        sync.copyNow()
+        val cursor = store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis!!
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
+        source.calls.clear()
+        sync.copyNow()
+
+        assertThat(source.calls.first()).isEqualTo("changes STEPS t-STEPS-1")
+        assertThat(source.calls.first { it.startsWith("window") })
+            .isEqualTo("window STEPS ${cursor - 7 * DAY}..$cursor")
+    }
+
+    /** Rule 8: a second copy asked for while one is running does nothing. */
+    @Test
+    fun `a copy asked for while one runs does nothing`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        val gate = CompletableDeferred<Unit>()
+        source.gate = gate
+
+        val first = launch { sync.copyNow() }
+        val second = launch { sync.copyNow() }
+        runCurrent()
+        gate.complete(Unit)
+        first.join()
+        second.join()
+
+        assertThat(source.grantedAsked).isEqualTo(1)
+        assertThat(source.calls.count { it == "token STEPS" }).isEqualTo(1)
+    }
+
+    /**
+     * Days are summarised as they are copied: after the changes, and after each turn of catch-up, with
+     * totals asked for each summarised range.
+     */
+    @Test
+    fun `touched days are summarised, with totals asked for each range`() = runTest {
+        source.granted = setOf(HealthKind.STEPS, HealthKind.HEART_RATE)
+        store.bookmarks[HealthKind.STEPS] = done("a")
+        store.bookmarks[HealthKind.HEART_RATE] = HealthSyncEntity(
+            kind = "HEART_RATE", changesToken = "b", tokenAtMillis = 0, catchUpCursorMillis = 100 * DAY, catchUpDone = false,
+        )
+        source.pages = mutableListOf(
+            ChangesPage(listOf(steps("st-1", 97 * DAY), steps("st-2", 99 * DAY)), emptyList(), "a2", false, false),
+        )
+        source.windowRecords = { from, _ -> if (from == 93 * DAY) listOf(steps("hr-1", 95 * DAY)) else emptyList() }
+
+        sync.copyNow()
+
+        assertThat(store.summarised.flatten().toSet()).containsExactly(95L, 97L, 99L)
+        assertThat(store.summarised).containsExactly(setOf(97L, 99L), setOf(95L)).inOrder()
+        assertThat(source.calls.filter { it.startsWith("totals") })
+            .containsExactly("totals 97..99", "totals 95..95").inOrder()
+    }
+
+    @Test
+    fun `an error, not only an exception, is logged rather than thrown`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.grantedError = AssertionError("client broke")
+
+        sync.copyNow()
+
+        assertThat(problems.logged.single().detail).contains("AssertionError")
     }
 
     @Test
@@ -165,10 +304,19 @@ class HealthRecordSyncTest {
         var pages = mutableListOf<ChangesPage>()
         var windowRecords: (Long, Long) -> List<ReadRecord> = { _, _ -> emptyList() }
         var refuseBefore: Long? = null
+        var refusal: () -> Exception = { SecurityException("refused") }
         var changesThrow = false
+        var gate: CompletableDeferred<Unit>? = null
+        var grantedError: Throwable? = null
+        var grantedAsked = 0
         private var tokens = 0
 
-        override suspend fun grantedKinds() = granted
+        override suspend fun grantedKinds(): Set<HealthKind> {
+            grantedAsked++
+            gate?.await()
+            grantedError?.let { throw it }
+            return granted
+        }
         override suspend fun changesToken(kind: HealthKind): String {
             calls += "token $kind"
             return "t-$kind-${++tokens}"
@@ -176,11 +324,11 @@ class HealthRecordSyncTest {
         override suspend fun changes(kind: HealthKind, token: String): ChangesPage {
             calls += "changes $kind $token"
             if (changesThrow) throw IllegalStateException("unavailable")
-            return pages.removeFirst()
+            return pages.removeFirstOrNull() ?: ChangesPage(emptyList(), emptyList(), token, hasMore = false, expired = false)
         }
         override suspend fun readWindow(kind: HealthKind, fromMillis: Long, toMillis: Long): List<ReadRecord> {
             calls += "window $kind $fromMillis..$toMillis"
-            refuseBefore?.let { if (toMillis <= it) throw SecurityException("refused") }
+            refuseBefore?.let { if (toMillis <= it) throw refusal() }
             return windowRecords(fromMillis, toMillis)
         }
         override suspend fun dayTotals(fromDay: Long, toDay: Long): Map<Long, DayTotals> {

@@ -28,12 +28,12 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.movement.ExerciseNames
 import com.metaself.app.domain.health.HealthKind
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.Period
-import java.time.ZoneId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.roundToInt
@@ -129,7 +129,7 @@ class HealthConnectReader @Inject constructor(
         from: LocalDate,
         to: LocalDate,
         asInt: (T) -> Int,
-    ): Map<Long, Int> = runCatching {
+    ): Map<Long, Int> = try {
         connect().aggregateGroupByPeriod(
             AggregateGroupByPeriodRequest(
                 metrics = setOf(metric),
@@ -139,9 +139,12 @@ class HealthConnectReader @Inject constructor(
         ).mapNotNull { bucket ->
             bucket.result[metric]?.let { bucket.startTime.toLocalDate().toEpochDay() to asInt(it) }
         }.toMap()
-    }.onFailure {
-        problems.record("health", "totals of $name: ${it::class.java.simpleName} ${it.message}")
-    }.getOrDefault(emptyMap())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        problems.record("health", "totals of $name: ${failure::class.java.simpleName} ${failure.message}")
+        emptyMap()
+    }
 
     private suspend fun translate(records: List<Record>): List<ReadRecord> = records.mapNotNull { record ->
         val origin = record.metadata.dataOrigin.packageName
@@ -179,21 +182,16 @@ class HealthConnectReader @Inject constructor(
     }
 
     /**
-     * Distance and energy over the session's own time, each its own call (D4: null when none).
+     * Distance and energy over the session's own time, each its own call (D4: null when none). A
+     * failed call leaves its figure null and is logged.
      *
      * These two aggregate calls are outside the copying's read budget: `HealthRecordSync` counts only
      * the change and window reads it makes itself. Accepted, because sessions are few.
      */
     private suspend fun session(record: ExerciseSessionRecord, origin: String, id: String): ReadRecord.Session {
         val range = TimeRangeFilter.between(record.startTime, record.endTime)
-        val distance = runCatching {
-            connect().aggregate(AggregateRequest(setOf(DistanceRecord.DISTANCE_TOTAL), range))[DistanceRecord.DISTANCE_TOTAL]
-        }.getOrNull()
-        val energy = runCatching {
-            connect().aggregate(AggregateRequest(setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), range))[
-                ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL,
-            ]
-        }.getOrNull()
+        val distance = sessionTotal(DistanceRecord.DISTANCE_TOTAL, "distance", range)
+        val energy = sessionTotal(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, "active calories", range)
         return ReadRecord.Session(
             origin = origin,
             recordId = id,
@@ -206,6 +204,16 @@ class HealthConnectReader @Inject constructor(
         )
     }
 
+    private suspend fun <T : Any> sessionTotal(metric: AggregateMetric<T>, name: String, range: TimeRangeFilter): T? =
+        try {
+            connect().aggregate(AggregateRequest(setOf(metric), range))[metric]
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            problems.record("health", "workout $name: ${failure::class.java.simpleName} ${failure.message}")
+            null
+        }
+
     private fun stageName(stage: Int): String = when (stage) {
         SleepSessionRecord.STAGE_TYPE_AWAKE -> "AWAKE"
         SleepSessionRecord.STAGE_TYPE_SLEEPING -> "SLEEPING"
@@ -215,10 +223,5 @@ class HealthConnectReader @Inject constructor(
         SleepSessionRecord.STAGE_TYPE_REM -> "REM"
         SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> "AWAKE_IN_BED"
         else -> "UNKNOWN"
-    }
-
-    private companion object {
-        @Suppress("unused")
-        val ZONE: ZoneId = ZoneId.systemDefault()
     }
 }
