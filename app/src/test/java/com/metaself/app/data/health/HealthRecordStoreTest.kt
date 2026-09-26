@@ -8,6 +8,7 @@ import com.metaself.app.data.assumeSqliteRuntime
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomDatabaseTransaction
 import com.metaself.app.data.profile.FakeProfileRepository
+import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.health.HealthKind
@@ -48,6 +49,7 @@ class HealthRecordStoreTest {
             HealthRows(ZoneOffset.UTC),
             FakeProfileRepository(aProfile()),
             Today { LocalDate.of(2026, 9, 3) },
+            Now { STAMP },
         )
     }
 
@@ -108,14 +110,68 @@ class HealthRecordStoreTest {
 
         store.replaceWindow(HealthKind.HEART_RATE, (day - 29) * DAY, (day + 1) * DAY, emptyList())
 
-        assertThat(db.healthReadingDao().ofKindBetween("HEART_RATE", 0, Long.MAX_VALUE).map { it.recordId })
-            .containsExactly("hr-out")
+        assertThat(allHeartRecordIds()).containsExactly("hr-out")
+    }
+
+    /** A series that began inside the window goes whole, samples past its edge included (M5). */
+    @Test
+    fun `replacing a window drops a whole record that began inside it`() = runTest {
+        val edge = (day + 1) * DAY
+        store.apply(listOf(heart("hr-edge", listOf(60.0, 62.0), at = edge - MINUTE)), emptyList())
+
+        val touched = store.replaceWindow(HealthKind.HEART_RATE, edge - 7 * DAY, edge, emptyList())
+
+        assertThat(allHeartRecordIds()).isEmpty()
+        assertThat(touched).containsExactly(day, day + 1)
+    }
+
+    /** I1: a window re-read updates a workout in place, so the owner's note stays with its row. */
+    @Test
+    fun `a window re-read keeps a synced session's id and note, and drops one no longer read`() = runTest {
+        store.apply(listOf(session("w-1"), session("w-2", at = day * DAY + 2 * HOUR)), emptyList())
+        val kept = db.workoutDao().all().first { it.originId == "w-1" }
+        db.workoutDao().update(kept.copy(note = "an invented note"))
+
+        val touched = store.replaceWindow(HealthKind.EXERCISE, (day - 29) * DAY, (day + 1) * DAY, listOf(session("w-1")))
+
+        val after = db.workoutDao().all().single()
+        assertThat(after.id).isEqualTo(kept.id)
+        assertThat(after.note).isEqualTo("an invented note")
+        assertThat(touched).containsExactly(day)
+    }
+
+    @Test
+    fun `a window re-read keeps a hidden synced session it no longer reads`() = runTest {
+        store.apply(listOf(session("w-1")), emptyList())
+        db.workoutDao().setHidden(db.workoutDao().all().single().id, true)
+
+        store.replaceWindow(HealthKind.EXERCISE, (day - 29) * DAY, (day + 1) * DAY, emptyList())
+
+        assertThat(db.workoutDao().all().single().hidden).isTrue()
+    }
+
+    @Test
+    fun `a reading read again on another day returns both days`() = runTest {
+        store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
+
+        val touched = store.apply(listOf(heart("hr-1", listOf(60.0), at = (day + 1) * DAY)), emptyList())
+
+        assertThat(touched).containsExactly(day, day + 1)
+    }
+
+    @Test
+    fun `a session read again on another day returns both days`() = runTest {
+        store.apply(listOf(session("w-1")), emptyList())
+
+        val touched = store.apply(listOf(session("w-1", at = (day + 1) * DAY)), emptyList())
+
+        assertThat(touched).containsExactly(day, day + 1)
     }
 
     @Test
     fun `a summarised day is written from its readings and its totals`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(60.0, 80.0))), emptyList())
-        store.summarise(setOf(day), mapOf(day to DayTotals(steps = 9_000)), nowMillis = 1_000)
+        store.summarise(setOf(day), totals(DayTotals(steps = 9_000)), nowMillis = 1_000)
 
         val summary = db.healthDayDao().day(day)!!
         assertThat(summary.steps).isEqualTo(9_000)
@@ -123,25 +179,49 @@ class HealthRecordStoreTest {
     }
 
     @Test
+    fun `the owner's correction wins over the total in the stored summary`() = runTest {
+        db.movementCorrectionDao().insertAll(
+            listOf(MovementCorrectionEntity(epochDay = day, steps = 10_000, activeKcal = null, setAtMillis = 0, note = null)),
+        )
+
+        store.summarise(setOf(day), totals(DayTotals(steps = 9_000)), nowMillis = 1_000)
+
+        val summary = db.healthDayDao().day(day)!!
+        assertThat(summary.steps).isEqualTo(10_000)
+        assertThat(summary.stepsSource).isEqualTo("CORRECTED")
+    }
+
+    @Test
     fun `a day with nothing left is removed`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
-        store.summarise(setOf(day), emptyMap(), nowMillis = 1_000)
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 1_000)
 
         store.apply(emptyList(), listOf("hr-1"))
-        store.summarise(setOf(day), emptyMap(), nowMillis = 2_000)
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 2_000)
 
         assertThat(db.healthDayDao().day(day)).isNull()
     }
 
-    /** A totals call that failed must not wipe a day's steps: what was stored as TOTAL stands. */
+    /** I2: a totals call that failed must not wipe a day's steps: what was stored as TOTAL stands. */
     @Test
-    fun `a total not given this time keeps the one stored`() = runTest {
+    fun `a failed total keeps the one stored`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
-        store.summarise(setOf(day), mapOf(day to DayTotals(steps = 9_000)), nowMillis = 1_000)
+        store.summarise(setOf(day), totals(DayTotals(steps = 9_000)), nowMillis = 1_000)
 
-        store.summarise(setOf(day), emptyMap(), nowMillis = 2_000)
+        store.summarise(setOf(day), TotalsResult(failed = setOf(TotalMetric.STEPS)), nowMillis = 2_000)
 
         assertThat(db.healthDayDao().day(day)!!.steps).isEqualTo(9_000)
+    }
+
+    /** I2: a call that worked and found nothing means nothing — the old figure is stale, not kept. */
+    @Test
+    fun `a total that came back empty clears the stored one, and an empty day goes`() = runTest {
+        store.summarise(setOf(day), totals(DayTotals(steps = 9_000)), nowMillis = 1_000)
+        assertThat(db.healthDayDao().day(day)!!.steps).isEqualTo(9_000)
+
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 2_000)
+
+        assertThat(db.healthDayDao().day(day)).isNull()
     }
 
     /** D70, on the standard body: born 1980, in 2026, so an estimated maximum of 174. */
@@ -152,7 +232,7 @@ class HealthRecordStoreTest {
             emptyList(),
         )
 
-        store.summarise(setOf(day), emptyMap(), nowMillis = 1_000)
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 1_000)
 
         val workout = db.workoutDao().all().single()
         assertThat(workout.avgHeartRate).isEqualTo(130)
@@ -161,16 +241,63 @@ class HealthRecordStoreTest {
         assertThat(workout.zoneSeconds).isNotNull()
     }
 
+    /** M1: figures from readings since deleted are cleared, not left standing. */
     @Test
-    fun `a summarised day marks its month as out of date`() = runTest {
+    fun `a workout whose readings are gone loses its heart-rate figures`() = runTest {
+        store.apply(
+            listOf(session("w-1"), heart("hr-1", listOf(120.0, 140.0), at = day * DAY + 60_000)),
+            emptyList(),
+        )
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 1_000)
+
+        store.apply(emptyList(), listOf("hr-1"))
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 2_000)
+
+        val workout = db.workoutDao().all().single()
+        assertThat(workout.avgHeartRate).isNull()
+        assertThat(workout.maxHeartRate).isNull()
+        assertThat(workout.zoneSeconds).isNull()
+        assertThat(workout.zoneMaxSource).isNull()
+    }
+
+    /** M3: a workout across midnight gets the samples filed on the next day, which alone was touched. */
+    @Test
+    fun `a workout across midnight is refigured when the next day is summarised`() = runTest {
+        store.apply(listOf(session("w-1", at = day * DAY - 10 * MINUTE)), emptyList())
+        store.apply(listOf(heart("hr-1", listOf(120.0, 140.0), at = day * DAY + 5 * MINUTE)), emptyList())
+
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 1_000)
+
+        val workout = db.workoutDao().all().single()
+        assertThat(workout.epochDay).isEqualTo(day - 1)
+        assertThat(workout.avgHeartRate).isEqualTo(130)
+        assertThat(db.healthDayDao().day(day - 1)).isNull()
+    }
+
+    /** M4: the archive month is marked when rows change, stamped with the store's own clock. */
+    @Test
+    fun `applying a record marks its month as out of date`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
 
-        store.summarise(setOf(day), emptyMap(), nowMillis = 1_000)
+        val months = db.healthBookkeepingDao().monthsOutOfDate()
+        assertThat(months.map { it.month }).containsExactly("2026-09")
+        assertThat(months.single().changedAtMillis).isEqualTo(STAMP)
+    }
 
-        assertThat(db.healthBookkeepingDao().monthsOutOfDate().map { it.month }).containsExactly("2026-09")
+    @Test
+    fun `summarising alone marks no month`() = runTest {
+        store.summarise(setOf(day), totals(DayTotals(steps = 9_000)), nowMillis = 1_000)
+
+        assertThat(db.healthBookkeepingDao().monthsOutOfDate()).isEmpty()
     }
 
     // --- Helpers -----------------------------------------------------------------------------------
+
+    private fun totals(onDay: DayTotals) = TotalsResult(byDay = mapOf(day to onDay))
+
+    private suspend fun allHeartRecordIds() =
+        db.healthReadingDao().ofKindBetween("HEART_RATE", Long.MIN_VALUE, Long.MAX_VALUE, 0, Long.MAX_VALUE)
+            .map { it.recordId }
 
     /** A heart-rate series, its samples one minute apart from [at]. */
     private fun heart(id: String, bpm: List<Double>, at: Long = day * DAY) = ReadRecord.Reading(
@@ -193,12 +320,12 @@ class HealthRecordStoreTest {
         },
     )
 
-    /** A half-hour run from the start of [day]. */
-    private fun session(id: String, distanceM: Int? = 5_000) = ReadRecord.Session(
+    /** A half-hour run from [at], the start of [day] unless said. */
+    private fun session(id: String, distanceM: Int? = 5_000, at: Long = day * DAY) = ReadRecord.Session(
         origin = ORIGIN,
         recordId = id,
-        startMillis = day * DAY,
-        endMillis = day * DAY + 30 * MINUTE,
+        startMillis = at,
+        endMillis = at + 30 * MINUTE,
         kind = "RUN",
         title = "Running",
         distanceM = distanceM,
@@ -210,5 +337,6 @@ class HealthRecordStoreTest {
         const val DAY = 86_400_000L
         const val HOUR = 3_600_000L
         const val MINUTE = 60_000L
+        const val STAMP = 5_000L
     }
 }

@@ -22,9 +22,10 @@ import javax.inject.Singleton
  * - **B.** Kinds still catching up take one week each in turn, newest first, until all are done or
  *   the budget is spent, so no kind waits behind another's history.
  *
- * Days touched are summarised after phase A and after each turn of phase B, with one totals call over
- * their range. **Accepted:** a crash between a saved bookmark and its summarise leaves that day's
- * summary stale until the day changes again.
+ * Days touched are summarised after phase A and after each turn of phase B, with totals asked over
+ * runs of at most [TOTALS_DAYS] days that cover them, one call per run (uncounted). **Accepted:** a
+ * crash between a saved bookmark and its summarise leaves that day's summary stale until the day
+ * changes again.
  *
  * **Accepted:** the count of empty weeks restarts each open, so a history spread thinly across opens
  * may not stop by that rule; it ends by [FURTHEST_DAYS] at worst.
@@ -195,31 +196,50 @@ class HealthRecordSync(
         }
     }
 
-    /** Summarises the days touched since the last summarise, with totals over their range. */
+    /**
+     * Summarises the days touched since the last summarise. They are cut into runs, each starting at a
+     * touched day and reaching at most [TOTALS_DAYS] days on, and each run gets its own totals call, so
+     * a scattered set of days is never one call over months. A run whose call throws is summarised with
+     * every metric failed, which keeps its stored totals; the other runs are not affected.
+     */
     private suspend fun summarise(touched: MutableSet<Long>, nowMillis: Long) {
         if (touched.isEmpty()) return
-        val days = touched.toSet()
+        val days = touched.sorted()
         touched.clear()
-        val totals = try {
-            source.dayTotals(days.min(), days.max())
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Exception) {
-            note("totals: ${failure::class.java.simpleName} ${failure.message}")
-            emptyMap()
+        for (run in runsOf(days)) {
+            val totals = try {
+                source.dayTotals(run.first(), run.last())
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                note("totals: ${failure::class.java.simpleName} ${failure.message}")
+                TotalsResult.ALL_FAILED
+            }
+            store.summarise(run.toSet(), totals, nowMillis)
         }
-        store.summarise(days, totals, nowMillis)
+    }
+
+    private fun runsOf(sortedDays: List<Long>): List<List<Long>> {
+        val runs = mutableListOf<MutableList<Long>>()
+        for (day in sortedDays) {
+            val current = runs.lastOrNull()
+            if (current != null && day < current.first() + TOTALS_DAYS) current += day else runs += mutableListOf(day)
+        }
+        return runs
     }
 
     /**
      * A failure that says "not now" rather than "never": an I/O failure, the binder's RemoteException or
      * a subclass of it (matched by name, so pure tests need no Android class), or an
-     * IllegalStateException whose message mentions a rate limit.
+     * IllegalStateException whose message says "rate limit", "rate-limit", "ratelimit" or "quota" in
+     * any case — not merely "rate", which is inside ordinary words.
      */
     private fun transient(failure: Exception): Boolean =
         failure is IOException ||
             generateSequence<Class<*>>(failure.javaClass) { it.superclass }.any { it.name == REMOTE_EXCEPTION } ||
-            (failure is IllegalStateException && failure.message?.contains("rate", ignoreCase = true) == true)
+            (failure is IllegalStateException && failure.message.let { message ->
+                message != null && RATE_LIMITED.any { message.contains(it, ignoreCase = true) }
+            })
 
     private fun note(detail: String) = problems.record(kind = "health", detail = detail)
 
@@ -233,6 +253,10 @@ class HealthRecordSync(
     companion object {
         private const val DAY = 86_400_000L
         private const val REMOTE_EXCEPTION = "android.os.RemoteException"
+        private val RATE_LIMITED = listOf("rate limit", "rate-limit", "ratelimit", "quota")
+
+        /** A choice: a totals call covers at most this many consecutive days. */
+        const val TOTALS_DAYS = 30L
 
         /** A choice: a week is a readable slice for any kind. */
         const val SLICE_DAYS = 7L
@@ -250,7 +274,7 @@ class HealthRecordSync(
          * A choice that keeps one open cheap. Health Connect's real quota is not measured here.
          *
          * Counted: each page of changes and each catch-up week. **Not counted:** taking a token, the
-         * totals calls, the re-read of the window after an expired token, and each workout's two
+         * totals calls (one per run of up to [TOTALS_DAYS] touched days), the re-read of the window after an expired token, and each workout's two
          * aggregate calls made while it is read.
          */
         const val READS_PER_OPEN = 60

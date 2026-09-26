@@ -93,13 +93,12 @@ class HealthConnectReader @Inject constructor(
         }
 
     /** Every page. One page is a thousand records, a few days of a busy series (the first steps bug). */
-    private suspend fun readAll(type: kotlin.reflect.KClass<out Record>, range: TimeRangeFilter): List<Record> {
-        val out = mutableListOf<Record>()
+    private suspend fun <T : Record> readAll(type: kotlin.reflect.KClass<T>, range: TimeRangeFilter): List<T> {
+        val out = mutableListOf<T>()
         var page: String? = null
         do {
-            @Suppress("UNCHECKED_CAST")
             val response = connect().readRecords(
-                ReadRecordsRequest(recordType = type as kotlin.reflect.KClass<Record>, timeRangeFilter = range, pageToken = page),
+                ReadRecordsRequest(recordType = type, timeRangeFilter = range, pageToken = page),
             )
             out += response.records
             page = response.pageToken
@@ -107,7 +106,7 @@ class HealthConnectReader @Inject constructor(
         return out
     }
 
-    override suspend fun dayTotals(fromDay: Long, toDay: Long): Map<Long, DayTotals> = withContext(Dispatchers.IO) {
+    override suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult = withContext(Dispatchers.IO) {
         val from = LocalDate.ofEpochDay(fromDay)
         val to = LocalDate.ofEpochDay(toDay)
         val steps = daily(StepsRecord.COUNT_TOTAL, "steps", from, to) { it.toInt() }
@@ -118,18 +117,29 @@ class HealthConnectReader @Inject constructor(
         val total = daily(TotalCaloriesBurnedRecord.ENERGY_TOTAL, "total calories", from, to) {
             it.inKilocalories.roundToInt()
         }
-        (steps.keys + distance.keys + active.keys + total.keys).associateWith { day ->
-            DayTotals(steps[day], distance[day], active[day], total[day])
-        }
+        val byMetric = mapOf(
+            TotalMetric.STEPS to steps,
+            TotalMetric.DISTANCE to distance,
+            TotalMetric.ACTIVE_KCAL to active,
+            TotalMetric.TOTAL_KCAL to total,
+        )
+        val days = byMetric.values.filterNotNull().flatMap { it.keys }.toSet()
+        TotalsResult(
+            byDay = days.associateWith { day ->
+                DayTotals(steps?.get(day), distance?.get(day), active?.get(day), total?.get(day))
+            },
+            failed = byMetric.filterValues { it == null }.keys,
+        )
     }
 
+    /** One metric's daily figures; empty when there was no data, null when the call failed (logged). */
     private suspend fun <T : Any> daily(
         metric: AggregateMetric<T>,
         name: String,
         from: LocalDate,
         to: LocalDate,
         asInt: (T) -> Int,
-    ): Map<Long, Int> = try {
+    ): Map<Long, Int>? = try {
         connect().aggregateGroupByPeriod(
             AggregateGroupByPeriodRequest(
                 metrics = setOf(metric),
@@ -143,7 +153,7 @@ class HealthConnectReader @Inject constructor(
         throw cancelled
     } catch (failure: Exception) {
         problems.record("health", "totals of $name: ${failure::class.java.simpleName} ${failure.message}")
-        emptyMap()
+        null
     }
 
     private suspend fun translate(records: List<Record>): List<ReadRecord> = records.mapNotNull { record ->

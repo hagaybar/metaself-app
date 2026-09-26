@@ -112,7 +112,11 @@ object DaySummary {
         )
     }
 
-    /** Groups nights whose [start, end) spans overlap, and keeps the best of each group. */
+    /**
+     * Groups nights whose [start, end) spans overlap, and keeps the best of each group. Grouping is
+     * transitive: a chain of overlaps — A overlaps B, B overlaps C — is one group even when A and C do
+     * not meet, so only one of the three counts. Accepted: such a chain is rare.
+     */
     private fun distinct(nights: List<SleepNight>): List<SleepNight> {
         val best = compareByDescending<SleepNight> { it.session.endMillis - it.session.startMillis }
             .thenByDescending { it.stages.size }

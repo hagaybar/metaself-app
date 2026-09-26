@@ -81,15 +81,14 @@ interface WorkoutDao {
     @Query("DELETE FROM workouts WHERE source = 'SYNCED' AND originId = :originId AND hidden = 0")
     suspend fun deleteSynced(originId: String)
 
+    /** Synced sessions starting in [from, to) that the owner has not hidden. */
     @Query(
-        "SELECT DISTINCT epochDay FROM workouts WHERE source = 'SYNCED' AND hidden = 0 " +
+        "SELECT * FROM workouts WHERE source = 'SYNCED' AND hidden = 0 " +
             "AND startedAtMillis >= :from AND startedAtMillis < :to",
     )
-    suspend fun daysOfSyncedBetween(from: Long, to: Long): List<Long>
+    suspend fun visibleSyncedBetween(from: Long, to: Long): List<WorkoutEntity>
 
-    @Query(
-        "DELETE FROM workouts WHERE source = 'SYNCED' AND hidden = 0 " +
-            "AND startedAtMillis >= :from AND startedAtMillis < :to",
-    )
-    suspend fun deleteSyncedBetween(from: Long, to: Long)
+    /** One synced row, by its own id. A typed workout is never removed by the sync. */
+    @Query("DELETE FROM workouts WHERE id = :id AND source = 'SYNCED'")
+    suspend fun deleteSyncedRow(id: Long)
 }

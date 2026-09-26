@@ -159,6 +159,29 @@ class HealthRecordSyncTest {
         assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
     }
 
+    /** "rate" inside another word is not a rate limit: an old refusal saying so is the history limit. */
+    @Test
+    fun `a failure that only contains the letters of rate is not transient`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.refuseBefore = 65 * DAY
+        source.refusal = { IllegalStateException("inaccurate range refused") }
+
+        sync.copyNow()
+
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
+    }
+
+    @Test
+    fun `a quota message on an old read is transient`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.refuseBefore = 65 * DAY
+        source.refusal = { IllegalStateException("API QUOTA exceeded") }
+
+        sync.copyNow()
+
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
+    }
+
     @Test
     fun `a refused recent read stops the kind for now and tries again next time`() = runTest {
         source.granted = setOf(HealthKind.STEPS)
@@ -267,6 +290,43 @@ class HealthRecordSyncTest {
             .containsExactly("totals 97..99", "totals 95..95").inOrder()
     }
 
+    /** M9: totals are asked thirty days at most at a time, each run of days summarised with its own. */
+    @Test
+    fun `totals are asked in runs of at most thirty days`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        store.bookmarks[HealthKind.STEPS] = done("a")
+        source.pages = mutableListOf(
+            ChangesPage(
+                listOf(steps("st-1", 10 * DAY), steps("st-2", 39 * DAY), steps("st-3", 40 * DAY), steps("st-4", 99 * DAY)),
+                emptyList(), "a2", false, false,
+            ),
+        )
+
+        sync.copyNow()
+
+        assertThat(source.calls.filter { it.startsWith("totals") })
+            .containsExactly("totals 10..39", "totals 40..40", "totals 99..99").inOrder()
+        assertThat(store.summarised).containsExactly(setOf(10L, 39L), setOf(40L), setOf(99L)).inOrder()
+    }
+
+    /** M9, I2: a totals call that throws fails every metric for its own days, and only those. */
+    @Test
+    fun `a totals call that fails marks only its own days as failed`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        store.bookmarks[HealthKind.STEPS] = done("a")
+        source.pages = mutableListOf(
+            ChangesPage(listOf(steps("st-1", 10 * DAY), steps("st-2", 99 * DAY)), emptyList(), "a2", false, false),
+        )
+        source.totalsThrowFrom = 50
+
+        sync.copyNow()
+
+        assertThat(store.totalsGiven.map { it.failed }).containsExactly(
+            emptySet<TotalMetric>(),
+            TotalMetric.entries.toSet(),
+        ).inOrder()
+    }
+
     @Test
     fun `an error, not only an exception, is logged rather than thrown`() = runTest {
         source.granted = setOf(HealthKind.STEPS)
@@ -309,6 +369,7 @@ class HealthRecordSyncTest {
         var gate: CompletableDeferred<Unit>? = null
         var grantedError: Throwable? = null
         var grantedAsked = 0
+        var totalsThrowFrom: Long? = null
         private var tokens = 0
 
         override suspend fun grantedKinds(): Set<HealthKind> {
@@ -331,9 +392,10 @@ class HealthRecordSyncTest {
             refuseBefore?.let { if (toMillis <= it) throw refusal() }
             return windowRecords(fromMillis, toMillis)
         }
-        override suspend fun dayTotals(fromDay: Long, toDay: Long): Map<Long, DayTotals> {
+        override suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult {
             calls += "totals $fromDay..$toDay"
-            return emptyMap()
+            totalsThrowFrom?.let { if (fromDay >= it) throw IllegalStateException("unavailable") }
+            return TotalsResult()
         }
     }
 
@@ -342,6 +404,7 @@ class HealthRecordSyncTest {
         val applied = mutableListOf<Pair<List<ReadRecord>, List<String>>>()
         val replaced = mutableListOf<String>()
         val summarised = mutableListOf<Set<Long>>()
+        val totalsGiven = mutableListOf<TotalsResult>()
 
         override suspend fun bookmark(kind: HealthKind) = bookmarks[kind]
         override suspend fun saveBookmark(bookmark: HealthSyncEntity) {
@@ -356,8 +419,9 @@ class HealthRecordSyncTest {
             replaced += "$kind $fromMillis..$toMillis"
             return emptySet()
         }
-        override suspend fun summarise(days: Set<Long>, totals: Map<Long, DayTotals>, nowMillis: Long) {
+        override suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long) {
             summarised += days
+            totalsGiven += totals
         }
     }
 

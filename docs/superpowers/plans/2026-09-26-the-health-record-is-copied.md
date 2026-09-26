@@ -2556,3 +2556,19 @@ A review of Tasks 1–4 changed these rules; the code and its tests are the reco
 7. **Sleep:** overlapping nights from different apps count once (the longest); each night kept is counted by its stages or, with none, its whole length; milliseconds are summed and rounded once; UNKNOWN counts as asleep.
 8. **An empty day** is decided by checking every figure is null; each mean is computed once.
 9. **Rows:** the zone is asked for at each row, so a travelling phone files by its current zone; a workout's length is rounded to the nearest minute.
+
+A review of the store and the reader changed these rules too:
+
+10. **I1 — Workouts in a window re-read:** the read sessions are stored first, updated in place (keeping id, `hidden`, `note`); then visible synced sessions in the window the read did not return are deleted by row id, their days counted as touched. Hidden ones stay.
+11. **I2 — No data is not a failed call:** `HealthSource.dayTotals` returns `TotalsResult(byDay, failed)` over `TotalMetric { STEPS, DISTANCE, ACTIVE_KCAL, TOTAL_KCAL }`; the store keeps a stored TOTAL figure only for a metric in `failed`, and a succeeded metric with no bucket clears it (an emptied day is deleted).
+12. **I3 — Indexed writes:** `store()` finds a reading's days by `(origin, recordId)`; window queries on readings add `epochDay BETWEEN` (the window's days widened by one each side) so the `(kind, epochDay, startMillis)` index applies. Deletion by record id alone stays unindexed — no schema change; deletions are rare.
+13. **M1 — Heart rate cleared:** a workout with no samples inside it has its four heart-rate fields set to null.
+14. **M2 — Workout end:** start plus whole minutes; up to 59 s at the end are not seen (no end column). Accepted.
+15. **M3 — Workouts across midnight:** summarising a day also refigures the heart rate of workouts filed on the day before that end after its start, without re-summarising the day before.
+16. **M4 — Archive months:** marked by `apply` and `replaceWindow` for the days whose rows changed, stamped with the store's injected `Now`; `summarise` marks nothing.
+17. **M5 — Window re-read of readings:** whole records with any sample in the window are deleted, not only their in-window samples; how Health Connect treats records straddling the window edge is unverified.
+18. **M6 — Batch order:** deletions run before upserts, so an id in both lists (not expected) ends stored.
+19. **M7 — Store tests added:** a reading or session re-read on another day returns both days; a correction wins in the stored summary.
+20. **M8 — Reader:** `readAll` is generic over `<T : Record>`, with no unchecked cast.
+21. **M9 — Totals in runs:** touched days are cut into runs of at most 30 days, each with its own totals call and its own summarise; a failed call fails every metric for its own run only. Uncounted.
+22. **Transient refusals:** an IllegalStateException is transient only when its message says "rate limit", "rate-limit", "ratelimit" or "quota" (any case); overlapping nights are grouped transitively (a chain of overlaps is one group; accepted, rare).

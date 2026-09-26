@@ -13,6 +13,26 @@ data class DayTotals(
     val totalKcal: Int? = null,
 )
 
+/** The four daily totals, each asked for in its own aggregation call. */
+enum class TotalMetric { STEPS, DISTANCE, ACTIVE_KCAL, TOTAL_KCAL }
+
+/**
+ * Daily totals over a run of days, and which metrics' calls failed.
+ *
+ * A metric whose call succeeded says what it found: a day with no bucket, or a null in its [DayTotals],
+ * means no data, and a stored figure for that day is stale. A metric in [failed] said nothing, so a
+ * figure already stored for it stands.
+ */
+data class TotalsResult(
+    val byDay: Map<Long, DayTotals> = emptyMap(),
+    val failed: Set<TotalMetric> = emptySet(),
+) {
+    companion object {
+        /** Every call failed: nothing is known and nothing stored is cleared. */
+        val ALL_FAILED = TotalsResult(failed = TotalMetric.entries.toSet())
+    }
+}
+
 /** One page of changes since a token. */
 data class ChangesPage(
     val upserts: List<ReadRecord>,
@@ -27,27 +47,40 @@ interface HealthSource {
     suspend fun grantedKinds(): Set<HealthKind>
     suspend fun changesToken(kind: HealthKind): String
     suspend fun changes(kind: HealthKind, token: String): ChangesPage
-    /** Every record of [kind] starting in [fromMillis, toMillis), all pages. */
+    /**
+     * Every record of [kind] in [fromMillis, toMillis), all pages. Which records straddling the window's
+     * edges Health Connect includes is not verified here; the store deletes whole records that have a
+     * sample inside the window, and stores whatever comes back.
+     */
     suspend fun readWindow(kind: HealthKind, fromMillis: Long, toMillis: Long): List<ReadRecord>
-    /** Daily totals for every day in [fromDay, toDay], one aggregation call per metric. */
-    suspend fun dayTotals(fromDay: Long, toDay: Long): Map<Long, DayTotals>
+    /**
+     * Daily totals for every day in [fromDay, toDay], one aggregation call per metric. A metric whose
+     * call failed is in [TotalsResult.failed]; it never throws for one metric's failure.
+     */
+    suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult
 }
 
 /** What the copying writes to. The real one is Room; tests use a fake. */
 interface HealthStore {
     suspend fun bookmark(kind: HealthKind): HealthSyncEntity?
     suspend fun saveBookmark(bookmark: HealthSyncEntity)
-    /** Applies one batch in one transaction; returns the local days it touched. */
+    /**
+     * Applies one batch in one transaction; returns the local days it touched, and marks their archive
+     * months out of date.
+     */
     suspend fun apply(records: List<ReadRecord>, deletedIds: List<String>): Set<Long>
-    /** Replaces every row of [kind] starting in the window with [records]; returns the days touched. */
+    /**
+     * Replaces the rows of [kind] in the window with [records]; returns the days touched and marks their
+     * archive months out of date. A synced workout is updated in place, not recreated.
+     */
     suspend fun replaceWindow(
         kind: HealthKind,
         fromMillis: Long,
         toMillis: Long,
         records: List<ReadRecord>,
     ): Set<Long>
-    /** Recomputes each day's summary and its workouts' heart-rate figures; marks its archive month. */
-    suspend fun summarise(days: Set<Long>, totals: Map<Long, DayTotals>, nowMillis: Long)
+    /** Recomputes each day's summary and its workouts' heart-rate figures. Marks no archive month. */
+    suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long)
 }
 
 /** The one thing the day screen asks for. */

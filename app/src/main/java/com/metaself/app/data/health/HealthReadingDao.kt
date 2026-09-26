@@ -28,21 +28,38 @@ interface HealthReadingDao {
     )
     suspend fun ofKindOnDay(kind: String, epochDay: Long): List<HealthReadingEntity>
 
+    /** A record's days, through the `(origin, recordId, sampleIndex)` index. */
+    @Query("SELECT DISTINCT epochDay FROM health_readings WHERE origin = :origin AND recordId = :recordId")
+    suspend fun daysOf(origin: String, recordId: String): List<Long>
+
+    /**
+     * A deleted record's days. Health Connect's deletion gives the id alone, and no index starts with
+     * `recordId` (adding one is a schema change), so this scans the table. Accepted: deletions are rare.
+     */
     @Query("SELECT DISTINCT epochDay FROM health_readings WHERE recordId = :recordId")
     suspend fun daysOf(recordId: String): List<Long>
 
+    /** Unindexed, as [daysOf] by id alone is; deletions are rare. */
     @Query("DELETE FROM health_readings WHERE recordId = :recordId")
     suspend fun deleteByRecordId(recordId: String)
 
-    @Query("SELECT DISTINCT epochDay FROM health_readings WHERE kind = :kind AND startMillis >= :from AND startMillis < :to")
-    suspend fun daysOfKindBetween(kind: String, from: Long, to: Long): List<Long>
-
-    @Query("DELETE FROM health_readings WHERE kind = :kind AND startMillis >= :from AND startMillis < :to")
-    suspend fun deleteKindBetween(kind: String, from: Long, to: Long)
-
+    /**
+     * The records of [kind] with a sample starting in [from, to). [fromDay]..[toDay] must cover the
+     * window's days; it is what lets the `(kind, epochDay, startMillis)` index narrow the scan.
+     */
     @Query(
-        "SELECT * FROM health_readings WHERE kind = :kind AND startMillis >= :from AND startMillis < :to " +
-            "ORDER BY startMillis, sampleIndex",
+        "SELECT DISTINCT origin, recordId FROM health_readings WHERE kind = :kind " +
+            "AND epochDay BETWEEN :fromDay AND :toDay AND startMillis >= :from AND startMillis < :to",
     )
-    suspend fun ofKindBetween(kind: String, from: Long, to: Long): List<HealthReadingEntity>
+    suspend fun recordsOfKindBetween(kind: String, fromDay: Long, toDay: Long, from: Long, to: Long): List<RecordKey>
+
+    /** Samples of [kind] starting in [from, to); [fromDay]..[toDay] as for [recordsOfKindBetween]. */
+    @Query(
+        "SELECT * FROM health_readings WHERE kind = :kind AND epochDay BETWEEN :fromDay AND :toDay " +
+            "AND startMillis >= :from AND startMillis < :to ORDER BY startMillis, sampleIndex",
+    )
+    suspend fun ofKindBetween(kind: String, fromDay: Long, toDay: Long, from: Long, to: Long): List<HealthReadingEntity>
 }
+
+/** One Health Connect record's key. */
+data class RecordKey(val origin: String, val recordId: String)
