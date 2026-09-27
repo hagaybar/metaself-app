@@ -1,9 +1,13 @@
 package com.metaself.app.data.health
 
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromStream
+import kotlinx.serialization.json.encodeToStream
 import java.io.ByteArrayOutputStream
+import java.io.OutputStream
 import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
@@ -57,22 +61,32 @@ object ReadingArchive {
             ?.removePrefix(PREFIX)?.removeSuffix(SUFFIX)
             ?.takeIf { Regex("""\d{4}-\d{2}""").matches(it) }
 
-    fun encode(month: String, rows: List<HealthReadingEntity>): ByteArray = encodeRaw(
-        json.encodeToString(
-            File.serializer(),
-            File(month = month, readings = rows.map { it.toRow() }),
-        ),
-    )
+    fun encode(month: String, rows: List<HealthReadingEntity>): ByteArray =
+        ByteArrayOutputStream().also { encodeTo(it, month, rows) }.toByteArray()
 
-    /** For tests and for [encode]: gzip of UTF-8 text. */
+    /**
+     * Streamed through gzip as it is serialised, so a month's text is never held whole beside its
+     * compressed bytes. [out] is finished but not closed.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    fun encodeTo(out: OutputStream, month: String, rows: List<HealthReadingEntity>) {
+        val gzip = GZIPOutputStream(out)
+        json.encodeToStream(File.serializer(), File(month = month, readings = rows.map { it.toRow() }), gzip)
+        gzip.finish()
+    }
+
+    /** For tests: gzip of UTF-8 text. */
     fun encodeRaw(text: String): ByteArray = ByteArrayOutputStream().also { out ->
         GZIPOutputStream(out).use { it.write(text.toByteArray(Charsets.UTF_8)) }
     }.toByteArray()
 
-    /** Null for anything that cannot be read whole, or a later version. No partial month. */
+    /**
+     * Null for anything that cannot be read whole, or a later version. No partial month. Streamed
+     * out of gzip as it is parsed, so the unzipped text is never held whole.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
     fun decode(bytes: ByteArray): Month? = runCatching {
-        val text = GZIPInputStream(bytes.inputStream()).bufferedReader(Charsets.UTF_8).readText()
-        val file = json.decodeFromString(File.serializer(), text)
+        val file = GZIPInputStream(bytes.inputStream()).use { json.decodeFromStream(File.serializer(), it) }
         if (file.version !in 1..VERSION) return null
         Month(file.month, file.readings.map { it.toEntity() })
     }.getOrNull()

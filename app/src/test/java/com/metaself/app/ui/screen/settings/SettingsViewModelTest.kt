@@ -361,7 +361,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `not now brings nothing back`() = runTest {
+    fun `no brings nothing back`() = runTest {
         val archive = Archive(months = 2)
         val viewModel = restoredWith(archive, driveOn = true)
 
@@ -370,6 +370,69 @@ class SettingsViewModelTest {
 
         assertThat(viewModel.state.value.pendingArchive).isNull()
         assertThat(archive.calls).doesNotContain("restore")
+    }
+
+    /**
+     * A way back besides the offer after a restore: asked from Movement, the same question is put
+     * there, and what came of it is said there too.
+     */
+    @Test
+    fun `asking from Movement puts the same question there`() = runTest {
+        val archive = Archive(
+            months = 3,
+            result = ArchiveRestore(months = 3, readings = 1_200, unreadable = 0, unreachable = 0),
+        )
+        val viewModel = viewModel(archive = archive)
+        watch(viewModel)
+
+        viewModel.offerArchive()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.pendingArchive)
+            .isEqualTo("Also bring back 3 months of detailed readings from Drive?")
+        assertThat(viewModel.state.value.archiveInMovement).isTrue()
+
+        viewModel.confirmArchive()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.archiveMessage).isEqualTo("Brought back 3 months: 1,200 readings.")
+        assertThat(viewModel.state.value.backupMessage).isNull()
+        assertThat(viewModel.state.value.pendingArchive).isNull()
+        assertThat(archive.calls).containsExactly("count", "restore").inOrder()
+    }
+
+    @Test
+    fun `asking from Movement with no months in Drive says so and asks nothing`() = runTest {
+        val viewModel = viewModel(archive = Archive(months = 0))
+        watch(viewModel)
+
+        viewModel.offerArchive()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.pendingArchive).isNull()
+        assertThat(viewModel.state.value.archiveMessage).isEqualTo("No detailed readings were found in Drive.")
+    }
+
+    @Test
+    fun `asking from Movement with Drive not answering says so and asks nothing`() = runTest {
+        val viewModel = viewModel(archive = Archive(months = null))
+        watch(viewModel)
+
+        viewModel.offerArchive()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.pendingArchive).isNull()
+        assertThat(viewModel.state.value.archiveMessage)
+            .isEqualTo("Drive could not be reached; the detailed readings were not brought back.")
+    }
+
+    /** The offer after a restore stays with the restore, under Backup. */
+    @Test
+    fun `the offer after a restore is not put in Movement`() = runTest {
+        val viewModel = restoredWith(Archive(months = 2), driveOn = true)
+
+        assertThat(viewModel.state.value.pendingArchive).isNotNull()
+        assertThat(viewModel.state.value.archiveInMovement).isFalse()
     }
 
     @Test

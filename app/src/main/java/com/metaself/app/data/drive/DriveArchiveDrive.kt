@@ -17,7 +17,7 @@ class DriveArchiveDrive @Inject constructor(
 
     override suspend fun token(): String? = (access.authorise() as? DriveAuth.Token)?.accessToken
 
-    override suspend fun list(token: String): List<DriveFile> =
+    override suspend fun list(token: String): List<DriveFile>? =
         withContext(Dispatchers.IO) { http.list(DriveFiles.archiveListQuery(), token) }
 
     override suspend fun upload(fileName: String, bytes: ByteArray, token: String): Boolean =

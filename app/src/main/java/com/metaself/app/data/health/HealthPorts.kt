@@ -99,6 +99,15 @@ interface ArchiveRecord {
 
     /** [month] is in Drive as it stood at [atMillis]. A month the record has never marked is left alone. */
     suspend fun markWritten(month: String, atMillis: Long)
+
+    /**
+     * Rows brought back from Drive, each inserted as it is — its sample index and day kept — unless
+     * the phone already holds a row with the same (origin, record id, sample index), which is kept
+     * as the phone has it. Never deletes or replaces anything. One transaction.
+     *
+     * @return the days of the rows actually inserted; their months are marked changed.
+     */
+    suspend fun insertMissing(rows: List<HealthReadingEntity>): Set<Long>
 }
 
 /** The one thing the day screen asks for. */

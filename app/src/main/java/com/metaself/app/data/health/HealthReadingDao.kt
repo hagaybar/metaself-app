@@ -16,6 +16,13 @@ interface HealthReadingDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(readings: List<HealthReadingEntity>)
 
+    /**
+     * Skips a sample already stored — `(origin, recordId, sampleIndex)` is unique — keeping the one
+     * there. Each result is the new row's id, or -1 where the row was skipped.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMissing(readings: List<HealthReadingEntity>): List<Long>
+
     @Query("DELETE FROM health_readings WHERE origin = :origin AND recordId = :recordId")
     suspend fun deleteRecord(origin: String, recordId: String)
 

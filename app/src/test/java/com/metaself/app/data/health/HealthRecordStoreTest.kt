@@ -346,7 +346,71 @@ class HealthRecordStoreTest {
         assertThat(store.everWritten("2026-09")).isTrue()
     }
 
+    /**
+     * Bringing rows back from Drive (D71) only adds: the phone's own row is kept on a clash, a missing
+     * sample goes in with its own index and day, and only the days actually added are returned.
+     */
+    @Test
+    fun `adding missing rows keeps the phone's own and adds the rest as they were`() = runTest {
+        store.apply(listOf(heart("hr-1", listOf(70.0))), emptyList())
+        store.markWritten("2026-09", STAMP)
+        val later = RoomHealthStore(
+            db, RoomDatabaseTransaction(db), HealthRows(ZoneOffset.UTC), FakeProfileRepository(aProfile()),
+            Today { LocalDate.of(2026, 9, 3) }, Now { STAMP + 1 },
+        )
+
+        val added = later.insertMissing(
+            listOf(
+                row("hr-1", index = 0, bpm = 50.0, day = day),
+                row("hr-1", index = 1, bpm = 50.0, day = day + 1),
+            ),
+        )
+
+        assertThat(added).containsExactly(day + 1)
+        val rows = db.healthReadingDao().ofKindInDays("HEART_RATE", day, day + 1)
+        assertThat(rows.map { Triple(it.sampleIndex, it.value, it.epochDay) })
+            .containsExactly(Triple(0, 70.0, day), Triple(1, 50.0, day + 1))
+        // The month gained a row, so it is out of date again, stamped with the store's clock.
+        assertThat(db.healthBookkeepingDao().month("2026-09")!!.changedAtMillis).isEqualTo(STAMP + 1)
+        assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
+    }
+
+    @Test
+    fun `adding rows the phone already holds adds nothing and marks nothing`() = runTest {
+        store.apply(listOf(heart("hr-1", listOf(70.0))), emptyList())
+        store.markWritten("2026-09", STAMP)
+
+        assertThat(store.insertMissing(listOf(row("hr-1", index = 0, bpm = 50.0, day = day)))).isEmpty()
+        assertThat(store.monthsOutOfDate()).isEmpty()
+    }
+
+    /**
+     * A series over midnight at a month's end is in two month files. Brought back from the two, in
+     * either order, it keeps every sample: nothing in one batch removes what the other added.
+     */
+    @Test
+    fun `a series split across two months keeps every sample from two batches`() = runTest {
+        val lastOfAugust = LocalDate.of(2026, 8, 31).toEpochDay()
+        val firstOfSeptember = LocalDate.of(2026, 9, 1).toEpochDay()
+
+        store.insertMissing(listOf(row("hr-x", index = 1, bpm = 62.0, day = firstOfSeptember)))
+        store.insertMissing(listOf(row("hr-x", index = 0, bpm = 60.0, day = lastOfAugust)))
+
+        val rows = db.healthReadingDao().ofKindInDays("HEART_RATE", lastOfAugust, firstOfSeptember)
+        assertThat(rows.map { it.sampleIndex to it.epochDay })
+            .containsExactly(0 to lastOfAugust, 1 to firstOfSeptember)
+        assertThat(store.monthsOutOfDate()).containsExactly("2026-08", "2026-09").inOrder()
+        assertThat(store.readingsIn("2026-08").map { it.sampleIndex }).containsExactly(0)
+        assertThat(store.readingsIn("2026-09").map { it.sampleIndex }).containsExactly(1)
+    }
+
     // --- Helpers -----------------------------------------------------------------------------------
+
+    /** One heart-rate row as a month file holds it: sample [index], filed on [day], a minute in. */
+    private fun row(id: String, index: Int, bpm: Double, day: Long) = HealthReadingEntity(
+        kind = "HEART_RATE", startMillis = day * DAY + index * MINUTE, endMillis = null, value = bpm,
+        unit = "bpm", origin = ORIGIN, recordId = id, sampleIndex = index, epochDay = day,
+    )
 
     private fun totals(onDay: DayTotals) = TotalsResult(byDay = mapOf(day to onDay))
 

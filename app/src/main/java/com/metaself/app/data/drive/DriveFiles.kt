@@ -44,15 +44,19 @@ object DriveFiles {
     /** The metadata half of the multipart upload: a name, and nothing else. */
     fun metadataFor(fileName: String): String = """{"name":"$fileName"}"""
 
-    /** File ids and names out of a listing, or an empty list for anything unreadable. */
-    fun readListing(body: String): List<DriveFile> = runCatching {
-        json.parseToJsonElement(body).jsonObject["files"]?.jsonArray.orEmpty().mapNotNull { entry ->
+    /**
+     * File ids and names out of a listing, or null when [body] is not one — not a JSON object with a
+     * `files` array. An empty `files` array is an empty list: Drive answered, and holds nothing.
+     */
+    fun readListing(body: String): List<DriveFile>? = runCatching {
+        val files = json.parseToJsonElement(body).jsonObject["files"]?.jsonArray ?: return null
+        files.mapNotNull { entry ->
             val file = entry.jsonObject
             val id = file["id"]?.jsonPrimitive?.content ?: return@mapNotNull null
             val name = file["name"]?.jsonPrimitive?.content ?: return@mapNotNull null
             DriveFile(id, name)
         }
-    }.getOrDefault(emptyList())
+    }.getOrNull()
 
     /** The id of a file already holding today's name, so a second copy is replaced not duplicated. */
     fun existing(files: List<DriveFile>, fileName: String): String? =

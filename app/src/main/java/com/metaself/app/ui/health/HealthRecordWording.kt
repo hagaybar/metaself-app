@@ -21,7 +21,10 @@ object HealthRecordWording {
     /** Bringing the months back could not start: Drive did not answer. */
     const val NOT_BROUGHT_BACK = "Drive could not be reached; the detailed readings were not brought back."
 
-    /** The question after a restore, when Drive holds month files. */
+    /** Asked from Movement, and Drive answered with no months. */
+    const val NONE_IN_DRIVE = "No detailed readings were found in Drive."
+
+    /** The question after a restore, or asked from Movement, when Drive holds month files. */
     fun offerMonths(months: Int): String =
         "Also bring back ${plural(months.toLong(), "month")} of detailed readings from Drive?"
 

@@ -196,6 +196,8 @@ class WindowSettingsRenderTest {
             onCancelRestore = {},
             onConfirmArchive = {},
             onCancelArchive = {},
+            onOfferArchive = {},
+            onDismissArchiveMessage = {},
             onDismissBackupMessage = {},
             onCopyProblems = {},
             onClearProblems = {},

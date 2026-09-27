@@ -26,12 +26,17 @@ class DriveHttp @Inject constructor() {
             .build()
     }
 
-    fun list(query: String, token: String): List<DriveFile> {
+    /**
+     * The files [query] finds, or null when Drive refused or the reply was not a listing — never an
+     * empty list for a failure. One page only: `pageSize=1000` is this app's choice, sized to hold the
+     * daily files kept plus one file per month for many years; a next page is not asked for.
+     */
+    fun list(query: String, token: String): List<DriveFile>? {
         val url = "${DriveFiles.FILES_URL}?q=${URLEncoder.encode(query, "UTF-8")}" +
             "&fields=files(id,name)&pageSize=1000"
         val request = Request.Builder().url(url).header("Authorization", "Bearer $token").build()
         return client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) emptyList() else DriveFiles.readListing(response.body?.string().orEmpty())
+            if (!response.isSuccessful) null else DriveFiles.readListing(response.body?.string().orEmpty())
         }
     }
 

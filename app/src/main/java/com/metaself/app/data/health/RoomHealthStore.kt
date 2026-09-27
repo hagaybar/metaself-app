@@ -23,7 +23,8 @@ import javax.inject.Singleton
  *
  * The archive months (D71) of the days whose rows a write changed are marked out of date by that
  * write, stamped with [now]; summarising marks nothing. It is also the archive's [ArchiveRecord]: which
- * months are out of date, what is in one, and marking one written. One instance serves both.
+ * months are out of date, what is in one, marking one written, and adding back the rows Drive has
+ * that the phone lacks. One instance serves both.
  */
 @Singleton
 class RoomHealthStore @Inject constructor(
@@ -244,12 +245,24 @@ class RoomHealthStore @Inject constructor(
         bookkeepingDao.month(month)?.writtenAtMillis != null
 
     /**
-     * Written as it stood at [atMillis] — the moment its rows were read, taken BEFORE reading, so a
-     * change made while the file was being written leaves `changedAt` later and the month out of date.
+     * Written as it stood at [atMillis]. The archive takes that moment BEFORE reading the month's
+     * rows, so a change made while the file was being written leaves `changedAt` later and the month
+     * out of date.
      */
     override suspend fun markWritten(month: String, atMillis: Long) {
         val known = bookkeepingDao.month(month) ?: return
         bookkeepingDao.putMonth(known.copy(writtenAtMillis = atMillis))
+    }
+
+    override suspend fun insertMissing(rows: List<HealthReadingEntity>): Set<Long> {
+        if (rows.isEmpty()) return emptySet()
+        val added = mutableSetOf<Long>()
+        transaction.run {
+            val ids = readingDao.insertMissing(rows.map { it.copy(id = 0) })
+            rows.zip(ids).forEach { (row, id) -> if (id != -1L) added += row.epochDay }
+            markMonths(added)
+        }
+        return added
     }
 
     /** The Drive month files of these days are out of date (D71); when each was last written is kept. */

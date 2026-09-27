@@ -838,3 +838,31 @@ Replace `NOT_BACKED_UP` with `detailedBackup(driveOn)` everywhere (and its test)
   days they touch with every total marked failed, before uploading. Because that `apply` marks the
   month changed, `asOf` is now taken after the rows are built (previously before), so `markWritten`
   is not immediately stale.
+- **Bringing readings back never deletes** (controller's decision, supersedes the two entries above
+  where they differ). `ArchiveRecord.insertMissing` inserts Drive's rows as they are (sample index and
+  day kept) with `OnConflictStrategy.IGNORE`, so on an (origin, record id, sample index) clash the
+  phone's row wins; it never deletes, returns the days actually inserted, and marks their months
+  changed. `restoreAll` downloads every month file first, then `insertMissing`s each readable one,
+  never calls `store.apply`, never marks a month written, and re-summarises the touched days in a
+  `finally`. The union write `insertMissing`s Drive's rows, then takes `asOf`, then uploads
+  `readingsIn(month)` — what the phone now holds; the phone path takes `asOf` before reading. The
+  grouping into `ReadRecord`s is gone.
+- **A failed listing is not "no files"** (controller's decision). `DriveHttp.list` and
+  `DriveFiles.readListing` return null for a refused reply or a body that is not an object with a
+  `files` array; `DriveBackup` keeps its old behaviour with `.orEmpty()`; `writeOutOfDate` writes
+  nothing, and `monthsInDrive` / `restoreAll` return null.
+- **One archive run at a time** (controller's decision). A `Mutex` in `HealthArchive`: a write finding
+  it held is skipped (returns 0), a restore waits for it.
+- **Per-file and per-month isolation** (controller's decision). A download that throws during a
+  restore counts that file unreachable; a month that throws during a write is logged and the next is
+  tried. Cancellation is rethrown in both.
+- **Streaming** (controller's decision). `ReadingArchive.encode` / `decode` stream through gzip with
+  kotlinx's `encodeToStream` / `decodeFromStream`, still indented; `encodeTo(OutputStream, …)` added.
+- **Months counted, not files** (controller's decision). `monthsInDrive` and the restore's month count
+  count distinct months, so two copies of one month are one; the restore's reading count is distinct
+  (origin, record id, sample index) keys.
+- **A way back besides the offer** (controller's decision). With Drive backup on, Settings → Movement
+  has "Bring back detailed readings from Drive"; it asks the same question there
+  (`SettingsViewModel.offerArchive`), or says no months were found, or that Drive could not be
+  reached, and what came back is said there too. "Not now" is relabelled "No".
+- **Minor** (controller's decision). `pageSize=1000` is labelled as this app's choice; long lines split.

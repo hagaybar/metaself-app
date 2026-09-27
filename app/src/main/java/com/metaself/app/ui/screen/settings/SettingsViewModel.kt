@@ -182,6 +182,8 @@ class SettingsViewModel internal constructor(
     private val backupMessage = MutableStateFlow<String?>(null)
     private val pendingRestore = MutableStateFlow<PendingRestore?>(null)
     private val pendingArchive = MutableStateFlow<String?>(null)
+    private val archiveInMovement = MutableStateFlow(false)
+    private val archiveMessage = MutableStateFlow<String?>(null)
     private val busy = MutableStateFlow(false)
 
     private val testing = MutableStateFlow(false)
@@ -256,6 +258,10 @@ class SettingsViewModel internal constructor(
             pendingArchive = lines.pendingArchive,
             busy = lines.busy,
         )
+    }.combine(
+        combine(archiveInMovement, archiveMessage, ::Pair),
+    ) { current, (inMovement, message) ->
+        current.copy(archiveInMovement = inMovement, archiveMessage = message)
     }.combine(failed) { current, refusal ->
         current.copy(failed = refusal)
     }.stateIn(
@@ -694,7 +700,7 @@ class SettingsViewModel internal constructor(
             backupMessage.value =
                 BackupWording.restored(result) + " " + BackupWording.KEY_NOT_INCLUDED
             busy.value = false
-            offerArchive()
+            offerArchiveAfterRestore()
         }
     }
 
@@ -708,18 +714,39 @@ class SettingsViewModel internal constructor(
      * the restore has already happened and said so, and Drive not answering is no reason to say
      * otherwise.
      */
-    private fun offerArchive() {
+    private fun offerArchiveAfterRestore() {
         quietly {
             if (!profiles.driveBackupOn.first()) return@quietly
             val months = archive.monthsInDrive() ?: return@quietly
-            if (months > 0) pendingArchive.value = HealthRecordWording.offerMonths(months)
+            if (months > 0) {
+                archiveInMovement.value = false
+                pendingArchive.value = HealthRecordWording.offerMonths(months)
+            }
         }
     }
 
     /**
-     * Bring every month in Drive back. Through the record's own door, so nothing already here is
-     * removed and a record already here is replaced rather than doubled; one that throws may have
-     * brought some months back.
+     * The same question, asked for from Movement: a way back to the months in Drive besides the offer
+     * after a restore. Asked out loud, as he pressed for it: no months, or no answer, is said there.
+     */
+    fun offerArchive() {
+        quietly {
+            archiveInMovement.value = true
+            archiveMessage.value = null
+            val months = archive.monthsInDrive()
+            problemLines.value = readProblems()
+            when {
+                months == null -> archiveMessage.value = HealthRecordWording.NOT_BROUGHT_BACK
+                months == 0 -> archiveMessage.value = HealthRecordWording.NONE_IN_DRIVE
+                else -> pendingArchive.value = HealthRecordWording.offerMonths(months)
+            }
+        }
+    }
+
+    /**
+     * Bring every month in Drive back. Rows the phone lacks are added and nothing already here is
+     * removed or replaced; one that throws may have brought some months back. What came of it is said
+     * where the question was asked.
      */
     fun confirmArchive() {
         if (pendingArchive.value == null) return
@@ -727,7 +754,8 @@ class SettingsViewModel internal constructor(
             busy.value = true
             pendingArchive.value = null
             val result = archive.restoreAll()
-            backupMessage.value = result?.let(HealthRecordWording::broughtBack) ?: HealthRecordWording.NOT_BROUGHT_BACK
+            val said = result?.let(HealthRecordWording::broughtBack) ?: HealthRecordWording.NOT_BROUGHT_BACK
+            if (archiveInMovement.value) archiveMessage.value = said else backupMessage.value = said
             problemLines.value = readProblems()
             quietly { healthRecordState.value = healthStatus.current() }
             busy.value = false
@@ -740,6 +768,10 @@ class SettingsViewModel internal constructor(
 
     fun dismissBackupMessage() {
         backupMessage.value = null
+    }
+
+    fun dismissArchiveMessage() {
+        archiveMessage.value = null
     }
 
     private data class PendingRestore(val backup: Backup, val question: String)

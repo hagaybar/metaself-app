@@ -92,6 +92,9 @@ fun SettingsScreen(
     onCancelRestore: () -> Unit,
     onConfirmArchive: () -> Unit,
     onCancelArchive: () -> Unit,
+    /** Movement's way back to the months in Drive, besides the offer after a restore (D71). */
+    onOfferArchive: () -> Unit,
+    onDismissArchiveMessage: () -> Unit,
     onDismissBackupMessage: () -> Unit,
     onCopyProblems: () -> Unit,
     onClearProblems: () -> Unit,
@@ -308,6 +311,28 @@ fun SettingsScreen(
                 )
             }
 
+            // A way back to the months in Drive besides the offer after a restore. With the daily file
+            // restored on a new phone the record may be empty, so it does not wait for any days here.
+            if (state.driveOn) {
+                TextButton(
+                    onClick = onOfferArchive,
+                    enabled = !state.busy,
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                ) { Text(stringResource(R.string.settings_archive_ask)) }
+            }
+            state.pendingArchive?.takeIf { state.archiveInMovement }?.let { question ->
+                ArchiveQuestion(question, onConfirmArchive, onCancelArchive)
+            }
+            state.archiveMessage?.let { message ->
+                Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Text(text = message, style = MaterialTheme.typography.bodyMedium)
+                    TextButton(
+                        onClick = onDismissArchiveMessage,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                    ) { Text(stringResource(R.string.settings_backup_dismiss)) }
+                }
+            }
+
             if (state.stepAccess == StepAccess.NOT_PERMITTED || state.healthRecord.notAllowed.isNotEmpty()) {
                 Button(onClick = onConnectSteps) {
                     Text(stringResource(R.string.settings_steps_connect))
@@ -520,32 +545,9 @@ fun SettingsScreen(
             }
 
             // After a restore: the detailed readings are not in the daily file, so Drive's months are
-            // offered separately (D71). Nothing on the phone is removed by accepting, so no warning.
-            state.pendingArchive?.let { question ->
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(Spacing.Related),
-                        verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
-                    ) {
-                        Text(
-                            text = question,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-                            Button(onClick = onConfirmArchive) {
-                                Text(stringResource(R.string.settings_archive_bring))
-                            }
-                            TextButton(onClick = onCancelArchive) {
-                                Text(stringResource(R.string.settings_archive_skip))
-                            }
-                        }
-                    }
-                }
+            // offered separately (D71). Asked from Movement, the same question is drawn there instead.
+            state.pendingArchive?.takeUnless { state.archiveInMovement }?.let { question ->
+                ArchiveQuestion(question, onConfirmArchive, onCancelArchive)
             }
 
             state.backupMessage?.let { message ->
@@ -923,3 +925,35 @@ private const val DEFAULT_FASTING = 16
 
 /** Fasting hours, written fasting-first as 12/12, 14/10, 16/8, 18/6 and 20/4. */
 private val RATIOS = listOf(12, 14, 16, 18, 20)
+
+/**
+ * Whether to bring back the months of detailed readings in Drive (D71). Nothing on the phone is
+ * removed or replaced by accepting, so no warning.
+ */
+@Composable
+private fun ArchiveQuestion(question: String, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(Spacing.Related),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+        ) {
+            Text(
+                text = question,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Button(onClick = onConfirm) {
+                    Text(stringResource(R.string.settings_archive_bring))
+                }
+                TextButton(onClick = onCancel) {
+                    Text(stringResource(R.string.settings_archive_skip))
+                }
+            }
+        }
+    }
+}

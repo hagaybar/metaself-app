@@ -6,6 +6,9 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -15,8 +18,11 @@ interface ArchiveDrive {
     /** A token, or null when Drive cannot be reached or consent is wanted (never asked for here). */
     suspend fun token(): String?
 
-    /** This app's month files in Drive. */
-    suspend fun list(token: String): List<DriveFile>
+    /**
+     * This app's month files in Drive, or null when the listing failed. A failed listing is never
+     * "no files": taken as empty, a month in Drive would look absent and be replaced unread.
+     */
+    suspend fun list(token: String): List<DriveFile>?
 
     suspend fun upload(fileName: String, bytes: ByteArray, token: String): Boolean
 
@@ -33,7 +39,7 @@ data class ArchiveRestore(val months: Int, val readings: Int, val unreadable: In
 
 /** What Settings asks of the archive. */
 interface ReadingsArchive {
-    /** How many month files Drive holds, or null when Drive cannot be reached. */
+    /** How many months Drive holds, or null when Drive cannot be reached. */
     suspend fun monthsInDrive(): Int?
 
     /** Every month in Drive brought back, or null when Drive cannot be reached. */
@@ -58,21 +64,23 @@ interface ReadingsArchive {
  * deletes a month; replaces only the file of the month it is writing, and only once the new copy is
  * up.
  *
+ * **Bringing readings back from Drive only ever adds.** Drive's rows reach the phone through
+ * [ArchiveRecord.insertMissing]: a row the phone lacks is inserted as it is, and a row the phone
+ * already holds — same (origin, record id, sample index) — is left as the phone has it. Nothing is
+ * deleted or replaced, so a record whose samples are split across two month files (a series running
+ * over midnight at a month's end) keeps both halves whichever file comes back first.
+ *
  * **A month in Drive is never replaced by a thinner one.** A phone that has never written a month —
  * a new install, or one whose data was cleared; the daily file carries no raw readings, so restoring
- * it brings none back — may hold less of it than Drive does. So for such a month Drive's copy is downloaded first and the file sent up is
- * the union: every record the phone has, as the phone has it, plus every record only Drive has. If
- * Drive's copy cannot be downloaded or read, the month is not sent this time and stays out of date;
- * a Drive month nobody could read is never replaced. A month this phone has written before is its
- * own and is replaced as it stands.
+ * it brings none back — may hold less of it than Drive does. So for such a month Drive's copy is
+ * downloaded first and what the phone lacks is added to the phone; the file sent up is then what the
+ * phone holds. If Drive's copy cannot be downloaded or read, the month is not sent this time and
+ * stays out of date. A month this phone has written before is its own and is replaced as it stands.
  *
- * The records only Drive had are also applied back to the phone's own store, through the same door a
- * restore uses, so a later write of the same month — now the phone's own, since this write marks it
- * written — does not send the record's rows alone and drop Drive's contribution again.
- *
- * A restore brings every month back through the record's own door, so a record already here is
- * replaced, never doubled, and nothing the phone has that the file lacks is removed.
- * Never throws upwards (D8); failures go to the problem log as `"drive"`.
+ * A failed listing is never taken as an empty Drive. One archive run at a time: a write started while
+ * another run holds the archive is skipped (the next daily backup comes round), a restore waits.
+ * One month or file failing does not stop the others. Never throws upwards (D8); failures go to the
+ * problem log as `"drive"`.
  */
 @Singleton
 class HealthArchive @Inject constructor(
@@ -83,102 +91,102 @@ class HealthArchive @Inject constructor(
     private val now: Now,
 ) : ReadingsArchive {
 
+    private val running = Mutex()
+
     override suspend fun writeOutOfDate(): Int = guarded(0) {
+        if (!running.tryLock()) return@guarded 0
+        try {
+            writeLocked()
+        } finally {
+            running.unlock()
+        }
+    }
+
+    private suspend fun writeLocked(): Int {
         val months = record.monthsOutOfDate()
-        if (months.isEmpty()) return@guarded 0
-        val token = drive.token() ?: return@guarded 0
+        if (months.isEmpty()) return 0
+        val token = drive.token() ?: return 0
         val existing = drive.list(token)
+        if (existing == null) {
+            log("the month files could not be listed; nothing written")
+            return 0
+        }
         var written = 0
         for (month in months) {
-            val name = ReadingArchive.fileName(month)
-            val inDrive = existing.filter { it.name == name }
-            val phone = record.readingsIn(month)
-            val rows = if (inDrive.isEmpty() || record.everWritten(month)) {
-                phone
-            } else {
-                val drives = inDrive.map { file -> drive.download(file.id, token)?.let(ReadingArchive::decode) }
-                if (drives.any { it == null }) {
-                    log("month $month in Drive could not be read; left as it is, not replaced")
-                    continue
-                }
-                val driveRows = drives.flatMap { it!!.readings }
-                val onlyDrive = driveOnly(phone, driveRows)
-                if (onlyDrive.isNotEmpty()) {
-                    // Fed back to the phone's own store now, not just uploaded: see the class KDoc.
-                    val touched = store.apply(groupIntoRecords(onlyDrive), emptyList())
-                    store.summarise(touched, TotalsResult.ALL_FAILED, now())
-                }
-                union(phone, driveRows)
+            try {
+                if (writeMonth(month, existing, token)) written++
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                log("month $month: ${failure::class.java.simpleName} ${failure.message}")
             }
-            // Taken AFTER the rows are read and, in the union branch, after applying Drive's extra
-            // records to the phone: `store.apply` marks the month changed, and taking `asOf` before it
-            // would leave that change looking like it happened after this write, so the month would
-            // stay "out of date" and be uploaded again next time for no reason. Taken here, `asOf`
-            // covers the apply too, and the uploaded union reflects the phone exactly as this write
-            // leaves it.
-            val asOf = now()
-            val bytes = ReadingArchive.encode(month, rows)
-            if (!drive.upload(name, bytes, token)) {
-                log("month $month could not be uploaded")
-                continue
-            }
-            // Only after the new one is safely up: the previous copy of THIS month, and nothing else.
-            inDrive.forEach { drive.delete(it.id, token) }
-            record.markWritten(month, asOf)
-            written++
         }
-        written
+        return written
     }
 
-    /**
-     * Every row the phone has, plus the rows of every record only Drive has. A record is one
-     * (origin, record id): where both hold it, the phone's copy is kept whole, because the phone read
-     * it from Health Connect as it stands now — taking Drive's extra samples into it would make a
-     * record neither side ever had. In (kind, time, sample) order, so the file reads straight.
-     */
-    private fun union(phone: List<HealthReadingEntity>, drive: List<HealthReadingEntity>): List<HealthReadingEntity> =
-        (phone + driveOnly(phone, drive))
-            .sortedWith(compareBy({ it.kind }, { it.startMillis }, { it.sampleIndex }))
-
-    /** The rows of [drive], keyed by (origin, record id), that [phone] does not already hold. */
-    private fun driveOnly(phone: List<HealthReadingEntity>, drive: List<HealthReadingEntity>): List<HealthReadingEntity> {
-        val held = phone.map { it.origin to it.recordId }.toSet()
-        return drive.filter { (it.origin to it.recordId) !in held }
-    }
-
-    /**
-     * [rows], one file's or one batch's worth, grouped back into the records `HealthStore.apply`
-     * expects: one [ReadRecord.Reading] per (kind, origin, record id), its samples in order. A row of
-     * a kind this version does not know, or that is not a reading, is left out.
-     */
-    private fun groupIntoRecords(rows: List<HealthReadingEntity>): List<ReadRecord.Reading> =
-        rows.mapNotNull { row -> HealthKind.parse(row.kind)?.takeIf { it.isReading }?.let { it to row } }
-            .groupBy { (kind, row) -> Triple(kind, row.origin, row.recordId) }
-            .map { (key, grouped) ->
-                ReadRecord.Reading(
-                    kind = key.first,
-                    origin = key.second,
-                    recordId = key.third,
-                    samples = grouped.map { it.second }.sortedBy { it.sampleIndex }
-                        .map { Sample(it.startMillis, it.endMillis, it.value) },
-                )
+    /** One month sent up. @return whether it was, and marked written. */
+    private suspend fun writeMonth(month: String, existing: List<DriveFile>, token: String): Boolean {
+        val name = ReadingArchive.fileName(month)
+        val inDrive = existing.filter { it.name == name }
+        if (inDrive.isNotEmpty() && !record.everWritten(month)) {
+            val copies = inDrive.map { file -> drive.download(file.id, token)?.let(ReadingArchive::decode) }
+            if (copies.any { it == null }) {
+                log("month $month in Drive could not be read; left as it is, not replaced")
+                return false
             }
+            val added = record.insertMissing(knownReadings(copies.flatMap { it!!.readings }))
+            if (added.isNotEmpty()) {
+                // Totals are not asked for: every metric counts as failed, so the daily figures stand.
+                store.summarise(added, TotalsResult.ALL_FAILED, now())
+            }
+        }
+        // Taken BEFORE the rows are read (and after anything added above, which marked the month
+        // changed): a change landing while the file is built then leaves the month out of date.
+        val asOf = now()
+        val bytes = ReadingArchive.encode(month, record.readingsIn(month))
+        if (!drive.upload(name, bytes, token)) {
+            log("month $month could not be uploaded")
+            return false
+        }
+        // Only after the new one is safely up: the previous copies of THIS month, and nothing else.
+        inDrive.forEach { drive.delete(it.id, token) }
+        record.markWritten(month, asOf)
+        return true
+    }
+
+    /** [rows] of the kinds this version stores as readings; any other is left out. */
+    private fun knownReadings(rows: List<HealthReadingEntity>): List<HealthReadingEntity> =
+        rows.filter { HealthKind.parse(it.kind)?.isReading == true }
 
     override suspend fun monthsInDrive(): Int? = guarded(null) {
         val token = drive.token() ?: return@guarded null
-        drive.list(token).count { ReadingArchive.monthOf(it.name) != null }
+        monthFiles(token)?.mapNotNull { ReadingArchive.monthOf(it.name) }?.distinct()?.size
     }
 
+    /**
+     * Every month file in Drive, downloaded first, then each one's rows added to the phone. Bringing
+     * back is not writing: nothing is marked written, and the months that gained rows are marked
+     * changed, so the next daily write sends them from the phone, which by then holds everything.
+     */
     override suspend fun restoreAll(): ArchiveRestore? = guarded(null) {
-        val token = drive.token() ?: return@guarded null
-        val files = drive.list(token).filter { ReadingArchive.monthOf(it.name) != null }.sortedBy { it.name }
-        var months = 0
-        var readings = 0
+        running.withLock { restoreLocked() }
+    }
+
+    private suspend fun restoreLocked(): ArchiveRestore? {
+        val token = drive.token() ?: return null
+        val files = monthFiles(token)?.sortedBy { it.name } ?: return null
         var unreadable = 0
         var unreachable = 0
-        val touched = mutableSetOf<Long>()
+        val months = mutableListOf<ReadingArchive.Month>()
         for (file in files) {
-            val bytes = drive.download(file.id, token)
+            val bytes = try {
+                drive.download(file.id, token)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Throwable) {
+                log("${file.name}: ${failure::class.java.simpleName} ${failure.message}")
+                null
+            }
             if (bytes == null) {
                 unreachable++
                 continue
@@ -188,17 +196,28 @@ class HealthArchive @Inject constructor(
                 unreadable++
                 continue
             }
-            val records = groupIntoRecords(month.readings)
-            touched += store.apply(records, emptyList())
-            record.markWritten(month.month, now())
-            readings += records.sumOf { it.samples.size }
-            months++
+            months += month
         }
-        if (touched.isNotEmpty()) {
-            // Totals are not asked for: every metric counts as failed, so the daily figures stand.
-            store.summarise(touched, TotalsResult.ALL_FAILED, now())
+        val touched = mutableSetOf<Long>()
+        try {
+            months.forEach { month -> touched += record.insertMissing(knownReadings(month.readings)) }
+        } finally {
+            if (touched.isNotEmpty()) {
+                // Even when a later month failed: what was added is summarised. Totals are not asked
+                // for: every metric counts as failed, so the daily figures stand.
+                withContext(NonCancellable) { store.summarise(touched, TotalsResult.ALL_FAILED, now()) }
+            }
         }
-        ArchiveRestore(months, readings, unreadable, unreachable)
+        val readings = months.flatMap { knownReadings(it.readings) }
+            .map { Triple(it.origin, it.recordId, it.sampleIndex) }.distinct().size
+        return ArchiveRestore(months.map { it.month }.distinct().size, readings, unreadable, unreachable)
+    }
+
+    /** This app's month files, or null (and logged) when the listing failed. */
+    private suspend fun monthFiles(token: String): List<DriveFile>? {
+        val files = drive.list(token)
+        if (files == null) log("the month files could not be listed")
+        return files?.filter { ReadingArchive.monthOf(it.name) != null }
     }
 
     private suspend fun log(detail: String) = withContext(Dispatchers.IO) {

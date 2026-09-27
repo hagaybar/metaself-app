@@ -78,7 +78,8 @@ class DriveBackup @Inject constructor(
             }
         }
 
-    private fun list(token: String): List<DriveFile> = http.list(DriveFiles.listQuery(), token)
+    /** A failed listing reads as none here, as it always has: nothing is found to replace or prune. */
+    private fun list(token: String): List<DriveFile> = http.list(DriveFiles.listQuery(), token).orEmpty()
 
     private fun upload(fileName: String, contents: String, token: String): Boolean =
         http.upload(fileName, contents.toByteArray(Charsets.UTF_8), "application/json; charset=utf-8", token)

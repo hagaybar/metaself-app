@@ -79,6 +79,8 @@ class SettingsRefusalRenderTest {
             onCancelRestore = {},
             onConfirmArchive = {},
             onCancelArchive = {},
+            onOfferArchive = {},
+            onDismissArchiveMessage = {},
             onDismissBackupMessage = {},
             onCopyProblems = {},
             onClearProblems = {},

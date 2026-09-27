@@ -432,6 +432,8 @@ fun MetaSelfNavHost(
                 onCancelRestore = settingsViewModel::cancelRestore,
                 onConfirmArchive = settingsViewModel::confirmArchive,
                 onCancelArchive = settingsViewModel::cancelArchive,
+                onOfferArchive = settingsViewModel::offerArchive,
+                onDismissArchiveMessage = settingsViewModel::dismissArchiveMessage,
                 onDismissBackupMessage = settingsViewModel::dismissBackupMessage,
                 onSetReminder = { reminder ->
                     settingsViewModel.setReminder(reminder)

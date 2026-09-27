@@ -548,7 +548,8 @@
     <string name="settings_backup_replace">Replace everything</string>
     <string name="settings_backup_keep">Keep what I have</string>
     <string name="settings_archive_bring">Bring them back</string>
-    <string name="settings_archive_skip">Not now</string>
+    <string name="settings_archive_skip">No</string>
+    <string name="settings_archive_ask">Bring back detailed readings from Drive</string>
     <string name="settings_backup_dismiss">Got it</string>
     <string name="settings_reminder_title">Daily reminder</string>
     <string name="settings_reminder_earlier">Earlier</string>
