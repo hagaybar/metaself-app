@@ -51,6 +51,11 @@ data class Workout(
     val source: WorkoutSource,
     val hidden: Boolean,
     val note: String?,
+    /**
+     * The session's average heart rate, worked out by this app from the readings inside it (D70);
+     * null when there were none. Defaulted, so every workout built before the Movement screen still compiles.
+     */
+    val avgHeartRate: Int? = null,
 ) {
     /** Seconds per kilometre — "5:30 /km" on screen — or null without a distance. */
     val paceSecondsPerKm: Int?

@@ -165,6 +165,9 @@ fun DayScreenContent(
     // two above are, and because the screen it opens is the next step: until it exists, a row is
     // still a real control and still says what it holds — it simply has nowhere to go yet.
     onOpenPart: (DayPart) -> Unit = {},
+    // The Movement screen (D75). Null — every caller written before it — leaves the step line a
+    // line, not a door.
+    onOpenMovement: (() -> Unit)? = null,
 ) = CompositionLocalProvider(LocalMoves provides Motion.moves(state.isToday, LocalMoves.current)) {
     // Today moves, the past is still (public issue #16): everything drawn for a past day is still,
     // whatever the system allows, and today moves only if the system allows motion at all.
@@ -206,7 +209,7 @@ fun DayScreenContent(
         // Activity is not only an input to the calorie arithmetic — it is a reason to go for a
         // walk (D12a) — and what it earned is what moved the figure at the top of this page (D9).
         state.movement?.let { walked ->
-            StepBar(today = walked)
+            StepBar(today = walked, onOpen = onOpenMovement)
 
             MovementWording.capped(walked.credit)?.let { capped ->
                 Text(

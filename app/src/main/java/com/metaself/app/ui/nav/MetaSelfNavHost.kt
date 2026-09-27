@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -68,6 +69,8 @@ import com.metaself.app.ui.screen.weight.WeightEditorScreen
 import com.metaself.app.ui.screen.weight.WeightFormState
 import com.metaself.app.ui.screen.weight.WeightScreen
 import com.metaself.app.ui.screen.weight.WeightViewModel
+import com.metaself.app.ui.screen.movement.MovementScreen
+import com.metaself.app.ui.screen.movement.MovementViewModel
 
 /**
  * The places this host can be.
@@ -84,6 +87,9 @@ sealed class Destination(val route: String) {
             if (name.isBlank()) route else "entry/add?name=" + Uri.encode(name)
     }
     data object Weight : Destination("weight")
+
+    /** This week's movement (D73–D75). */
+    data object Movement : Destination("movement")
     data object Settings : Destination("settings") {
         /** Scrolled to the key: where the describe screen's "Add a key in settings" goes. */
         val atKey: String = "settings?at=key"
@@ -217,6 +223,7 @@ fun MetaSelfNavHost(
                 onRepeat = { navController.navigate(Destination.Repeat.route) },
                 onScan = { navController.navigate(Destination.Scan.route) },
                 onOpenWeight = { navController.navigate(Destination.Weight.route) },
+                onOpenMovement = { navController.navigate(Destination.Movement.route) },
                 onOpenSettings = { navController.navigate(Destination.Settings.route) },
                 onOpenManager = { navController.navigate(Destination.Foods.route) },
             )
@@ -256,6 +263,21 @@ fun MetaSelfNavHost(
                     weightViewModel.forgetJustLogged()
                     navController.popBackStack()
                 },
+            )
+        }
+
+        composable(Destination.Movement.route) {
+            val movementViewModel: MovementViewModel = hiltViewModel()
+            val movementState by movementViewModel.state.collectAsStateWithLifecycle()
+            // Left open past midnight, it moves to the new day on return, as the day pager does.
+            LifecycleResumeEffect(movementViewModel) {
+                movementViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
+            MovementScreen(
+                state = movementState,
+                onToggleDay = movementViewModel::toggle,
+                onBack = { navController.popBackStack() },
             )
         }
 

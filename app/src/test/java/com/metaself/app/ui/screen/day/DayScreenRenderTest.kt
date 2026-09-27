@@ -32,6 +32,7 @@ import com.metaself.app.domain.target.DailyTargetCalculator
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -638,6 +639,29 @@ class DayScreenRenderTest {
         assertThat(texts).contains("3,100 steps")
         assertThat(texts).contains("Your usual day is 5,200")
         assertThat(texts.any { it.contains("kcal earned") }).isFalse()
+    }
+
+    /** D75: the step line is a door to the Movement screen; nothing new is drawn on the day. */
+    @Test
+    fun `the step line is a door to the Movement screen`() {
+        var opened = false
+        draw(
+            meals = emptyList(),
+            movement = MovementToday(steps = 3_100, normalSteps = 5_200),
+            onOpenMovement = { opened = true },
+        )
+
+        assertThat(render.roleOf("3,100 steps")).isEqualTo(Role.Button)
+        assertThat(render.clickLabelOf("3,100 steps")).isEqualTo("open Movement")
+        render.click("3,100 steps")
+        assertThat(opened).isTrue()
+    }
+
+    @Test
+    fun `with nowhere to go, the step line is only a line`() {
+        draw(meals = emptyList(), movement = MovementToday(steps = 3_100, normalSteps = 5_200))
+
+        assertThat(render.roleOf("3,100 steps")).isNull()
     }
 
     @Test
@@ -1606,6 +1630,7 @@ class DayScreenRenderTest {
         onAdd: () -> Unit = {},
         onDescribe: () -> Unit = {},
         onScan: () -> Unit = {},
+        onOpenMovement: (() -> Unit)? = null,
     ): List<String> = render.texts {
         DayScreenContent(
             state = DayUiState.Ready(
@@ -1641,6 +1666,7 @@ class DayScreenRenderTest {
             onDismissRefusal = onDismissRefusal,
             onDismissFoodRetaught = onDismissFoodRetaught,
             onOpenPart = onOpenPart,
+            onOpenMovement = onOpenMovement,
         )
     }
 }

@@ -32,7 +32,9 @@ import com.metaself.app.data.health.HealthRows
 import com.metaself.app.data.health.HealthSource
 import com.metaself.app.data.health.HealthStore
 import com.metaself.app.data.health.MovementCorrectionDao
+import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.health.RoomHealthRecordStatus
+import com.metaself.app.data.health.RoomMovementRecord
 import com.metaself.app.data.health.RoomHealthStore
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
@@ -239,6 +241,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideHealthRecordStatus(status: RoomHealthRecordStatus): HealthRecordStatus = status
+
+    /** What the Movement screen reads (D73–D75): the health record's days and workouts, observed. */
+    @Provides
+    @Singleton
+    fun provideMovementRecord(record: RoomMovementRecord): MovementRecord = record
 
     @Provides
     @Singleton

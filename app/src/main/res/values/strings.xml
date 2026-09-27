@@ -171,6 +171,15 @@
     <string name="weight_trend_caption">The line is the trend; the dots are what the scale actually said.</string>
     <string name="weight_open">Weight</string>
 
+    <string name="movement_title">Movement</string>
+    <string name="movement_open">Movement</string>
+    <string name="movement_open_label">open Movement</string>
+    <string name="movement_day_open">open</string>
+    <string name="movement_day_closed">closed</string>
+    <string name="movement_day_show">show this day</string>
+    <string name="movement_day_hide">close this day</string>
+    <string name="movement_unreadable">The movement record could not be read; Recent problems says why.</string>
+
     <string name="settings_title">Settings</string>
     <string name="settings_open">Settings</string>
 
