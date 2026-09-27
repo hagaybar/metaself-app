@@ -136,6 +136,15 @@ class ComposeRender {
         nodeStartingWith(prefix).config.getOrNull(SemanticsProperties.Role)
 
     /**
+     * What a screen reader is told the state of the node matching [prefix] is — "open", "closed" —
+     * or null when it is told none.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun stateOf(prefix: String): String? =
+        nodeStartingWith(prefix).config.getOrNull(SemanticsProperties.StateDescription)
+
+    /**
      * What a screen reader says pressing the node matching [prefix] will do ("double-tap to ..."),
      * or null when the node names no action.
      *
