@@ -5,6 +5,8 @@
 > `2026-09-02-milestone-1-design.md`) and the page decisions (D49, D50 in
 > `2026-09-21-the-page-design.md`). Nothing here is built.
 >
+> **§4.2 (the activity screen) amended 2026-09-27 by `2026-09-27-movement-screen-design.md` (D73–D75).**
+>
 > **Partly superseded 2026-09-26 by `2026-09-26-health-record-design.md` (D65–D72).** D59's "daily
 > totals are not stored" is reversed there; this spec's phases 2 and 3 are replaced by that one's
 > phases 1 to 3, and phases 4 to 6 here follow on top of the health record. Everything else stands.
