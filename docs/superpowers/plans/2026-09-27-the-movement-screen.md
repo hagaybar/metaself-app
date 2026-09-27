@@ -62,8 +62,11 @@ The executor follows these; each is repeated in the PR body so the owner can ove
    figures (steps only, say, or only food): the closed row shows **the first line the open row would
    show** ("9,000 steps · phone and band"). "nothing recorded" is said only when the open row would be
    empty too — otherwise the closed row would say "nothing recorded" over a day that has steps.
-3. **An open day replaces its summary.** When a day is open, its row shows the heading and the detail
-   lines beneath; the one-line summary is not repeated above them.
+3. **An open day keeps its summary.** Every day row shows its heading and its one-line summary, open
+   or closed; an open day adds its detail lines beneath the summary. A detail line that says exactly
+   what the summary says is not repeated, so a day with nothing but steps, or nothing at all, opens
+   onto nothing more. (The wording is `summaryLine` and `detailLines`; the `closedLine` / `openLines`
+   code shown in Tasks 2 and 5 below is the plan as first written, before this was settled.)
 4. **Every summary figure carries its source**, steps included: "9,000 steps · phone and band",
    "9,000 steps · you set this". TOTAL → "phone and band", CORRECTED → "you set this"; any other
    source (READ, COMPUTED, unknown) has no suffix, since movement calories and steps are only ever
