@@ -356,6 +356,28 @@ class RoomFoodRepositoryTest {
             .isInstanceOf(EditRefused.AlreadyAnotherFood::class.java)
     }
 
+    /**
+     * A join leaves the absorbed food's name on the winner as a second name under the same brand.
+     * Renaming the winner to that name passed the check — the only food holding it was itself — and
+     * then put the shown name on the very (name, brand) the second name held, which the unique index
+     * refused with "UNIQUE constraint failed: food_names.nameKey, food_names.brandKey". The two names
+     * are one identity now, so they become one name.
+     */
+    @Test
+    fun `renaming a food to a name it absorbed in a join folds the two names into one`() = runTest {
+        val kept = repository.findOrCreate("Oat bar", facts = FoodFacts(per100g = per100g())).food
+        val absorbed = repository.findOrCreate("Granola bar", facts = FoodFacts(per100g = per100g())).food
+        repository.merge(winnerId = kept.id, loserId = absorbed.id)
+
+        assertThat(repository.rename(kept.id, "Granola bar")).isEqualTo(EditResult.Done)
+
+        val food = repository.byId(kept.id)!!
+        assertThat(food.name).isEqualTo("Granola bar")
+        assertThat(food.alsoKnownAs).isEmpty()
+        assertThat(repository.findOrCreate("granola bar", facts = FoodFacts(per100g = per100g())).food.id)
+            .isEqualTo(kept.id)
+    }
+
     // --- The form's Save, as one change ------------------------------------------------------------
 
     /**

@@ -190,7 +190,13 @@ class RoomFoodRepository @Inject constructor(
             val displayName = FoodKeys.displayName(newName)
             val nameKey = FoodKeys.nameKey(newName)
             val stored = dao.byId(foodId) ?: return@withTransaction EditResult.Done
-            val brandKey = FoodKeys.brandKey(stored.food.brand)
+            val preferred = stored.names.firstOrNull { it.isPreferred }
+                ?: stored.names.minByOrNull { it.addedAtMillis }
+                ?: return@withTransaction EditResult.Done
+            // The brand the renamed row is under, read off the row rather than recomputed from the
+            // food's brand column, so the check and the drop below ask about exactly the
+            // (name, brand) the unique index will see.
+            val brandKey = preferred.brandKey
 
             val taken = dao.foodIdNamed(nameKey, brandKey)
             if (taken != null && taken != foodId) {
@@ -198,9 +204,13 @@ class RoomFoodRepository @Inject constructor(
                     EditRefused.AlreadyAnotherFood(taken, displayName),
                 )
             }
-            val preferred = stored.names.firstOrNull { it.isPreferred }
-                ?: stored.names.minByOrNull { it.addedAtMillis }
-                ?: return@withTransaction EditResult.Done
+
+            // A name this food took in a join, already under this brand, is the identity the shown
+            // name is about to take, so it goes rather than collide: renaming onto it once threw
+            // "UNIQUE constraint failed: food_names.nameKey, food_names.brandKey". Only a
+            // non-preferred row is dropped, so a rename that changes only the spelling of the shown
+            // name drops nothing. Nothing points at a name row.
+            dao.dropJoinedName(foodId, nameKey, brandKey)
 
             // The name row is edited in place rather than replaced, so nothing anywhere has to be
             // repointed — which is the mechanism by which every past day re-labels without a single
