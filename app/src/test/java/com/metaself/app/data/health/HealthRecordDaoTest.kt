@@ -8,6 +8,9 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.assumeSqliteRuntime
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
+import com.metaself.app.domain.health.BandReport
+import com.metaself.app.domain.health.DayFigure
+import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
@@ -334,6 +337,48 @@ class HealthRecordDaoTest {
     }
 
     // --- Fixtures ----------------------------------------------------------------------------------
+
+    // --- What the band sends (D80) -----------------------------------------------------------------
+
+    @Test
+    fun `readings are counted by kind, app and day, only for the kinds and days asked for`() = runTest {
+        val dao = db.healthReadingDao()
+        dao.insertAll(
+            listOf(
+                beat("r1", 0, 60.0),
+                beat("r1", 1, 61.0),
+                beat("r2", 0, 62.0, day = TEST_EPOCH_DAY - 1),
+                beat("r3", 0, 63.0, day = TEST_EPOCH_DAY - 40),
+            ),
+        )
+
+        assertThat(dao.countsByDay(listOf("HEART_RATE"), TEST_EPOCH_DAY - 29, TEST_EPOCH_DAY)).containsExactly(
+            ReadingCount("HEART_RATE", ORIGIN, TEST_EPOCH_DAY, 2),
+            ReadingCount("HEART_RATE", ORIGIN, TEST_EPOCH_DAY - 1, 1),
+        )
+        assertThat(dao.countsByDay(listOf("STEPS"), TEST_EPOCH_DAY - 29, TEST_EPOCH_DAY)).isEmpty()
+    }
+
+    @Test
+    fun `the band report reads readings, nights, workouts and days from the record`() = runTest {
+        db.healthReadingDao().insertAll(listOf(beat("r1", 0, 60.0), beat("r1", 1, 61.0)))
+        db.sleepDao().insertSession(night("n1"))
+        db.workoutDao().insert(synced("s1"))
+        db.workoutDao().insert(synced("s2").copy(hidden = true))
+        db.workoutDao().insert(typed())
+        db.healthDayDao().put(HealthDayEntity(epochDay = TEST_EPOCH_DAY, computedAtMillis = 0, steps = 9_000))
+
+        val report = RoomBandRecord(db).report(BandReport.fromDayFor(TEST_EPOCH_DAY), TEST_EPOCH_DAY)
+
+        assertThat(report.kinds.single { it.kind == HealthKind.HEART_RATE }.count).isEqualTo(2)
+        assertThat(report.kinds.single { it.kind == HealthKind.SLEEP }.count).isEqualTo(1)
+        assertThat(report.kinds.single { it.kind == HealthKind.EXERCISE }.origins).containsExactly(ORIGIN)
+        // A session the owner hid is still the band's, so it still counts toward the total (D80).
+        assertThat(report.workouts.total).isEqualTo(3)
+        assertThat(report.workouts.copied).isEqualTo(2)
+        assertThat(report.workouts.typed).isEqualTo(1)
+        assertThat(report.daysWith.getValue(DayFigure.STEPS)).isEqualTo(1)
+    }
 
     private fun typed(day: Long = TEST_EPOCH_DAY, startedAt: Long = 1_000) = WorkoutEntity(
         epochDay = day,

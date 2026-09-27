@@ -26,6 +26,8 @@ import com.metaself.app.data.health.HealthConnectReader
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.HealthReadingDao
 import com.metaself.app.data.health.HealthRecordCopier
+import com.metaself.app.data.health.AppLabels
+import com.metaself.app.data.health.BandRecord
 import com.metaself.app.data.health.HealthRecordStatus
 import com.metaself.app.data.health.HealthRecordSync
 import com.metaself.app.data.health.HealthRows
@@ -33,6 +35,8 @@ import com.metaself.app.data.health.HealthSource
 import com.metaself.app.data.health.HealthStore
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.MovementRecord
+import com.metaself.app.data.health.PackageManagerAppLabels
+import com.metaself.app.data.health.RoomBandRecord
 import com.metaself.app.data.health.RoomHealthRecordStatus
 import com.metaself.app.data.health.RoomMovementRecord
 import com.metaself.app.data.health.RoomHealthStore
@@ -253,6 +257,16 @@ object DataModule {
     @Provides
     @Singleton
     fun provideTypedWorkouts(typed: RoomTypedWorkouts): TypedWorkouts = typed
+
+    /** What "What the band sends" reads (D80): counts from the stored record. */
+    @Provides
+    @Singleton
+    fun provideBandRecord(record: RoomBandRecord): BandRecord = record
+
+    /** A writing app's name on "What the band sends" (D80), else its package name. */
+    @Provides
+    @Singleton
+    fun provideAppLabels(labels: PackageManagerAppLabels): AppLabels = labels
 
     @Provides
     @Singleton

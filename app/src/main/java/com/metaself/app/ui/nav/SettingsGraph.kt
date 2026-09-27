@@ -14,8 +14,9 @@ import com.metaself.app.ui.screen.settings.SettingsPage
  * per [SettingsPage].
  *
  * [content] is handed the page (null for the index), the entry being drawn, and the graph's own
- * entry. The graph's entry is on the back stack for as long as any Settings destination is, and is
- * gone as soon as none is — so the one `SettingsViewModel` every destination takes from it lives
+ * entry; [bandReport] is handed the same two for "What the band sends" (D80), reached from the
+ * Movement page. The graph's entry is on the back stack for as long as any Settings destination is,
+ * and is gone as soon as none is — so the one `SettingsViewModel` every destination takes from it lives
  * exactly as long as a visit to Settings, as it did when Settings was a single destination. Hoisted
  * to the activity instead, a restore question or a Test it result would still be there on the next
  * visit.
@@ -23,6 +24,7 @@ import com.metaself.app.ui.screen.settings.SettingsPage
 fun NavGraphBuilder.settingsGraph(
     nav: NavController,
     content: @Composable (page: SettingsPage?, here: NavBackStackEntry, graph: NavBackStackEntry) -> Unit,
+    bandReport: @Composable (here: NavBackStackEntry, graph: NavBackStackEntry) -> Unit,
 ) {
     navigation(startDestination = Destination.Settings.index, route = Destination.Settings.route) {
         composable(Destination.Settings.index) { here ->
@@ -32,6 +34,9 @@ fun NavGraphBuilder.settingsGraph(
             composable(Destination.Settings.page(page)) { here ->
                 content(page, here, graphOf(nav, here))
             }
+        }
+        composable(Destination.Settings.bandReport) { here ->
+            bandReport(here, graphOf(nav, here))
         }
     }
 }
@@ -46,4 +51,9 @@ private fun graphOf(nav: NavController, here: NavBackStackEntry): NavBackStackEn
  */
 fun NavController.openSettingsPage(here: NavBackStackEntry, page: SettingsPage) {
     here.ifResumed { navigate(Destination.Settings.page(page)) }
+}
+
+/** Opens "What the band sends" from the Movement page, once however quickly it is tapped. */
+fun NavController.openBandReport(here: NavBackStackEntry) {
+    here.ifResumed { navigate(Destination.Settings.bandReport) }
 }

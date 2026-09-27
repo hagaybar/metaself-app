@@ -73,7 +73,20 @@ interface HealthReadingDao {
             "AND startMillis >= :from AND startMillis < :to ORDER BY startMillis, sampleIndex",
     )
     suspend fun ofKindBetween(kind: String, fromDay: Long, toDay: Long, from: Long, to: Long): List<HealthReadingEntity>
+
+    /**
+     * How many rows each app wrote of each of [kinds] on each day of [fromDay]..[toDay] (D80). Counts
+     * only, never a value. `kind IN` lets the `(kind, epochDay, startMillis)` index serve the range.
+     */
+    @Query(
+        "SELECT kind, origin, epochDay, COUNT(*) AS count FROM health_readings " +
+            "WHERE kind IN (:kinds) AND epochDay BETWEEN :fromDay AND :toDay GROUP BY kind, origin, epochDay",
+    )
+    suspend fun countsByDay(kinds: List<String>, fromDay: Long, toDay: Long): List<ReadingCount>
 }
 
 /** One Health Connect record's key. */
 data class RecordKey(val origin: String, val recordId: String)
+
+/** One app's rows of one kind on one day, counted. */
+data class ReadingCount(val kind: String, val origin: String, val epochDay: Long, val count: Int)

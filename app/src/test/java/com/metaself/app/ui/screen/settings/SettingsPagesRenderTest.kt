@@ -107,6 +107,19 @@ class SettingsPagesRenderTest {
         assertThat(texts).contains(POINTER)
     }
 
+    /** D80: the way to what the band sends, from the page about what can be read. */
+    @Test
+    fun `the Movement page has a row for what the band sends, and it opens the page`() {
+        var opened = 0
+        val texts = render.texts {
+            MovementSettingsPage(state = SettingsUiState(), onConnectSteps = {}, onOpenBandReport = { opened++ }, onBack = {})
+        }
+
+        assertThat(texts).contains("What the band sends")
+        render.click("What the band sends")
+        assertThat(opened).isEqualTo(1)
+    }
+
     // --- Food database ---
 
     @Test
@@ -166,7 +179,7 @@ class SettingsPagesRenderTest {
     }
 
     private fun movement(state: SettingsUiState): List<String> = render.texts {
-        MovementSettingsPage(state = state, onConnectSteps = {}, onBack = {})
+        MovementSettingsPage(state = state, onConnectSteps = {}, onOpenBandReport = {}, onBack = {})
     }
 
     private fun food(state: SettingsUiState): List<String> = render.texts {

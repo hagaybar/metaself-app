@@ -18,7 +18,10 @@ import androidx.lifecycle.compose.currentStateAsState
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.metaself.app.data.health.HealthPermissions
+import com.metaself.app.ui.health.BandReportWording
 import com.metaself.app.ui.screen.settings.AiSettingsPage
+import com.metaself.app.ui.screen.settings.BandReportPage
+import com.metaself.app.ui.screen.settings.BandReportViewModel
 import com.metaself.app.ui.screen.settings.BackupSettingsPage
 import com.metaself.app.ui.screen.settings.EatingSettingsPage
 import com.metaself.app.ui.screen.settings.FoodDatabaseSettingsPage
@@ -141,6 +144,7 @@ internal fun SettingsDestination(
                     }
                     askForSteps.launch(permissions)
                 },
+                onOpenBandReport = { navController.openBandReport(here) },
                 onBack = onBack,
             )
         }
@@ -219,3 +223,36 @@ internal fun SettingsDestination(
 /** "metaself-2026-09-04.json" — dated, so a folder of these sorts itself. */
 private fun backupFileName(): String =
     "metaself-${LocalDate.now()}.json"
+
+/**
+ * "What the band sends" (D80): its own view model on this entry, and which kinds are not allowed from
+ * the visit's Settings view model on [graph] — refreshed here, so "not allowed" is fresh whether this
+ * page was reached through Movement or opened directly. The clipboard is here, like Recent problems'
+ * Copy them, so the page stays drawable without an activity.
+ */
+@Composable
+internal fun BandReportDestination(
+    here: NavBackStackEntry,
+    graph: NavBackStackEntry,
+    navController: NavController,
+) {
+    val settingsViewModel: SettingsViewModel = hiltViewModel(graph)
+    val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
+    val bandViewModel: BandReportViewModel = hiltViewModel(here)
+    val state by bandViewModel.state.collectAsStateWithLifecycle()
+    val clipboard = LocalClipboardManager.current
+    val notAllowed = settingsState.healthRecord.notAllowed
+
+    LaunchedEffect(Unit) { settingsViewModel.refreshHealthRecord() }
+
+    BandReportPage(
+        state = state,
+        notAllowed = notAllowed,
+        onCopy = {
+            state.report?.let { report ->
+                clipboard.setText(AnnotatedString(BandReportWording.asText(report, notAllowed, state.labels, state.today)))
+            }
+        },
+        onBack = { navController.popFrom(here) },
+    )
+}

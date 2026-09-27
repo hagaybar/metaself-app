@@ -1,7 +1,10 @@
 package com.metaself.app.ui.screen.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -13,17 +16,20 @@ import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.health.HealthRecordWording
 import com.metaself.app.ui.movement.MovementWording
+import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 import java.time.LocalDate
 
 /**
  * Settings' Movement and health page (D79): what the phone lets the app read, how far the health
  * record reaches, and the way to allow it. The detailed readings' Drive controls are on Backups.
+ * Its last row opens "What the band sends" (D80).
  */
 @Composable
 fun MovementSettingsPage(
     state: SettingsUiState,
     onConnectSteps: () -> Unit,
+    onOpenBandReport: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -92,6 +98,23 @@ fun MovementSettingsPage(
                     Text(stringResource(R.string.settings_steps_connect))
                 }
             }
+        }
+
+        // --- what has arrived (D80) ---
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenBandReport)
+                .padding(vertical = Spacing.Related),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+        ) {
+            Text(stringResource(R.string.settings_band_title), style = MaterialTheme.typography.titleMedium)
+            Text(
+                stringResource(R.string.settings_band_row),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MetaSelfInk.two,
+            )
         }
     }
 }

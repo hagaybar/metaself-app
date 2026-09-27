@@ -44,6 +44,16 @@
          declared here (activity spec §1.1). Harmless above. -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- An app asking for Health Connect permissions has to declare one of these two. Seeing
+             them lets "What the band sends" (D80) name a writing app; anything unseen is shown by
+             its package name. -->
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+            <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+        </intent>
     </queries>
 
     <!-- Reading a barcode. Asked for at the moment he presses Scan, never at startup. -->
