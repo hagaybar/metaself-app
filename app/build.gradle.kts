@@ -10,7 +10,7 @@ plugins {
 
 android {
     namespace = "com.metaself.app"
-    compileSdk = 34
+    compileSdk = 36
     // Named rather than left to AGP's default (35.0.0 for AGP 8.10), so the build uses the
     // build-tools package installed for compileSdk 36 instead of fetching a second one into the
     // SDK folder, which is shared with another project on the development box. AGP 8.10 accepts
