@@ -112,4 +112,16 @@ class MetEstimateTest {
             }
         }
     }
+
+    /** The sheet says "from the pace" exactly when this is true (plan design question 4). */
+    @Test
+    fun `a run, walk or ride with a distance is priced by its pace, anything else by its effort`() {
+        assertThat(MetEstimate.pricedByPace(WorkoutKind.RUN, 5_000)).isTrue()
+        assertThat(MetEstimate.pricedByPace(WorkoutKind.WALK, 4_000)).isTrue()
+        assertThat(MetEstimate.pricedByPace(WorkoutKind.CYCLE, 20_000)).isTrue()
+        assertThat(MetEstimate.pricedByPace(WorkoutKind.SWIM, 1_000)).isFalse()
+        assertThat(MetEstimate.pricedByPace(WorkoutKind.STRENGTH, 1_000)).isFalse()
+        assertThat(MetEstimate.pricedByPace(WorkoutKind.RUN, null)).isFalse()
+        assertThat(MetEstimate.pricedByPace(WorkoutKind.RUN, 0)).isFalse()
+    }
 }

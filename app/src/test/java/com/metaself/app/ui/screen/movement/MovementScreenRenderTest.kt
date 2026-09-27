@@ -10,6 +10,7 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -162,13 +163,83 @@ class MovementScreenRenderTest {
         assertThat(render.isDrawnBefore("Mon 31 Aug", "Last four weeks")).isTrue()
     }
 
-    /** D75: no button that does nothing. D63: no burn, no net. */
+    /** D63: no burn, no net. */
     @Test
-    fun `nothing is offered that does nothing yet, and nothing claims a burn`() {
+    fun `nothing claims a burn`() {
         val texts = draw()
 
-        assertThat(texts.none { it.contains("Log a workout") }).isTrue()
         assertThat(texts.none { it.contains("burn", ignoreCase = true) }).isTrue()
+    }
+
+    /** D76: the button at the foot, kept in view. */
+    @Test
+    fun `Log a workout is offered, and asks to log one`() {
+        var asked = false
+        val texts = draw(onLogWorkout = { asked = true })
+
+        assertThat(texts).contains("Log a workout")
+        render.clickDescribed("Log a workout")
+        assertThat(asked).isTrue()
+    }
+
+    @Test
+    fun `a record that could not be read offers no button`() {
+        val texts = draw(state = MovementUiState(unreadable = true))
+
+        assertThat(texts.none { it.contains("Log a workout") }).isTrue()
+    }
+
+    /** D76: a typed workout's line opens it; a synced one's does not (corrections are a later phase). */
+    @Test
+    fun `a typed workout in the open day is a door to change it, and a synced one is not`() {
+        val typed = aTypedWorkout(id = 2, startedAtMillis = 1)
+        val withTyped = MovementWeek.of(
+            today = TEST_EPOCH_DAY,
+            days = emptyList(),
+            workouts = week.days.first().workouts + typed,
+            mealsByDay = emptyMap(),
+        )
+        var opened: Workout? = null
+        draw(state = MovementUiState(week = withTyped, openDay = TEST_EPOCH_DAY), onOpenWorkout = { opened = it })
+
+        assertThat(render.roleOf("Weights · 45 min")).isEqualTo(Role.Button)
+        assertThat(render.clickLabelOf("Weights · 45 min")).isEqualTo("change this workout")
+        assertThat(render.clickLabelOf("Running · 6.2 km")).isNull()
+        render.click("Weights · 45 min")
+        assertThat(opened).isEqualTo(typed)
+    }
+
+    /**
+     * Plan design question 8: a delete is undone the way the record screen's rows are — its "Deleted ·
+     * Undo" line — pinned under the title bar, above everything the list scrolls, because the bottom
+     * edge holds "Log a workout".
+     */
+    @Test
+    fun `after a delete, Undo is offered above the week and asks to put it back`() {
+        var asked = false
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, canUndo = true), onUndoDelete = { asked = true })
+
+        assertThat(texts).containsAtLeast("Deleted", "Undo")
+        assertThat(render.isDrawnBefore("Deleted", "THIS WEEK")).isTrue()
+        render.click("Undo")
+        assertThat(asked).isTrue()
+    }
+
+    @Test
+    fun `with nothing to undo there is no Undo`() {
+        val texts = draw()
+
+        assertThat(texts).doesNotContain("Undo")
+        assertThat(texts).doesNotContain("Deleted")
+    }
+
+    /** D8: a failed Undo is said, and Undo stays to try again. */
+    @Test
+    fun `an Undo that failed says so and is still offered`() {
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, canUndo = true, undoFailed = true))
+
+        assertThat(texts).contains("Not put back; Recent problems says why.")
+        assertThat(texts).contains("Undo")
     }
 
     @Test
@@ -193,7 +264,17 @@ class MovementScreenRenderTest {
         openDay: Long? = TEST_EPOCH_DAY,
         state: MovementUiState = MovementUiState(week = week, openDay = openDay),
         onToggleDay: (Long) -> Unit = {},
+        onLogWorkout: () -> Unit = {},
+        onOpenWorkout: (Workout) -> Unit = {},
+        onUndoDelete: () -> Unit = {},
     ): List<String> = render.texts {
-        MovementScreen(state = state, onToggleDay = onToggleDay, onBack = {})
+        MovementScreen(
+            state = state,
+            onToggleDay = onToggleDay,
+            onBack = {},
+            onLogWorkout = onLogWorkout,
+            onOpenWorkout = onOpenWorkout,
+            onUndoDelete = onUndoDelete,
+        )
     }
 }

@@ -39,16 +39,33 @@ data class MovementToday(
     val decidedByEnergy: Boolean
         get() = energy != null && energy.source != MovementSource.STEPS && normalEnergyKcal != null
 
-    val aboveUsual: Boolean get() = normalSteps != null && steps > normalSteps
+    /**
+     * Whether the day went past a usual one, in the reading that decided it (public issue #58): on a
+     * day the band or a typed workout decided, its kcal against the usual day's; otherwise the steps.
+     */
+    val aboveUsual: Boolean
+        get() {
+            val energy = energy
+            val usualEnergy = normalEnergyKcal
+            if (decidedByEnergy && energy != null && usualEnergy != null) return energy.kcal > usualEnergy
+            return normalSteps != null && steps > normalSteps
+        }
 
     /**
-     * How full the bar is, against a usual day.
+     * How full the rule is, against a usual day, in the reading that decided it (public issue #58) —
+     * a swim is not drawn as a near-empty rule under "kcal more movement than your usual".
      *
-     * Capped at one: a day that doubles his usual fills the bar and stops, because a bar that keeps
+     * Capped at one: a day that doubles his usual fills the rule and stops, because a rule that keeps
      * a huge day in scale makes every ordinary day look like nothing.
      */
     val fractionOfUsual: Float
         get() {
+            val energy = energy
+            val usualEnergy = normalEnergyKcal
+            if (decidedByEnergy && energy != null && usualEnergy != null) {
+                if (usualEnergy <= 0) return 0f
+                return (energy.kcal.toFloat() / usualEnergy).coerceIn(0f, 1f)
+            }
             val usual = normalSteps?.takeIf { it > 0 } ?: return 0f
             return (steps.toFloat() / usual).coerceIn(0f, 1f)
         }

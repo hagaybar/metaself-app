@@ -6,21 +6,30 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.movement.WorkoutDraft
+import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.movement.MovementWeekWording
+import com.metaself.app.ui.screen.day.UndoRow
 import com.metaself.app.ui.theme.Spacing
 
 /**
@@ -28,7 +37,13 @@ import com.metaself.app.ui.theme.Spacing
  * calories and the workouts beneath it, a short row per day — today first — and the last four weeks
  * at the foot.
  *
- * It LOOKS; it takes no input yet. "Log a workout" arrives with logging by hand (D75), not before.
+ * "Log a workout" sits at the bottom edge, where it cannot scroll away (D75, D76); a typed workout's
+ * line in an open day opens it to be changed. A synced workout is not editable here.
+ *
+ * A typed workout deleted from the sheet can be put back: the record screen's "Deleted · Undo" line
+ * ([UndoRow]), pinned under the title bar. The record screen pins it to the bottom edge so that no
+ * list can push it below the fold; here the bottom edge is the floating button's, and the top edge
+ * answers the same objection.
  */
 @Composable
 fun MovementScreen(
@@ -36,11 +51,22 @@ fun MovementScreen(
     onToggleDay: (Long) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onLogWorkout: () -> Unit = {},
+    onOpenWorkout: (Workout) -> Unit = {},
+    onDraft: (WorkoutDraft) -> Unit = {},
+    onSaveWorkout: () -> Unit = {},
+    onDeleteWorkout: () -> Unit = {},
+    onCloseSheet: () -> Unit = {},
+    onUndoDelete: () -> Unit = {},
 ) {
+    val readable = state.week != null
     MetaSelfScreen(
         title = stringResource(R.string.movement_title),
         modifier = modifier,
         onBack = onBack,
+        belowBar = { if (state.canUndo) UndoLine(failed = state.undoFailed, onUndo = onUndoDelete) },
+        hasFloatingButton = readable,
+        floatingActionButton = { if (readable) LogWorkoutButton(onClick = onLogWorkout) },
     ) {
         val week = state.week
         when {
@@ -61,6 +87,7 @@ fun MovementScreen(
                             day = day,
                             open = day.epochDay == state.openDay,
                             onToggle = { onToggleDay(day.epochDay) },
+                            onOpenWorkout = onOpenWorkout,
                         )
                     }
                 }
@@ -74,6 +101,34 @@ fun MovementScreen(
                 }
             }
         }
+    }
+
+    state.sheet?.let { sheet ->
+        WorkoutSheet(
+            sheet = sheet,
+            onDraft = onDraft,
+            onSave = onSaveWorkout,
+            onDelete = onDeleteWorkout,
+            onCancel = onCloseSheet,
+        )
+    }
+}
+
+/**
+ * The way back from deleting a typed workout: the record screen's own "Deleted · Undo" line, and,
+ * when the last Undo failed, a line saying so above it (D8).
+ */
+@Composable
+private fun UndoLine(failed: Boolean, onUndo: () -> Unit) {
+    Column(modifier = Modifier.padding(horizontal = Spacing.Screen, vertical = Spacing.Tight)) {
+        if (failed) {
+            Text(
+                text = stringResource(R.string.movement_undo_failed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+        UndoRow(onUndo = onUndo)
     }
 }
 
@@ -108,14 +163,31 @@ private fun Headline(week: MovementWeek) {
 }
 
 /**
+ * "Log a workout" (D76), drawn as the screen's floating button so it never scrolls away. Named on the
+ * button itself, as the day's `AddSomethingButton` is: the words drawn inside it never reached the
+ * accessibility tree.
+ */
+@Composable
+internal fun LogWorkoutButton(onClick: () -> Unit) {
+    val said = stringResource(R.string.movement_log_workout)
+    ExtendedFloatingActionButton(
+        onClick = onClick,
+        modifier = Modifier.semantics { contentDescription = said },
+        icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+        text = { Text(said) },
+    )
+}
+
+/**
  * One day (D73). The heading and the one-line summary are one button that says whether it is open;
  * the summary stays whether the day is open or closed. An open day's detail lines sit beneath it,
  * outside the button, so a screen reader reads them one at a time.
  */
 @Composable
-private fun DayRow(day: MovementDay, open: Boolean, onToggle: () -> Unit) {
+private fun DayRow(day: MovementDay, open: Boolean, onToggle: () -> Unit, onOpenWorkout: (Workout) -> Unit) {
     val said = stringResource(if (open) R.string.movement_day_open else R.string.movement_day_closed)
     val action = stringResource(if (open) R.string.movement_day_hide else R.string.movement_day_show)
+    val change = stringResource(R.string.movement_workout_change)
 
     Column(modifier = Modifier.fillMaxWidth()) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -141,7 +213,7 @@ private fun DayRow(day: MovementDay, open: Boolean, onToggle: () -> Unit) {
             )
         }
         if (open) {
-            val details = MovementWeekWording.detailLines(day)
+            val details = MovementWeekWording.detailRows(day)
             if (details.isNotEmpty()) {
                 Column(
                     modifier = Modifier
@@ -150,10 +222,21 @@ private fun DayRow(day: MovementDay, open: Boolean, onToggle: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
                 ) {
                     details.forEach { line ->
+                        // A typed workout's line is a door to change it (D76); a synced one's is not.
+                        val typed = line.workout?.takeIf { it.source == WorkoutSource.TYPED }
                         Text(
-                            text = line,
+                            text = line.text,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onBackground,
+                            modifier = if (typed == null) {
+                                Modifier
+                            } else {
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable(role = Role.Button, onClickLabel = change, onClick = { onOpenWorkout(typed) })
+                                    // The usual 48 of touch; a render here cannot measure it (CLAUDE.md).
+                                    .heightIn(min = 48.dp)
+                            },
                         )
                     }
                 }

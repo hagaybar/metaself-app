@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.day.DeletedEntry
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.HealthRecordCopier
+import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.DetachedRows
@@ -43,6 +44,7 @@ import com.metaself.app.domain.movement.MovementCap
 import com.metaself.app.domain.movement.MovementCredit
 import com.metaself.app.domain.movement.MovementToday
 import com.metaself.app.domain.movement.NormalDay
+import com.metaself.app.domain.movement.TypedReading
 import com.metaself.app.domain.milestone.Milestones
 import com.metaself.app.domain.encourage.Encouragements
 import com.metaself.app.domain.encourage.Occasion
@@ -69,9 +71,12 @@ import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.window.WindowWording
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -82,6 +87,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import java.time.LocalDate
 import java.time.ZoneId
@@ -127,6 +133,8 @@ class DayViewModel @Inject constructor(
     private val problems: ProblemLog,
     /** Copying the health record (D67). Defaulted so tests and the walk need not supply one. */
     private val healthRecord: HealthRecordCopier = HealthRecordCopier.NONE,
+    /** The owner's typed workouts, the day's third movement reading (D60, D77). Defaulted like [healthRecord]. */
+    private val typedWorkouts: TypedWorkouts = TypedWorkouts.NONE,
 ) : ViewModel() {
 
     /**
@@ -221,14 +229,37 @@ class DayViewModel @Inject constructor(
         if (stretchFollowerStopped) followTheOpenStretch()
     }
 
-    /** What was read from Health Connect: every day's steps, and what a usual day looks like. */
+    /**
+     * What was read from Health Connect: every day's steps, and what a usual day looks like — with the
+     * owner's typed workouts laid in by [withTyped] (D77).
+     *
+     * @property history the days as read, before any typed workout is laid in; kept so the usual day
+     *   can be worked out again when a workout is typed while the app is open.
+     * @property readOn the day the read was made: the usual day is measured up to it.
+     */
     private data class Movement(
         val byDay: Map<Long, DayMovement>,
         val normalSteps: Int?,
         val normalEnergyKcal: Int?,
         val weightKg: Double,
         val capKcal: Int,
-    )
+        val history: List<DayMovement>,
+        val readOn: Long,
+    ) {
+        /**
+         * Each recorded day with its typed kcal as the third reading, and the usual day's energy worked
+         * out again with them in it: a routine typed workout raises the usual, as a routine walk does.
+         * The step median does not move — typed workouts are not steps.
+         */
+        fun withTyped(kcalByDay: Map<Long, Int>): Movement {
+            if (kcalByDay.isEmpty()) return this
+            val merged = TypedReading.merge(history, kcalByDay, readOn)
+            return copy(
+                byDay = merged.associateBy { it.epochDay },
+                normalEnergyKcal = NormalDay.energyKcal(merged, readOn, weightKg),
+            )
+        }
+    }
 
     init {
         // One attempt per view model — that is, once per app open. There is no background work in
@@ -674,6 +705,8 @@ class DayViewModel @Inject constructor(
                 ),
                 weightKg = profile.weightKg,
                 capKcal = MovementCap.forGoal(profile.goal),
+                history = history,
+                readOn = todayDate.toEpochDay(),
             )
     }
 
@@ -838,6 +871,30 @@ class DayViewModel @Inject constructor(
      */
     private val _foodRetaught = MutableStateFlow<String?>(null)
 
+    /**
+     * The typed workouts of the usual-day window, as kcal by day (D77) — observed, so a workout typed on
+     * the Movement screen moves today's credit without a refresh. A read that fails counts as none
+     * (D8): nothing about it stops the day screen. It is logged once, and the read is tried again
+     * every [TYPED_RETRY_MS] — one failure must not turn typed workouts off until the next day.
+     */
+    private val typedKcal: Flow<Map<Long, Int>> = _calendarToday.flatMapLatest { day ->
+        typedWorkouts.observe(day - NormalDay.WINDOW_DAYS, day)
+            .map(TypedReading::kcalByDay)
+            .retryWhen { failure, attempt ->
+                if (failure is CancellationException) return@retryWhen false
+                if (attempt == 0L) {
+                    problems.record(TYPED_PROBLEM_KIND, failure.message ?: failure::class.java.simpleName)
+                    emit(emptyMap())
+                }
+                delay(TYPED_RETRY_MS)
+                true
+            }
+    }
+
+    /** What was read, with the typed workouts laid in (D77). */
+    private val movementWithTyped: Flow<Movement?> =
+        combine(_movement, typedKcal) { movement, typed -> movement?.withTyped(typed) }
+
     val state: StateFlow<DayUiState> = combine(
         profiles.profile,
         profiles.revision,
@@ -858,7 +915,7 @@ class DayViewModel @Inject constructor(
         .combine(profiles.burnAdjustmentKcal) { inputs, adjustment ->
             inputs.copy(burnAdjustmentKcal = adjustment)
         }
-        .combine(_movement) { inputs, movement -> inputs.copy(movement = movement) }
+        .combine(movementWithTyped) { inputs, movement -> inputs.copy(movement = movement) }
         .combine(profiles.windowRules) { inputs, rules -> inputs.copy(windows = rules) }
         .combine(_encouragement) { inputs, said -> inputs.copy(encouragement = said) }
         .combine(_weeklySaidOn) { inputs, day -> inputs.copy(weeklySaidOn = day) }
@@ -909,6 +966,8 @@ class DayViewModel @Inject constructor(
                     val energy = ActivityEnergy.of(day, inputs.movement.weightKg)
                     MovementToday(
                         steps = day.steps,
+                        // A today laid in for a typed workout alone (D77) still has no steps recorded.
+                        recorded = inputs.movement.history.any { it.epochDay == inputs.day },
                         normalSteps = inputs.movement.normalSteps,
                         sessions = day.sessions,
                         energy = energy,
@@ -1746,6 +1805,16 @@ class DayViewModel @Inject constructor(
     val canUndo: StateFlow<Boolean> = _canUndo.asStateFlow()
 
     private companion object {
+        /** The problem log's kind for a typed-workout read that failed: the Movement screen's own. */
+        const val TYPED_PROBLEM_KIND = "movement"
+
+        /**
+         * How long a failed typed-workout read waits before it is tried again. A choice, not a
+         * measurement: long enough not to spin on a database that keeps failing, short enough that
+         * a passing failure is gone before the owner looks twice.
+         */
+        const val TYPED_RETRY_MS = 30_000L
+
         /** A fortnight: long enough to show whether a decision is holding, short enough to matter. */
         const val TALLY_DAYS = 13L
 

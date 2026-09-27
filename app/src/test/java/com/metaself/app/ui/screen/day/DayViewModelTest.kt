@@ -8,6 +8,13 @@ import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
+import com.metaself.app.data.health.FakeTypedWorkouts
+import com.metaself.app.data.health.TypedWorkouts
+import com.metaself.app.domain.movement.ActivityEnergy
+import com.metaself.app.domain.movement.MovementSource
+import com.metaself.app.domain.movement.MovementToday
+import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.movement.DayMovement
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
@@ -66,6 +73,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
@@ -73,8 +81,10 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
@@ -360,6 +370,12 @@ class DayViewModelTest {
         // The calendar day, overridable for the one test in which the night passes.
         today: Today = this.today,
         problems: ProblemLog = ProblemLog.NONE,
+        // No Health Connect in a test, which the app treats exactly as it treats an ordinary day.
+        steps: StepSource = object : StepSource {
+            override suspend fun access() = StepAccess.UNAVAILABLE
+            override suspend fun history(from: LocalDate, to: LocalDate) = emptyList<DayMovement>()
+        },
+        typedWorkouts: TypedWorkouts = TypedWorkouts.NONE,
     ) = DayViewModel(
         profiles = profiles,
         meals = mealRepository,
@@ -380,16 +396,13 @@ class DayViewModelTest {
         automaticBackup = object : DailyBackup {
             override suspend fun runIfDue(today: LocalDate, nowMillis: Long) = null
         },
-        // No Health Connect in a test, which the app treats exactly as it treats an ordinary day.
-        steps = object : StepSource {
-            override suspend fun access() = StepAccess.UNAVAILABLE
-            override suspend fun history(from: LocalDate, to: LocalDate) = emptyList<DayMovement>()
-        },
+        steps = steps,
         // Attaching a row to its food is exercised where it lives; here it only has to happen.
         // The same foods the view model reads, so a row attached while logging or correcting is
         // attached to a food the rest of the test can see.
         loggedFoods = LoggedFoods(foods),
         problems = problems,
+        typedWorkouts = typedWorkouts,
     )
 
     @Test
@@ -4256,5 +4269,136 @@ class DayViewModelTest {
         ) {
             gathered += Triple(epochDay, itemIds, savedMealId)
         }
+    }
+
+    /**
+     * D77 (D60 made live). Invented, round figures on `aProfile()`'s 80 kg: thirty past days of 8,000
+     * steps are 240 kcal each (8,000 × 0.000375 × 80), so the usual day is 240; today the band says
+     * 400. The cap for losing 0.5 kg a week is 275. A typed workout joins as a third reading, the
+     * largest decides, and nothing is added.
+     */
+    @Test
+    fun `a typed workout is the third reading of today's movement, never added to the others`() = runTest {
+        val typed = FakeTypedWorkouts()
+        val viewModel = viewModel(steps = bandDays(todayActiveKcal = 400), typedWorkouts = typed)
+        val job = launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(movementOf(viewModel).energy).isEqualTo(ActivityEnergy(400, MovementSource.ACTIVE_CALORIES))
+        assertThat(movementOf(viewModel).credit!!.kcal).isEqualTo(120) // (400 − 240) × 0.75
+
+        typed.workouts.value = listOf(aTypedWorkout(energyKcal = 300))
+        advanceUntilIdle()
+
+        assertThat(movementOf(viewModel).energy).isEqualTo(ActivityEnergy(400, MovementSource.ACTIVE_CALORIES))
+        assertThat(movementOf(viewModel).credit!!.kcal).isEqualTo(120)
+
+        typed.workouts.value = listOf(aTypedWorkout(energyKcal = 500))
+        advanceUntilIdle()
+
+        assertThat(movementOf(viewModel).energy).isEqualTo(ActivityEnergy(500, MovementSource.TYPED_WORKOUT))
+        assertThat(movementOf(viewModel).credit!!.kcal).isEqualTo(195) // (500 − 240) × 0.75
+
+        job.cancel()
+    }
+
+    @Test
+    fun `a hidden typed workout is no reading at all`() = runTest {
+        val typed = FakeTypedWorkouts(listOf(aTypedWorkout(energyKcal = 500, hidden = true)))
+        val viewModel = viewModel(steps = bandDays(todayActiveKcal = 400), typedWorkouts = typed)
+        val job = launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(movementOf(viewModel).energy).isEqualTo(ActivityEnergy(400, MovementSource.ACTIVE_CALORIES))
+
+        job.cancel()
+    }
+
+    /** Plan design question 14: routine typed workouts raise the usual day, as routine walks do. */
+    @Test
+    fun `typed workouts on past days raise the usual day`() = runTest {
+        val past = (1..30).map { back -> aTypedWorkout(id = back.toLong(), epochDay = TEST_EPOCH_DAY - back, energyKcal = 300) }
+        val viewModel = viewModel(steps = bandDays(todayActiveKcal = 400), typedWorkouts = FakeTypedWorkouts(past))
+        val job = launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(movementOf(viewModel).normalEnergyKcal).isEqualTo(300)
+        assertThat(movementOf(viewModel).credit!!.kcal).isEqualTo(75) // (400 − 300) × 0.75
+
+        job.cancel()
+    }
+
+    /**
+     * Before the first step of the morning Health Connect has nothing for today; a workout typed then
+     * still earns. Figures as above: the usual day is 240, so 300 typed earns (300 − 240) × 0.75 = 45.
+     * The count still says no steps are recorded — nothing is shown as a measurement that was not one.
+     */
+    @Test
+    fun `a typed workout counts today before any step is recorded`() = runTest {
+        val typed = FakeTypedWorkouts(listOf(aTypedWorkout(energyKcal = 300)))
+        val viewModel = viewModel(steps = pastDaysOnly(), typedWorkouts = typed)
+        val job = launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        val today = movementOf(viewModel)
+        assertThat(today.recorded).isFalse()
+        assertThat(today.energy).isEqualTo(ActivityEnergy(300, MovementSource.TYPED_WORKOUT))
+        assertThat(today.credit!!.kcal).isEqualTo(45)
+
+        job.cancel()
+    }
+
+    /**
+     * D8: a typed-workout read that fails counts as none and is logged — once — and is tried again,
+     * so one failure does not turn typed workouts off until the next day. Figures as above.
+     */
+    @Test
+    fun `a typed-workout read that fails is tried again, and logged once`() = runTest {
+        val typed = FakeTypedWorkouts(listOf(aTypedWorkout(energyKcal = 500)))
+        var reads = 0
+        val flaky = object : TypedWorkouts by typed {
+            override fun observe(from: Long, to: Long): Flow<List<Workout>> = flow {
+                if (reads++ < 3) throw IllegalStateException("database locked")
+                emitAll(typed.observe(from, to))
+            }
+        }
+        val problems = RecordingProblemLog()
+        val viewModel = viewModel(steps = bandDays(todayActiveKcal = 400), typedWorkouts = flaky, problems = problems)
+        val job = launch { viewModel.state.collect {} }
+        runCurrent()
+
+        assertThat(movementOf(viewModel).energy).isEqualTo(ActivityEnergy(400, MovementSource.ACTIVE_CALORIES))
+
+        advanceTimeBy(10 * 60_000L)
+        runCurrent()
+
+        assertThat(movementOf(viewModel).energy).isEqualTo(ActivityEnergy(500, MovementSource.TYPED_WORKOUT))
+        assertThat(reads).isEqualTo(4)
+        assertThat(problems.recorded.filter { it.kind == "movement" }).hasSize(1)
+
+        job.cancel()
+    }
+
+    private fun movementOf(viewModel: DayViewModel): MovementToday =
+        (viewModel.state.value as DayUiState.Ready).movement!!
+
+    /** Thirty past days of 8,000 steps and nothing yet for today. Invented. */
+    private fun pastDaysOnly() = object : StepSource {
+        override suspend fun access() = StepAccess.GRANTED
+        override suspend fun history(from: LocalDate, to: LocalDate) =
+            (TEST_EPOCH_DAY - 30 until TEST_EPOCH_DAY).map { day -> DayMovement(epochDay = day, steps = 8_000) }
+    }
+
+    /** Thirty past days of 8,000 steps, and today's 8,000 with the band's [todayActiveKcal]. Invented. */
+    private fun bandDays(todayActiveKcal: Int) = object : StepSource {
+        override suspend fun access() = StepAccess.GRANTED
+        override suspend fun history(from: LocalDate, to: LocalDate) =
+            (TEST_EPOCH_DAY - 30..TEST_EPOCH_DAY).map { day ->
+                DayMovement(
+                    epochDay = day,
+                    steps = 8_000,
+                    activeKcal = if (day == TEST_EPOCH_DAY) todayActiveKcal else null,
+                )
+            }
     }
 }

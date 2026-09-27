@@ -7,6 +7,7 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.health.HealthKind
 import com.metaself.app.domain.health.HeartRateZones
+import com.metaself.app.domain.movement.WorkoutSource
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.YearMonth
@@ -202,8 +203,22 @@ class RoomHealthStore @Inject constructor(
      * A workout's heart-rate figures from the readings inside it (D70); all four null when none fall
      * inside, so figures from readings since deleted do not stand. Unchanged when there is no profile
      * to estimate a maximum from.
+     *
+     * A typed workout (D4) is never given figures this way: nothing recorded it, so a reading that
+     * happens to fall inside its typed window is not its heart rate. All four fields stay, or are
+     * made, null.
      */
     private suspend fun withHeartRate(workout: WorkoutEntity, maxHeartRate: Int?): WorkoutEntity {
+        if (workout.source == WorkoutSource.TYPED.name) {
+            if (workout.avgHeartRate == null && workout.maxHeartRate == null &&
+                workout.zoneSeconds == null && workout.zoneMaxSource == null
+            ) {
+                return workout
+            }
+            val cleared = workout.copy(avgHeartRate = null, maxHeartRate = null, zoneSeconds = null, zoneMaxSource = null)
+            workoutDao.update(cleared)
+            return cleared
+        }
         if (maxHeartRate == null) return workout
         val end = endOf(workout)
         val (fromDay, toDay) = daysAround(workout.startedAtMillis, end)

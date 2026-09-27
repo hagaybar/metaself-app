@@ -34,7 +34,9 @@ import com.metaself.app.ui.theme.Spacing
  * steps" and names itself, so a kicker over it would print the word twice.
  *
  * The rule fills to a usual day and stops. A scale that kept a 25,000-step day in proportion would
- * make every ordinary day look like nothing, which is the opposite of the point.
+ * make every ordinary day look like nothing, which is the opposite of the point. On a day the band or
+ * a typed workout decided, the rule and its green are that reading's kcal against the usual day's
+ * (public issue #58); the count above stays steps.
  *
  * D12a is untouched: the count shows every day, and a day that earned nothing still says nothing
  * about the zero, because printing "0 kcal earned" would turn an ordinary day into a reproach.

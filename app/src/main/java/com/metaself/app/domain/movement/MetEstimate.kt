@@ -39,14 +39,18 @@ object MetEstimate {
         return ((row.met - 1.0) * weightKg * hours).roundToInt()
     }
 
+    /**
+     * Whether [netKcal] prices a workout of [kind] with [distanceM] by its speed — the felt effort then
+     * ignored — so that the sheet can say which of the two its estimate came from.
+     */
+    fun pricedByPace(kind: WorkoutKind, distanceM: Int?): Boolean =
+        (distanceM ?: 0) > 0 && kind in SPEED_TABLES
+
+    /** Through [pricedByPace], and [SPEED_TABLES] is the one list of kinds, so the two cannot drift. */
     private fun bySpeed(kind: WorkoutKind, minutes: Int, distanceM: Int?): Row? {
-        val metres = distanceM?.takeIf { it > 0 } ?: return null
-        val table = when (kind) {
-            WorkoutKind.RUN -> RUNNING_BY_SPEED
-            WorkoutKind.WALK -> WALKING_BY_SPEED
-            WorkoutKind.CYCLE -> CYCLING_BY_SPEED
-            else -> return null
-        }
+        if (distanceM == null || !pricedByPace(kind, distanceM)) return null
+        val metres = distanceM
+        val table = SPEED_TABLES.getValue(kind)
         val mph = (metres / METRES_PER_MILE) / (minutes / 60.0)
         // A speed that is exactly a threshold can come out a hair under it in floating point —
         // 16,764 m in 125 min is 5 mph and evaluates to 4.999…9 — and would then take the row below.
@@ -121,5 +125,15 @@ object MetEstimate {
         SpeedRow(12.0, 1030, 8.0),   // Bicycling, 12-13.9 mph, leisure, moderate effort
         SpeedRow(14.0, 1040, 10.0),  // Bicycling, 14-15.9 mph, racing or leisure, fast, vigorous
         SpeedRow(16.0, 1050, 12.0),  // Bicycling, 16-19 mph, racing/not drafting, very fast
+    )
+
+    /**
+     * The kinds priced by speed, each with its rows: the ONE list [pricedByPace] and [bySpeed] both
+     * read. Declared after the rows, because an object's properties are set in the order written.
+     */
+    private val SPEED_TABLES: Map<WorkoutKind, List<SpeedRow>> = mapOf(
+        WorkoutKind.RUN to RUNNING_BY_SPEED,
+        WorkoutKind.WALK to WALKING_BY_SPEED,
+        WorkoutKind.CYCLE to CYCLING_BY_SPEED,
     )
 }

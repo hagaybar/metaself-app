@@ -64,6 +64,9 @@ data class MovementDay(
  *   null when no day this week has one.
  * @property averageActiveKcal the mean movement calories over the days that have a figure, rounded;
  *   days without are not counted as zero. Null when none has one.
+ * @property workoutCount visible sessions this week that are not walks (D78).
+ * @property walkCount visible walks this week, counted apart from workouts (D78).
+ * @property workoutMinutes every visible session's time, walks included (D78).
  * @property days today first, back to Monday.
  * @property previousWeeksM the four weeks before this one, newest first; null for a week with no
  *   distance on any day.
@@ -73,6 +76,7 @@ data class MovementWeek(
     val distanceM: Int?,
     val averageActiveKcal: Int?,
     val workoutCount: Int,
+    val walkCount: Int,
     val workoutMinutes: Int,
     val days: List<MovementDay>,
     val previousWeeksM: List<Int?>,
@@ -115,7 +119,8 @@ data class MovementWeek(
                 monday = monday,
                 distanceM = distances.takeIf { it.isNotEmpty() }?.sum(),
                 averageActiveKcal = active.takeIf { it.isNotEmpty() }?.average()?.roundToInt(),
-                workoutCount = visible.size,
+                workoutCount = visible.count { it.kind != WorkoutKind.WALK },
+                walkCount = visible.count { it.kind == WorkoutKind.WALK },
                 workoutMinutes = visible.sumOf { it.durationMinutes },
                 days = (today downTo monday).map { day ->
                     MovementDay(

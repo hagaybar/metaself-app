@@ -145,6 +145,15 @@ class ComposeRender {
         nodeStartingWith(prefix).config.getOrNull(SemanticsProperties.StateDescription)
 
     /**
+     * Whether the node matching [prefix] is told to a screen reader as selected — a chosen chip or
+     * segment — or null when it says nothing about being selected.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun isSelected(prefix: String): Boolean? =
+        nodeStartingWith(prefix).config.getOrNull(SemanticsProperties.Selected)
+
+    /**
      * What a screen reader says pressing the node matching [prefix] will do ("double-tap to ..."),
      * or null when the node names no action.
      *
