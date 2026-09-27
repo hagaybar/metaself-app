@@ -66,4 +66,23 @@ class HealthRecordStateTest {
 
         assertThat(state.lastCopiedMillis).isEqualTo(3_000)
     }
+
+    // --- Older history (D72) --------------------------------------------------------------------
+
+    /** The copying's older-history marker shares the table; it is not a kind and never counted as one. */
+    @Test
+    fun `the older-history marker is neither a kind nor a copy`() {
+        val state = HealthRecordState.from(
+            days = 5, earliest = 20_699,
+            syncRows = listOf(
+                row(HealthKind.STEPS, 1_000, catchUpDone = true),
+                HealthSyncEntity(kind = HealthStore.HISTORY_MARKER, tokenAtMillis = 9_000, catchUpDone = false),
+            ),
+            granted = setOf(HealthKind.STEPS),
+        )
+
+        assertThat(state.catchingUp).isFalse()
+        assertThat(state.lastCopiedMillis).isEqualTo(1_000)
+        assertThat(state.notAllowed).isEqualTo(HealthKind.entries.toSet() - HealthKind.STEPS)
+    }
 }

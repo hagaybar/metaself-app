@@ -363,6 +363,115 @@ class HealthRecordSyncTest {
         assertThat(problems.logged).isNotEmpty()
     }
 
+    // --- Older history (D72) --------------------------------------------------------------------
+
+    /**
+     * A finished catch-up is re-opened once older history is allowed. Its cursor is kept when it is
+     * within the last [HealthRecordSync.WINDOW_DAYS] days, and otherwise brought back to that edge:
+     * without the permission, weeks past the limit may have read as empty, so the cursor can sit weeks
+     * beyond the last week that was really read.
+     */
+    @Test
+    fun `older history allowed for the first time re-opens finished catch-ups`() = runTest {
+        source.granted = setOf(HealthKind.STEPS, HealthKind.HEART_RATE)
+        source.history = true
+        store.bookmarks[HealthKind.STEPS] = done("t-s").copy(catchUpCursorMillis = 44 * DAY)
+        store.bookmarks[HealthKind.HEART_RATE] = done("t-h", HealthKind.HEART_RATE).copy(catchUpCursorMillis = 80 * DAY)
+
+        sync.copyNow()
+
+        val windows = source.calls.filter { it.startsWith("window") }
+        assertThat(windows).contains("window STEPS ${63 * DAY}..${70 * DAY}")
+        assertThat(windows).contains("window HEART_RATE ${73 * DAY}..${80 * DAY}")
+        assertThat(windows.first { it.startsWith("window STEPS") }).isEqualTo("window STEPS ${63 * DAY}..${70 * DAY}")
+        assertThat(windows.first { it.startsWith("window HEART_RATE") })
+            .isEqualTo("window HEART_RATE ${73 * DAY}..${80 * DAY}")
+        assertThat(store.historyMarked).isTrue()
+    }
+
+    @Test
+    fun `a catch-up still running past the limit is brought back to it too`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.history = true
+        store.bookmarks[HealthKind.STEPS] = done("t").copy(catchUpCursorMillis = 50 * DAY, catchUpDone = false)
+
+        sync.copyNow()
+
+        assertThat(source.calls.first { it.startsWith("window") }).isEqualTo("window STEPS ${63 * DAY}..${70 * DAY}")
+    }
+
+    /** Two years back is the furthest a catch-up goes (rule 4); one already there has nothing to add. */
+    @Test
+    fun `a catch-up that reached two years back is left finished`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.history = true
+        store.bookmarks[HealthKind.STEPS] = done("t").copy(catchUpCursorMillis = -630 * DAY)
+
+        sync.copyNow()
+
+        assertThat(source.calls.filter { it.startsWith("window") }).isEmpty()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
+        assertThat(store.historyMarked).isTrue()
+    }
+
+    @Test
+    fun `older history is acted on once, not on every open`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.history = true
+        store.historyMarked = true
+        store.bookmarks[HealthKind.STEPS] = done("t").copy(catchUpCursorMillis = 44 * DAY)
+
+        sync.copyNow()
+
+        assertThat(source.calls.filter { it.startsWith("window") }).isEmpty()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
+        assertThat(source.historyAsked).isEqualTo(0)
+    }
+
+    @Test
+    fun `older history not allowed changes nothing`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.history = false
+        store.bookmarks[HealthKind.STEPS] = done("t").copy(catchUpCursorMillis = 44 * DAY)
+
+        sync.copyNow()
+
+        assertThat(source.calls.filter { it.startsWith("window") }).isEmpty()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis).isEqualTo(44 * DAY)
+        assertThat(store.historyMarked).isFalse()
+    }
+
+    /** A second open after the first: the catch-up carries on from its own cursor, not the edge again. */
+    @Test
+    fun `after the re-open the catch-up carries on from where it got to`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.history = true
+        store.bookmarks[HealthKind.STEPS] = done("t").copy(catchUpCursorMillis = 44 * DAY)
+        source.windowRecords = { from, _ -> listOf(steps("st-$from", from)) }
+        sync.copyNow()
+        val reached = store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis!!
+        source.calls.clear()
+
+        sync.copyNow()
+
+        assertThat(source.calls.first { it.startsWith("window") })
+            .isEqualTo("window STEPS ${reached - 7 * DAY}..$reached")
+    }
+
+    @Test
+    fun `a failure while re-opening is logged, and the marker is not written`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.history = true
+        store.bookmarks[HealthKind.STEPS] = done("t").copy(catchUpCursorMillis = 44 * DAY)
+        store.markThrows = true
+
+        sync.copyNow()
+
+        assertThat(store.historyMarked).isFalse()
+        assertThat(problems.logged.map { it.detail }.any { it.contains("older history") }).isTrue()
+    }
+
     // --- Fakes -----------------------------------------------------------------------------------
 
     private fun done(token: String, kind: HealthKind = HealthKind.STEPS) = HealthSyncEntity(
@@ -385,7 +494,15 @@ class HealthRecordSyncTest {
         var grantedError: Throwable? = null
         var grantedAsked = 0
         var totalsThrowFrom: Long? = null
+        var history = false
+        var historyAsked = 0
         private var tokens = 0
+
+        override suspend fun historyAvailable(): Boolean = true
+        override suspend fun historyGranted(): Boolean {
+            historyAsked++
+            return history
+        }
 
         override suspend fun grantedKinds(): Set<HealthKind> {
             grantedAsked++
@@ -420,8 +537,15 @@ class HealthRecordSyncTest {
         val replaced = mutableListOf<String>()
         val summarised = mutableListOf<Set<Long>>()
         val totalsGiven = mutableListOf<TotalsResult>()
+        var historyMarked = false
+        var markThrows = false
 
         override suspend fun bookmark(kind: HealthKind) = bookmarks[kind]
+        override suspend fun historyActedOn() = historyMarked
+        override suspend fun markHistoryActedOn() {
+            if (markThrows) throw IllegalStateException("disk full")
+            historyMarked = true
+        }
         override suspend fun saveBookmark(bookmark: HealthSyncEntity) {
             bookmarks[HealthKind.parse(bookmark.kind)!!] = bookmark
         }

@@ -47,6 +47,10 @@ class RoomHealthStore @Inject constructor(
 
     override suspend fun saveBookmark(bookmark: HealthSyncEntity) = bookkeepingDao.putSync(bookmark)
 
+    override suspend fun historyActedOn(): Boolean = bookkeepingDao.sync(HealthStore.HISTORY_MARKER) != null
+
+    override suspend fun markHistoryActedOn() = bookkeepingDao.putSync(HealthSyncEntity(kind = HealthStore.HISTORY_MARKER))
+
     override suspend fun apply(records: List<ReadRecord>, deletedIds: List<String>): Set<Long> {
         val touched = mutableSetOf<Long>()
         transaction.run {

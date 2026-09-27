@@ -13,6 +13,7 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.health.HealthKind
 import com.metaself.app.domain.profile.aProfile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -56,6 +57,21 @@ class HealthRecordStoreTest {
     @After
     fun tearDown() {
         if (this::db.isInitialized) db.close()
+    }
+
+    /** D72: the older-history marker is a row of its own, beside the kinds' bookmarks, and leaves them be. */
+    @Test
+    fun `the older-history marker is kept beside the bookmarks`() = runTest {
+        val steps = HealthSyncEntity(kind = "STEPS", changesToken = "t", tokenAtMillis = STAMP, catchUpCursorMillis = 0)
+        store.saveBookmark(steps)
+        assertThat(store.historyActedOn()).isFalse()
+
+        store.markHistoryActedOn()
+
+        assertThat(store.historyActedOn()).isTrue()
+        assertThat(store.bookmark(HealthKind.STEPS)).isEqualTo(steps)
+        assertThat(db.healthBookkeepingDao().observeSync().first().map { it.kind })
+            .containsExactly("STEPS", HealthStore.HISTORY_MARKER)
     }
 
     @Test

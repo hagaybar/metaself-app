@@ -58,6 +58,16 @@ interface HealthSource {
      * call failed is in [TotalsResult.failed]; it never throws for one metric's failure.
      */
     suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult
+    /**
+     * Whether this phone's Health Connect can grant reading history older than 30 days at all (D72).
+     * Never throws: anything that goes wrong is false.
+     */
+    suspend fun historyAvailable(): Boolean
+    /**
+     * Whether history older than 30 days may be read: the feature is available AND its permission is
+     * granted (D72). Never throws (D8): anything that goes wrong is false.
+     */
+    suspend fun historyGranted(): Boolean
 }
 
 /** What the copying writes to. The real one is Room; tests use a fake. */
@@ -81,6 +91,20 @@ interface HealthStore {
     ): Set<Long>
     /** Recomputes each day's summary and its workouts' heart-rate figures. Marks no archive month. */
     suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long)
+    /** Whether the catch-ups have already been re-opened for older history (D72). */
+    suspend fun historyActedOn(): Boolean
+    /** Records that they have. */
+    suspend fun markHistoryActedOn()
+
+    companion object {
+        /**
+         * The `health_sync` row that records [historyActedOn] (D72), so no schema change was needed.
+         * Not a [HealthKind]: every reader of that table skips kinds [HealthKind.parse] does not know.
+         * A restore clears the table and the marker with it; the catch-ups then start from scratch,
+         * so the re-open that follows on the next open finds nothing finished to re-open.
+         */
+        const val HISTORY_MARKER = "_HISTORY"
+    }
 }
 
 /**
@@ -155,8 +179,9 @@ data class HealthRecordState(
          * say it, and naming all thirteen kinds on top would be noise.
          */
         fun from(days: Int, earliest: Long?, syncRows: List<HealthSyncEntity>, granted: Set<HealthKind>): HealthRecordState {
-            val lastCopiedMillis = syncRows.mapNotNull { it.tokenAtMillis }.maxOrNull()
-            val syncByKind = syncRows.associateBy { HealthKind.parse(it.kind) }
+            // Only rows that are kinds: the older-history marker (D72) shares the table.
+            val syncByKind = syncRows.mapNotNull { row -> HealthKind.parse(row.kind)?.let { it to row } }.toMap()
+            val lastCopiedMillis = syncByKind.values.mapNotNull { it.tokenAtMillis }.maxOrNull()
             val catchingUp = granted.any { kind -> syncByKind[kind]?.catchUpDone != true }
             val notAllowed = if (granted.isEmpty()) emptySet() else HealthKind.entries.toSet() - granted
             return HealthRecordState(
