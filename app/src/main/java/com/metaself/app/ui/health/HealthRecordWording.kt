@@ -1,6 +1,7 @@
 package com.metaself.app.ui.health
 
 import com.metaself.app.data.health.ArchiveRestore
+import com.metaself.app.data.health.ArchiveWrite
 import com.metaself.app.domain.health.HealthKind
 import java.time.Instant
 import java.time.LocalDate
@@ -16,6 +17,22 @@ object HealthRecordWording {
         "Detailed readings are copied to your Drive, one file a month."
     } else {
         "Detailed readings are kept on this phone only while Drive backup is off; the daily backup has the summaries."
+    }
+
+    /**
+     * The sentence "Copy to Drive now" adds about the month files (D71). Anything that left a month
+     * unsent points to the problem log, where [ArchiveWrite] always leaves the reason.
+     */
+    fun archiveSent(write: ArchiveWrite): String = when {
+        write is ArchiveWrite.Sent && write.failed == 0 && write.written > 0 ->
+            "Also sent ${plural(write.written.toLong(), "month")} of detailed readings."
+        write == ArchiveWrite.NothingDue || write == ArchiveWrite.Sent(written = 0, failed = 0) ->
+            "The detailed readings in Drive were already up to date."
+        write is ArchiveWrite.Sent && write.failed > 0 ->
+            "Sent ${plural(write.written.toLong(), "month")} of detailed readings; " +
+                "${plural(write.failed.toLong(), "month")} could not be sent — Recent problems says why."
+        write == ArchiveWrite.Busy -> "The detailed readings are already being sent."
+        else -> "The detailed readings could not be sent this time; Recent problems says why."
     }
 
     /** Bringing the months back could not start: Drive did not answer. */

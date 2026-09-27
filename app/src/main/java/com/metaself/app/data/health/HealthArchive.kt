@@ -38,6 +38,31 @@ interface ArchiveDrive {
  */
 data class ArchiveRestore(val months: Int, val readings: Int, val unreadable: Int, val unreachable: Int)
 
+/**
+ * What one write of the out-of-date months did. Every outcome but [Sent] with nothing failed and
+ * [NothingDue] leaves a line in the problem log as `"drive"`, so a month that did not appear in Drive
+ * always has a reason written down.
+ */
+sealed interface ArchiveWrite {
+    /** Months were tried: [written] went up and were marked; [failed] did not and stay out of date. */
+    data class Sent(val written: Int, val failed: Int) : ArchiveWrite
+
+    /** No month had changed since it was last written; Drive was not asked. */
+    data object NothingDue : ArchiveWrite
+
+    /** Drive gave no token: out of reach, or consent is wanted (never asked for here). */
+    data object NoDrive : ArchiveWrite
+
+    /** Drive's month files could not be listed, so nothing was sent (a failed listing is never empty). */
+    data object ListingFailed : ArchiveWrite
+
+    /** Another archive run held the archive; this one was skipped. */
+    data object Busy : ArchiveWrite
+
+    /** Something threw outside any one month. */
+    data object Failed : ArchiveWrite
+}
+
 /** What Settings asks of the archive. */
 interface ReadingsArchive {
     /** How many months Drive holds, or null when Drive cannot be reached. */
@@ -46,14 +71,14 @@ interface ReadingsArchive {
     /** Every month in Drive brought back, or null when Drive cannot be reached. */
     suspend fun restoreAll(): ArchiveRestore?
 
-    /** The months that changed since they were last written, sent to Drive. @return how many were. */
-    suspend fun writeOutOfDate(): Int
+    /** The months that changed since they were last written, sent to Drive. Never throws (D8). */
+    suspend fun writeOutOfDate(): ArchiveWrite
 
     companion object {
         val NONE = object : ReadingsArchive {
             override suspend fun monthsInDrive(): Int? = null
             override suspend fun restoreAll(): ArchiveRestore? = null
-            override suspend fun writeOutOfDate(): Int = 0
+            override suspend fun writeOutOfDate(): ArchiveWrite = ArchiveWrite.NothingDue
         }
     }
 }
@@ -100,9 +125,13 @@ class HealthArchive(
 
     private val running = Mutex()
 
-    override suspend fun writeOutOfDate(): Int = withContext(dispatcher) {
-        guarded(0) {
-            if (!running.tryLock()) return@guarded 0
+    override suspend fun writeOutOfDate(): ArchiveWrite = withContext(dispatcher) {
+        guarded<ArchiveWrite>(ArchiveWrite.Failed) {
+            if (!running.tryLock()) {
+                // Not a failure — the other run will send this month, or the next daily backup will —
+                // so this is not written to the problem log.
+                return@guarded ArchiveWrite.Busy
+            }
             try {
                 writeLocked()
             } finally {
@@ -111,14 +140,18 @@ class HealthArchive(
         }
     }
 
-    private suspend fun writeLocked(): Int {
+    private suspend fun writeLocked(): ArchiveWrite {
         val months = record.monthsOutOfDate()
-        if (months.isEmpty()) return 0
-        val token = drive.token() ?: return 0
+        if (months.isEmpty()) return ArchiveWrite.NothingDue
+        val token = drive.token()
+        if (token == null) {
+            log("Drive gave no token (out of reach, or consent is wanted); nothing written")
+            return ArchiveWrite.NoDrive
+        }
         val existing = drive.list(token)
         if (existing == null) {
             log("the month files could not be listed; nothing written")
-            return 0
+            return ArchiveWrite.ListingFailed
         }
         var written = 0
         for (month in months) {
@@ -130,7 +163,8 @@ class HealthArchive(
                 log("month $month: ${failure::class.java.simpleName} ${failure.message}")
             }
         }
-        return written
+        // Every month not written was logged where it failed, in writeMonth or just above.
+        return ArchiveWrite.Sent(written = written, failed = months.size - written)
     }
 
     /** One month sent up. @return whether it was, and marked written. */

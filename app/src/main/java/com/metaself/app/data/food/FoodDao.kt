@@ -287,12 +287,16 @@ interface FoodDao {
     @Query("UPDATE food_names SET brandKey = :to WHERE foodId = :foodId AND brandKey = :from")
     suspend fun moveNamesToBrand(foodId: Long, from: String, to: String)
 
-    /** A name a join brought in, already under the brand another of the food's names is moving to. */
+    /**
+     * A name a join brought in, already under the brand another of the food's names is moving to.
+     * [keepId] is the row being edited (renamed or moved) itself, excluded so a food whose only name
+     * row happens not to be flagged preferred never has that row dropped out from under it.
+     */
     @Query(
         "DELETE FROM food_names WHERE foodId = :foodId AND nameKey = :nameKey AND brandKey = :brandKey " +
-            "AND isPreferred = 0",
+            "AND isPreferred = 0 AND id != :keepId",
     )
-    suspend fun dropJoinedName(foodId: Long, nameKey: String, brandKey: String)
+    suspend fun dropJoinedName(foodId: Long, nameKey: String, brandKey: String, keepId: Long)
 
     @Query("UPDATE foods SET barcode = :barcode, updatedAtMillis = :nowMillis WHERE id = :id")
     suspend fun setBarcode(id: Long, barcode: String?, nowMillis: Long)

@@ -458,7 +458,9 @@ class SettingsViewModel internal constructor(
                 daysSoFar = before.size,
                 earliest = before.minByOrNull { it.epochDay }
                     ?.let { LocalDate.ofEpochDay(it.epochDay) },
-                daysWithEnergy = history.count { it.activeKcal != null },
+                // Over the same days as daysSoFar, the days it is "of"; counting today here as well
+                // could claim one day more than there were.
+                daysWithEnergy = before.count { it.activeKcal != null },
             )
         }
     }
@@ -552,15 +554,16 @@ class SettingsViewModel internal constructor(
                 return@act
             }
 
-            driveMessage.value = AutomaticBackupWording.drive(outcome)
-
-            // Switching Drive on sends the detailed readings' months now rather than tomorrow (D71).
-            // Quietly: the daily copy's line is the answer; a month that fails is in the problem log.
-            if (outcome is DriveOutcome.Written) {
-                quietly {
-                    archive.writeOutOfDate()
-                    problemLines.value = readProblems()
-                }
+            // The detailed readings' months go now rather than tomorrow (D71), and the line says what
+            // they did: set once, after both, so it never claims less or more than happened. A month
+            // not sent is in the problem log, which is re-read so the line it points to is on the page.
+            val line = AutomaticBackupWording.drive(outcome)
+            driveMessage.value = if (outcome is DriveOutcome.Written) {
+                val months = archive.writeOutOfDate()
+                problemLines.value = readProblems()
+                line + " " + HealthRecordWording.archiveSent(months)
+            } else {
+                line
             }
         }
     }

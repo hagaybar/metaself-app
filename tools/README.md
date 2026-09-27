@@ -24,6 +24,10 @@ Scripts carried in version control so they are not only on one machine.
   through rows logged, deleted and moved by a join, and models whether the app reads the food at
   all. It resolves a statement held in a `const val`, as `check-correct-keeps.py` now does. That
   each answer is emitted again when the tables move is only checked by CI's `RoomFoodRepositoryTest`.
+- `check-rename-own-alias.py` — runs a rename onto a name the food took in a join against `sqlite3`
+  from the latest exported schema: without the drop it is refused by the unique index on
+  (`nameKey`, `brandKey`), with it the food is left with one name. CI's `RoomFoodRepositoryTest` is
+  still the real check.
 
 The copies that actually run live in `~/bin`. These are the source of truth for what they should
 contain.

@@ -237,6 +237,19 @@ class ComposeRender {
         (nodeStartingWith(prefix).boundsInRoot.top / density).toInt()
 
     /**
+     * How tall, in dp, the node matching [prefix] is.
+     *
+     * Only ever compared with another node's height in the same render: with no real font a line of
+     * text does not measure what it would on a phone, so no absolute figure means anything here. Two
+     * controls built alike with one line each are the same height; one whose label broke onto more
+     * lines is taller.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun heightDp(prefix: String): Int =
+        (nodeStartingWith(prefix).boundsInRoot.height / density).toInt()
+
+    /**
      * How wide, in dp, the last render was really laid out — which is the device Robolectric was
      * given and not the width [texts] asks the decor for. See the note on `PHONE_WIDTH_PX`.
      *
