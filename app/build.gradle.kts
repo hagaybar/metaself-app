@@ -149,13 +149,11 @@ dependencies {
     // Health Connect rather than the Google Fit APIs, which shut down at the end of 2026 and whose
     // developer sign-ups closed in May 2024.
     //
-    // Pinned to 1.1.0-alpha07 because it is the last release that compiles against SDK 34. Stable
-    // 1.1.0 requires SDK 36, which needs a newer Gradle plugin than this project runs, and an
-    // upgrade of the whole toolchain is not something to smuggle in underneath a step counter.
-    //
-    // This does not contradict the rule that kept the encrypted key store off an alpha. That rule
-    // was about a credential that spends money; the worst this one can do is fail to report steps,
-    // which the app already treats as an ordinary Tuesday.
+    // Stable 1.1.0. Its AAR declares minCompileSdk=36 and minAndroidGradlePluginVersion=8.9.1,
+    // which is why it waited for the toolchain upgrade (D72): until then the project was pinned to
+    // 1.1.0-alpha07, the last release that compiled against SDK 34. It also brings kotlin-stdlib
+    // 2.0.21 onto the classpath, which the Kotlin 1.9 compiler reads (one version of forward
+    // metadata compatibility); a dependency built with Kotlin 2.1 or later would not be readable.
     // Authorising Drive. play-services-auth ONLY, for a token — not Google's Java API client
     // libraries, which are a heavy and awkward dependency tree on Android. The upload itself goes
     // through OkHttp, which this app already has, so this adds one dependency rather than thirty.
