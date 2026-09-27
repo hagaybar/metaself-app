@@ -65,8 +65,8 @@ The executor follows these; each is repeated in the PR body so the owner can ove
 3. **An open day keeps its summary.** Every day row shows its heading and its one-line summary, open
    or closed; an open day adds its detail lines beneath the summary. A detail line that says exactly
    what the summary says is not repeated, so a day with nothing but steps, or nothing at all, opens
-   onto nothing more. (The wording is `summaryLine` and `detailLines`; the `closedLine` / `openLines`
-   code shown in Tasks 2 and 5 below is the plan as first written, before this was settled.)
+   onto nothing more. (`summaryLine` and `detailLines`, named for what they hold: the summary stays on
+   screen with the detail added beneath it, never replaced.)
 4. **Every summary figure carries its source**, steps included: "9,000 steps · phone and band",
    "9,000 steps · you set this". TOTAL → "phone and band", CORRECTED → "you set this"; any other
    source (READ, COMPUTED, unknown) has no suffix, since movement calories and steps are only ever
@@ -608,7 +608,7 @@ class MovementWeekWordingTest {
 
     @Test
     fun `a closed day is its movement, its workouts and its sleep`() {
-        assertThat(MovementWeekWording.closedLine(fullDay)).isEqualTo("410 kcal · Running 6.2 km · slept 7 h 10")
+        assertThat(MovementWeekWording.summaryLine(fullDay)).isEqualTo("410 kcal · Running 6.2 km · slept 7 h 10")
     }
 
     @Test
@@ -616,15 +616,15 @@ class MovementWeekWordingTest {
         val weights = workout(title = "Weights", minutes = 45, distanceM = null)
         val day = MovementDay(TEST_EPOCH_DAY, null, listOf(running, weights), eatenKcal = null)
 
-        assertThat(MovementWeekWording.closedLine(day)).isEqualTo("Running 6.2 km, Weights 45 min")
+        assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("Running 6.2 km, Weights 45 min")
     }
 
     @Test
     fun `a closed day with nothing at all says so`() {
         val day = MovementDay(TEST_EPOCH_DAY, null, emptyList(), eatenKcal = null)
 
-        assertThat(MovementWeekWording.closedLine(day)).isEqualTo("nothing recorded")
-        assertThat(MovementWeekWording.openLines(day)).containsExactly("nothing recorded")
+        assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("nothing recorded")
+        assertThat(MovementWeekWording.detailLines(day)).containsExactly("nothing recorded")
     }
 
     /** Design question 2 in the plan: never "nothing recorded" over a day that has steps. */
@@ -637,12 +637,12 @@ class MovementWeekWordingTest {
             eatenKcal = null,
         )
 
-        assertThat(MovementWeekWording.closedLine(day)).isEqualTo("9,000 steps · phone and band")
+        assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("9,000 steps · phone and band")
     }
 
     @Test
     fun `an open day is one line per part`() {
-        assertThat(MovementWeekWording.openLines(fullDay)).containsExactly(
+        assertThat(MovementWeekWording.detailLines(fullDay)).containsExactly(
             "410 kcal of movement · phone and band",
             "9,000 steps · phone and band",
             "Running · 6.2 km · 32 min · 5:10 /km · avg 142 bpm",
@@ -655,7 +655,7 @@ class MovementWeekWordingTest {
     @Test
     fun `a figure the owner set says so`() {
         val corrected = fullHealth.copy(stepsSource = FigureSource.CORRECTED, activeKcalSource = FigureSource.CORRECTED)
-        val lines = MovementWeekWording.openLines(MovementDay(TEST_EPOCH_DAY, corrected, emptyList(), null))
+        val lines = MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, corrected, emptyList(), null))
 
         assertThat(lines).contains("410 kcal of movement · you set this")
         assertThat(lines).contains("9,000 steps · you set this")
@@ -665,7 +665,7 @@ class MovementWeekWordingTest {
     fun `a source this version does not know is not guessed at`() {
         val unknown = HealthDay(TEST_EPOCH_DAY, activeKcal = 410, activeKcalSource = FigureSource.UNRECOGNISED)
 
-        assertThat(MovementWeekWording.openLines(MovementDay(TEST_EPOCH_DAY, unknown, emptyList(), null)))
+        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, unknown, emptyList(), null)))
             .containsExactly("410 kcal of movement")
     }
 
@@ -675,7 +675,7 @@ class MovementWeekWordingTest {
         val sparse = HealthDay(TEST_EPOCH_DAY, sleepMinutes = 430, restingHeartRate = 58)
         val bare = workout(title = "Running", minutes = 32, distanceM = null)
 
-        val lines = MovementWeekWording.openLines(MovementDay(TEST_EPOCH_DAY, sparse, listOf(bare), null))
+        val lines = MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, sparse, listOf(bare), null))
 
         assertThat(lines).containsExactly("Running · 32 min", "Slept 7 h 10", "Resting 58").inOrder()
     }
@@ -789,7 +789,7 @@ object MovementWeekWording {
      * the first line the open day would show, so a day with steps is never called empty; "nothing
      * recorded" only when the open day has nothing either.
      */
-    fun closedLine(day: MovementDay): String {
+    fun summaryLine(day: MovementDay): String {
         val health = day.health
         val parts = listOfNotNull(
             health?.activeKcal?.let { "${number(it)} kcal" },
@@ -798,11 +798,11 @@ object MovementWeekWording {
             },
             health?.sleepMinutes?.let { "slept ${duration(it)}" },
         )
-        return if (parts.isNotEmpty()) parts.joinToString(SEP) else openLines(day).first()
+        return if (parts.isNotEmpty()) parts.joinToString(SEP) else detailLines(day).first()
     }
 
     /** An open day (D73): one line per part, each only when recorded. */
-    fun openLines(day: MovementDay): List<String> {
+    fun detailLines(day: MovementDay): List<String> {
         val health = day.health
         val movement = if (health == null) {
             emptyList()
@@ -1551,7 +1551,7 @@ class MovementScreenRenderTest {
     }
 
     @Test
-    fun `today starts open, with its detail in place of its summary`() {
+    fun `today starts open, with its detail beneath its summary`() {
         val texts = draw(openDay = TEST_EPOCH_DAY)
 
         assertThat(texts).contains("410 kcal of movement · phone and band")
@@ -1809,7 +1809,7 @@ private fun DayRow(day: MovementDay, open: Boolean, onToggle: () -> Unit) {
             )
             if (!open) {
                 Text(
-                    text = MovementWeekWording.closedLine(day),
+                    text = MovementWeekWording.summaryLine(day),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1822,7 +1822,7 @@ private fun DayRow(day: MovementDay, open: Boolean, onToggle: () -> Unit) {
                     .padding(bottom = Spacing.Related),
                 verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
             ) {
-                MovementWeekWording.openLines(day).forEach { line ->
+                MovementWeekWording.detailLines(day).forEach { line ->
                     Text(
                         text = line,
                         style = MaterialTheme.typography.bodyMedium,
@@ -2150,8 +2150,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ## Self-review (2026-09-27)
 
 **Spec coverage.** D73 closed row (movement kcal, workouts by name and distance or time, sleep; "nothing
-recorded") → Task 2 `closedLine`, rendered in Task 5. Open row (movement with source, steps, each visible
-workout with pace and avg bpm, sleep with stages, body, eaten) → Task 2 `openLines`. Today first and open,
+recorded") → Task 2 `summaryLine`, rendered in Task 5. Open row (movement with source, steps, each visible
+workout with pace and avg bpm, sleep with stages, body, eaten) → Task 2 `detailLines`. Today first and open,
 one open at a time, tap to close → Task 1 (order), Task 4 (`toggle`, default), Task 5 (rows). No
 allowance per day → nothing computes one. D74 kicker, large distance, average over days that have one,
 workouts count and time, rows, last four weeks with "—" → Tasks 1, 2, 5. No net, no burn → Task 5 test.
@@ -2165,7 +2165,7 @@ result.
 **Type consistency.** `MovementWeek.of(today, days, workouts, mealsByDay)`, `mondayOf`, `weekOf`,
 `PREVIOUS_WEEKS`; `MovementDay(epochDay, health, workouts, eatenKcal)`; `HealthDay` fields as declared in
 Task 1 and used in Tasks 2–5; `FigureSource.parse`; `Workout.avgHeartRate`; `MovementWeekWording.kicker /
-distance / averageMovement / workouts / dayHeading / closedLine / openLines / lastFourWeeks / name / km /
+distance / averageMovement / workouts / dayHeading / summaryLine / detailLines / lastFourWeeks / name / km /
 duration / pace`; `MovementRecord.observeDays / observeWorkouts`; `MovementUiState(week, openDay,
 unreadable)`; `MovementViewModel.toggle / lookedAt / state`; `MovementScreen(state, onToggleDay, onBack)`;
 `StepBar(onOpen)`; `DayScreenContent(onOpenMovement)`; `DayPager(onOpenMovement)`;

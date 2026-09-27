@@ -19,7 +19,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
@@ -117,12 +119,16 @@ class MovementViewModelTest {
     @Test
     fun `back on the screen the same day, the open day is left alone`() = runTest {
         val model = viewModel()
-        model.state.first { it.week != null }
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
         model.toggle(20_698L)
-
         model.lookedAt()
+        advanceUntilIdle()
 
-        assertThat(model.state.first { it.openDay != TEST_EPOCH_DAY }.openDay).isEqualTo(20_698L)
+        assertThat(model.state.value.openDay).isEqualTo(20_698L)
+
+        job.cancel()
     }
 
     /** D8: a read that fails is said on the screen and logged, never thrown. */
@@ -139,6 +145,29 @@ class MovementViewModelTest {
 
         assertThat(model.state.first { it.unreadable }.week).isNull()
         assertThat(problems.recorded.single().kind).isEqualTo("movement")
+    }
+
+    /** The failure ends the health-record flow, not the whole state stream: toggling still works. */
+    @Test
+    fun `after a failing read, toggling still changes openDay`() = runTest {
+        val broken = object : MovementRecord {
+            override fun observeDays(from: Long, to: Long): Flow<List<HealthDay>> =
+                flow { throw IllegalStateException("disk full") }
+
+            override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> = flowOf(emptyList())
+        }
+        val model = MovementViewModel(broken, InMemoryMealRepository(), today, RecordingProblemLog())
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(model.state.value.unreadable).isTrue()
+
+        model.toggle(20_698L)
+        advanceUntilIdle()
+
+        assertThat(model.state.value.openDay).isEqualTo(20_698L)
+
+        job.cancel()
     }
 
     private fun viewModel(record: MovementRecord = FakeRecord()) =

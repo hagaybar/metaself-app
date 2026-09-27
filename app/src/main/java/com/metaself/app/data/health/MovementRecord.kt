@@ -56,7 +56,7 @@ fun HealthDayEntity.toHealthDay(): HealthDay = HealthDay(
 /**
  * A stored workout as the rest of the app reasons about it. A name this version does not know never
  * breaks the read: an unknown kind is UNRECOGNISED, an unknown effort none. An unknown energy source
- * reads as NONE and an unknown origin as SYNCED — the Movement screen shows neither, and SYNCED is
+ * reads as NONE and an unknown source as SYNCED — the Movement screen shows neither, and SYNCED is
  * the side that cannot be deleted by hand.
  */
 fun WorkoutEntity.toWorkout(): Workout = Workout(

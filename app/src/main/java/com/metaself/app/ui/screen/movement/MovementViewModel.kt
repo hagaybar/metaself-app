@@ -43,23 +43,29 @@ class MovementViewModel @Inject constructor(
     /** Today starts open (D73). */
     private val openDay = MutableStateFlow<Long?>(calendarToday.value)
 
-    private val week: Flow<MovementWeek> = calendarToday.flatMapLatest { day ->
+    /** Null means the read failed; the failure is logged where it happened, below. */
+    private val week: Flow<MovementWeek?> = calendarToday.flatMapLatest { day ->
         val monday = MovementWeek.mondayOf(day)
-        combine(
+        val built: Flow<MovementWeek?> = combine(
             // Five weeks: this one, and the four the foot of the screen sums (D74).
             record.observeDays(monday - 7L * MovementWeek.PREVIOUS_WEEKS, day),
             record.observeWorkouts(monday, day),
             mealsOn((monday..day).toList()),
         ) { days, workouts, mealsByDay -> MovementWeek.of(day, days, workouts, mealsByDay) }
-    }
-
-    val state: StateFlow<MovementUiState> = combine(week, openDay) { built, open ->
-        MovementUiState(week = built, openDay = open)
+        built
     }
         .catch { failure ->
             problems.record(PROBLEM_KIND, failure.message ?: failure::class.java.simpleName)
-            emit(MovementUiState(unreadable = true))
+            emit(null)
         }
+
+    val state: StateFlow<MovementUiState> = combine(week, openDay) { built, open ->
+        if (built == null) {
+            MovementUiState(unreadable = true, openDay = open)
+        } else {
+            MovementUiState(week = built, openDay = open)
+        }
+    }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
