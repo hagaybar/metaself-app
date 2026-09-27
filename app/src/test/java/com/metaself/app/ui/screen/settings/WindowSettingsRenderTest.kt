@@ -12,6 +12,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * The "When you eat" section, now that there are two kinds of window.
@@ -134,6 +135,35 @@ class WindowSettingsRenderTest {
         assertThat(savedHours).isEmpty()
     }
 
+    /**
+     * The five ratio chips wrap onto another line rather than squeezing the last ones until their
+     * label breaks into a column of characters, as "20/4" did on a phone.
+     *
+     * What this can prove: on a canvas too narrow for five chips in a row (and tall enough that the
+     * section is not clipped away, since a clipped node reads zero), no chip reaches past the canvas, the last chip starts lower than the first (the row wrapped), and every chip is the same
+     * height as the first — so none was squeezed until its label broke onto more lines, nor pushed out
+     * of sight. On the old `Row` it fails: the last three chips were pushed past the edge and read zero.
+     *
+     * What it cannot prove: how wide a label really is on a phone, or that five chips need two lines
+     * at a phone's real width. Robolectric has no real font (`CLAUDE.md`), so the narrow canvas stands
+     * in for a phone the way `DayScreenRenderTest`'s three ways in do. That a label stays on ONE line
+     * at a phone's width rests on `maxLines = 1, softWrap = false`, which only the phone shows.
+     */
+    @Test
+    @Config(qualifiers = "+w150dp-h3000dp")
+    fun `the ratio chips wrap onto another line, each label on one line`() {
+        draw(heightPx = TALL)
+
+        // Placed at all: a node pushed out of its clip reads zero everywhere, which would pass the
+        // right-edge check below for a chip that is not there.
+        assertThat(render.heightDp("12/12")).isGreaterThan(0)
+        for (ratio in listOf("12/12", "14/10", "16/8", "18/6", "20/4")) {
+            assertThat(render.rightEdgeDp(ratio)).isAtMost(render.canvasWidthDp)
+            assertThat(render.heightDp(ratio)).isEqualTo(render.heightDp("12/12"))
+        }
+        assertThat(render.topDp("20/4")).isGreaterThan(render.topDp("12/12"))
+    }
+
     /** D27's one firm rule, said where the window is set — for the ratio as much as the hours. */
     @Test
     fun `it still says the window applies only from today`() {
@@ -165,7 +195,8 @@ class WindowSettingsRenderTest {
         rule: WindowRule? = null,
         kept: Int = 0,
         judged: Int = 0,
-    ): List<String> = render.texts {
+        heightPx: Int = PHONE_HEIGHT_PX,
+    ): List<String> = render.texts(heightPx = heightPx) {
         SettingsScreen(
             state = SettingsUiState(
                 windowRule = rule,
@@ -204,5 +235,13 @@ class WindowSettingsRenderTest {
             onDismissFailure = {},
             onBack = {},
         )
+    }
+
+    private companion object {
+        /** ComposeRender's own default height, restated because its constant is private. */
+        const val PHONE_HEIGHT_PX = 1920
+
+        /** Tall enough that the window section, far down the page, is laid out and not left unplaced. */
+        const val TALL = 20_000
     }
 }

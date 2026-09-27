@@ -4,6 +4,8 @@ import java.time.LocalDate
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,7 +66,7 @@ import com.metaself.app.ui.theme.Spacing
  *
  * [openAtKey] opens it scrolled to the key, for the describe screen's way here when there is none.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
@@ -220,12 +222,20 @@ fun SettingsScreen(
                 color = MetaSelfInk.two,
             )
 
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            // Wraps: five chips do not fit one row on a phone, and in a Row the last were squeezed
+            // until "20/4" stood as a column of characters. Each label keeps to one line.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
                 RATIOS.forEach { hours ->
                     FilterChip(
                         selected = fastingHours == hours,
                         onClick = { fastingHours = hours },
-                        label = { Text(WindowWording.ratio(MeasuredWindow(hours))) },
+                        label = {
+                            Text(
+                                text = WindowWording.ratio(MeasuredWindow(hours)),
+                                maxLines = 1,
+                                softWrap = false,
+                            )
+                        },
                     )
                 }
             }
