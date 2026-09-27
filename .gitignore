@@ -1,0 +1,2 @@
+# The build directory newer AGP creates at the repository root.
+/build/
