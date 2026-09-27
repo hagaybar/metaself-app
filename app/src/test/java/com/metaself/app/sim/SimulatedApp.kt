@@ -352,6 +352,7 @@ private fun TodayHere(dayViewModel: DayViewModel, stack: MutableList<Where>) {
         // The Movement screen is not part of this shell; a walk that opens it finds nothing.
         onOpenMovement = {},
         onOpenSettings = {},
+        onOpenWindowSettings = {},
         onOpenManager = { stack.add(Where.Manager()) },
     )
 }

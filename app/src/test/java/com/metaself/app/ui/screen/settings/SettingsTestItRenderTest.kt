@@ -9,7 +9,7 @@ import org.robolectric.RobolectricTestRunner
 
 /**
  * After Test it, the line saying what the saved model is sent (D57 §6) is drawn under the test's
- * own result, before the problems. Asserted by order in the drawn tree, which is what a render test
+ * own result, on the AI estimates page (D79), and not on the Recent problems page. Asserted by order in the drawn tree, which is what a render test
  * here can say about position. JUnit 4 because Robolectric's runner is.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -33,7 +33,10 @@ class SettingsTestItRenderTest {
 
         assertThat(texts.count { it == LEARNED }).isEqualTo(1)
         assertThat(texts.indexOf(LEARNED)).isGreaterThan(texts.indexOf(RESULT))
-        assertThat(texts.indexOf(LEARNED)).isLessThan(texts.indexOf("Recent problems"))
+        // The problems once came straight after, on the same page; they are now a page of their
+        // own (D79), so the bound below is kept as "not drawn there".
+        assertThat(problemsPage(SettingsUiState(testResult = RESULT, testLearned = LEARNED)))
+            .doesNotContain(LEARNED)
     }
 
     @Test
@@ -45,40 +48,20 @@ class SettingsTestItRenderTest {
     }
 
     private fun draw(state: SettingsUiState): List<String> = render.texts {
-        SettingsScreen(
+        AiSettingsPage(
             state = state,
             onSaveKey = {},
             onClearKey = {},
             onSetModel = {},
             onSetCeiling = {},
             onTest = {},
-            onSetReminder = {},
-            onSendReminderNow = {},
-            onSaveOffAccount = { _, _ -> },
-            onClearOffAccount = {},
-            onSetWindow = { _, _ -> },
-            onSetRatio = {},
-            onClearWindow = {},
-            onConnectSteps = {},
-            onPickBackupFolder = {},
-            onForgetBackupFolder = {},
-            onBackUpNow = {},
-            onSetDrive = {},
-            onDriveNow = {},
-            onExport = {},
-            onRestore = {},
-            onConfirmRestore = {},
-            onCancelRestore = {},
-            onConfirmArchive = {},
-            onCancelArchive = {},
-            onOfferArchive = {},
-            onDismissArchiveMessage = {},
-            onDismissBackupMessage = {},
-            onCopyProblems = {},
-            onClearProblems = {},
             onDismissFailure = {},
             onBack = {},
         )
+    }
+
+    private fun problemsPage(state: SettingsUiState): List<String> = render.texts {
+        ProblemsSettingsPage(state = state, onCopyProblems = {}, onClearProblems = {}, onBack = {})
     }
 
     private companion object {

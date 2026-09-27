@@ -165,6 +165,7 @@ class SettingsViewModel internal constructor(
     }
 
     private val windowState = MutableStateFlow(Triple<WindowRule?, Int, Int>(null, 0, 0))
+    private val windowRead = MutableStateFlow(false)
 
     private data class Steps(
         val access: StepAccess = StepAccess.UNAVAILABLE,
@@ -175,6 +176,7 @@ class SettingsViewModel internal constructor(
     )
 
     private val stepState = MutableStateFlow(Steps())
+    private val stepsRead = MutableStateFlow(false)
     private val healthRecordState = MutableStateFlow(HealthRecordState())
 
     private val automaticMessage = MutableStateFlow<String?>(null)
@@ -182,7 +184,7 @@ class SettingsViewModel internal constructor(
     private val backupMessage = MutableStateFlow<String?>(null)
     private val pendingRestore = MutableStateFlow<PendingRestore?>(null)
     private val pendingArchive = MutableStateFlow<String?>(null)
-    private val archiveInMovement = MutableStateFlow(false)
+    private val archiveFromDrive = MutableStateFlow(false)
     private val archiveMessage = MutableStateFlow<String?>(null)
     private val busy = MutableStateFlow(false)
 
@@ -199,6 +201,9 @@ class SettingsViewModel internal constructor(
         problemLines,
     ) { key, aiSettings, isTesting, (result, learned), lines ->
         SettingsUiState(
+            // True from this first combine emission on: the `initialValue` a `StateFlow` is given
+            // before it has produced one of its own is the only `SettingsUiState` this leaves false.
+            loaded = true,
             problems = lines,
             hasKey = !key.isNullOrBlank(),
             model = aiSettings.model,
@@ -221,15 +226,26 @@ class SettingsViewModel internal constructor(
         combine(profiles.driveBackupOn, driveMessage) { on, message -> on to message },
     ) { current, (on, message) ->
         current.copy(driveOn = on, driveMessage = message)
-    }.combine(windowState) { current, (rule, kept, judged) ->
-        current.copy(windowRule = rule, windowKept = kept, windowJudged = judged)
-    }.combine(stepState) { current, steps ->
+    }.combine(
+        combine(windowState, windowRead, ::Pair),
+    ) { current, (window, isWindowRead) ->
+        val (rule, kept, judged) = window
+        current.copy(
+            windowRule = rule,
+            windowKept = kept,
+            windowJudged = judged,
+            windowRead = isWindowRead,
+        )
+    }.combine(
+        combine(stepState, stepsRead, ::Pair),
+    ) { current, (steps, isStepsRead) ->
         current.copy(
             stepAccess = steps.access,
             hasStepNormal = steps.hasNormal,
             stepDaysSoFar = steps.daysSoFar,
             earliestStepDay = steps.earliest,
             daysWithBandEnergy = steps.daysWithEnergy,
+            stepsRead = isStepsRead,
         )
     }.combine(healthRecordState) { current, healthRecord ->
         current.copy(healthRecord = healthRecord)
@@ -259,9 +275,9 @@ class SettingsViewModel internal constructor(
             busy = lines.busy,
         )
     }.combine(
-        combine(archiveInMovement, archiveMessage, ::Pair),
-    ) { current, (inMovement, message) ->
-        current.copy(archiveInMovement = inMovement, archiveMessage = message)
+        combine(archiveFromDrive, archiveMessage, ::Pair),
+    ) { current, (fromDrive, message) ->
+        current.copy(archiveFromDrive = fromDrive, archiveMessage = message)
     }.combine(failed) { current, refusal ->
         current.copy(failed = refusal)
     }.stateIn(
@@ -340,7 +356,7 @@ class SettingsViewModel internal constructor(
      * A read the page does for itself, so one that throws is recorded and the tally stays as it was.
      */
     fun refreshWindow() {
-        quietly {
+        quietly(onDone = { windowRead.value = true }) {
             val rules = profiles.windowRules.first()
             val todayEpochDay = today().toEpochDay()
             val inForce = WindowRules.inForceOn(rules, todayEpochDay)
@@ -439,7 +455,7 @@ class SettingsViewModel internal constructor(
      * throws is recorded and the line stays as it was.
      */
     fun refreshSteps() {
-        quietly {
+        quietly(onDone = { stepsRead.value = true }) {
             val access = steps.access()
             if (access != StepAccess.GRANTED) {
                 stepState.value = Steps(access = access)
@@ -722,20 +738,21 @@ class SettingsViewModel internal constructor(
             if (!profiles.driveBackupOn.first()) return@quietly
             val months = archive.monthsInDrive() ?: return@quietly
             if (months > 0) {
-                archiveInMovement.value = false
+                archiveFromDrive.value = false
                 pendingArchive.value = HealthRecordWording.offerMonths(months)
             }
         }
     }
 
     /**
-     * The same question, asked for from Movement: a way back to the months in Drive besides the offer
-     * after a restore. Asked out loud, as he pressed for it: no months, or no answer, is said there.
+     * The same question, asked for from the Drive controls on Backups: a way back to the months in
+     * Drive besides the offer after a restore. Asked out loud, as he pressed for it: no months, or no
+     * answer, is said there.
      */
     fun offerArchive() {
         quietly {
             pendingArchive.value = null
-            archiveInMovement.value = true
+            archiveFromDrive.value = true
             archiveMessage.value = null
             busy.value = true
             val months = archive.monthsInDrive()
@@ -761,7 +778,7 @@ class SettingsViewModel internal constructor(
             pendingArchive.value = null
             val result = archive.restoreAll()
             val said = result?.let(HealthRecordWording::broughtBack) ?: HealthRecordWording.NOT_BROUGHT_BACK
-            if (archiveInMovement.value) archiveMessage.value = said else backupMessage.value = said
+            if (archiveFromDrive.value) archiveMessage.value = said else backupMessage.value = said
             problemLines.value = readProblems()
             quietly { healthRecordState.value = healthStatus.current() }
             busy.value = false
@@ -876,9 +893,23 @@ class SettingsViewModel internal constructor(
         }, block = block)
     }
 
-    /** Work the page does on its own: a failure is recorded, and nothing is said. */
-    private fun quietly(block: suspend CoroutineScope.() -> Unit) {
-        guarded(problems, onRefused = { problemLines.value = readProblems() }, block = block)
+    /**
+     * Work the page does on its own: a failure is recorded, and nothing is said.
+     *
+     * [onDone] runs when [block] finishes either way, success or failure — for a read whose status
+     * line must stop being hidden once the read has happened, whatever it found.
+     */
+    private fun quietly(onDone: () -> Unit = {}, block: suspend CoroutineScope.() -> Unit) {
+        guarded(
+            problems,
+            onRefused = {
+                problemLines.value = readProblems()
+                onDone()
+            },
+        ) {
+            block()
+            onDone()
+        }
     }
 
     private fun readProblems(): List<String> = problems.recent()

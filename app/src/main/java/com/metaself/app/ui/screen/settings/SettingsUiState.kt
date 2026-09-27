@@ -15,6 +15,17 @@ import java.time.LocalDate
  * a credential in a screenshot.
  */
 data class SettingsUiState(
+    /**
+     * Whether the page has read anything at all yet. False only for the instant before the view
+     * model's state flow has combined its first value — the `initialValue` a `StateFlow` is given
+     * before it has one of its own. True from then on, so a status line is never drawn from fields
+     * that still hold their all-zero defaults.
+     */
+    val loaded: Boolean = false,
+    /** Whether [SettingsViewModel.refreshWindow] has finished at least once, success or failure. */
+    val windowRead: Boolean = false,
+    /** Whether [SettingsViewModel.refreshSteps] has finished at least once, success or failure. */
+    val stepsRead: Boolean = false,
     val problems: List<String> = emptyList(),
     val hasKey: Boolean = false,
     val model: String = "",
@@ -33,11 +44,11 @@ data class SettingsUiState(
     /** The offer to bring back the detailed readings' months from Drive (D71). */
     val pendingArchive: String? = null,
     /**
-     * Whether that offer, and what came of it, were asked for from Movement and are drawn there,
-     * rather than under Backup after a restore.
+     * Whether that offer, and what came of it, were asked for from the Drive controls on Backups and
+     * are drawn there, rather than under By hand after a restore (D79).
      */
-    val archiveInMovement: Boolean = false,
-    /** What asking from Movement came to: nothing found, Drive not answering, or what came back. */
+    val archiveFromDrive: Boolean = false,
+    /** What asking from the Drive controls came to: nothing found, Drive not answering, or what came back. */
     val archiveMessage: String? = null,
     val busy: Boolean = false,
     /** Whether an Open Food Facts account is set. Never the password itself. */

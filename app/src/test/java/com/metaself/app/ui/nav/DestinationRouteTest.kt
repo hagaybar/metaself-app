@@ -131,10 +131,13 @@ class DestinationRouteTest {
         assertThat(Destination.Describe.fromMyMeals).isEqualTo("meal/describe?from=meals")
     }
 
-    /** "Add a key in settings" opens settings at the key, by the route the host registers. */
+    /**
+     * "Add a key in settings" opens settings at the key, by a route the host registers: since D79,
+     * the AI estimates page, whose first section is the key.
+     */
     @Test
     fun `settings can be opened at the key`() {
-        assertThat(Destination.Settings.atKey).isEqualTo("settings?at=key")
+        assertThat(Destination.Settings.atKey).isEqualTo("settings/ai")
     }
 
     /** The "Build a meal" button carries nothing, and must still land on the same destination. */

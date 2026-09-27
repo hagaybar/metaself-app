@@ -198,6 +198,38 @@ class SettingsViewModelTest {
         assertThat(viewModel.state.value.failed).isNull()
         assertThat(problems.recorded.map { it.kind }).containsExactly("refused", "refused")
         assertThat(viewModel.state.value.problems).hasSize(2)
+        // A refused read still finished: the index must stop hiding the row's status behind it.
+        assertThat(viewModel.state.value.windowRead).isTrue()
+        assertThat(viewModel.state.value.stepsRead).isTrue()
+    }
+
+    /**
+     * `loaded` is true as soon as the page's state has combined once, well before either of its own
+     * reads has run — those are asked for separately, by the screen, once it is on screen.
+     */
+    @Test
+    fun `loaded is true from the first state, before the window or steps have been read`() = runTest {
+        val viewModel = viewModel()
+        watch(viewModel)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.loaded).isTrue()
+        assertThat(viewModel.state.value.windowRead).isFalse()
+        assertThat(viewModel.state.value.stepsRead).isFalse()
+    }
+
+    /** The ordinary case: both reads succeed, and both mark themselves read. */
+    @Test
+    fun `a window and a step read that succeed are marked read too`() = runTest {
+        val viewModel = viewModel()
+        watch(viewModel)
+
+        viewModel.refreshWindow()
+        viewModel.refreshSteps()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.windowRead).isTrue()
+        assertThat(viewModel.state.value.stepsRead).isTrue()
     }
 
     /**
@@ -398,11 +430,11 @@ class SettingsViewModelTest {
     }
 
     /**
-     * A way back besides the offer after a restore: asked from Movement, the same question is put
-     * there, and what came of it is said there too.
+     * A way back besides the offer after a restore: asked from the Drive controls on Backups, the
+     * same question is put there, and what came of it is said there too.
      */
     @Test
-    fun `asking from Movement puts the same question there`() = runTest {
+    fun `asking from the Drive controls puts the same question there`() = runTest {
         val archive = Archive(
             months = 3,
             result = ArchiveRestore(months = 3, readings = 1_200, unreadable = 0, unreachable = 0),
@@ -415,7 +447,7 @@ class SettingsViewModelTest {
 
         assertThat(viewModel.state.value.pendingArchive)
             .isEqualTo("Also bring back 3 months of detailed readings from Drive?")
-        assertThat(viewModel.state.value.archiveInMovement).isTrue()
+        assertThat(viewModel.state.value.archiveFromDrive).isTrue()
 
         viewModel.confirmArchive()
         advanceUntilIdle()
@@ -427,7 +459,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `asking from Movement with no months in Drive says so and asks nothing`() = runTest {
+    fun `asking from the Drive controls with no months in Drive says so and asks nothing`() = runTest {
         val viewModel = viewModel(archive = Archive(months = 0))
         watch(viewModel)
 
@@ -439,7 +471,7 @@ class SettingsViewModelTest {
     }
 
     @Test
-    fun `asking from Movement with Drive not answering says so and asks nothing`() = runTest {
+    fun `asking from the Drive controls with Drive not answering says so and asks nothing`() = runTest {
         val viewModel = viewModel(archive = Archive(months = null))
         watch(viewModel)
 
@@ -473,11 +505,11 @@ class SettingsViewModelTest {
 
     /** The offer after a restore stays with the restore, under Backup. */
     @Test
-    fun `the offer after a restore is not put in Movement`() = runTest {
+    fun `the offer after a restore is not put with the Drive controls`() = runTest {
         val viewModel = restoredWith(Archive(months = 2), driveOn = true)
 
         assertThat(viewModel.state.value.pendingArchive).isNotNull()
-        assertThat(viewModel.state.value.archiveInMovement).isFalse()
+        assertThat(viewModel.state.value.archiveFromDrive).isFalse()
     }
 
     @Test
