@@ -2,7 +2,7 @@
 
 > Written 2026-09-27 from a design conversation with the owner, who chose among four mock-ups and
 > approved the result. It amends §4.2 of `2026-09-25-physical-activity-module-design.md` (the activity
-> screen, D62) now that the health record (D65–D72) exists. Nothing here is built.
+> screen, D62) now that the health record (D65–D72) exists. Built as 0.58.0.
 >
 > **Every figure in an example is invented.**
 
@@ -17,10 +17,11 @@ open day closes it; **today starts open**; one day open at a time.
 
 - **A closed day:** the weekday and date, then up to three parts joined by " · ", each shown only when
   recorded: the day's movement calories, its workouts by name and distance or time, and its sleep —
-  "410 kcal · Running 6.2 km · slept 7 h 10". A day with none of the three: "nothing recorded".
+  "410 kcal · Running 6.2 km · slept 7 h 10". A day with none of the three shows its first detail line
+  instead (a day with only steps: "9,000 steps · phone and band"); a day with nothing: "nothing recorded".
 - **An open day:** one line per part, each only when recorded (a missing figure is left out, never
   written as zero — D4, D69):
-  - movement: "410 kcal of movement · band" and, when read, "9,000 steps" — the figures of that day's
+  - movement: "410 kcal of movement · phone and band" and, when read, "9,000 steps" — the figures of that day's
     health summary with their source (TOTAL shows as "phone and band", CORRECTED as "you set this");
   - each visible workout: "Running · 6.2 km · 32 min · 5:10 /km", plus "· avg 142 bpm" when the
     workout has heart-rate figures;
@@ -34,7 +35,7 @@ open day closes it; **today starts open**; one day open at a time.
 **D74 — The headline is this week's distance and the average movement calories.** Chosen by the owner
 over the week's running distance and the week's workout time. Top to bottom:
 
-1. Kicker: "THIS WEEK · FROM MON 21 SEP".
+1. Kicker: "THIS WEEK · FROM MON 31 AUG".
 2. The one large figure: the week's distance so far — the sum of the health summaries' `distanceM`
    (Health Connect's de-duplicated totals, D69), shown in km to one decimal: "42.6 km". Absent when
    no day this week has a distance.
