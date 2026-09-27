@@ -20,9 +20,9 @@ data class DayMovement(
     val sessions: List<ExerciseSession> = emptyList(),
     /**
      * What the workouts the owner typed for this day cost, by [MetEstimate] or his own figure —
-     * summed across them, since two typed sessions are two different things done. Zero until the
-     * store that holds typed workouts exists (phase 2). It is a THIRD reading beside steps and the
-     * band, never added to either (D60).
+     * summed across them, since two typed sessions are two different things done. Filled by
+     * [TypedReading.merge] (D77). It is a THIRD reading beside steps and the band, never added to
+     * either (D60).
      */
     val typedWorkoutsKcal: Int = 0,
 )

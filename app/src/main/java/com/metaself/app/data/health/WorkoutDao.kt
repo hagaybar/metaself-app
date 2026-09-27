@@ -71,6 +71,9 @@ interface WorkoutDao {
     @Query("DELETE FROM workouts")
     suspend fun deleteAll()
 
+    @Query("SELECT * FROM workouts WHERE id = :id")
+    suspend fun byId(id: Long): WorkoutEntity?
+
     @Query("SELECT * FROM workouts WHERE epochDay = :epochDay ORDER BY startedAtMillis")
     suspend fun onDay(epochDay: Long): List<WorkoutEntity>
 

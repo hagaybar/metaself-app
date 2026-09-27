@@ -108,6 +108,23 @@ class MovementWeekTest {
         assertThat(week.workoutMinutes).isEqualTo(0)
     }
 
+    /** D78: walks are counted apart from workouts; the time is every session's. Invented minutes. */
+    @Test
+    fun `walks are counted apart from workouts, and the time is every session's`() {
+        val workouts = listOf(
+            workout(20_699, minutes = 30),
+            workout(20_698, minutes = 45),
+            workout(20_697, minutes = 60, kind = WorkoutKind.WALK),
+            workout(20_697, minutes = 20, kind = WorkoutKind.WALK, hidden = true),
+        )
+
+        val week = MovementWeek.of(today, emptyList(), workouts, emptyMap())
+
+        assertThat(week.workoutCount).isEqualTo(2)
+        assertThat(week.walkCount).isEqualTo(1)
+        assertThat(week.workoutMinutes).isEqualTo(135)
+    }
+
     @Test
     fun `a day's workouts are in the order they started`() {
         val workouts = listOf(
@@ -180,9 +197,10 @@ class MovementWeekTest {
         minutes: Int,
         hidden: Boolean = false,
         startedAtMillis: Long = 0,
+        kind: WorkoutKind = WorkoutKind.RUN,
     ) = Workout(
         id = 0, epochDay = epochDay, startedAtMillis = startedAtMillis, durationMinutes = minutes,
-        kind = WorkoutKind.RUN, title = "Running", distanceM = null, energyKcal = null,
+        kind = kind, title = "Running", distanceM = null, energyKcal = null,
         energySource = EnergySource.NONE, effort = null, source = WorkoutSource.SYNCED,
         hidden = hidden, note = null,
     )

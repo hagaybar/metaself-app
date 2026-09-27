@@ -35,4 +35,40 @@ class MovementTodayTest {
         assertThat(learning.aboveUsual).isFalse()
         assertThat(learning.extraSteps).isNull()
     }
+
+    /** Public issue #58, invented figures: few steps, but the band's figure beat the usual day. */
+    @Test
+    fun `on a day the band decided, the rule is filled and marked by the band's figure`() {
+        val swim = MovementToday(
+            steps = 1_000, normalSteps = 8_000,
+            energy = ActivityEnergy(480, MovementSource.ACTIVE_CALORIES), normalEnergyKcal = 240,
+        )
+
+        assertThat(swim.decidedByEnergy).isTrue()
+        assertThat(swim.fractionOfUsual).isEqualTo(1f)
+        assertThat(swim.aboveUsual).isTrue()
+    }
+
+    @Test
+    fun `on a day a typed workout decided but fell short of usual, the rule is part-filled in kcal`() {
+        val short = MovementToday(
+            steps = 1_000, normalSteps = 8_000,
+            energy = ActivityEnergy(120, MovementSource.TYPED_WORKOUT), normalEnergyKcal = 240,
+        )
+
+        assertThat(short.fractionOfUsual).isWithin(1e-6f).of(0.5f)
+        assertThat(short.aboveUsual).isFalse()
+    }
+
+    /** 4,000 steps on 80 kg are 4,000 × 0.000375 × 80 = 120 kcal: the steps decided. */
+    @Test
+    fun `on a day the steps decided, the rule is the steps, as before`() {
+        val walk = MovementToday(
+            steps = 4_000, normalSteps = 8_000,
+            energy = ActivityEnergy(120, MovementSource.STEPS), normalEnergyKcal = 240,
+        )
+
+        assertThat(walk.fractionOfUsual).isWithin(1e-6f).of(0.5f)
+        assertThat(walk.aboveUsual).isFalse()
+    }
 }

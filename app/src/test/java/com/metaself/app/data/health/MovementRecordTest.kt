@@ -6,6 +6,7 @@ import com.metaself.app.domain.movement.FigureSource
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.movement.aTypedWorkout
 import org.junit.jupiter.api.Test
 
 /** The stored rows, as the Movement screen reads them. Every figure is invented. */
@@ -64,6 +65,20 @@ class MovementRecordTest {
         assertThat(workout.energySource).isEqualTo(EnergySource.NONE)
         assertThat(workout.effort).isNull()
         assertThat(workout.source).isEqualTo(WorkoutSource.SYNCED)
+    }
+
+    @Test
+    fun `a typed workout is stored with no origin and reads back as it was`() {
+        val typed = aTypedWorkout(id = 7, note = "a note")
+
+        val entity = typed.toTypedEntity()
+
+        assertThat(entity.source).isEqualTo("TYPED")
+        assertThat(entity.origin).isNull()
+        assertThat(entity.originId).isNull()
+        assertThat(entity.effort).isEqualTo("MODERATE")
+        assertThat(entity.energySource).isEqualTo("MET_ESTIMATE")
+        assertThat(entity.toWorkout()).isEqualTo(typed)
     }
 
     private fun aWorkout(

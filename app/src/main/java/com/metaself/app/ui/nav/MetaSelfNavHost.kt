@@ -278,6 +278,13 @@ fun MetaSelfNavHost(
                 state = movementState,
                 onToggleDay = movementViewModel::toggle,
                 onBack = { navController.popBackStack() },
+                onLogWorkout = movementViewModel::logWorkout,
+                onOpenWorkout = movementViewModel::openWorkout,
+                onDraft = movementViewModel::changeDraft,
+                onSaveWorkout = movementViewModel::saveWorkout,
+                onDeleteWorkout = movementViewModel::deleteWorkout,
+                onCloseSheet = movementViewModel::closeSheet,
+                onUndoDelete = movementViewModel::undoDelete,
             )
         }
 

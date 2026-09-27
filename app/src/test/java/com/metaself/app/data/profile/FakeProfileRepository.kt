@@ -7,6 +7,8 @@ import com.metaself.app.domain.profile.Profile
 import com.metaself.app.domain.target.TargetRevision
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 
 /**
  * The profile store, in memory.
@@ -24,6 +26,9 @@ class FakeProfileRepository(
 ) : ProfileRepository {
 
     private val profileState = MutableStateFlow(initial)
+
+    /** Makes [profile] throw it instead of emitting, for a test of a read that fails (D8). */
+    var failing: Exception? = null
     private val revisionState = MutableStateFlow(initialRevision)
     private val seenState = MutableStateFlow(initialSeen)
     private val arrivalState = MutableStateFlow(initialArrival)
@@ -38,7 +43,10 @@ class FakeProfileRepository(
 
     val storedRevision: TargetRevision? get() = revisionState.value
 
-    override val profile: Flow<Profile?> = profileState
+    override val profile: Flow<Profile?> = flow {
+        failing?.let { throw it }
+        emitAll(profileState)
+    }
 
     override suspend fun save(profile: Profile) {
         profileState.value = profile

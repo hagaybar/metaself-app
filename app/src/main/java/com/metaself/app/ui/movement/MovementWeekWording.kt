@@ -1,15 +1,23 @@
 package com.metaself.app.ui.movement
 
+import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.FigureSource
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.movement.WorkoutSource
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
+
+/**
+ * One line of an open day. [workout] is set on a workout's own line, so the screen can make a typed
+ * workout's line a door to change it (D76).
+ */
+data class DetailLine(val text: String, val workout: Workout? = null)
 
 /**
  * What the Movement screen says (D73, D74).
@@ -40,11 +48,14 @@ object MovementWeekWording {
     fun averageMovement(week: MovementWeek): String? =
         week.averageActiveKcal?.let { "${number(it)} kcal of movement a day, on average" }
 
-    /** "4 workouts · 2 h 21"; null with none. */
+    /** "2 workouts · 3 walks · 4 h 30" (D78): either part left out at zero; null with neither. */
     fun workouts(week: MovementWeek): String? {
-        if (week.workoutCount == 0) return null
-        val count = if (week.workoutCount == 1) "1 workout" else "${week.workoutCount} workouts"
-        return count + SEP + duration(week.workoutMinutes)
+        val parts = listOfNotNull(
+            week.workoutCount.takeIf { it > 0 }?.let { if (it == 1) "1 workout" else "$it workouts" },
+            week.walkCount.takeIf { it > 0 }?.let { if (it == 1) "1 walk" else "$it walks" },
+        )
+        if (parts.isEmpty()) return null
+        return (parts + duration(week.workoutMinutes)).joinToString(SEP)
     }
 
     /** "Thu 3 Sep". No year: the screen only ever shows this week. */
@@ -59,12 +70,10 @@ object MovementWeekWording {
         val health = day.health
         val parts = listOfNotNull(
             health?.activeKcal?.let { "${number(it)} kcal" },
-            day.workouts.takeIf { it.isNotEmpty() }?.joinToString(", ") { workout ->
-                name(workout) + " " + (workout.distanceM?.let(::km) ?: duration(workout.durationMinutes))
-            },
+            sessions(day.workouts),
             health?.sleepMinutes?.let { "slept ${duration(it)}" },
         )
-        return if (parts.isNotEmpty()) parts.joinToString(SEP) else partLines(day).firstOrNull() ?: NOTHING
+        return if (parts.isNotEmpty()) parts.joinToString(SEP) else partLines(day).firstOrNull()?.text ?: NOTHING
     }
 
     /**
@@ -72,10 +81,13 @@ object MovementWeekWording {
      * A line the summary already says is not repeated, so a day with nothing but steps, or nothing at
      * all, has nothing beneath.
      */
-    fun detailLines(day: MovementDay): List<String> {
+    fun detailRows(day: MovementDay): List<DetailLine> {
         val summary = summaryLine(day)
-        return partLines(day).filterNot { it == summary }
+        return partLines(day).filterNot { it.text == summary }
     }
+
+    /** [detailRows]' words alone. */
+    fun detailLines(day: MovementDay): List<String> = detailRows(day).map { it.text }
 
     /** "Last four weeks: 38.1 · 45.0 · — · 44.7 km"; null when none of the four has a distance. */
     fun lastFourWeeks(week: MovementWeek): String? {
@@ -85,14 +97,33 @@ object MovementWeekWording {
             " km"
     }
 
-    /** The recording app's name for a session, or the kind's, as `ExerciseNames` names them. */
-    fun name(workout: Workout): String = workout.title?.takeIf { it.isNotBlank() } ?: when (workout.kind) {
+    /** The recording app's name for a session, or its kind's. */
+    fun name(workout: Workout): String = workout.title?.takeIf { it.isNotBlank() } ?: kindName(workout.kind)
+
+    /** A kind's name, as `ExerciseNames` names the same kinds on the day screen. */
+    fun kindName(kind: WorkoutKind): String = when (kind) {
         WorkoutKind.RUN -> "Running"
         WorkoutKind.WALK -> "Walking"
         WorkoutKind.CYCLE -> "Cycling"
         WorkoutKind.SWIM -> "Swimming"
         WorkoutKind.STRENGTH -> "Weights"
         WorkoutKind.OTHER, WorkoutKind.UNRECOGNISED -> "Exercise"
+    }
+
+    /**
+     * A day's sessions in its summary (D78): same-kind sessions combined — "Walking ×3 · 2 h 30" —
+     * in the order each kind first started. A kind's total distance when every one of its sessions
+     * has one, its total time otherwise. Named by the title its sessions share, or by the kind when
+     * the titles differ. A kind with one session reads as it always did: "Running 6.2 km".
+     */
+    private fun sessions(workouts: List<Workout>): String? {
+        if (workouts.isEmpty()) return null
+        return workouts.groupBy { it.kind }.values.joinToString(", ") { same ->
+            val label = same.map(::name).distinct().singleOrNull() ?: kindName(same.first().kind)
+            val distances = same.mapNotNull { it.distanceM }
+            val measure = if (distances.size == same.size) km(distances.sum()) else duration(same.sumOf { it.durationMinutes })
+            if (same.size == 1) "$label $measure" else "$label ×${same.size}$SEP$measure"
+        }
     }
 
     fun km(metres: Int): String = kmFigure(metres) + " km"
@@ -109,7 +140,7 @@ object MovementWeekWording {
         String.format(Locale.US, "%d:%02d /km", secondsPerKm / 60, secondsPerKm % 60)
 
     /** One line per recorded part of the day, in the order an open day shows them. */
-    private fun partLines(day: MovementDay): List<String> {
+    private fun partLines(day: MovementDay): List<DetailLine> {
         val health = day.health
         val movement = if (health == null) {
             emptyList()
@@ -124,16 +155,31 @@ object MovementWeekWording {
             health?.let(::bodyLine),
             day.eatenKcal?.let { "${number(it)} kcal eaten" },
         )
-        return movement + day.workouts.map(::workoutLine) + rest
+        return movement.map { DetailLine(it) } +
+            day.workouts.map { DetailLine(workoutLine(it), it) } +
+            rest.map { DetailLine(it) }
     }
 
     private fun workoutLine(workout: Workout): String = listOfNotNull(
         name(workout),
         workout.distanceM?.let(::km),
         duration(workout.durationMinutes),
-        workout.paceSecondsPerKm?.let(::pace),
+        // D78: pace for runs only.
+        workout.paceSecondsPerKm?.takeIf { workout.kind == WorkoutKind.RUN }?.let(::pace),
         workout.avgHeartRate?.let { "avg $it bpm" },
+        typedEnergy(workout),
     ).joinToString(SEP)
+
+    /** A typed workout's energy with where it came from (D4). A synced one's is not shown here. */
+    private fun typedEnergy(workout: Workout): String? {
+        if (workout.source != WorkoutSource.TYPED) return null
+        val kcal = workout.energyKcal ?: return null
+        return when (workout.energySource) {
+            EnergySource.MET_ESTIMATE -> "about ${number(kcal)} kcal, estimated"
+            EnergySource.TYPED -> "${number(kcal)} kcal, you set this"
+            EnergySource.BAND, EnergySource.NONE -> null
+        }
+    }
 
     private fun sleepLine(health: HealthDay): String? {
         val total = health.sleepMinutes ?: return null

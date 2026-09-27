@@ -167,6 +167,27 @@ class DaySummaryTest {
         assertThat(summary.workoutMinutes).isEqualTo(75)
     }
 
+    /** D77: a workout the owner typed is one of the day's workouts. */
+    @Test
+    fun `a typed workout counts among the day's workouts`() {
+        val summary = DaySummary.of(day, DayTotals(), emptyList(), emptyList(), listOf(workout(30), typed(40)), null, 1_000)!!
+
+        assertThat(summary.workoutCount).isEqualTo(2)
+        assertThat(summary.workoutMinutes).isEqualTo(70)
+    }
+
+    @Test
+    fun `a day with nothing but a typed workout has a summary`() {
+        val summary = DaySummary.of(day, DayTotals(), emptyList(), emptyList(), listOf(typed(40)), null, 1_000)
+
+        assertThat(summary?.workoutCount).isEqualTo(1)
+    }
+
+    private fun typed(minutes: Int) = workout(minutes).copy(
+        kind = "STRENGTH", source = "TYPED", origin = null, originId = null,
+        effort = "MODERATE", energySource = "MET_ESTIMATE", energyKcal = 150,
+    )
+
     /** D12d: the owner's figure wins, and the summary says it is his. */
     @Test
     fun `a correction replaces what was read and says so`() {

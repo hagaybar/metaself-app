@@ -12,6 +12,7 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.health.HealthKind
+import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.profile.aProfile
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -229,6 +230,71 @@ class HealthRecordStoreTest {
         assertThat(db.healthDayDao().day(day)!!.steps).isEqualTo(9_000)
     }
 
+    /** D77: summarising again after a typed workout counts it and keeps the stored totals. */
+    @Test
+    fun `a typed workout is counted when its day is summarised again, and the stored totals stay`() = runTest {
+        store.summarise(setOf(day), TotalsResult(byDay = mapOf(day to DayTotals(steps = 9_000))), STAMP)
+        db.workoutDao().insert(
+            WorkoutEntity(
+                epochDay = day, startedAtMillis = day * 86_400_000L, durationMinutes = 45, kind = "STRENGTH",
+                title = null, distanceM = null, energyKcal = 150, energySource = "MET_ESTIMATE",
+                effort = "MODERATE", source = "TYPED", origin = null, originId = null, note = null,
+            ),
+        )
+
+        store.summarise(setOf(day), TotalsResult.ALL_FAILED, STAMP)
+
+        val summary = db.healthDayDao().day(day)!!
+        assertThat(summary.steps).isEqualTo(9_000)
+        assertThat(summary.workoutCount).isEqualTo(1)
+        assertThat(summary.workoutMinutes).isEqualTo(45)
+    }
+
+    /**
+     * D76/D77 through the real typed store and the real DAO: a typed workout logged, changed and
+     * deleted by its id, each write summarising its day again; a re-log carrying an id already used
+     * is a new row; the synced session on the same day is never touched.
+     */
+    @Test
+    fun `a typed workout is logged, changed and deleted by id, and the synced one beside it stays`() = runTest {
+        val typed = RoomTypedWorkouts(db.workoutDao(), RoomDatabaseTransaction(db), store, Now { STAMP })
+        store.summarise(setOf(day), TotalsResult(byDay = mapOf(day to DayTotals(steps = 9_000))), STAMP)
+        val syncedId = db.workoutDao().insert(
+            WorkoutEntity(
+                epochDay = day, startedAtMillis = day * DAY, durationMinutes = 30, kind = "RUN",
+                title = "Running", distanceM = 5_000, energyKcal = null, energySource = "NONE",
+                effort = null, source = "SYNCED", origin = "com.example.band", originId = "s-1", note = null,
+            ),
+        )
+
+        val id = typed.log(aTypedWorkout(id = 0, epochDay = day, minutes = 45))
+        // Taken after the first summary, which may work out the synced session's heart-rate figures.
+        val synced = db.workoutDao().byId(syncedId)!!
+        assertThat(db.healthDayDao().day(day)!!.workoutCount).isEqualTo(2)
+        assertThat(db.healthDayDao().day(day)!!.workoutMinutes).isEqualTo(75)
+
+        assertThat(typed.change(aTypedWorkout(id = id, epochDay = day - 2, minutes = 60))).isTrue()
+        assertThat(db.workoutDao().byId(id)!!.durationMinutes).isEqualTo(60)
+        assertThat(db.workoutDao().byId(id)!!.epochDay).isEqualTo(day)
+        assertThat(db.healthDayDao().day(day)!!.workoutMinutes).isEqualTo(90)
+
+        assertThat(typed.change(aTypedWorkout(id = syncedId, epochDay = day, minutes = 60))).isFalse()
+        assertThat(typed.delete(aTypedWorkout(id = syncedId, epochDay = day))).isFalse()
+        assertThat(db.workoutDao().byId(syncedId)).isEqualTo(synced)
+
+        assertThat(typed.delete(aTypedWorkout(id = id, epochDay = day - 2))).isTrue()
+        assertThat(db.workoutDao().byId(id)).isNull()
+        assertThat(db.healthDayDao().day(day)!!.workoutCount).isEqualTo(1)
+        assertThat(db.healthDayDao().day(day)!!.steps).isEqualTo(9_000)
+        assertThat(typed.delete(aTypedWorkout(id = id, epochDay = day))).isFalse()
+
+        val again = typed.log(aTypedWorkout(id = syncedId, epochDay = day, minutes = 45))
+        assertThat(again).isNotEqualTo(syncedId)
+        assertThat(db.workoutDao().all().map { it.id }).containsExactly(syncedId, again)
+        assertThat(db.workoutDao().byId(syncedId)).isEqualTo(synced)
+        assertThat(db.healthDayDao().day(day)!!.workoutCount).isEqualTo(2)
+    }
+
     /** I2: a call that worked and found nothing means nothing — the old figure is stale, not kept. */
     @Test
     fun `a total that came back empty clears the stored one, and an empty day goes`() = runTest {
@@ -255,6 +321,27 @@ class HealthRecordStoreTest {
         assertThat(workout.maxHeartRate).isEqualTo(140)
         assertThat(workout.zoneMaxSource).isEqualTo("ESTIMATED")
         assertThat(workout.zoneSeconds).isNotNull()
+    }
+
+    /** D4: nothing recorded a typed workout, so a reading inside its typed window is never its heart rate. */
+    @Test
+    fun `a typed workout keeps no heart-rate figures, even with readings inside its window`() = runTest {
+        db.workoutDao().insert(
+            WorkoutEntity(
+                epochDay = day, startedAtMillis = day * DAY, durationMinutes = 45, kind = "RUN",
+                title = null, distanceM = null, energyKcal = 300, energySource = "TYPED",
+                effort = "MODERATE", source = "TYPED", origin = null, originId = null, note = null,
+            ),
+        )
+        store.apply(listOf(heart("hr-1", listOf(120.0, 140.0), at = day * DAY + 60_000)), emptyList())
+
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 1_000)
+
+        val workout = db.workoutDao().all().single()
+        assertThat(workout.avgHeartRate).isNull()
+        assertThat(workout.maxHeartRate).isNull()
+        assertThat(workout.zoneSeconds).isNull()
+        assertThat(workout.zoneMaxSource).isNull()
     }
 
     /** M1: figures from readings since deleted are cleared, not left standing. */

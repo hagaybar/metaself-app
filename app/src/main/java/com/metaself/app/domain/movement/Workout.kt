@@ -31,6 +31,10 @@ enum class EnergySource { BAND, MET_ESTIMATE, TYPED, NONE }
 /** Whether the band recorded it or the owner did. */
 enum class WorkoutSource { SYNCED, TYPED }
 
+/** Seconds per kilometre for [minutes] over [metres]. One formula for a stored workout and a draft. */
+internal fun paceOf(minutes: Int, metres: Int): Int =
+    (minutes * 60.0 / (metres / 1000.0)).roundToInt()
+
 /**
  * One workout, as the rest of the app reasons about it.
  *
@@ -60,5 +64,5 @@ data class Workout(
     /** Seconds per kilometre — "5:30 /km" on screen — or null without a distance. */
     val paceSecondsPerKm: Int?
         get() = distanceM?.takeIf { it > 0 && durationMinutes > 0 }
-            ?.let { (durationMinutes * 60.0 / (it / 1000.0)).roundToInt() }
+            ?.let { paceOf(durationMinutes, it) }
 }

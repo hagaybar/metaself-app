@@ -75,3 +75,22 @@ fun WorkoutEntity.toWorkout(): Workout = Workout(
     note = note,
     avgHeartRate = avgHeartRate,
 )
+
+/** A typed workout as it is stored (D76): no origin, `source = TYPED`, every enum by its name. */
+fun Workout.toTypedEntity(): WorkoutEntity = WorkoutEntity(
+    id = id,
+    epochDay = epochDay,
+    startedAtMillis = startedAtMillis,
+    durationMinutes = durationMinutes,
+    kind = kind.name,
+    title = title,
+    distanceM = distanceM,
+    energyKcal = energyKcal,
+    energySource = energySource.name,
+    effort = effort?.name,
+    source = WorkoutSource.TYPED.name,
+    origin = null,
+    originId = null,
+    hidden = hidden,
+    note = note,
+)

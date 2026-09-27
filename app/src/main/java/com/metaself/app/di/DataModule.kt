@@ -36,7 +36,9 @@ import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.health.RoomHealthRecordStatus
 import com.metaself.app.data.health.RoomMovementRecord
 import com.metaself.app.data.health.RoomHealthStore
+import com.metaself.app.data.health.RoomTypedWorkouts
 import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.movement.HealthConnectSteps
 import com.metaself.app.data.movement.StepSource
@@ -246,6 +248,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideMovementRecord(record: RoomMovementRecord): MovementRecord = record
+
+    /** Workouts the owner types in (D76), with the day's summary worked out again after each write. */
+    @Provides
+    @Singleton
+    fun provideTypedWorkouts(typed: RoomTypedWorkouts): TypedWorkouts = typed
 
     @Provides
     @Singleton

@@ -10,6 +10,7 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.movement.aTypedWorkout
 import org.junit.jupiter.api.Test
 
 /**
@@ -35,7 +36,7 @@ class MovementWeekWordingTest {
 
     private val week = MovementWeek(
         monday = 20_696, distanceM = 42_600, averageActiveKcal = 355,
-        workoutCount = 4, workoutMinutes = 141,
+        workoutCount = 4, walkCount = 0, workoutMinutes = 141,
         days = emptyList(), previousWeeksM = listOf(38_100, 45_000, null, 44_700),
     )
 
@@ -59,7 +60,7 @@ class MovementWeekWordingTest {
 
     @Test
     fun `a headline figure that is not recorded is not said`() {
-        val empty = week.copy(distanceM = null, averageActiveKcal = null, workoutCount = 0, workoutMinutes = 0)
+        val empty = week.copy(distanceM = null, averageActiveKcal = null, workoutCount = 0, walkCount = 0, workoutMinutes = 0)
 
         assertThat(MovementWeekWording.distance(empty)).isNull()
         assertThat(MovementWeekWording.averageMovement(empty)).isNull()
@@ -98,7 +99,7 @@ class MovementWeekWordingTest {
 
     @Test
     fun `a workout with no distance is given by its time, and two are listed together`() {
-        val weights = workout(title = "Weights", minutes = 45, distanceM = null)
+        val weights = workout(title = "Weights", minutes = 45, distanceM = null, kind = WorkoutKind.STRENGTH)
         val day = MovementDay(TEST_EPOCH_DAY, null, listOf(running, weights), eatenKcal = null)
 
         assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("Running 6.2 km, Weights 45 min")
@@ -203,14 +204,112 @@ class MovementWeekWordingTest {
             .isNull()
     }
 
+    /** D78: "2 workouts · 3 walks · 4 h 30" — 270 minutes, invented. */
+    @Test
+    fun `the headline counts walks apart from workouts, with every session's time`() {
+        val busy = week.copy(workoutCount = 2, walkCount = 3, workoutMinutes = 270)
+
+        assertThat(MovementWeekWording.workouts(busy)).isEqualTo("2 workouts · 3 walks · 4 h 30")
+    }
+
+    @Test
+    fun `either part is left out when it is zero, and one is one`() {
+        assertThat(MovementWeekWording.workouts(week.copy(workoutCount = 0, walkCount = 3, workoutMinutes = 270)))
+            .isEqualTo("3 walks · 4 h 30")
+        assertThat(MovementWeekWording.workouts(week.copy(workoutCount = 0, walkCount = 1, workoutMinutes = 45)))
+            .isEqualTo("1 walk · 45 min")
+    }
+
+    /** D78: 50 + 40 + 60 = 150 minutes, invented. */
+    @Test
+    fun `same-kind sessions are combined in the summary, by their total time`() {
+        val walks = listOf(50, 40, 60).mapIndexed { i, minutes ->
+            workout(title = "Walking", minutes = minutes, distanceM = null, kind = WorkoutKind.WALK, startedAtMillis = i.toLong())
+        }
+
+        assertThat(MovementWeekWording.summaryLine(MovementDay(TEST_EPOCH_DAY, null, walks, null)))
+            .isEqualTo("Walking ×3 · 2 h 30")
+    }
+
+    @Test
+    fun `combined sessions give their total distance when every one has one`() {
+        // 2,000 + 3,000 = 5,000 m.
+        val walks = listOf(
+            workout(title = "Walking", minutes = 30, distanceM = 2_000, kind = WorkoutKind.WALK),
+            workout(title = "Walking", minutes = 45, distanceM = 3_000, kind = WorkoutKind.WALK, startedAtMillis = 1),
+        )
+
+        assertThat(MovementWeekWording.summaryLine(MovementDay(TEST_EPOCH_DAY, null, walks, null)))
+            .isEqualTo("Walking ×2 · 5.0 km")
+    }
+
+    @Test
+    fun `combined sessions with one distance missing give their time`() {
+        val walks = listOf(
+            workout(title = "Walking", minutes = 30, distanceM = 2_000, kind = WorkoutKind.WALK),
+            workout(title = "Walking", minutes = 40, distanceM = null, kind = WorkoutKind.WALK, startedAtMillis = 1),
+        )
+
+        assertThat(MovementWeekWording.summaryLine(MovementDay(TEST_EPOCH_DAY, null, walks, null)))
+            .isEqualTo("Walking ×2 · 1 h 10")
+    }
+
+    @Test
+    fun `combined sessions with different titles are named by their kind, in the order kinds first started`() {
+        val day = MovementDay(
+            TEST_EPOCH_DAY,
+            null,
+            listOf(
+                running.copy(startedAtMillis = 0),
+                workout(title = "Hiking", minutes = 40, distanceM = null, kind = WorkoutKind.WALK, startedAtMillis = 1),
+                workout(title = "Walking", minutes = 50, distanceM = null, kind = WorkoutKind.WALK, startedAtMillis = 2),
+            ),
+            null,
+        )
+
+        assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("Running 6.2 km, Walking ×2 · 1 h 30")
+    }
+
+    /** D78: pace for runs only. */
+    @Test
+    fun `a walk with a distance shows no pace`() {
+        val walk = workout(title = "Walking", minutes = 50, distanceM = 4_000, kind = WorkoutKind.WALK)
+
+        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(walk), null)))
+            .containsExactly("Walking · 4.0 km · 50 min")
+    }
+
+    /** D4: a typed workout's energy says where it came from. */
+    @Test
+    fun `a typed workout's line says its energy and where it came from`() {
+        fun line(workout: Workout) =
+            MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(workout), null)).single()
+
+        assertThat(line(aTypedWorkout())).isEqualTo("Weights · 45 min · about 150 kcal, estimated")
+        assertThat(line(aTypedWorkout(energyKcal = 300, energySource = EnergySource.TYPED)))
+            .isEqualTo("Weights · 45 min · 300 kcal, you set this")
+        assertThat(line(aTypedWorkout(energyKcal = null, energySource = EnergySource.NONE)))
+            .isEqualTo("Weights · 45 min")
+    }
+
+    @Test
+    fun `an open day's workout line carries its workout, and no other line does`() {
+        val typed = aTypedWorkout()
+        val rows = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(typed), 1_840))
+
+        assertThat(rows.mapNotNull { it.workout }).containsExactly(typed)
+        assertThat(rows.single { it.workout != null }.text).isEqualTo("Weights · 45 min · about 150 kcal, estimated")
+    }
+
     private fun workout(
         title: String?,
         minutes: Int,
         distanceM: Int?,
         kind: WorkoutKind = WorkoutKind.RUN,
         avgHeartRate: Int? = null,
+        startedAtMillis: Long = 0,
     ) = Workout(
-        id = 0, epochDay = TEST_EPOCH_DAY, startedAtMillis = 0, durationMinutes = minutes,
+        id = 0, epochDay = TEST_EPOCH_DAY, startedAtMillis = startedAtMillis, durationMinutes = minutes,
         kind = kind, title = title, distanceM = distanceM, energyKcal = null,
         energySource = EnergySource.NONE, effort = null, source = WorkoutSource.SYNCED,
         hidden = false, note = null, avgHeartRate = avgHeartRate,
