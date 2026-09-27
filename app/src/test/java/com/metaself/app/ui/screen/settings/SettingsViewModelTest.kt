@@ -49,6 +49,7 @@ import com.metaself.app.domain.reminder.Reminder
 import com.metaself.app.domain.window.WindowRule
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
+import com.metaself.app.ui.movement.MovementWording
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -197,6 +198,29 @@ class SettingsViewModelTest {
         assertThat(viewModel.state.value.failed).isNull()
         assertThat(problems.recorded.map { it.kind }).containsExactly("refused", "refused")
         assertThat(viewModel.state.value.problems).hasSize(2)
+    }
+
+    /**
+     * The band's calories are counted over the same days as the days they are "of": the days before
+     * today. Today counted in one and not the other could claim one day more than there were. Every
+     * figure is invented.
+     */
+    @Test
+    fun `the band's calorie days are counted over the days before today, as the days seen are`() = runTest {
+        val days = (TEST_EPOCH_DAY - 30L..TEST_EPOCH_DAY.toLong()).map {
+            DayMovement(epochDay = it, steps = 5_000, activeKcal = 300)
+        }
+        val viewModel = viewModel(steps = Steps(days = days))
+        watch(viewModel)
+
+        viewModel.refreshSteps()
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertThat(state.stepDaysSoFar).isEqualTo(30)
+        assertThat(state.daysWithBandEnergy).isEqualTo(30)
+        assertThat(MovementWording.bandEnergy(state.daysWithBandEnergy, state.stepDaysSoFar))
+            .startsWith("Your band reported calories on 30 of the last 30 days")
     }
 
     @Test
@@ -739,13 +763,17 @@ class SettingsViewModelTest {
         }
     }
 
-    private class Steps(private val failing: Boolean = false) : StepSource {
+    private class Steps(
+        private val failing: Boolean = false,
+        private val days: List<DayMovement>? = null,
+    ) : StepSource {
         override suspend fun access(): StepAccess {
             if (failing) throw IllegalStateException("health connect gone")
-            return StepAccess.UNAVAILABLE
+            return if (days == null) StepAccess.UNAVAILABLE else StepAccess.GRANTED
         }
 
-        override suspend fun history(from: LocalDate, to: LocalDate): List<DayMovement> = emptyList()
+        override suspend fun history(from: LocalDate, to: LocalDate): List<DayMovement> =
+            days.orEmpty().filter { it.epochDay in from.toEpochDay()..to.toEpochDay() }
     }
 
     private companion object {

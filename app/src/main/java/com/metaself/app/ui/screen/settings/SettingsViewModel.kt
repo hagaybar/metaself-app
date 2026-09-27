@@ -458,7 +458,9 @@ class SettingsViewModel internal constructor(
                 daysSoFar = before.size,
                 earliest = before.minByOrNull { it.epochDay }
                     ?.let { LocalDate.ofEpochDay(it.epochDay) },
-                daysWithEnergy = history.count { it.activeKcal != null },
+                // Over the same days as daysSoFar, the days it is "of"; counting today here as well
+                // could claim one day more than there were.
+                daysWithEnergy = before.count { it.activeKcal != null },
             )
         }
     }
