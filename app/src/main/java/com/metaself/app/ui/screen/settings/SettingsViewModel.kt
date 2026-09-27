@@ -18,6 +18,8 @@ import com.metaself.app.data.drive.DriveBackup
 import com.metaself.app.data.drive.DriveOutcome
 import com.metaself.app.data.health.HealthRecordState
 import com.metaself.app.data.health.HealthRecordStatus
+import com.metaself.app.data.health.ReadingsArchive
+import com.metaself.app.ui.health.HealthRecordWording
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.domain.movement.NormalDay
@@ -109,6 +111,8 @@ class SettingsViewModel internal constructor(
     private val drive: DriveBackup,
     /** How far the health record reaches (D65). Defaulted so tests need not supply one. */
     private val healthStatus: HealthRecordStatus = HealthRecordStatus.NONE,
+    /** The detailed readings' month files in Drive (D71). Defaulted so tests need not supply one. */
+    private val archive: ReadingsArchive = ReadingsArchive.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -132,10 +136,11 @@ class SettingsViewModel internal constructor(
         meals: MealRepository,
         drive: DriveBackup,
         healthStatus: HealthRecordStatus,
+        archive: ReadingsArchive,
     ) : this(
         keys, settings, estimator, problems, reminders, scheduler, notifier, backups, files,
         SecretStoreOffAccount(secrets), profiles, backupFolder, automaticBackup, today, now, steps,
-        meals, drive, healthStatus,
+        meals, drive, healthStatus, archive,
     )
 
     /**
@@ -176,6 +181,9 @@ class SettingsViewModel internal constructor(
 
     private val backupMessage = MutableStateFlow<String?>(null)
     private val pendingRestore = MutableStateFlow<PendingRestore?>(null)
+    private val pendingArchive = MutableStateFlow<String?>(null)
+    private val archiveInMovement = MutableStateFlow(false)
+    private val archiveMessage = MutableStateFlow<String?>(null)
     private val busy = MutableStateFlow(false)
 
     private val testing = MutableStateFlow(false)
@@ -240,15 +248,20 @@ class SettingsViewModel internal constructor(
             automaticBackupMessage = message,
         )
     }.combine(
-        combine(backupMessage, pendingRestore, busy) { message, pending, working ->
-            Triple(message, pending, working)
+        combine(backupMessage, pendingRestore, pendingArchive, busy) { message, pending, archiveOffer, working ->
+            BackupLines(message, pending?.question, archiveOffer, working)
         },
-    ) { current, (message, pending, working) ->
+    ) { current, lines ->
         current.copy(
-            backupMessage = message,
-            pendingRestore = pending?.question,
-            busy = working,
+            backupMessage = lines.message,
+            pendingRestore = lines.pendingRestore,
+            pendingArchive = lines.pendingArchive,
+            busy = lines.busy,
         )
+    }.combine(
+        combine(archiveInMovement, archiveMessage, ::Pair),
+    ) { current, (inMovement, message) ->
+        current.copy(archiveInMovement = inMovement, archiveMessage = message)
     }.combine(failed) { current, refusal ->
         current.copy(failed = refusal)
     }.stateIn(
@@ -540,6 +553,15 @@ class SettingsViewModel internal constructor(
             }
 
             driveMessage.value = AutomaticBackupWording.drive(outcome)
+
+            // Switching Drive on sends the detailed readings' months now rather than tomorrow (D71).
+            // Quietly: the daily copy's line is the answer; a month that fails is in the problem log.
+            if (outcome is DriveOutcome.Written) {
+                quietly {
+                    archive.writeOutOfDate()
+                    problemLines.value = readProblems()
+                }
+            }
         }
     }
 
@@ -619,6 +641,7 @@ class SettingsViewModel internal constructor(
             busy.value = true
             backupMessage.value = null
             pendingRestore.value = null
+            pendingArchive.value = null
 
             val backup = files.read(uri)?.let { BackupCodec.decode(it) }
             if (backup == null) {
@@ -677,6 +700,7 @@ class SettingsViewModel internal constructor(
             backupMessage.value =
                 BackupWording.restored(result) + " " + BackupWording.KEY_NOT_INCLUDED
             busy.value = false
+            offerArchiveAfterRestore()
         }
     }
 
@@ -684,11 +708,83 @@ class SettingsViewModel internal constructor(
         pendingRestore.value = null
     }
 
+    /**
+     * The daily file carries no raw readings (D71), so after a restore the months in Drive are
+     * offered separately — only with Drive backup on, and only when Drive holds some. Asked quietly:
+     * the restore has already happened and said so, and Drive not answering is no reason to say
+     * otherwise.
+     */
+    private fun offerArchiveAfterRestore() {
+        quietly {
+            if (!profiles.driveBackupOn.first()) return@quietly
+            val months = archive.monthsInDrive() ?: return@quietly
+            if (months > 0) {
+                archiveInMovement.value = false
+                pendingArchive.value = HealthRecordWording.offerMonths(months)
+            }
+        }
+    }
+
+    /**
+     * The same question, asked for from Movement: a way back to the months in Drive besides the offer
+     * after a restore. Asked out loud, as he pressed for it: no months, or no answer, is said there.
+     */
+    fun offerArchive() {
+        quietly {
+            pendingArchive.value = null
+            archiveInMovement.value = true
+            archiveMessage.value = null
+            busy.value = true
+            val months = archive.monthsInDrive()
+            busy.value = false
+            problemLines.value = readProblems()
+            when {
+                months == null -> archiveMessage.value = HealthRecordWording.NOT_BROUGHT_BACK
+                months == 0 -> archiveMessage.value = HealthRecordWording.NONE_IN_DRIVE
+                else -> pendingArchive.value = HealthRecordWording.offerMonths(months)
+            }
+        }
+    }
+
+    /**
+     * Bring every month in Drive back. Rows the phone lacks are added and nothing already here is
+     * removed or replaced; one that throws may have brought some months back. What came of it is said
+     * where the question was asked.
+     */
+    fun confirmArchive() {
+        if (pendingArchive.value == null) return
+        act(SettingsPart.BACKUP, ActionRefused.MAYBE_PARTIAL, onRefused = { busy.value = false }) {
+            busy.value = true
+            pendingArchive.value = null
+            val result = archive.restoreAll()
+            val said = result?.let(HealthRecordWording::broughtBack) ?: HealthRecordWording.NOT_BROUGHT_BACK
+            if (archiveInMovement.value) archiveMessage.value = said else backupMessage.value = said
+            problemLines.value = readProblems()
+            quietly { healthRecordState.value = healthStatus.current() }
+            busy.value = false
+        }
+    }
+
+    fun cancelArchive() {
+        pendingArchive.value = null
+    }
+
     fun dismissBackupMessage() {
         backupMessage.value = null
     }
 
+    fun dismissArchiveMessage() {
+        archiveMessage.value = null
+    }
+
     private data class PendingRestore(val backup: Backup, val question: String)
+
+    private data class BackupLines(
+        val message: String?,
+        val pendingRestore: String?,
+        val pendingArchive: String?,
+        val busy: Boolean,
+    )
 
     /**
      * Post the reminder now, so it can be checked without waiting for a day with nothing in it.

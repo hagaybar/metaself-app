@@ -1,6 +1,7 @@
 package com.metaself.app.ui.health
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.health.ArchiveRestore
 import com.metaself.app.domain.health.HealthKind
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -74,10 +75,53 @@ class HealthRecordWordingTest {
             .isEqualTo("13 kinds of health data are not allowed — tap Connect to allow them.")
     }
 
-    /** D71: the raw readings go to Drive in the next phase; until then they are on this phone only. */
+    /** D71: the raw readings go to Drive, a file a month, when Drive backup is on. */
     @Test
-    fun `the detailed readings are said not to be backed up`() {
-        assertThat(HealthRecordWording.NOT_BACKED_UP)
-            .isEqualTo("Detailed readings are kept on this phone only; the daily backup has the summaries.")
+    fun `the detailed readings line follows Drive`() {
+        assertThat(HealthRecordWording.detailedBackup(driveOn = true))
+            .isEqualTo("Detailed readings are copied to your Drive, one file a month.")
+        assertThat(HealthRecordWording.detailedBackup(driveOn = false))
+            .isEqualTo("Detailed readings are kept on this phone only while Drive backup is off; the daily backup has the summaries.")
+    }
+
+    @Test
+    fun `the offer after a restore names the months`() {
+        assertThat(HealthRecordWording.offerMonths(14))
+            .isEqualTo("Also bring back 14 months of detailed readings from Drive?")
+        assertThat(HealthRecordWording.offerMonths(1))
+            .isEqualTo("Also bring back 1 month of detailed readings from Drive?")
+    }
+
+    @Test
+    fun `what came back is said in numbers`() {
+        assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 2, readings = 40_000, unreadable = 0, unreachable = 0)))
+            .isEqualTo("Brought back 2 months: 40,000 readings.")
+        assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 1, readings = 10, unreadable = 1, unreachable = 0)))
+            .isEqualTo("Brought back 1 month: 10 readings. 1 file could not be read.")
+        assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 1, readings = 1, unreadable = 0, unreachable = 1)))
+            .isEqualTo("Brought back 1 month: 1 reading. 1 file could not be downloaded.")
+    }
+
+    @Test
+    fun `Drive not answering is said plainly`() {
+        assertThat(HealthRecordWording.NOT_BROUGHT_BACK)
+            .isEqualTo("Drive could not be reached; the detailed readings were not brought back.")
+    }
+
+    /** Could not be downloaded may work another time; could not be read will not. Both are said. */
+    @Test
+    fun `files that could not be downloaded and could not be read are said apart`() {
+        assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 0, readings = 0, unreadable = 2, unreachable = 3)))
+            .isEqualTo(
+                "Brought back 0 months: nothing new — the phone already had every reading. " +
+                    "3 files could not be downloaded. 2 files could not be read.",
+            )
+    }
+
+    /** D71: nothing to add is said plainly, not as a count of zero. */
+    @Test
+    fun `nothing new says so plainly`() {
+        assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 3, readings = 0, unreadable = 0, unreachable = 0)))
+            .isEqualTo("Brought back 3 months: nothing new — the phone already had every reading.")
     }
 }

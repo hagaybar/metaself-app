@@ -30,6 +30,15 @@ data class SettingsUiState(
     val backupMessage: String? = null,
     /** A restore waiting to be agreed to, because it will destroy what is here. */
     val pendingRestore: String? = null,
+    /** The offer to bring back the detailed readings' months from Drive (D71). */
+    val pendingArchive: String? = null,
+    /**
+     * Whether that offer, and what came of it, were asked for from Movement and are drawn there,
+     * rather than under Backup after a restore.
+     */
+    val archiveInMovement: Boolean = false,
+    /** What asking from Movement came to: nothing found, Drive not answering, or what came back. */
+    val archiveMessage: String? = null,
     val busy: Boolean = false,
     /** Whether an Open Food Facts account is set. Never the password itself. */
     val offUsername: String = "",

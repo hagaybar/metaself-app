@@ -9,7 +9,9 @@ import com.metaself.app.domain.health.HealthKind
 import com.metaself.app.domain.health.HeartRateZones
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
+import java.time.YearMonth
 import javax.inject.Inject
+import javax.inject.Singleton
 
 /**
  * The health record's writes (D65). One transaction per batch, so a record and its rows — a night and
@@ -20,8 +22,11 @@ import javax.inject.Inject
  * `hidden` and `note`, whether it comes in a batch of changes or in a window re-read.
  *
  * The archive months (D71) of the days whose rows a write changed are marked out of date by that
- * write, stamped with [now]; summarising marks nothing.
+ * write, stamped with [now]; summarising marks nothing. It is also the archive's [ArchiveRecord]: which
+ * months are out of date, what is in one, marking one written, and adding back the rows Drive has
+ * that the phone lacks. One instance serves both.
  */
+@Singleton
 class RoomHealthStore @Inject constructor(
     private val database: MetaSelfDatabase,
     private val transaction: DatabaseTransaction,
@@ -29,7 +34,7 @@ class RoomHealthStore @Inject constructor(
     private val profiles: ProfileRepository,
     private val today: Today,
     private val now: Now,
-) : HealthStore {
+) : HealthStore, ArchiveRecord {
 
     private val readingDao get() = database.healthReadingDao()
     private val sleepDao get() = database.sleepDao()
@@ -223,6 +228,52 @@ class RoomHealthStore @Inject constructor(
      */
     private fun daysAround(fromMillis: Long, toMillis: Long): Pair<Long, Long> =
         rows.dayOf(fromMillis) - 1 to rows.dayOf(toMillis) + 1
+
+    override suspend fun monthsOutOfDate(): List<String> = bookkeepingDao.monthsOutOfDate().map { it.month }
+
+    /**
+     * Kind by kind, so the `(kind, epochDay, startMillis)` index serves every query. The month's
+     * changedAt is read in the SAME transaction as the rows, so it reflects exactly what [rows]
+     * holds — a later write can mark the month written as of this value and no other.
+     */
+    override suspend fun readingsIn(month: String): MonthRows {
+        val yearMonth = YearMonth.parse(month)
+        val first = yearMonth.atDay(1).toEpochDay()
+        val last = yearMonth.atEndOfMonth().toEpochDay()
+        lateinit var result: MonthRows
+        transaction.run {
+            val rows = HealthKind.entries.filter { it.isReading }.flatMap { kind ->
+                readingDao.ofKindInDays(kind.name, first, last)
+            }
+            val changedAtMillis = bookkeepingDao.month(month)?.changedAtMillis ?: 0L
+            result = MonthRows(rows, changedAtMillis)
+        }
+        return result
+    }
+
+    override suspend fun everWritten(month: String): Boolean =
+        bookkeepingDao.month(month)?.writtenAtMillis != null
+
+    /**
+     * A conditional update, never a read-then-replace: it takes only when the month's changedAt is
+     * still [changedAtSeen], so a change stamped after the read that produced it — and before this
+     * call — leaves the month out of date rather than marked for a version it never wrote.
+     */
+    override suspend fun markWritten(month: String, changedAtSeen: Long) {
+        bookkeepingDao.markWritten(month, changedAtSeen)
+    }
+
+    override suspend fun insertMissing(rows: List<HealthReadingEntity>): Inserted {
+        if (rows.isEmpty()) return Inserted.NONE
+        val added = mutableSetOf<Long>()
+        var count = 0
+        transaction.run {
+            val ids = readingDao.insertMissing(rows.map { it.copy(id = 0) })
+            rows.zip(ids).forEach { (row, id) -> if (id != -1L) { added += row.epochDay; count++ } }
+            markMonths(added)
+        }
+        return Inserted(added, count)
+    }
 
     /** The Drive month files of these days are out of date (D71); when each was last written is kept. */
     private suspend fun markMonths(days: Set<Long>) {

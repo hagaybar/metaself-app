@@ -34,4 +34,14 @@ interface HealthBookkeepingDao {
 
     @Query("SELECT * FROM archive_months WHERE month = :month")
     suspend fun month(month: String): ArchiveMonthEntity?
+
+    /**
+     * [month] is written as of [changedAtSeen], UNLESS its changedAt has moved on since — a write
+     * built from an earlier read must not hide a change that landed after it.
+     */
+    @Query(
+        "UPDATE archive_months SET writtenAtMillis = :changedAtSeen " +
+            "WHERE month = :month AND changedAtMillis = :changedAtSeen",
+    )
+    suspend fun markWritten(month: String, changedAtSeen: Long)
 }

@@ -1,5 +1,6 @@
 package com.metaself.app.ui.health
 
+import com.metaself.app.data.health.ArchiveRestore
 import com.metaself.app.domain.health.HealthKind
 import java.time.Instant
 import java.time.LocalDate
@@ -10,8 +11,41 @@ import java.util.Locale
 /** What Settings says about the health record (D65–D71). Counts and dates, never reassurance. */
 object HealthRecordWording {
 
-    const val NOT_BACKED_UP =
-        "Detailed readings are kept on this phone only; the daily backup has the summaries."
+    /** Where the raw readings are kept (D71): Drive, a file a month, when Drive backup is on. */
+    fun detailedBackup(driveOn: Boolean): String = if (driveOn) {
+        "Detailed readings are copied to your Drive, one file a month."
+    } else {
+        "Detailed readings are kept on this phone only while Drive backup is off; the daily backup has the summaries."
+    }
+
+    /** Bringing the months back could not start: Drive did not answer. */
+    const val NOT_BROUGHT_BACK = "Drive could not be reached; the detailed readings were not brought back."
+
+    /** Asked from Movement, and Drive answered with no months. */
+    const val NONE_IN_DRIVE = "No detailed readings were found in Drive."
+
+    /** The question after a restore, or asked from Movement, when Drive holds month files. */
+    fun offerMonths(months: Int): String =
+        "Also bring back ${plural(months.toLong(), "month")} of detailed readings from Drive?"
+
+    /**
+     * What bringing the months back did. A file that could not be downloaded is said apart from one
+     * that could not be read: the first may come another time, the second will not.
+     */
+    fun broughtBack(result: ArchiveRestore): String = buildString {
+        append("Brought back ").append(plural(result.months.toLong(), "month")).append(": ")
+        if (result.readings == 0) {
+            append("nothing new — the phone already had every reading.")
+        } else {
+            append(if (result.readings == 1) "1 reading" else "${number(result.readings)} readings").append(".")
+        }
+        if (result.unreachable > 0) append(" ").append(files(result.unreachable)).append(" could not be downloaded.")
+        if (result.unreadable > 0) append(" ").append(files(result.unreadable)).append(" could not be read.")
+    }
+
+    private fun files(n: Int) = if (n == 1) "1 file" else "$n files"
+
+    private fun number(value: Int): String = String.format(Locale.US, "%,d", value)
 
     private val DAY_MONTH = DateTimeFormatter.ofPattern("d MMMM", Locale.UK)
     private val DAY_MONTH_YEAR = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.UK)

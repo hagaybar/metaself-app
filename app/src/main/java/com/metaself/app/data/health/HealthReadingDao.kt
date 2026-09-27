@@ -16,6 +16,13 @@ interface HealthReadingDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertAll(readings: List<HealthReadingEntity>)
 
+    /**
+     * Skips a sample already stored — `(origin, recordId, sampleIndex)` is unique — keeping the one
+     * there. Each result is the new row's id, or -1 where the row was skipped.
+     */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMissing(readings: List<HealthReadingEntity>): List<Long>
+
     @Query("DELETE FROM health_readings WHERE origin = :origin AND recordId = :recordId")
     suspend fun deleteRecord(origin: String, recordId: String)
 
@@ -27,6 +34,13 @@ interface HealthReadingDao {
             "ORDER BY startMillis, sampleIndex",
     )
     suspend fun ofKindOnDay(kind: String, epochDay: Long): List<HealthReadingEntity>
+
+    /** One kind's rows over a day range: the `(kind, epochDay, startMillis)` index applies. */
+    @Query(
+        "SELECT * FROM health_readings WHERE kind = :kind AND epochDay BETWEEN :fromDay AND :toDay " +
+            "ORDER BY startMillis, sampleIndex",
+    )
+    suspend fun ofKindInDays(kind: String, fromDay: Long, toDay: Long): List<HealthReadingEntity>
 
     /** A record's days, through the `(origin, recordId, sampleIndex)` index. */
     @Query("SELECT DISTINCT epochDay FROM health_readings WHERE origin = :origin AND recordId = :recordId")

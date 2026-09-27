@@ -35,10 +35,22 @@ class DriveFilesTest {
             )
     }
 
+    /**
+     * A reply that is not a listing is no answer, not an empty Drive: taken as empty, a month file in
+     * Drive would look absent and be replaced unread.
+     */
     @Test
-    fun `rubbish reads as nothing rather than throwing`() {
-        assertThat(DriveFiles.readListing("not json")).isEmpty()
-        assertThat(DriveFiles.readListing("")).isEmpty()
+    fun `a reply that is not a listing reads as no answer rather than throwing`() {
+        assertThat(DriveFiles.readListing("not json")).isNull()
+        assertThat(DriveFiles.readListing("")).isNull()
+        assertThat(DriveFiles.readListing("[]")).isNull()
+        assertThat(DriveFiles.readListing("""{"error":{"code":500}}""")).isNull()
+        assertThat(DriveFiles.readListing("""{"files":"nope"}""")).isNull()
+    }
+
+    @Test
+    fun `a listing with no files is an empty Drive, and an entry without an id is skipped`() {
+        assertThat(DriveFiles.readListing("""{"files":[]}""")).isEmpty()
         assertThat(DriveFiles.readListing("""{"files":[{"name":"no id"}]}""")).isEmpty()
     }
 
@@ -111,5 +123,11 @@ class DriveFilesTest {
     fun `it says the key is not in the Drive copy either`() {
         assertThat(AutomaticBackupWording.DRIVE_OFF).contains("only this app can see")
         assertThat(AutomaticBackupWording.DRIVE_OFF).contains("API key is not in them")
+    }
+
+    @Test
+    fun `the archive listing asks only for month files`() {
+        assertThat(DriveFiles.archiveListQuery())
+            .isEqualTo("name contains 'metaself-readings-' and trashed = false")
     }
 }
