@@ -39,6 +39,12 @@ class MetaSelfNavHostRenderTest {
         assertThat(routes.all { it.startsWith(Destination.Settings.route + "/") }).isTrue()
     }
 
+    /** D80: under the Settings graph, beside the Movement page it is reached from. */
+    @Test
+    fun `the band report has its own route under Settings`() {
+        assertThat(Destination.Settings.bandReport).isEqualTo("settings/movement/band")
+    }
+
     /** The describe screen's "Add a key in settings" lands on the page the key is on (D79). */
     @Test
     fun `opened for the key, Settings is the AI estimates page`() {

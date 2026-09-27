@@ -542,6 +542,13 @@
          would press the wrong one and silently save an hours window. -->
     <string name="settings_window_ratio_save">Save this ratio</string>
     <string name="settings_movement_readings_pointer">Detailed readings: see Backups</string>
+    <string name="settings_band_title">What the band sends</string>
+    <string name="settings_band_row">What has arrived in the last 30 days, kind by kind</string>
+    <string name="settings_band_kinds">Kinds of reading</string>
+    <string name="settings_band_workouts">Workouts</string>
+    <string name="settings_band_days">Daily summary</string>
+    <string name="settings_band_copy">Copy as text</string>
+    <string name="settings_band_unreadable">The health record could not be read; Recent problems says why.</string>
     <string name="settings_steps_connect">Allow MetaSelf to read your health data</string>
     <string name="settings_off_title">Open Food Facts account</string>
     <string name="settings_off_none">Not set. You can scan and log without one; it is only needed to send missing products up.</string>

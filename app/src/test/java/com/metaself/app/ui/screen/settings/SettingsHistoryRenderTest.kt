@@ -58,6 +58,7 @@ class SettingsHistoryRenderTest {
         MovementSettingsPage(
             state = SettingsUiState(stepAccess = StepAccess.GRANTED, healthRecord = record),
             onConnectSteps = {},
+            onOpenBandReport = {},
             onBack = {},
         )
     }

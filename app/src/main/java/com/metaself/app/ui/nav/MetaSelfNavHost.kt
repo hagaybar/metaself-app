@@ -100,6 +100,9 @@ sealed class Destination(val route: String) {
          * the single Settings page, so the marks landed on it; they still do.
          */
         val atWindow: String = page(SettingsPage.EATING)
+
+        /** "What the band sends" (D80), reached from the Movement and health page. */
+        const val bandReport: String = "settings/movement/band"
     }
     data object Describe : Destination("meal/describe") {
         /** Carrying the words already typed into the search, so a miss costs a tap, not a retype. */
@@ -366,9 +369,16 @@ fun MetaSelfNavHost(
 
         // Settings is a nested graph (D79): the menu's bare route opens the index, and each of the
         // six pages is its own destination, all sharing the one view model on the graph's entry.
-        settingsGraph(navController) { page, here, graph ->
-            SettingsDestination(page = page, here = here, graph = graph, navController = navController)
-        }
+        // "What the band sends" (D80) is one more destination in it, reached from Movement.
+        settingsGraph(
+            navController,
+            content = { page, here, graph ->
+                SettingsDestination(page = page, here = here, graph = graph, navController = navController)
+            },
+            bandReport = { here, graph ->
+                BandReportDestination(here = here, graph = graph, navController = navController)
+            },
+        )
 
         composable(Destination.Scan.route) {
             val scanViewModel: ScanViewModel = hiltViewModel()

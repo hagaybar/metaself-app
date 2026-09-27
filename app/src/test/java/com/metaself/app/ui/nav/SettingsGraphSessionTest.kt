@@ -119,6 +119,22 @@ class SettingsGraphSessionTest {
             .containsExactly("day", "settings", "settings/index", "settings/eating").inOrder()
     }
 
+    /** D80: the Movement page's row opens the band report; back returns to the Movement page. */
+    @Test
+    fun `the band report opens from the Movement page and shares the visit's view model`() {
+        draw()
+        press("Open settings")
+        press("Open MOVEMENT")
+
+        press("Open the band report")
+        assertThat(routes().last()).isEqualTo("settings/movement/band")
+        compose.onNodeWithText("BAND REPORT").assertExists()
+        assertThat(probes.toSet()).hasSize(1)
+
+        press("Back")
+        assertThat(routes().last()).isEqualTo("settings/movement")
+    }
+
     private fun draw() {
         compose.setContent { Graph() }
         compose.waitForIdle()
@@ -146,20 +162,33 @@ class SettingsGraphSessionTest {
                     }
                 }
             }
-            settingsGraph(nav) { page, here, graph ->
-                probes += viewModel<Probe>(viewModelStoreOwner = graph)
-                Column {
-                    Text(if (page == null) "INDEX" else "PAGE ${page.name}")
-                    if (page == null) {
-                        SettingsPage.entries.forEach { row ->
-                            TextButton(onClick = { nav.openSettingsPage(here, row) }) {
-                                Text("Open ${row.name}")
+            settingsGraph(
+                nav,
+                content = { page, here, graph ->
+                    probes += viewModel<Probe>(viewModelStoreOwner = graph)
+                    Column {
+                        Text(if (page == null) "INDEX" else "PAGE ${page.name}")
+                        if (page == null) {
+                            SettingsPage.entries.forEach { row ->
+                                TextButton(onClick = { nav.openSettingsPage(here, row) }) {
+                                    Text("Open ${row.name}")
+                                }
                             }
                         }
+                        if (page == SettingsPage.MOVEMENT) {
+                            TextButton(onClick = { nav.openBandReport(here) }) { Text("Open the band report") }
+                        }
+                        TextButton(onClick = { nav.popFrom(here) }) { Text("Back") }
                     }
-                    TextButton(onClick = { nav.popFrom(here) }) { Text("Back") }
-                }
-            }
+                },
+                bandReport = { here, graph ->
+                    probes += viewModel<Probe>(viewModelStoreOwner = graph)
+                    Column {
+                        Text("BAND REPORT")
+                        TextButton(onClick = { nav.popFrom(here) }) { Text("Back") }
+                    }
+                },
+            )
         }
     }
 }
