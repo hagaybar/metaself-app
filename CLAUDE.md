@@ -73,8 +73,9 @@ needed to get it to this state, so these rules are hard-won rather than theoreti
 
 ## Stack
 
-Kotlin 1.9.22 · JVM 17 · AGP 8.2.2 · Gradle 8.5 · Compose BOM 2024.02.00 · Material 3 · Hilt 2.50
-over KSP. Exact versions: `gradle/libs.versions.toml`. `minSdk 26 · targetSdk 34 · compileSdk 34`.
+Kotlin 1.9.22 · JVM 17 · AGP 8.10.1 · Gradle 8.11.1 · Compose BOM 2024.02.00 · Material 3 · Hilt 2.50
+over KSP. Exact versions: `gradle/libs.versions.toml`. `minSdk 26 · targetSdk 34 · compileSdk 36` (build-tools 36.0.0; Health Connect 1.1.0 stable, which
+ships Kotlin stdlib 2.0 — a dependency built with Kotlin 2.1+ would force the Kotlin upgrade).
 
 ## Testing
 
