@@ -83,6 +83,8 @@ fun DayPager(
     /** The Movement screen (D75): from the top-right menu and from the day's step line. */
     onOpenMovement: () -> Unit,
     onOpenSettings: () -> Unit,
+    /** The day's window marks: Settings at the page window settings are on (D79). */
+    onOpenWindowSettings: () -> Unit,
     onOpenManager: () -> Unit,
 ) {
     // Today's sentence under a ratio changes with the clock alone — "next meal from 12:00" becomes
@@ -111,6 +113,7 @@ fun DayPager(
             onOpenWeight = onOpenWeight,
             onOpenMovement = onOpenMovement,
             onOpenSettings = onOpenSettings,
+            onOpenWindowSettings = onOpenWindowSettings,
             onOpenManager = onOpenManager,
         )
     }
@@ -132,6 +135,7 @@ private fun DayPagerOn(
     /** The Movement screen (D75): from the top-right menu and from the day's step line. */
     onOpenMovement: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenWindowSettings: () -> Unit,
     onOpenManager: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -273,7 +277,9 @@ private fun DayPagerOn(
                         onAdd = onAdd,
                         onDescribe = onDescribe,
                         onScan = onScan,
-                        onOpenSettings = onOpenSettings,
+                        // The day screen opens Settings only from its window marks, so they land on
+                        // the Eating page (D79); the menu above opens the index.
+                        onOpenSettings = onOpenWindowSettings,
                         onOpenMovement = onOpenMovement,
                         onDismissTargetChange = viewModel::dismissTargetChange,
                         onDismissFoodRetaught = viewModel::dismissFoodRetaught,

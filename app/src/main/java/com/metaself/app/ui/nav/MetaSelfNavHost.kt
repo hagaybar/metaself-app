@@ -3,9 +3,7 @@ package com.metaself.app.ui.nav
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -14,8 +12,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LifecycleResumeEffect
@@ -37,7 +33,7 @@ import com.metaself.app.ui.screen.day.DayUiState
 import com.metaself.app.ui.screen.day.DayViewModel
 import com.metaself.app.ui.screen.entry.EntryEditorScreen
 import com.metaself.app.ui.screen.entry.EntryFormState
-import com.metaself.app.ui.screen.settings.SettingsScreen
+import com.metaself.app.ui.screen.settings.SettingsPage
 import com.metaself.app.ui.screen.propose.ConversationActions
 import com.metaself.app.ui.screen.propose.KeepOnlyActions
 import com.metaself.app.ui.screen.propose.Landing
@@ -58,11 +54,8 @@ import com.metaself.app.ui.screen.manager.MealsViewModel
 import com.metaself.app.ui.screen.repeat.RepeatScreen
 import com.metaself.app.ui.screen.repeat.RepeatViewModel
 import com.metaself.app.ui.screen.propose.ProposalViewModel
-import androidx.health.connect.client.PermissionController
-import com.metaself.app.data.health.HealthPermissions
 import com.metaself.app.ui.screen.scan.ScanScreen
 import com.metaself.app.ui.screen.scan.ScanViewModel
-import com.metaself.app.ui.screen.settings.SettingsViewModel
 import java.time.LocalDate
 import com.metaself.app.ui.screen.weight.WeightChartScreen
 import com.metaself.app.ui.screen.weight.WeightEditorScreen
@@ -90,9 +83,23 @@ sealed class Destination(val route: String) {
 
     /** This week's movement (D73–D75). */
     data object Movement : Destination("movement")
+    /**
+     * Settings is a nested graph (D79): [route] is the graph's, and opens its [index]; each of the
+     * six pages has its own route under it.
+     */
     data object Settings : Destination("settings") {
-        /** Scrolled to the key: where the describe screen's "Add a key in settings" goes. */
-        val atKey: String = "settings?at=key"
+        const val index: String = "settings/index"
+
+        fun page(page: SettingsPage): String = "settings/${page.path}"
+
+        /** Where the describe screen's "Add a key in settings" goes: the page the key is first on. */
+        val atKey: String = page(SettingsPage.AI)
+
+        /**
+         * Where the day's window marks go: the page "When you eat" is on. It was the first thing on
+         * the single Settings page, so the marks landed on it; they still do.
+         */
+        val atWindow: String = page(SettingsPage.EATING)
     }
     data object Describe : Destination("meal/describe") {
         /** Carrying the words already typed into the search, so a miss costs a tap, not a retype. */
@@ -225,6 +232,7 @@ fun MetaSelfNavHost(
                 onOpenWeight = { navController.navigate(Destination.Weight.route) },
                 onOpenMovement = { navController.navigate(Destination.Movement.route) },
                 onOpenSettings = { navController.navigate(Destination.Settings.route) },
+                onOpenWindowSettings = { navController.navigate(Destination.Settings.atWindow) },
                 onOpenManager = { navController.navigate(Destination.Foods.route) },
             )
         }
@@ -356,137 +364,10 @@ fun MetaSelfNavHost(
             }
         }
 
-        // Registered with where to open as an optional argument and still reachable by the bare
-        // route the menu uses, exactly as the food manager is.
-        composable(
-            route = Destination.Settings.route + "?at={at}",
-            arguments = listOf(
-                navArgument("at") {
-                    type = NavType.StringType
-                    nullable = true
-                    defaultValue = null
-                },
-            ),
-        ) { entry ->
-            val clipboard = LocalClipboardManager.current
-            val settingsViewModel: SettingsViewModel = hiltViewModel()
-            val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
-
-            // From Android 13 a notification nobody permitted is a notification nobody sees. Asked
-            // at the moment the owner turns the reminder on, which is the only moment it means
-            // anything to him — and the setting is saved either way, so a refusal leaves a switch
-            // that is on and silent rather than a switch that quietly turned itself off.
-            //
-            // Kept here rather than inside the settings screen so that the screen stays a pure
-            // composable a render test can draw without an activity underneath it.
-            val askForNotifications = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission(),
-            ) { }
-
-            // Android's own document picker, so the app needs no storage permission and the owner
-            // puts the file wherever he already keeps things rather than wherever the app decided.
-            val chooseWhereToSave = rememberLauncherForActivityResult(
-                ActivityResultContracts.CreateDocument("application/json"),
-            ) { uri -> uri?.let(settingsViewModel::exportTo) }
-
-            val chooseWhatToRestore = rememberLauncherForActivityResult(
-                ActivityResultContracts.OpenDocument(),
-            ) { uri -> uri?.let(settingsViewModel::offerRestoreFrom) }
-
-            // A whole folder rather than a file, and a permission that survives a reboot. This is
-            // what lets the copy be automatic with no Cloud project and no account (D26).
-            // Health Connect issues its own permission screen rather than Android's. The result is
-            // whatever the owner chose there, so the settings line is asked to look again rather
-            // than assuming it got what it wanted.
-            val askForSteps = rememberLauncherForActivityResult(
-                PermissionController.createRequestPermissionResultContract(),
-            ) {
-                settingsViewModel.refreshSteps()
-                settingsViewModel.refreshHealthRecord()
-            }
-
-            LaunchedEffect(Unit) {
-                settingsViewModel.refreshSteps()
-                settingsViewModel.refreshWindow()
-                settingsViewModel.refreshHealthRecord()
-            }
-
-            // Google's consent screen, shown once. A view model cannot start an activity, so it
-            // hands the screen up here; when it comes back, the write is simply tried again.
-            val consent by settingsViewModel.consent.collectAsStateWithLifecycle()
-            val showConsent = rememberLauncherForActivityResult(
-                ActivityResultContracts.StartIntentSenderForResult(),
-            ) { result ->
-                // Retried ONCE, and told it is a retry. Retrying blindly is what turned a
-                // configuration problem into an endless account picker.
-                if (result.resultCode == android.app.Activity.RESULT_OK) {
-                    settingsViewModel.driveNow(afterConsent = true)
-                } else {
-                    settingsViewModel.consentDeclined()
-                }
-            }
-
-            LaunchedEffect(consent) {
-                consent?.let {
-                    showConsent.launch(IntentSenderRequest.Builder(it).build())
-                    settingsViewModel.consentShown()
-                }
-            }
-
-            val chooseBackupFolder = rememberLauncherForActivityResult(
-                ActivityResultContracts.OpenDocumentTree(),
-            ) { uri -> uri?.let(settingsViewModel::useBackupFolder) }
-            SettingsScreen(
-                state = settingsState,
-                onSaveKey = settingsViewModel::saveKey,
-                onClearKey = settingsViewModel::clearKey,
-                onSetModel = settingsViewModel::setModel,
-                onSetCeiling = settingsViewModel::setDailyCeiling,
-                onTest = settingsViewModel::test,
-                onSendReminderNow = settingsViewModel::sendReminderNow,
-                onSaveOffAccount = settingsViewModel::saveOffAccount,
-                onClearOffAccount = settingsViewModel::clearOffAccount,
-                onSetWindow = settingsViewModel::setEatingWindow,
-                onSetRatio = settingsViewModel::setMeasuredWindow,
-                onClearWindow = settingsViewModel::clearEatingWindow,
-                onConnectSteps = {
-                    // A phone whose own Health Connect cannot grant history older than 30 days (D72)
-                    // is not asked for it: that permission would only ever come back refused.
-                    val permissions = if (settingsState.healthRecord.historyOffered) {
-                        HealthPermissions.ALL
-                    } else {
-                        HealthPermissions.withoutHistory
-                    }
-                    askForSteps.launch(permissions)
-                },
-                onPickBackupFolder = { chooseBackupFolder.launch(null) },
-                onForgetBackupFolder = settingsViewModel::forgetBackupFolder,
-                onBackUpNow = settingsViewModel::backUpNow,
-                onSetDrive = settingsViewModel::setDriveBackup,
-                onDriveNow = settingsViewModel::driveNow,
-                onExport = { chooseWhereToSave.launch(backupFileName()) },
-                onRestore = { chooseWhatToRestore.launch(arrayOf("application/json", "*/*")) },
-                onConfirmRestore = settingsViewModel::confirmRestore,
-                onCancelRestore = settingsViewModel::cancelRestore,
-                onConfirmArchive = settingsViewModel::confirmArchive,
-                onCancelArchive = settingsViewModel::cancelArchive,
-                onOfferArchive = settingsViewModel::offerArchive,
-                onDismissArchiveMessage = settingsViewModel::dismissArchiveMessage,
-                onDismissBackupMessage = settingsViewModel::dismissBackupMessage,
-                onSetReminder = { reminder ->
-                    settingsViewModel.setReminder(reminder)
-                    if (reminder.enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        askForNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    }
-                },
-                onCopyProblems = {
-                    clipboard.setText(AnnotatedString(settingsViewModel.problemsAsText()))
-                },
-                onClearProblems = settingsViewModel::clearProblems,
-                onDismissFailure = settingsViewModel::dismissFailure,
-                onBack = { navController.popBackStack() },
-                openAtKey = entry.arguments?.getString("at") == "key",
-            )
+        // Settings is a nested graph (D79): the menu's bare route opens the index, and each of the
+        // six pages is its own destination, all sharing the one view model on the graph's entry.
+        settingsGraph(navController) { page, here, graph ->
+            SettingsDestination(page = page, here = here, graph = graph, navController = navController)
         }
 
         composable(Destination.Scan.route) {
@@ -1139,7 +1020,3 @@ private fun confirmation(
         today = LocalDate.ofEpochDay(todayEpochDay),
     ),
 )
-
-/** "metaself-2026-09-04.json" — dated, so a folder of these sorts itself. */
-private fun backupFileName(): String =
-    "metaself-${LocalDate.now()}.json"

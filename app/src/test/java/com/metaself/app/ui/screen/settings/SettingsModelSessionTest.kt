@@ -112,7 +112,7 @@ class SettingsModelSessionTest {
     @Composable
     private fun Settings() {
         var model by remember { mutableStateOf(stored) }
-        SettingsScreen(
+        AiSettingsPage(
             state = SettingsUiState(hasKey = true, model = model),
             onSaveKey = {},
             onClearKey = {},
@@ -122,30 +122,6 @@ class SettingsModelSessionTest {
             },
             onSetCeiling = {},
             onTest = { tested += stored },
-            onSetReminder = {},
-            onSendReminderNow = {},
-            onSaveOffAccount = { _, _ -> },
-            onClearOffAccount = {},
-            onSetWindow = { _, _ -> },
-            onSetRatio = {},
-            onClearWindow = {},
-            onConnectSteps = {},
-            onPickBackupFolder = {},
-            onForgetBackupFolder = {},
-            onBackUpNow = {},
-            onSetDrive = {},
-            onDriveNow = {},
-            onExport = {},
-            onRestore = {},
-            onConfirmRestore = {},
-            onCancelRestore = {},
-            onConfirmArchive = {},
-            onCancelArchive = {},
-            onOfferArchive = {},
-            onDismissArchiveMessage = {},
-            onDismissBackupMessage = {},
-            onCopyProblems = {},
-            onClearProblems = {},
             onDismissFailure = {},
             onBack = {},
         )

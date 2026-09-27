@@ -517,6 +517,11 @@
     <!-- D56: the same line for an amount of millilitres. %2$s is the millilitre as the food
          spells it ("ml", or a Hebrew spelling). -->
     <string name="amount_at_most_ml">At most %1$s %2$s at a time.</string>
+    <string name="settings_page_eating">Eating</string>
+    <string name="settings_page_movement">Movement and health</string>
+    <string name="settings_page_backups">Backups</string>
+    <string name="settings_page_ai">AI estimates</string>
+    <string name="settings_page_food">Food database</string>
     <string name="settings_window_title">When you eat</string>
     <string name="settings_window_none">Off. Set the hours you mean to eat between and the app will keep tab, from today onwards.</string>
     <string name="settings_window_set">Your window is %1$s.</string>
@@ -536,7 +541,7 @@
     <!-- Not "Keep tab on this ratio": that extends the hours button's label, and a prefix match
          would press the wrong one and silently save an hours window. -->
     <string name="settings_window_ratio_save">Save this ratio</string>
-    <string name="settings_steps_title">Movement</string>
+    <string name="settings_movement_readings_pointer">Detailed readings: see Backups</string>
     <string name="settings_steps_connect">Allow MetaSelf to read your health data</string>
     <string name="settings_off_title">Open Food Facts account</string>
     <string name="settings_off_none">Not set. You can scan and log without one; it is only needed to send missing products up.</string>
@@ -578,6 +583,8 @@
     <string name="scan_contribute_note">Optional. It sends the barcode, the name and the label\'s numbers — nothing about you but your username.</string>
     <string name="settings_backup_title">Keeping a copy</string>
     <string name="settings_backup_note">Everything you have logged, in one file. Automatically into a folder you choose, or saved by hand wherever you like.</string>
+    <string name="settings_drive_title">Google Drive</string>
+    <string name="settings_by_hand_title">By hand</string>
     <string name="settings_backup_folder_pick">Pick a folder</string>
     <string name="settings_backup_folder_change">Change the folder</string>
     <string name="settings_backup_folder_forget">Turn it off</string>

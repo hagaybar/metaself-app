@@ -15,7 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * The "When you eat" section, now that there are two kinds of window.
+ * The "When you eat" section, on the Eating page (D79), now that there are two kinds of window.
  *
  * JUnit 4 by necessity — Robolectric's runner is JUnit 4.
  *
@@ -198,41 +198,17 @@ class WindowSettingsRenderTest {
         judged: Int = 0,
         heightPx: Int = PHONE_HEIGHT_PX,
     ): List<String> = render.texts(heightPx = heightPx) {
-        SettingsScreen(
+        EatingSettingsPage(
             state = SettingsUiState(
                 windowRule = rule,
                 windowKept = kept,
                 windowJudged = judged,
             ),
-            onSaveKey = {},
-            onClearKey = {},
-            onSetModel = {},
-            onSetCeiling = {},
-            onTest = {},
-            onSetReminder = {},
-            onSendReminderNow = {},
-            onSaveOffAccount = { _, _ -> },
-            onClearOffAccount = {},
             onSetWindow = { start, end -> savedHours += start to end },
             onSetRatio = { fastingHours -> savedRatios += fastingHours },
             onClearWindow = {},
-            onConnectSteps = {},
-            onPickBackupFolder = {},
-            onForgetBackupFolder = {},
-            onBackUpNow = {},
-            onSetDrive = {},
-            onDriveNow = {},
-            onExport = {},
-            onRestore = {},
-            onConfirmRestore = {},
-            onCancelRestore = {},
-            onConfirmArchive = {},
-            onCancelArchive = {},
-            onOfferArchive = {},
-            onDismissArchiveMessage = {},
-            onDismissBackupMessage = {},
-            onCopyProblems = {},
-            onClearProblems = {},
+            onSetReminder = {},
+            onSendReminderNow = {},
             onDismissFailure = {},
             onBack = {},
         )
@@ -242,7 +218,7 @@ class WindowSettingsRenderTest {
         /** ComposeRender's own default height, restated because its constant is private. */
         const val PHONE_HEIGHT_PX = 1920
 
-        /** Tall enough that the window section, far down the page, is laid out and not left unplaced. */
+        /** Tall enough that the whole Eating page is laid out and none of it left unplaced. */
         const val TALL = 20_000
     }
 }

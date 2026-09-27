@@ -55,38 +55,9 @@ class SettingsHistoryRenderTest {
     }
 
     private fun draw(record: HealthRecordState): List<String> = render.texts {
-        SettingsScreen(
+        MovementSettingsPage(
             state = SettingsUiState(stepAccess = StepAccess.GRANTED, healthRecord = record),
-            onSaveKey = {},
-            onClearKey = {},
-            onSetModel = {},
-            onSetCeiling = {},
-            onTest = {},
-            onSetReminder = {},
-            onSendReminderNow = {},
-            onSaveOffAccount = { _, _ -> },
-            onClearOffAccount = {},
-            onSetWindow = { _, _ -> },
-            onSetRatio = {},
-            onClearWindow = {},
             onConnectSteps = {},
-            onPickBackupFolder = {},
-            onForgetBackupFolder = {},
-            onBackUpNow = {},
-            onSetDrive = {},
-            onDriveNow = {},
-            onExport = {},
-            onRestore = {},
-            onConfirmRestore = {},
-            onCancelRestore = {},
-            onConfirmArchive = {},
-            onCancelArchive = {},
-            onOfferArchive = {},
-            onDismissArchiveMessage = {},
-            onDismissBackupMessage = {},
-            onCopyProblems = {},
-            onClearProblems = {},
-            onDismissFailure = {},
             onBack = {},
         )
     }
