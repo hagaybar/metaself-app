@@ -22,6 +22,7 @@ import com.metaself.app.data.drive.DriveHttp
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
 import com.metaself.app.data.health.ArchiveRestore
+import com.metaself.app.data.health.ArchiveWrite
 import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.MovementCorrectionDao
@@ -560,9 +561,9 @@ class SettingsViewModelTest {
             return result
         }
 
-        override suspend fun writeOutOfDate(): Int {
+        override suspend fun writeOutOfDate(): ArchiveWrite {
             calls += "write"
-            return 0
+            return ArchiveWrite.NothingDue
         }
     }
 

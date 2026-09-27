@@ -39,7 +39,7 @@ class HealthArchiveTest {
 
         val written = archive.writeOutOfDate()
 
-        assertThat(written).isEqualTo(2)
+        assertThat(written).isEqualTo(ArchiveWrite.Sent(written = 2, failed = 0))
         assertThat(drive.files.keys)
             .containsExactly("metaself-readings-2026-08.json.gz", "metaself-readings-2026-09.json.gz")
         assertThat(drive.stored.count { it.name == "metaself-readings-2026-09.json.gz" }).isEqualTo(1)
@@ -59,7 +59,7 @@ class HealthArchiveTest {
         record.writtenBefore += "2026-09"
         record.onRead = { record.touch("2026-09") }
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 1, failed = 0))
 
         assertThat(record.written).isEmpty()
     }
@@ -88,7 +88,7 @@ class HealthArchiveTest {
         drive.put("metaself-readings-2026-09.json.gz", byteArrayOf(0))
         drive.refuseUploads = true
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 0, failed = 1))
 
         assertThat(record.written).isEmpty()
         assertThat(problems.logged.single().kind).isEqualTo("drive")
@@ -103,7 +103,7 @@ class HealthArchiveTest {
         record.held += listOf(beat("hr-1", day = 20_690), beat("hr-2", day = 20_699))
         drive.uploadThrowsFor += "metaself-readings-2026-08.json.gz"
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 1, failed = 1))
 
         assertThat(drive.files.keys).containsExactly("metaself-readings-2026-09.json.gz")
         assertThat(record.written.keys).containsExactly("2026-09")
@@ -121,7 +121,7 @@ class HealthArchiveTest {
         record.outOfDate = listOf("2026-09")
         record.held += beat("hr-2", day = 20_699)
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 1, failed = 0))
 
         assertThat(monthInDrive("2026-09").map { it.recordId }).containsExactly("hr-1", "hr-2")
         assertThat(drive.stored.count { it.name == "metaself-readings-2026-09.json.gz" }).isEqualTo(1)
@@ -162,7 +162,7 @@ class HealthArchiveTest {
 
         // The phone wrote this month now; a later change goes the phone's own way, reading no Drive.
         record.held += beat("hr-3", day = 20_699)
-        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 1, failed = 0))
 
         assertThat(monthInDrive("2026-09").map { it.recordId }).containsExactly("hr-1", "hr-2", "hr-3")
     }
@@ -199,7 +199,7 @@ class HealthArchiveTest {
         record.outOfDate = listOf("2026-09")
         record.held += beat("hr-1", day = 20_699)
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 0, failed = 1))
 
         assertThat(drive.calls.filter { it.startsWith("upload") || it.startsWith("delete") }).isEmpty()
         assertThat(drive.files.getValue("metaself-readings-2026-09.json.gz")).isEqualTo(byteArrayOf(1, 2, 3))
@@ -214,7 +214,7 @@ class HealthArchiveTest {
         record.outOfDate = listOf("2026-09")
         record.held += beat("hr-2", day = 20_699)
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 0, failed = 1))
 
         assertThat(drive.calls.filter { it.startsWith("upload") || it.startsWith("delete") }).isEmpty()
         assertThat(record.written).isEmpty()
@@ -229,7 +229,7 @@ class HealthArchiveTest {
         record.outOfDate = listOf("2026-09")
         record.held += beat("hr-2", day = 20_699)
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(1)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 1, failed = 0))
 
         assertThat(drive.calls.filter { it.startsWith("download") }).isEmpty()
         assertThat(monthInDrive("2026-09").map { it.recordId }).containsExactly("hr-2")
@@ -243,14 +243,17 @@ class HealthArchiveTest {
         record.outOfDate = listOf("2026-09")
         record.held += beat("hr-2", day = 20_699)
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.ListingFailed)
 
         assertThat(drive.calls.filter { it.startsWith("upload") || it.startsWith("delete") }).isEmpty()
         assertThat(record.written).isEmpty()
         assertThat(problems.logged.single().kind).isEqualTo("drive")
     }
 
-    /** I2: a write already running is not joined by a second one; the second does nothing. */
+    /**
+     * I2: a write already running is not joined by a second one; the second does nothing, says it was
+     * skipped, and leaves a line in the problem log saying why.
+     */
     @Test
     fun `a second write while one is running is skipped`() = runTest {
         record.outOfDate = listOf("2026-09")
@@ -260,27 +263,32 @@ class HealthArchiveTest {
 
         val first = async { archive.writeOutOfDate() }
         runCurrent()
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Busy)
         assertThat(drive.calls).containsExactly("token")
+        assertThat(problems.logged.single().kind).isEqualTo("drive")
 
         gate.complete(Unit)
-        assertThat(first.await()).isEqualTo(1)
+        assertThat(first.await()).isEqualTo(ArchiveWrite.Sent(written = 1, failed = 0))
     }
 
+    /** No token is an outcome of its own, and written down: otherwise no month appearing has no reason. */
     @Test
-    fun `no Drive, nothing written and nothing marked`() = runTest {
+    fun `no Drive, nothing written and nothing marked, and the problem log says so`() = runTest {
         record.outOfDate = listOf("2026-09")
         drive.tokenAvailable = false
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.NoDrive)
         assertThat(drive.calls).containsExactly("token")
         assertThat(record.written).isEmpty()
+        assertThat(problems.logged.single().kind).isEqualTo("drive")
     }
 
+    /** Nothing due is not a problem, so it is not written down as one. */
     @Test
-    fun `nothing out of date, Drive is not even asked`() = runTest {
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+    fun `nothing out of date, Drive is not even asked, and nothing is logged`() = runTest {
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.NothingDue)
         assertThat(drive.calls).isEmpty()
+        assertThat(problems.logged).isEmpty()
     }
 
     /** Red line: an archive write never deletes a month file. */
@@ -304,7 +312,7 @@ class HealthArchiveTest {
         record.outOfDate = listOf("2026-09")
         drive.listThrows = true
 
-        assertThat(archive.writeOutOfDate()).isEqualTo(0)
+        assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Failed)
         assertThat(archive.monthsInDrive()).isNull()
         assertThat(archive.restoreAll()).isNull()
         assertThat(problems.logged.map { it.kind }.toSet()).containsExactly("drive")
@@ -444,7 +452,7 @@ class HealthArchiveTest {
             assertThat(record.held.map { it.sampleIndex }).containsExactly(0, 1)
 
             record.outOfDate = listOf("2026-08", "2026-09")
-            assertThat(archive.writeOutOfDate()).isEqualTo(2)
+            assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Sent(written = 2, failed = 0))
             assertThat(record.held.map { it.sampleIndex }).containsExactly(0, 1)
 
             val aug = ReadingArchive.decode(drive.files.getValue(ReadingArchive.fileName("2026-08")))!!.readings

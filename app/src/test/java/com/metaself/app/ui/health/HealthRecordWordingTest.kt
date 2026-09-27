@@ -2,6 +2,7 @@ package com.metaself.app.ui.health
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.health.ArchiveRestore
+import com.metaself.app.data.health.ArchiveWrite
 import com.metaself.app.domain.health.HealthKind
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -135,5 +136,37 @@ class HealthRecordWordingTest {
     fun `nothing new says so plainly`() {
         assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 3, readings = 0, unreadable = 0, unreachable = 0)))
             .isEqualTo("Brought back 3 months: nothing new — the phone already had every reading.")
+    }
+
+    // --- What "Copy to Drive now" adds about the month files ------------------------------------------
+
+    @Test
+    fun `months sent are counted, one is not ones`() {
+        assertThat(HealthRecordWording.archiveSent(ArchiveWrite.Sent(written = 3, failed = 0)))
+            .isEqualTo("Also sent 3 months of detailed readings.")
+        assertThat(HealthRecordWording.archiveSent(ArchiveWrite.Sent(written = 1, failed = 0)))
+            .isEqualTo("Also sent 1 month of detailed readings.")
+    }
+
+    @Test
+    fun `nothing due says the months in Drive were already up to date`() {
+        assertThat(HealthRecordWording.archiveSent(ArchiveWrite.NothingDue))
+            .isEqualTo("The detailed readings in Drive were already up to date.")
+    }
+
+    /** Every outcome that left a month unsent points to the problem log, which says why. */
+    @Test
+    fun `anything that left a month unsent points to Recent problems`() {
+        val notSent = "The detailed readings could not be sent this time; Recent problems says why."
+        for (outcome in listOf(
+            ArchiveWrite.NoDrive,
+            ArchiveWrite.ListingFailed,
+            ArchiveWrite.Busy,
+            ArchiveWrite.Failed,
+            ArchiveWrite.Sent(written = 0, failed = 1),
+            ArchiveWrite.Sent(written = 2, failed = 1),
+        )) {
+            assertThat(HealthRecordWording.archiveSent(outcome)).isEqualTo(notSent)
+        }
     }
 }
