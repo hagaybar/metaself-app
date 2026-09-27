@@ -154,19 +154,32 @@ class HealthRecordWordingTest {
             .isEqualTo("The detailed readings in Drive were already up to date.")
     }
 
-    /** Every outcome that left a month unsent points to the problem log, which says why. */
+    /** Every outcome that never even started sending points to the problem log, which says why. */
     @Test
     fun `anything that left a month unsent points to Recent problems`() {
         val notSent = "The detailed readings could not be sent this time; Recent problems says why."
         for (outcome in listOf(
             ArchiveWrite.NoDrive,
             ArchiveWrite.ListingFailed,
-            ArchiveWrite.Busy,
             ArchiveWrite.Failed,
-            ArchiveWrite.Sent(written = 0, failed = 1),
-            ArchiveWrite.Sent(written = 2, failed = 1),
         )) {
             assertThat(HealthRecordWording.archiveSent(outcome)).isEqualTo(notSent)
         }
+    }
+
+    /** A partial send says how many months went and how many did not, plainly, not as one blur. */
+    @Test
+    fun `a partial send counts what went and what did not`() {
+        assertThat(HealthRecordWording.archiveSent(ArchiveWrite.Sent(written = 2, failed = 1)))
+            .isEqualTo("Sent 2 months of detailed readings; 1 month could not be sent — Recent problems says why.")
+        assertThat(HealthRecordWording.archiveSent(ArchiveWrite.Sent(written = 0, failed = 1)))
+            .isEqualTo("Sent 0 months of detailed readings; 1 month could not be sent — Recent problems says why.")
+    }
+
+    /** Busy is not a failure — another run (or the next daily backup) is already sending it. */
+    @Test
+    fun `a run already in progress says so, not that something went wrong`() {
+        assertThat(HealthRecordWording.archiveSent(ArchiveWrite.Busy))
+            .isEqualTo("The detailed readings are already being sent.")
     }
 }

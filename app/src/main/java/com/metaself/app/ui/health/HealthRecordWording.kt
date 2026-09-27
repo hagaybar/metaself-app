@@ -28,6 +28,10 @@ object HealthRecordWording {
             "Also sent ${plural(write.written.toLong(), "month")} of detailed readings."
         write == ArchiveWrite.NothingDue || write == ArchiveWrite.Sent(written = 0, failed = 0) ->
             "The detailed readings in Drive were already up to date."
+        write is ArchiveWrite.Sent && write.failed > 0 ->
+            "Sent ${plural(write.written.toLong(), "month")} of detailed readings; " +
+                "${plural(write.failed.toLong(), "month")} could not be sent — Recent problems says why."
+        write == ArchiveWrite.Busy -> "The detailed readings are already being sent."
         else -> "The detailed readings could not be sent this time; Recent problems says why."
     }
 

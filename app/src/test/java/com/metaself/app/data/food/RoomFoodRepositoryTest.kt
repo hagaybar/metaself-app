@@ -378,6 +378,35 @@ class RoomFoodRepositoryTest {
             .isEqualTo(kept.id)
     }
 
+    /**
+     * Only the one absorbed name that collides with the new spelling goes. A second absorbed name
+     * stays an alias, and a same-spelled name that belongs to an unrelated food of another brand is
+     * never touched — the DELETE this folds through is scoped to this food's own (name, brand).
+     */
+    @Test
+    fun `folding a joined name into a rename leaves a different alias and another brand's own name alone`() =
+        runTest {
+            val kept = repository.findOrCreate("Oat bar", facts = FoodFacts(per100g = per100g())).food
+            val granola = repository.findOrCreate("Granola bar", facts = FoodFacts(per100g = per100g())).food
+            val muesli = repository.findOrCreate("Muesli bar", facts = FoodFacts(per100g = per100g())).food
+            repository.merge(winnerId = kept.id, loserId = granola.id)
+            repository.merge(winnerId = kept.id, loserId = muesli.id)
+            val brandedGranola = repository.findOrCreate(
+                "Granola bar",
+                brand = "Brando",
+                facts = FoodFacts(per100g = per100g()),
+            ).food
+
+            assertThat(repository.rename(kept.id, "Granola bar")).isEqualTo(EditResult.Done)
+
+            val food = repository.byId(kept.id)!!
+            assertThat(food.name).isEqualTo("Granola bar")
+            assertThat(food.alsoKnownAs).containsExactly("Muesli bar")
+            val branded = repository.byId(brandedGranola.id)!!
+            assertThat(branded.name).isEqualTo("Granola bar")
+            assertThat(branded.brand).isEqualTo("Brando")
+        }
+
     // --- The form's Save, as one change ------------------------------------------------------------
 
     /**

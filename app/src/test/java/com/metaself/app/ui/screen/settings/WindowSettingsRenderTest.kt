@@ -140,8 +140,9 @@ class WindowSettingsRenderTest {
      * label breaks into a column of characters, as "20/4" did on a phone.
      *
      * What this can prove: on a canvas too narrow for five chips in a row (and tall enough that the
-     * section is not clipped away, since a clipped node reads zero), no chip reaches past the canvas, the last chip starts lower than the first (the row wrapped), and every chip is the same
-     * height as the first — so none was squeezed until its label broke onto more lines, nor pushed out
+     * section is not clipped away, since a clipped node reads zero), no chip reaches past the canvas,
+     * the last chip starts lower than the first (the row wrapped), and every chip is the same height
+     * as the first — so none was squeezed until its label broke onto more lines, nor pushed out
      * of sight. On the old `Row` it fails: the last three chips were pushed past the edge and read zero.
      *
      * What it cannot prove: how wide a label really is on a phone, or that five chips need two lines

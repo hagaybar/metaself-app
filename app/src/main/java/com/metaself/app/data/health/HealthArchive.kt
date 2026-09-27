@@ -128,7 +128,8 @@ class HealthArchive(
     override suspend fun writeOutOfDate(): ArchiveWrite = withContext(dispatcher) {
         guarded<ArchiveWrite>(ArchiveWrite.Failed) {
             if (!running.tryLock()) {
-                log("another archive run was in progress; this write was skipped")
+                // Not a failure — the other run will send this month, or the next daily backup will —
+                // so this is not written to the problem log.
                 return@guarded ArchiveWrite.Busy
             }
             try {

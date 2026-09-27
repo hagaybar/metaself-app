@@ -207,10 +207,11 @@ class RoomFoodRepository @Inject constructor(
 
             // A name this food took in a join, already under this brand, is the identity the shown
             // name is about to take, so it goes rather than collide: renaming onto it once threw
-            // "UNIQUE constraint failed: food_names.nameKey, food_names.brandKey". Only a
-            // non-preferred row is dropped, so a rename that changes only the spelling of the shown
-            // name drops nothing. Nothing points at a name row.
-            dao.dropJoinedName(foodId, nameKey, brandKey)
+            // "UNIQUE constraint failed: food_names.nameKey, food_names.brandKey". The row being
+            // renamed itself is excluded (`keepId`), so a rename that lands on its own current
+            // spelling — or, when nothing is flagged preferred, on the fallback row's own key — drops
+            // nothing. Nothing points at a name row.
+            dao.dropJoinedName(foodId, nameKey, brandKey, keepId = preferred.id)
 
             // The name row is edited in place rather than replaced, so nothing anywhere has to be
             // repointed — which is the mechanism by which every past day re-labels without a single
@@ -257,7 +258,7 @@ class RoomFoodRepository @Inject constructor(
             dao.setBrand(foodId, display, moment)
             // A joined name already under the new brand is the same identity the moving name is
             // about to take, so it goes rather than collide. Nothing points at a name row.
-            moving.forEach { name -> dao.dropJoinedName(foodId, name.nameKey, brandKey) }
+            moving.forEach { name -> dao.dropJoinedName(foodId, name.nameKey, brandKey, keepId = name.id) }
             dao.moveNamesToBrand(foodId, oldKey, brandKey)
             EditResult.Done
         }

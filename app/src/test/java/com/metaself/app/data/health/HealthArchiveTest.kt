@@ -251,8 +251,9 @@ class HealthArchiveTest {
     }
 
     /**
-     * I2: a write already running is not joined by a second one; the second does nothing, says it was
-     * skipped, and leaves a line in the problem log saying why.
+     * I2: a write already running is not joined by a second one; the second does nothing and says it
+     * was skipped. Not a failure — the other run (or the next daily backup) will still send the month —
+     * so nothing is written to the problem log for it.
      */
     @Test
     fun `a second write while one is running is skipped`() = runTest {
@@ -265,7 +266,7 @@ class HealthArchiveTest {
         runCurrent()
         assertThat(archive.writeOutOfDate()).isEqualTo(ArchiveWrite.Busy)
         assertThat(drive.calls).containsExactly("token")
-        assertThat(problems.logged.single().kind).isEqualTo("drive")
+        assertThat(problems.logged).isEmpty()
 
         gate.complete(Unit)
         assertThat(first.await()).isEqualTo(ArchiveWrite.Sent(written = 1, failed = 0))
