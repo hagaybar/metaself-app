@@ -426,6 +426,26 @@ class SettingsViewModelTest {
             .isEqualTo("Drive could not be reached; the detailed readings were not brought back.")
     }
 
+    /** A stale offer from an earlier ask must not sit alongside a fresh answer that replaces it. */
+    @Test
+    fun `asking again clears a stale offer before a fresh answer replaces it`() = runTest {
+        val archive = Archive(months = 3)
+        val viewModel = viewModel(archive = archive)
+        watch(viewModel)
+
+        viewModel.offerArchive()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.pendingArchive).isNotNull()
+
+        archive.months = null
+        viewModel.offerArchive()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.pendingArchive).isNull()
+        assertThat(viewModel.state.value.archiveMessage)
+            .isEqualTo("Drive could not be reached; the detailed readings were not brought back.")
+    }
+
     /** The offer after a restore stays with the restore, under Backup. */
     @Test
     fun `the offer after a restore is not put in Movement`() = runTest {
@@ -525,7 +545,7 @@ class SettingsViewModelTest {
     }
 
     private class Archive(
-        private val months: Int?,
+        var months: Int?,
         private val result: ArchiveRestore? = null,
     ) : ReadingsArchive {
         val calls = mutableListOf<String>()

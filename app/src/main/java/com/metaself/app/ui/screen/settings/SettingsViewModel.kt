@@ -731,9 +731,12 @@ class SettingsViewModel internal constructor(
      */
     fun offerArchive() {
         quietly {
+            pendingArchive.value = null
             archiveInMovement.value = true
             archiveMessage.value = null
+            busy.value = true
             val months = archive.monthsInDrive()
+            busy.value = false
             problemLines.value = readProblems()
             when {
                 months == null -> archiveMessage.value = HealthRecordWording.NOT_BROUGHT_BACK

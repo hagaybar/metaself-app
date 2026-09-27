@@ -66,13 +66,23 @@ object ReadingArchive {
 
     /**
      * Streamed through gzip as it is serialised, so a month's text is never held whole beside its
-     * compressed bytes. [out] is finished but not closed.
+     * compressed bytes. [out] is finished but not closed: the GZIP stream (and the Deflater holding
+     * its native resources) is closed here, through a wrapper that swallows that close so the
+     * caller's own stream stays open for whatever it writes next.
      */
     @OptIn(ExperimentalSerializationApi::class)
     fun encodeTo(out: OutputStream, month: String, rows: List<HealthReadingEntity>) {
-        val gzip = GZIPOutputStream(out)
-        json.encodeToStream(File.serializer(), File(month = month, readings = rows.map { it.toRow() }), gzip)
-        gzip.finish()
+        GZIPOutputStream(NonClosing(out)).use { gzip ->
+            json.encodeToStream(File.serializer(), File(month = month, readings = rows.map { it.toRow() }), gzip)
+        }
+    }
+
+    /** [out] with `close()` swallowed, so closing a stream built on it never closes [out] itself. */
+    private class NonClosing(private val out: OutputStream) : OutputStream() {
+        override fun write(b: Int) = out.write(b)
+        override fun write(b: ByteArray, off: Int, len: Int) = out.write(b, off, len)
+        override fun flush() = out.flush()
+        override fun close() = Unit
     }
 
     /** For tests: gzip of UTF-8 text. */

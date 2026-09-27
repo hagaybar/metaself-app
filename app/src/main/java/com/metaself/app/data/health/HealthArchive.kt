@@ -5,6 +5,7 @@ import com.metaself.app.data.drive.DriveFile
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
@@ -83,22 +84,30 @@ interface ReadingsArchive {
  * problem log as `"drive"`.
  */
 @Singleton
-class HealthArchive @Inject constructor(
+class HealthArchive(
     private val drive: ArchiveDrive,
     private val record: ArchiveRecord,
     private val store: HealthStore,
     private val problems: ProblemLog,
     private val now: Now,
+    private val dispatcher: CoroutineDispatcher,
 ) : ReadingsArchive {
+
+    /** Off the screen's thread: encoding and decoding a month's rows is real work. */
+    @Inject
+    constructor(drive: ArchiveDrive, record: ArchiveRecord, store: HealthStore, problems: ProblemLog, now: Now) :
+        this(drive, record, store, problems, now, Dispatchers.Default)
 
     private val running = Mutex()
 
-    override suspend fun writeOutOfDate(): Int = guarded(0) {
-        if (!running.tryLock()) return@guarded 0
-        try {
-            writeLocked()
-        } finally {
-            running.unlock()
+    override suspend fun writeOutOfDate(): Int = withContext(dispatcher) {
+        guarded(0) {
+            if (!running.tryLock()) return@guarded 0
+            try {
+                writeLocked()
+            } finally {
+                running.unlock()
+            }
         }
     }
 
@@ -135,22 +144,23 @@ class HealthArchive @Inject constructor(
                 return false
             }
             val added = record.insertMissing(knownReadings(copies.flatMap { it!!.readings }))
-            if (added.isNotEmpty()) {
+            if (added.days.isNotEmpty()) {
                 // Totals are not asked for: every metric counts as failed, so the daily figures stand.
-                store.summarise(added, TotalsResult.ALL_FAILED, now())
+                store.summarise(added.days, TotalsResult.ALL_FAILED, now())
             }
         }
-        // Taken BEFORE the rows are read (and after anything added above, which marked the month
-        // changed): a change landing while the file is built then leaves the month out of date.
-        val asOf = now()
-        val bytes = ReadingArchive.encode(month, record.readingsIn(month))
+        // The rows and the changedAt they reflect come from the SAME read, so marking the month
+        // written as of that changedAt is exact: a change landing after this read — even while the
+        // file is still being built — leaves the month's changedAt past it, and the mark below misses.
+        val monthRows = record.readingsIn(month)
+        val bytes = ReadingArchive.encode(month, monthRows.rows)
         if (!drive.upload(name, bytes, token)) {
             log("month $month could not be uploaded")
             return false
         }
         // Only after the new one is safely up: the previous copies of THIS month, and nothing else.
         inDrive.forEach { drive.delete(it.id, token) }
-        record.markWritten(month, asOf)
+        record.markWritten(month, monthRows.changedAtMillis)
         return true
     }
 
@@ -158,9 +168,11 @@ class HealthArchive @Inject constructor(
     private fun knownReadings(rows: List<HealthReadingEntity>): List<HealthReadingEntity> =
         rows.filter { HealthKind.parse(it.kind)?.isReading == true }
 
-    override suspend fun monthsInDrive(): Int? = guarded(null) {
-        val token = drive.token() ?: return@guarded null
-        monthFiles(token)?.mapNotNull { ReadingArchive.monthOf(it.name) }?.distinct()?.size
+    override suspend fun monthsInDrive(): Int? = withContext(dispatcher) {
+        guarded(null) {
+            val token = drive.token() ?: return@guarded null
+            monthFiles(token)?.mapNotNull { ReadingArchive.monthOf(it.name) }?.distinct()?.size
+        }
     }
 
     /**
@@ -168,39 +180,54 @@ class HealthArchive @Inject constructor(
      * back is not writing: nothing is marked written, and the months that gained rows are marked
      * changed, so the next daily write sends them from the phone, which by then holds everything.
      */
-    override suspend fun restoreAll(): ArchiveRestore? = guarded(null) {
-        running.withLock { restoreLocked() }
+    override suspend fun restoreAll(): ArchiveRestore? = withContext(dispatcher) {
+        guarded(null) { running.withLock { restoreLocked() } }
     }
 
+    /**
+     * One month at a time: every copy of a month is downloaded, decoded and added, and dropped before
+     * the next month's files are even listed — so a large restore never holds more than one month's
+     * decoded rows at once. [ArchiveRestore.readings] counts rows actually inserted, not rows seen: a
+     * sample the phone already held does not count twice, and one Drive never got right does not count
+     * at all.
+     */
     private suspend fun restoreLocked(): ArchiveRestore? {
         val token = drive.token() ?: return null
-        val files = monthFiles(token)?.sortedBy { it.name } ?: return null
+        val files = monthFiles(token)?.sortedBy { it.name }?.groupBy { ReadingArchive.monthOf(it.name)!! }
+            ?: return null
         var unreadable = 0
         var unreachable = 0
-        val months = mutableListOf<ReadingArchive.Month>()
-        for (file in files) {
-            val bytes = try {
-                drive.download(file.id, token)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Throwable) {
-                log("${file.name}: ${failure::class.java.simpleName} ${failure.message}")
-                null
-            }
-            if (bytes == null) {
-                unreachable++
-                continue
-            }
-            val month = ReadingArchive.decode(bytes)
-            if (month == null) {
-                unreadable++
-                continue
-            }
-            months += month
-        }
+        var monthsBrought = 0
+        var rowsAdded = 0
         val touched = mutableSetOf<Long>()
         try {
-            months.forEach { month -> touched += record.insertMissing(knownReadings(month.readings)) }
+            for ((_, copies) in files.toSortedMap()) {
+                var decodedOne = false
+                for (file in copies) {
+                    val bytes = try {
+                        drive.download(file.id, token)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (failure: Throwable) {
+                        log("${file.name}: ${failure::class.java.simpleName} ${failure.message}")
+                        null
+                    }
+                    if (bytes == null) {
+                        unreachable++
+                        continue
+                    }
+                    val month = ReadingArchive.decode(bytes)
+                    if (month == null) {
+                        unreadable++
+                        continue
+                    }
+                    decodedOne = true
+                    val inserted = record.insertMissing(knownReadings(month.readings))
+                    touched += inserted.days
+                    rowsAdded += inserted.rows
+                }
+                if (decodedOne) monthsBrought++
+            }
         } finally {
             if (touched.isNotEmpty()) {
                 // Even when a later month failed: what was added is summarised. Totals are not asked
@@ -208,9 +235,7 @@ class HealthArchive @Inject constructor(
                 withContext(NonCancellable) { store.summarise(touched, TotalsResult.ALL_FAILED, now()) }
             }
         }
-        val readings = months.flatMap { knownReadings(it.readings) }
-            .map { Triple(it.origin, it.recordId, it.sampleIndex) }.distinct().size
-        return ArchiveRestore(months.map { it.month }.distinct().size, readings, unreadable, unreachable)
+        return ArchiveRestore(monthsBrought, rowsAdded, unreadable, unreachable)
     }
 
     /** This app's month files, or null (and logged) when the listing failed. */

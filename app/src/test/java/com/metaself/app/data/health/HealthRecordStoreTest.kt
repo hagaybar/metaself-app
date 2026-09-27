@@ -313,22 +313,35 @@ class HealthRecordStoreTest {
 
         val september = store.readingsIn("2026-09")
 
-        assertThat(september.map { it.recordId }.toSet())
+        assertThat(september.rows.map { it.recordId }.toSet())
             .containsExactly("hr-sep-1", "st-sep-1", "hr-sep-30", "st-sep-30")
-        assertThat(september).hasSize(5)
-        assertThat(september.map { it.epochDay }.toSet()).containsExactly(firstOfSeptember, lastOfSeptember)
+        assertThat(september.rows).hasSize(5)
+        assertThat(september.rows.map { it.epochDay }.toSet()).containsExactly(firstOfSeptember, lastOfSeptember)
     }
 
-    /** D71: a month stays out of date until it is written as it stood at or after its last change. */
+    /**
+     * D71: a month stays out of date until it is written as of the changedAt its own read saw; a mark
+     * built from an older read no longer takes once the month has changed again.
+     */
     @Test
-    fun `a month written after its last change is no longer out of date, one changed since is`() = runTest {
+    fun `a month written as of its own read is no longer out of date, until it changes again`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
         assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
 
-        store.markWritten("2026-09", STAMP + 1)
+        val seenAtFirstChange = store.readingsIn("2026-09").changedAtMillis
+        store.markWritten("2026-09", seenAtFirstChange)
         assertThat(store.monthsOutOfDate()).isEmpty()
 
-        store.markWritten("2026-09", STAMP - 1)
+        // A change stamped by a later clock moves changedAt on; the old mark no longer covers it.
+        val later = RoomHealthStore(
+            db, RoomDatabaseTransaction(db), HealthRows(ZoneOffset.UTC), FakeProfileRepository(aProfile()),
+            Today { LocalDate.of(2026, 9, 3) }, Now { STAMP + 1 },
+        )
+        later.apply(listOf(heart("hr-2", listOf(62.0))), emptyList())
+        assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
+
+        // Marking with the stale, first changedAt no longer takes: the month stays out of date.
+        store.markWritten("2026-09", seenAtFirstChange)
         assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
     }
 
@@ -339,7 +352,7 @@ class HealthRecordStoreTest {
         store.apply(listOf(heart("hr-1", listOf(60.0))), emptyList())
         assertThat(store.everWritten("2026-09")).isFalse()
 
-        store.markWritten("2026-09", STAMP + 1)
+        store.markWritten("2026-09", store.readingsIn("2026-09").changedAtMillis)
         assertThat(store.everWritten("2026-09")).isTrue()
 
         store.apply(listOf(heart("hr-2", listOf(62.0))), emptyList())
@@ -353,7 +366,7 @@ class HealthRecordStoreTest {
     @Test
     fun `adding missing rows keeps the phone's own and adds the rest as they were`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(70.0))), emptyList())
-        store.markWritten("2026-09", STAMP)
+        store.markWritten("2026-09", store.readingsIn("2026-09").changedAtMillis)
         val later = RoomHealthStore(
             db, RoomDatabaseTransaction(db), HealthRows(ZoneOffset.UTC), FakeProfileRepository(aProfile()),
             Today { LocalDate.of(2026, 9, 3) }, Now { STAMP + 1 },
@@ -366,7 +379,8 @@ class HealthRecordStoreTest {
             ),
         )
 
-        assertThat(added).containsExactly(day + 1)
+        assertThat(added.days).containsExactly(day + 1)
+        assertThat(added.rows).isEqualTo(1)
         val rows = db.healthReadingDao().ofKindInDays("HEART_RATE", day, day + 1)
         assertThat(rows.map { Triple(it.sampleIndex, it.value, it.epochDay) })
             .containsExactly(Triple(0, 70.0, day), Triple(1, 50.0, day + 1))
@@ -378,9 +392,10 @@ class HealthRecordStoreTest {
     @Test
     fun `adding rows the phone already holds adds nothing and marks nothing`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(70.0))), emptyList())
-        store.markWritten("2026-09", STAMP)
+        store.markWritten("2026-09", store.readingsIn("2026-09").changedAtMillis)
 
-        assertThat(store.insertMissing(listOf(row("hr-1", index = 0, bpm = 50.0, day = day)))).isEmpty()
+        assertThat(store.insertMissing(listOf(row("hr-1", index = 0, bpm = 50.0, day = day))))
+            .isEqualTo(Inserted.NONE)
         assertThat(store.monthsOutOfDate()).isEmpty()
     }
 
@@ -400,8 +415,8 @@ class HealthRecordStoreTest {
         assertThat(rows.map { it.sampleIndex to it.epochDay })
             .containsExactly(0 to lastOfAugust, 1 to firstOfSeptember)
         assertThat(store.monthsOutOfDate()).containsExactly("2026-08", "2026-09").inOrder()
-        assertThat(store.readingsIn("2026-08").map { it.sampleIndex }).containsExactly(0)
-        assertThat(store.readingsIn("2026-09").map { it.sampleIndex }).containsExactly(1)
+        assertThat(store.readingsIn("2026-08").rows.map { it.sampleIndex }).containsExactly(0)
+        assertThat(store.readingsIn("2026-09").rows.map { it.sampleIndex }).containsExactly(1)
     }
 
     // --- Helpers -----------------------------------------------------------------------------------

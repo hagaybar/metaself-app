@@ -231,38 +231,48 @@ class RoomHealthStore @Inject constructor(
 
     override suspend fun monthsOutOfDate(): List<String> = bookkeepingDao.monthsOutOfDate().map { it.month }
 
-    /** Kind by kind, so the `(kind, epochDay, startMillis)` index serves every query. */
-    override suspend fun readingsIn(month: String): List<HealthReadingEntity> {
+    /**
+     * Kind by kind, so the `(kind, epochDay, startMillis)` index serves every query. The month's
+     * changedAt is read in the SAME transaction as the rows, so it reflects exactly what [rows]
+     * holds — a later write can mark the month written as of this value and no other.
+     */
+    override suspend fun readingsIn(month: String): MonthRows {
         val yearMonth = YearMonth.parse(month)
         val first = yearMonth.atDay(1).toEpochDay()
         val last = yearMonth.atEndOfMonth().toEpochDay()
-        return HealthKind.entries.filter { it.isReading }.flatMap { kind ->
-            readingDao.ofKindInDays(kind.name, first, last)
+        lateinit var result: MonthRows
+        transaction.run {
+            val rows = HealthKind.entries.filter { it.isReading }.flatMap { kind ->
+                readingDao.ofKindInDays(kind.name, first, last)
+            }
+            val changedAtMillis = bookkeepingDao.month(month)?.changedAtMillis ?: 0L
+            result = MonthRows(rows, changedAtMillis)
         }
+        return result
     }
 
     override suspend fun everWritten(month: String): Boolean =
         bookkeepingDao.month(month)?.writtenAtMillis != null
 
     /**
-     * Written as it stood at [atMillis]. The archive takes that moment BEFORE reading the month's
-     * rows, so a change made while the file was being written leaves `changedAt` later and the month
-     * out of date.
+     * A conditional update, never a read-then-replace: it takes only when the month's changedAt is
+     * still [changedAtSeen], so a change stamped after the read that produced it — and before this
+     * call — leaves the month out of date rather than marked for a version it never wrote.
      */
-    override suspend fun markWritten(month: String, atMillis: Long) {
-        val known = bookkeepingDao.month(month) ?: return
-        bookkeepingDao.putMonth(known.copy(writtenAtMillis = atMillis))
+    override suspend fun markWritten(month: String, changedAtSeen: Long) {
+        bookkeepingDao.markWritten(month, changedAtSeen)
     }
 
-    override suspend fun insertMissing(rows: List<HealthReadingEntity>): Set<Long> {
-        if (rows.isEmpty()) return emptySet()
+    override suspend fun insertMissing(rows: List<HealthReadingEntity>): Inserted {
+        if (rows.isEmpty()) return Inserted.NONE
         val added = mutableSetOf<Long>()
+        var count = 0
         transaction.run {
             val ids = readingDao.insertMissing(rows.map { it.copy(id = 0) })
-            rows.zip(ids).forEach { (row, id) -> if (id != -1L) added += row.epochDay }
+            rows.zip(ids).forEach { (row, id) -> if (id != -1L) { added += row.epochDay; count++ } }
             markMonths(added)
         }
-        return added
+        return Inserted(added, count)
     }
 
     /** The Drive month files of these days are out of date (D71); when each was last written is kept. */

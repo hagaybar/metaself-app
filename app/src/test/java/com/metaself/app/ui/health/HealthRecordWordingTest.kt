@@ -112,6 +112,16 @@ class HealthRecordWordingTest {
     @Test
     fun `files that could not be downloaded and could not be read are said apart`() {
         assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 0, readings = 0, unreadable = 2, unreachable = 3)))
-            .isEqualTo("Brought back 0 months: 0 readings. 3 files could not be downloaded. 2 files could not be read.")
+            .isEqualTo(
+                "Brought back 0 months: nothing new — the phone already had every reading. " +
+                    "3 files could not be downloaded. 2 files could not be read.",
+            )
+    }
+
+    /** D71: nothing to add is said plainly, not as a count of zero. */
+    @Test
+    fun `nothing new says so plainly`() {
+        assertThat(HealthRecordWording.broughtBack(ArchiveRestore(months = 3, readings = 0, unreadable = 0, unreachable = 0)))
+            .isEqualTo("Brought back 3 months: nothing new — the phone already had every reading.")
     }
 }

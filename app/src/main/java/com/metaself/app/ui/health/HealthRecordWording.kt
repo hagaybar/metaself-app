@@ -34,7 +34,11 @@ object HealthRecordWording {
      */
     fun broughtBack(result: ArchiveRestore): String = buildString {
         append("Brought back ").append(plural(result.months.toLong(), "month")).append(": ")
-        append(if (result.readings == 1) "1 reading" else "${number(result.readings)} readings").append(".")
+        if (result.readings == 0) {
+            append("nothing new — the phone already had every reading.")
+        } else {
+            append(if (result.readings == 1) "1 reading" else "${number(result.readings)} readings").append(".")
+        }
         if (result.unreachable > 0) append(" ").append(files(result.unreachable)).append(" could not be downloaded.")
         if (result.unreadable > 0) append(" ").append(files(result.unreadable)).append(" could not be read.")
     }

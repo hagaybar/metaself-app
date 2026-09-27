@@ -865,4 +865,28 @@ Replace `NOT_BACKED_UP` with `detailedBackup(driveOn)` everywhere (and its test)
   has "Bring back detailed readings from Drive"; it asks the same question there
   (`SettingsViewModel.offerArchive`), or says no months were found, or that Drive could not be
   reached, and what came back is said there too. "Not now" is relabelled "No".
+- **Fix (2026-09-26): off the screen's thread.** `HealthArchive.writeOutOfDate`, `restoreAll` and
+  `monthsInDrive` now run their bodies in `withContext(dispatcher)`; a new secondary `@Inject`
+  constructor supplies `Dispatchers.Default`, and the primary constructor takes the dispatcher so
+  tests pass `Dispatchers.Unconfined`.
+- **Fix (2026-09-26): restore one month at a time.** `restoreLocked` now groups Drive's files by
+  month and inserts each month's rows before moving to the next, rather than decoding every month
+  into memory first. `ArchiveRecord.insertMissing` returns `Inserted(days, rows)`; `rows` counts
+  inserts that actually happened (non -1 results), and `ArchiveRestore.readings` is now that count,
+  not a count of rows seen. `HealthRecordWording.broughtBack` says "nothing new — the phone already
+  had every reading" when nothing was added, instead of "0 readings".
+- **Fix (2026-09-26): mark written without losing a newer change.** `markWritten`'s read-then-REPLACE
+  is replaced by a conditional `UPDATE archive_months SET writtenAtMillis = :seen WHERE month = :month
+  AND changedAtMillis = :seen`. `ArchiveRecord.readingsIn` now returns `MonthRows(rows, changedAtMillis)`,
+  reading the month's own changedAt in the same transaction as its rows, so `HealthArchive` marks a
+  month written as of exactly the changedAt its own read saw; a change stamped after that read and
+  before the mark leaves the month out of date instead of being hidden by it. `asOf` is gone.
+- **Fix (2026-09-26): `ReadingArchive.encodeTo` closes its GZIP stream.** It previously called
+  `gzip.finish()` and never closed it, leaking the Deflater's native buffer. It now runs the GZIP
+  stream through `use {}` over a non-closing wrapper of the caller's stream, so the Deflater is
+  released while the caller's own stream stays open.
+- **Fix (2026-09-26): `SettingsViewModel.offerArchive` clears a stale offer first.** It previously
+  could leave an old `pendingArchive` question on screen next to a fresh "not found" or "could not
+  reach Drive" message; it now clears `pendingArchive` before asking, and sets `busy` around the
+  `monthsInDrive()` call.
 - **Minor** (controller's decision). `pageSize=1000` is labelled as this app's choice; long lines split.

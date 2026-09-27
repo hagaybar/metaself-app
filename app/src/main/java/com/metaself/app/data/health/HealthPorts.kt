@@ -83,13 +83,27 @@ interface HealthStore {
     suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long)
 }
 
+/**
+ * A month's raw readings, read together with the [changedAtMillis] the record saw for that month in
+ * the SAME read — so a write built from [rows] can be marked written as of exactly the change it
+ * reflects, never a moment guessed from outside the read.
+ */
+data class MonthRows(val rows: List<HealthReadingEntity>, val changedAtMillis: Long)
+
+/** What [ArchiveRecord.insertMissing] added: which days gained a row, and how many rows that was. */
+data class Inserted(val days: Set<Long>, val rows: Int) {
+    companion object {
+        val NONE = Inserted(emptySet(), 0)
+    }
+}
+
 /** What the Drive archive needs from the record (D71). */
 interface ArchiveRecord {
     /** Months never written, or changed since, oldest first, as "YYYY-MM". */
     suspend fun monthsOutOfDate(): List<String>
 
     /** Every raw reading filed on a day of [month], kind by kind, each kind in time order. */
-    suspend fun readingsIn(month: String): List<HealthReadingEntity>
+    suspend fun readingsIn(month: String): MonthRows
 
     /**
      * Whether this phone has ever written [month] to Drive. False after a new install or cleared data,
@@ -97,17 +111,23 @@ interface ArchiveRecord {
      */
     suspend fun everWritten(month: String): Boolean
 
-    /** [month] is in Drive as it stood at [atMillis]. A month the record has never marked is left alone. */
-    suspend fun markWritten(month: String, atMillis: Long)
+    /**
+     * [month] is in Drive as it reflects [changedAtSeen] — the changedAt a [readingsIn] read saw
+     * beside the rows it sent up. Only takes when the month's changedAt is still [changedAtSeen]: a
+     * change stamped after that read, and before this call, leaves the month out of date rather than
+     * hidden behind a write that missed it.
+     */
+    suspend fun markWritten(month: String, changedAtSeen: Long)
 
     /**
      * Rows brought back from Drive, each inserted as it is — its sample index and day kept — unless
      * the phone already holds a row with the same (origin, record id, sample index), which is kept
      * as the phone has it. Never deletes or replaces anything. One transaction.
      *
-     * @return the days of the rows actually inserted; their months are marked changed.
+     * @return the days of the rows actually inserted, and how many rows that was; their months are
+     *   marked changed.
      */
-    suspend fun insertMissing(rows: List<HealthReadingEntity>): Set<Long>
+    suspend fun insertMissing(rows: List<HealthReadingEntity>): Inserted
 }
 
 /** The one thing the day screen asks for. */

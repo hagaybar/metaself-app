@@ -7,6 +7,7 @@ import com.metaself.app.data.drive.DriveFile
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -25,7 +26,7 @@ class HealthArchiveTest {
     private val record = FakeArchiveRecord()
     private val store = FakeStore()
     private val problems = RecordingProblems()
-    private val archive = HealthArchive(drive, record, store, problems, Now { NOW })
+    private val archive = HealthArchive(drive, record, store, problems, Now { NOW }, Dispatchers.Unconfined)
 
     // --- Writing -----------------------------------------------------------------------------------
 
@@ -44,25 +45,23 @@ class HealthArchiveTest {
         assertThat(drive.stored.count { it.name == "metaself-readings-2026-09.json.gz" }).isEqualTo(1)
         assertThat(monthInDrive("2026-09").map { it.recordId }).containsExactly("hr-2")
         assertThat(record.written.keys).containsExactly("2026-08", "2026-09")
-        assertThat(record.written.getValue("2026-08")).isEqualTo(NOW)
     }
 
     /**
-     * I3: the moment a month is marked written as of is taken BEFORE its rows are read, so a change
-     * landing while the file is built leaves the month out of date rather than hidden.
+     * I3: a month is marked written with the changedAt its own read saw, never a moment guessed from
+     * outside it. A change stamped between that read and the mark leaves the month out of date, since
+     * the mark's conditional update no longer matches.
      */
     @Test
-    fun `a month is marked as of a moment taken before its rows were read`() = runTest {
-        var clock = 1_000L
-        val ticking = HealthArchive(drive, record, store, problems, Now { clock })
+    fun `a change stamped between the read and the mark leaves the month out of date`() = runTest {
         record.outOfDate = listOf("2026-09")
         record.held += beat("hr-1", day = 20_699)
         record.writtenBefore += "2026-09"
-        record.onRead = { clock = 2_000L }
+        record.onRead = { record.touch("2026-09") }
 
-        ticking.writeOutOfDate()
+        assertThat(archive.writeOutOfDate()).isEqualTo(1)
 
-        assertThat(record.written.getValue("2026-09")).isEqualTo(1_000L)
+        assertThat(record.written).isEmpty()
     }
 
     /** The new copy goes up before the old one is removed, so a month is never absent from Drive. */
@@ -159,7 +158,7 @@ class HealthArchiveTest {
 
         archive.writeOutOfDate()
         val first = monthInDrive("2026-09")
-        assertThat(first).containsExactlyElementsIn(record.readingsIn("2026-09"))
+        assertThat(first).containsExactlyElementsIn(record.readingsIn("2026-09").rows)
 
         // The phone wrote this month now; a later change goes the phone's own way, reading no Drive.
         record.held += beat("hr-3", day = 20_699)
@@ -433,7 +432,7 @@ class HealthArchiveTest {
         for (order in listOf(listOf("2026-08", "2026-09"), listOf("2026-09", "2026-08"))) {
             val drive = FakeDrive()
             val record = FakeArchiveRecord()
-            val archive = HealthArchive(drive, record, FakeStore(), RecordingProblems(), Now { NOW })
+            val archive = HealthArchive(drive, record, FakeStore(), RecordingProblems(), Now { NOW }, Dispatchers.Unconfined)
             val august = beat("hr-x", day = 20_696, index = 0)
             val september = beat("hr-x", day = 20_697, index = 1)
             val files = mapOf("2026-08" to august, "2026-09" to september)
@@ -623,19 +622,28 @@ class HealthArchiveTest {
         /** Months this phone had written before the test began. */
         val writtenBefore = mutableSetOf<String>()
 
+        /** Each month's changedAt, as the real bookkeeping would track it; 0 until first touched. */
+        private val changedAt = mutableMapOf<String, Long>()
+        private var stamp = 0L
+
         override suspend fun monthsOutOfDate() = outOfDate
         override suspend fun everWritten(month: String) = month in writtenBefore || month in written
-        override suspend fun readingsIn(month: String): List<HealthReadingEntity> {
-            onRead()
-            return held.filter { monthOf(it.epochDay) == month }
+        override suspend fun readingsIn(month: String): MonthRows {
+            // The rows and the changedAt they reflect are captured together, as one transaction would;
+            // [onRead] then simulates whatever lands right after that transaction commits.
+            val rows = held.filter { monthOf(it.epochDay) == month }
                 .sortedWith(compareBy({ it.kind }, { it.startMillis }, { it.sampleIndex }))
+            val changedAtMillis = changedAt[month] ?: 0L
+            onRead()
+            return MonthRows(rows, changedAtMillis)
         }
-        override suspend fun markWritten(month: String, atMillis: Long) {
-            written[month] = atMillis
+        override suspend fun markWritten(month: String, changedAtSeen: Long) {
+            if ((changedAt[month] ?: 0L) == changedAtSeen) written[month] = changedAtSeen
         }
-        override suspend fun insertMissing(rows: List<HealthReadingEntity>): Set<Long> {
+        override suspend fun insertMissing(rows: List<HealthReadingEntity>): Inserted {
             if (rows.any { monthOf(it.epochDay) in insertThrowsFor }) throw IllegalStateException("disk full")
             val inserted = mutableSetOf<Long>()
+            var count = 0
             rows.forEach { row ->
                 val clash = held.any {
                     it.origin == row.origin && it.recordId == row.recordId && it.sampleIndex == row.sampleIndex
@@ -643,10 +651,18 @@ class HealthArchiveTest {
                 if (!clash) {
                     held += row.copy(id = 0)
                     inserted += row.epochDay
+                    count++
                 }
             }
-            changed += inserted.map(::monthOf)
-            return inserted
+            val monthsTouched = inserted.map(::monthOf).toSet()
+            changed += monthsTouched
+            monthsTouched.forEach(::touch)
+            return Inserted(inserted, count)
+        }
+
+        /** Bumps [month]'s changed-at, as a real write would; tests use it to simulate a concurrent change. */
+        fun touch(month: String) {
+            changedAt[month] = ++stamp
         }
 
         private fun monthOf(epochDay: Long) = LocalDate.ofEpochDay(epochDay).toString().substring(0, 7)
