@@ -85,4 +85,49 @@ class HealthRecordStateTest {
         assertThat(state.lastCopiedMillis).isEqualTo(1_000)
         assertThat(state.notAllowed).isEqualTo(HealthKind.entries.toSet() - HealthKind.STEPS)
     }
+
+    @Test
+    fun `older history not allowed asks for Connect`() {
+        val state = HealthRecordState.from(
+            days = 5, earliest = 20_699, syncRows = emptyList(), granted = HealthKind.entries.toSet(), history = false,
+        )
+
+        assertThat(state.historyAllowed).isFalse()
+        assertThat(state.notAllowed).isEmpty()
+        assertThat(state.asksToConnect).isTrue()
+    }
+
+    @Test
+    fun `older history allowed, or not offered by the phone, asks for nothing`() {
+        val allowed = HealthRecordState.from(
+            days = 5, earliest = 20_699, syncRows = emptyList(), granted = HealthKind.entries.toSet(), history = true,
+        )
+        val notOffered = HealthRecordState.from(
+            days = 5, earliest = 20_699, syncRows = emptyList(), granted = HealthKind.entries.toSet(), history = null,
+        )
+
+        assertThat(allowed.historyAllowed).isTrue()
+        assertThat(allowed.asksToConnect).isFalse()
+        assertThat(notOffered.historyAllowed).isNull()
+        assertThat(notOffered.asksToConnect).isFalse()
+    }
+
+    /** As with [HealthRecordState.notAllowed]: with nothing granted, the "Off" line already says it. */
+    @Test
+    fun `with nothing granted, older history is not mentioned`() {
+        val state = HealthRecordState.from(
+            days = 0, earliest = null, syncRows = emptyList(), granted = emptySet(), history = false,
+        )
+
+        assertThat(state.historyAllowed).isNull()
+    }
+
+    @Test
+    fun `a kind not allowed still asks for Connect`() {
+        val state = HealthRecordState.from(
+            days = 5, earliest = 20_699, syncRows = emptyList(), granted = setOf(HealthKind.STEPS), history = true,
+        )
+
+        assertThat(state.asksToConnect).isTrue()
+    }
 }

@@ -170,15 +170,30 @@ data class HealthRecordState(
     val lastCopiedMillis: Long? = null,
     val catchingUp: Boolean = false,
     val notAllowed: Set<HealthKind> = emptySet(),
+    /**
+     * Whether history older than 30 days may be read (D72). Null when this phone's Health Connect
+     * cannot offer it, and when nothing is granted at all (as with [notAllowed]).
+     */
+    val historyAllowed: Boolean? = null,
 ) {
+    /** Whether Settings offers the Connect button for the record: a kind, or the history, not allowed. */
+    val asksToConnect: Boolean get() = notAllowed.isNotEmpty() || historyAllowed == false
+
     companion object {
         /**
          * Worked out from what is stored (D65, D66) — pure, so it is tested without Room. With nothing
          * granted at all, [notAllowed] is left empty: the existing "Off. Allow MetaSelf to read your
          * steps and a long walk will add to that day's allowance" line and the Connect button already
-         * say it, and naming all thirteen kinds on top would be noise.
+         * say it, and naming all thirteen kinds on top would be noise. [history] is null when the
+         * phone cannot offer older history (D72), and is dropped for the same reason.
          */
-        fun from(days: Int, earliest: Long?, syncRows: List<HealthSyncEntity>, granted: Set<HealthKind>): HealthRecordState {
+        fun from(
+            days: Int,
+            earliest: Long?,
+            syncRows: List<HealthSyncEntity>,
+            granted: Set<HealthKind>,
+            history: Boolean? = null,
+        ): HealthRecordState {
             // Only rows that are kinds: the older-history marker (D72) shares the table.
             val syncByKind = syncRows.mapNotNull { row -> HealthKind.parse(row.kind)?.let { it to row } }.toMap()
             val lastCopiedMillis = syncByKind.values.mapNotNull { it.tokenAtMillis }.maxOrNull()
@@ -190,6 +205,7 @@ data class HealthRecordState(
                 lastCopiedMillis = lastCopiedMillis,
                 catchingUp = catchingUp,
                 notAllowed = notAllowed,
+                historyAllowed = if (granted.isEmpty()) null else history,
             )
         }
     }

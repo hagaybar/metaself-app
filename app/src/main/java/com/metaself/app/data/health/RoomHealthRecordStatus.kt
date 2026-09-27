@@ -24,7 +24,8 @@ class RoomHealthRecordStatus @Inject constructor(
         val earliest = database.healthDayDao().observeEarliest().first()
         val sync = database.healthBookkeepingDao().observeSync().first()
         val granted = source.grantedKinds()
+        val history = if (source.historyAvailable()) source.historyGranted() else null
 
-        return HealthRecordState.from(days, earliest, sync, granted)
+        return HealthRecordState.from(days, earliest, sync, granted, history)
     }
 }

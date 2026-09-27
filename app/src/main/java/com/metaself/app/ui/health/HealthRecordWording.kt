@@ -103,5 +103,9 @@ object HealthRecordWording {
         return "Reading $list is not allowed — tap Connect to allow $pronoun."
     }
 
+    /** D72: only when the phone could allow it and has not; null when allowed or not offered. */
+    fun historyNotAllowed(allowed: Boolean?): String? =
+        if (allowed == false) "Reading history older than 30 days is not allowed — tap Connect to allow it." else null
+
     private fun plural(n: Long, word: String) = if (n == 1L) "1 $word" else "$n ${word}s"
 }
