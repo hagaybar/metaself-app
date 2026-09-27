@@ -170,6 +170,10 @@ class FoodsAskFirstSessionTest {
      */
     @Composable
     private fun Foods(foods: FakeFoodRepository, joiningFrom: Long? = null) {
+        // Lint's RememberReturnType reports this call as returning Unit, and it does not: the lambda
+        // returns a view model. The lint shipped with AGP 8.10 types this call as Unit, even with an
+        // explicit type argument (tried); AGP 8.2.2's did not. Nothing here mutates in `remember`.
+        @Suppress("RememberReturnType")
         val viewModel = remember {
             FoodsViewModel(
                 foods,

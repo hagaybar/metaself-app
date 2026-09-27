@@ -228,6 +228,10 @@ fun SimulatedApp(world: World) {
 
     // One day view model for the whole walk, exactly as the app keeps one for the whole session:
     // the logging screen logs THROUGH it, so a second one would log onto a day nobody is looking at.
+    // Lint's RememberReturnType reports this call as returning Unit, and it does not: the lambda
+    // returns a view model. The lint shipped with AGP 8.10 types this call as Unit, even with an
+    // explicit type argument (tried); AGP 8.2.2's did not. Nothing here mutates in `remember`.
+    @Suppress("RememberReturnType")
     val dayViewModel = remember {
         DayViewModel(
             profiles = world.profiles,
