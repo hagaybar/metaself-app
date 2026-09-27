@@ -12,6 +12,7 @@ class MetaSelfNavHostRenderTest {
             Destination.AddEntry.route,
             Destination.EditEntry.route,
             Destination.Weight.route,
+            Destination.Movement.route,
         )
         assertThat(routes).containsNoDuplicates()
     }
@@ -20,6 +21,11 @@ class MetaSelfNavHostRenderTest {
     fun `the edit route carries which item is being corrected`() {
         assertThat(Destination.EditEntry.route).contains("{itemId}")
         assertThat(Destination.EditEntry.of(itemId = 7)).isEqualTo("entry/edit/7")
+    }
+
+    @Test
+    fun `the Movement screen has its own route`() {
+        assertThat(Destination.Movement.route).isEqualTo("movement")
     }
 
     @Test

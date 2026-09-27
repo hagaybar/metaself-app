@@ -1,5 +1,6 @@
 package com.metaself.app.ui.day
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,7 +10,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import com.metaself.app.R
 import com.metaself.app.domain.movement.MovementToday
 import com.metaself.app.ui.movement.MovementWording
 import com.metaself.app.ui.theme.Spacing
@@ -36,11 +40,28 @@ import com.metaself.app.ui.theme.Spacing
  * about the zero, because printing "0 kcal earned" would turn an ordinary day into a reproach.
  */
 @Composable
-fun StepBar(today: MovementToday, modifier: Modifier = Modifier) {
+fun StepBar(
+    today: MovementToday,
+    modifier: Modifier = Modifier,
+    /**
+     * Opens the Movement screen (D75, D49 item 8's rule: every line is a door). Null draws the line
+     * as it always was, with nothing to press.
+     */
+    onOpen: (() -> Unit)? = null,
+) {
     val reached = today.aboveUsual
+    val opens = stringResource(R.string.movement_open_label)
 
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (onOpen == null) {
+                    Modifier
+                } else {
+                    Modifier.clickable(role = Role.Button, onClickLabel = opens, onClick = onOpen)
+                },
+            ),
         verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
     ) {
         Row(

@@ -80,6 +80,8 @@ fun DayPager(
     onRepeat: () -> Unit,
     onScan: () -> Unit,
     onOpenWeight: () -> Unit,
+    /** The Movement screen (D75): from the top-right menu and from the day's step line. */
+    onOpenMovement: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenManager: () -> Unit,
 ) {
@@ -107,6 +109,7 @@ fun DayPager(
             onRepeat = onRepeat,
             onScan = onScan,
             onOpenWeight = onOpenWeight,
+            onOpenMovement = onOpenMovement,
             onOpenSettings = onOpenSettings,
             onOpenManager = onOpenManager,
         )
@@ -126,6 +129,8 @@ private fun DayPagerOn(
     onRepeat: () -> Unit,
     onScan: () -> Unit,
     onOpenWeight: () -> Unit,
+    /** The Movement screen (D75): from the top-right menu and from the day's step line. */
+    onOpenMovement: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenManager: () -> Unit,
 ) {
@@ -180,6 +185,13 @@ private fun DayPagerOn(
                     onClick = {
                         showingMenu = false
                         onOpenWeight()
+                    },
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.movement_open)) },
+                    onClick = {
+                        showingMenu = false
+                        onOpenMovement()
                     },
                 )
                 DropdownMenuItem(
@@ -262,6 +274,7 @@ private fun DayPagerOn(
                         onDescribe = onDescribe,
                         onScan = onScan,
                         onOpenSettings = onOpenSettings,
+                        onOpenMovement = onOpenMovement,
                         onDismissTargetChange = viewModel::dismissTargetChange,
                         onDismissFoodRetaught = viewModel::dismissFoodRetaught,
                         onDismissJustLogged = viewModel::dismissJustLogged,
