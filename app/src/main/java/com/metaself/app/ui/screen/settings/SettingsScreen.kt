@@ -303,6 +303,9 @@ fun SettingsScreen(
             HealthRecordWording.notAllowed(state.healthRecord.notAllowed)?.let { line ->
                 Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            HealthRecordWording.historyNotAllowed(state.healthRecord.historyAllowed)?.let { line ->
+                Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (state.healthRecord.days > 0) {
                 Text(
                     HealthRecordWording.detailedBackup(driveOn = state.driveOn),
@@ -333,7 +336,7 @@ fun SettingsScreen(
                 }
             }
 
-            if (state.stepAccess == StepAccess.NOT_PERMITTED || state.healthRecord.notAllowed.isNotEmpty()) {
+            if (state.stepAccess == StepAccess.NOT_PERMITTED || state.healthRecord.asksToConnect) {
                 Button(onClick = onConnectSteps) {
                     Text(stringResource(R.string.settings_steps_connect))
                 }

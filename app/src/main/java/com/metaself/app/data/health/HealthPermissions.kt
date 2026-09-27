@@ -39,6 +39,17 @@ object HealthPermissions {
 
     fun of(kind: HealthKind): String = HealthPermission.getReadPermission(recordType(kind))
 
-    /** What the Connect button asks for: every kind, so a new device needs no app update (D66). */
-    val ALL: Set<String> get() = HealthKind.entries.map(::of).toSet()
+    /**
+     * What the Connect button asks for: every kind, so a new device needs no app update (D66), and
+     * history older than 30 days (D72).
+     */
+    val ALL: Set<String> get() = HealthKind.entries.map(::of).toSet() + HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
+
+    /**
+     * [ALL] without the history permission, for a phone whose own Health Connect cannot grant it
+     * (D72): asking for a permission it can never grant would put a refusal in front of the owner for
+     * something that was never really on offer, so it is left out of the request rather than asked
+     * for and declined.
+     */
+    val withoutHistory: Set<String> get() = ALL - HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

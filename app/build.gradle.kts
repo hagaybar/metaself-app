@@ -10,13 +10,18 @@ plugins {
 
 android {
     namespace = "com.metaself.app"
-    compileSdk = 34
+    compileSdk = 36
+    // Named rather than left to AGP's default (35.0.0 for AGP 8.10), so the build uses the
+    // build-tools package installed for compileSdk 36 instead of fetching a second one into the
+    // SDK folder, which is shared with another project on the development box. AGP 8.10 accepts
+    // anything from 35.0.0 up.
+    buildToolsVersion = "36.0.0"
 
     defaultConfig {
         applicationId = "com.metaself.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 110
+        versionCode = 111
 
         // The barcode reader ships a native model for every processor Android runs on. Only one of
         // them is a phone: arm64 is every Android handset of the last decade, and the x86 pair
@@ -27,7 +32,7 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-        versionName = "0.56.0"
+        versionName = "0.57.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -144,13 +149,11 @@ dependencies {
     // Health Connect rather than the Google Fit APIs, which shut down at the end of 2026 and whose
     // developer sign-ups closed in May 2024.
     //
-    // Pinned to 1.1.0-alpha07 because it is the last release that compiles against SDK 34. Stable
-    // 1.1.0 requires SDK 36, which needs a newer Gradle plugin than this project runs, and an
-    // upgrade of the whole toolchain is not something to smuggle in underneath a step counter.
-    //
-    // This does not contradict the rule that kept the encrypted key store off an alpha. That rule
-    // was about a credential that spends money; the worst this one can do is fail to report steps,
-    // which the app already treats as an ordinary Tuesday.
+    // Stable 1.1.0. Its AAR declares minCompileSdk=36 and minAndroidGradlePluginVersion=8.9.1,
+    // which is why it waited for the toolchain upgrade (D72): until then the project was pinned to
+    // 1.1.0-alpha07, the last release that compiled against SDK 34. It also brings kotlin-stdlib
+    // 2.0.21 onto the classpath, which the Kotlin 1.9 compiler reads (one version of forward
+    // metadata compatibility); a dependency built with Kotlin 2.1 or later would not be readable.
     // Authorising Drive. play-services-auth ONLY, for a token — not Google's Java API client
     // libraries, which are a heavy and awkward dependency tree on Android. The upload itself goes
     // through OkHttp, which this app already has, so this adds one dependency rather than thirty.

@@ -32,6 +32,9 @@ import javax.inject.Singleton
  * **Accepted:** the count of empty weeks restarts each open, so a history spread thinly across opens
  * may not stop by that rule; it ends by [FURTHEST_DAYS] at worst.
  *
+ * Before both, once, the first open on which older history may be read re-opens the catch-ups (D72);
+ * see [reopenForHistory].
+ *
  * **Nothing here throws upwards (D8).** A failure — an exception or an error from the client — is a
  * problem-log entry, and the next open carries on from the last bookmark saved. Log dates are in the
  * phone's own zone.
@@ -68,6 +71,7 @@ class HealthRecordSync(
         val nowMillis = now()
         val granted = source.grantedKinds()
         if (granted.isEmpty()) return
+        reopenForHistory(nowMillis)
 
         val budget = Budget(READS_PER_OPEN)
         val touched = mutableSetOf<Long>()
@@ -99,6 +103,45 @@ class HealthRecordSync(
                 if (turn.finished) catching -= turn
             }
             summarise(touched, nowMillis)
+        }
+    }
+
+    /**
+     * D72. The first open on which history older than [WINDOW_DAYS] days may be read, every catch-up
+     * is set going again, so it carries on further back; then the marker is written, and later opens
+     * skip this (without asking Health Connect).
+     *
+     * A cursor within the last [WINDOW_DAYS] days is kept. Every other cursor — however far back it
+     * already got, even one that sits at [FURTHEST_DAYS] — is brought forward to that edge: before the
+     * permission, the weeks past the history limit may have come back empty rather than refused, so a
+     * catch-up could walk all the way to [FURTHEST_DAYS] on nothing but empty weeks without ever really
+     * seeing the record. It would normally stop after [EMPTY_SLICES_TO_STOP] such weeks in a row, but
+     * that count resets every open, and with all of [HealthKind]'s kinds sharing one open's read budget,
+     * a single kind rarely gets [EMPTY_SLICES_TO_STOP] turns before the budget runs out — so a cursor at
+     * the bound proves nothing about what is really there, and gets no exemption. Re-reading the weeks
+     * between the edge and the limit costs reads, not rows: a record read again replaces its own.
+     *
+     * **Accepted:** a failure after some bookmarks are saved but before the marker is written is logged,
+     * and the next open does this again — which can bring a cursor that has moved past the edge back to
+     * it once more. Costs reads, not rows.
+     */
+    private suspend fun reopenForHistory(nowMillis: Long) {
+        try {
+            if (store.historyActedOn()) return
+            val available = source.historyAvailable()
+            if (!available || !source.historyGranted(available)) return
+            val edge = nowMillis - WINDOW_DAYS * DAY
+            for (kind in HealthKind.entries) {
+                val mark = store.bookmark(kind) ?: continue
+                val cursor = mark.catchUpCursorMillis ?: continue
+                val reopened = mark.copy(catchUpCursorMillis = maxOf(cursor, edge), catchUpDone = false)
+                if (reopened != mark) store.saveBookmark(reopened)
+            }
+            store.markHistoryActedOn()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            note("older history: ${failure::class.java.simpleName} ${failure.message}")
         }
     }
 

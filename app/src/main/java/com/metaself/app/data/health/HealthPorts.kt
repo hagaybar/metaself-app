@@ -58,6 +58,18 @@ interface HealthSource {
      * call failed is in [TotalsResult.failed]; it never throws for one metric's failure.
      */
     suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult
+    /**
+     * Whether this phone's Health Connect can grant reading history older than 30 days at all (D72).
+     * Never throws: anything that goes wrong is false.
+     */
+    suspend fun historyAvailable(): Boolean
+    /**
+     * Whether history older than 30 days may be read: [available] AND its permission is granted (D72).
+     * [available] is the caller's own [historyAvailable], passed in rather than asked for again here,
+     * so a caller that needs both never queries the feature twice. Never throws (D8): anything that
+     * goes wrong is false.
+     */
+    suspend fun historyGranted(available: Boolean): Boolean
 }
 
 /** What the copying writes to. The real one is Room; tests use a fake. */
@@ -81,6 +93,20 @@ interface HealthStore {
     ): Set<Long>
     /** Recomputes each day's summary and its workouts' heart-rate figures. Marks no archive month. */
     suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long)
+    /** Whether the catch-ups have already been re-opened for older history (D72). */
+    suspend fun historyActedOn(): Boolean
+    /** Records that they have. */
+    suspend fun markHistoryActedOn()
+
+    companion object {
+        /**
+         * The `health_sync` row that records [historyActedOn] (D72), so no schema change was needed.
+         * Not a [HealthKind]: every reader of that table skips kinds [HealthKind.parse] does not know.
+         * A restore clears the table and the marker with it; the catch-ups then start from scratch,
+         * so the re-open that follows on the next open finds nothing finished to re-open.
+         */
+        const val HISTORY_MARKER = "_HISTORY"
+    }
 }
 
 /**
@@ -146,17 +172,43 @@ data class HealthRecordState(
     val lastCopiedMillis: Long? = null,
     val catchingUp: Boolean = false,
     val notAllowed: Set<HealthKind> = emptySet(),
+    /**
+     * Whether history older than 30 days may be read (D72). Null when this phone's Health Connect
+     * cannot offer it, and when nothing is granted at all (as with [notAllowed]).
+     */
+    val historyAllowed: Boolean? = null,
+    /**
+     * Whether this phone's Health Connect can grant history older than 30 days at all (D72), regardless
+     * of whether anything is granted yet. Unlike [historyAllowed], this is never folded into null by
+     * [notAllowed] being non-empty: the Connect button needs to know, before anything is granted, whether
+     * to ask for that permission at all.
+     */
+    val historyOffered: Boolean = false,
 ) {
+    /** Whether Settings offers the Connect button for the record: a kind, or the history, not allowed. */
+    val asksToConnect: Boolean get() = notAllowed.isNotEmpty() || historyAllowed == false
+
     companion object {
         /**
          * Worked out from what is stored (D65, D66) — pure, so it is tested without Room. With nothing
          * granted at all, [notAllowed] is left empty: the existing "Off. Allow MetaSelf to read your
          * steps and a long walk will add to that day's allowance" line and the Connect button already
-         * say it, and naming all thirteen kinds on top would be noise.
+         * say it, and naming all thirteen kinds on top would be noise. [history] is null when the
+         * phone cannot offer older history (D72), and is dropped for the same reason; [historyOffered]
+         * carries that same fact without being dropped, since the Connect button needs it even when
+         * nothing has been granted yet.
          */
-        fun from(days: Int, earliest: Long?, syncRows: List<HealthSyncEntity>, granted: Set<HealthKind>): HealthRecordState {
-            val lastCopiedMillis = syncRows.mapNotNull { it.tokenAtMillis }.maxOrNull()
-            val syncByKind = syncRows.associateBy { HealthKind.parse(it.kind) }
+        fun from(
+            days: Int,
+            earliest: Long?,
+            syncRows: List<HealthSyncEntity>,
+            granted: Set<HealthKind>,
+            history: Boolean? = null,
+            historyOffered: Boolean = false,
+        ): HealthRecordState {
+            // Only rows that are kinds: the older-history marker (D72) shares the table.
+            val syncByKind = syncRows.mapNotNull { row -> HealthKind.parse(row.kind)?.let { it to row } }.toMap()
+            val lastCopiedMillis = syncByKind.values.mapNotNull { it.tokenAtMillis }.maxOrNull()
             val catchingUp = granted.any { kind -> syncByKind[kind]?.catchUpDone != true }
             val notAllowed = if (granted.isEmpty()) emptySet() else HealthKind.entries.toSet() - granted
             return HealthRecordState(
@@ -165,6 +217,8 @@ data class HealthRecordState(
                 lastCopiedMillis = lastCopiedMillis,
                 catchingUp = catchingUp,
                 notAllowed = notAllowed,
+                historyAllowed = if (granted.isEmpty()) null else history,
+                historyOffered = historyOffered,
             )
         }
     }

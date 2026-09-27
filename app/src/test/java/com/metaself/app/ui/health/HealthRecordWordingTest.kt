@@ -77,6 +77,18 @@ class HealthRecordWordingTest {
 
     /** D71: the raw readings go to Drive, a file a month, when Drive backup is on. */
     @Test
+    fun `older history not allowed says how to allow it`() {
+        assertThat(HealthRecordWording.historyNotAllowed(false))
+            .isEqualTo("Reading history older than 30 days is not allowed — tap Connect to allow it.")
+    }
+
+    @Test
+    fun `older history allowed, or not offered by the phone, says nothing`() {
+        assertThat(HealthRecordWording.historyNotAllowed(true)).isNull()
+        assertThat(HealthRecordWording.historyNotAllowed(null)).isNull()
+    }
+
+    @Test
     fun `the detailed readings line follows Drive`() {
         assertThat(HealthRecordWording.detailedBackup(driveOn = true))
             .isEqualTo("Detailed readings are copied to your Drive, one file a month.")
