@@ -111,12 +111,15 @@ class HealthRecordSync(
      * is set going again, so it carries on further back; then the marker is written, and later opens
      * skip this (without asking Health Connect).
      *
-     * A cursor within the last [WINDOW_DAYS] days is kept. One further back is brought forward to that
-     * edge: before the permission, the weeks past the history limit may have come back empty rather than
-     * refused, so the cursor can sit up to [EMPTY_SLICES_TO_STOP] weeks beyond the last week that really
-     * had data, and keeping it would leave those weeks unread. Re-reading the weeks between the edge and
-     * the limit costs reads, not rows: a record read again replaces its own. A catch-up that already
-     * reached [FURTHEST_DAYS] is left finished, since it can go no further.
+     * A cursor within the last [WINDOW_DAYS] days is kept. Every other cursor — however far back it
+     * already got, even one that sits at [FURTHEST_DAYS] — is brought forward to that edge: before the
+     * permission, the weeks past the history limit may have come back empty rather than refused, so a
+     * catch-up could walk all the way to [FURTHEST_DAYS] on nothing but empty weeks without ever really
+     * seeing the record. It would normally stop after [EMPTY_SLICES_TO_STOP] such weeks in a row, but
+     * that count resets every open, and with all of [HealthKind]'s kinds sharing one open's read budget,
+     * a single kind rarely gets [EMPTY_SLICES_TO_STOP] turns before the budget runs out — so a cursor at
+     * the bound proves nothing about what is really there, and gets no exemption. Re-reading the weeks
+     * between the edge and the limit costs reads, not rows: a record read again replaces its own.
      *
      * **Accepted:** a failure after some bookmarks are saved but before the marker is written is logged,
      * and the next open does this again — which can bring a cursor that has moved past the edge back to
@@ -124,13 +127,13 @@ class HealthRecordSync(
      */
     private suspend fun reopenForHistory(nowMillis: Long) {
         try {
-            if (store.historyActedOn() || !source.historyGranted()) return
+            if (store.historyActedOn()) return
+            val available = source.historyAvailable()
+            if (!available || !source.historyGranted(available)) return
             val edge = nowMillis - WINDOW_DAYS * DAY
-            val furthest = nowMillis - FURTHEST_DAYS * DAY
             for (kind in HealthKind.entries) {
                 val mark = store.bookmark(kind) ?: continue
                 val cursor = mark.catchUpCursorMillis ?: continue
-                if (cursor <= furthest) continue
                 val reopened = mark.copy(catchUpCursorMillis = maxOf(cursor, edge), catchUpDone = false)
                 if (reopened != mark) store.saveBookmark(reopened)
             }

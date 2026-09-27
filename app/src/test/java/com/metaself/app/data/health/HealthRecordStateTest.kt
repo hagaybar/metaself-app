@@ -122,6 +122,18 @@ class HealthRecordStateTest {
         assertThat(state.historyAllowed).isNull()
     }
 
+    /** [HealthRecordState.historyOffered] is never folded into null: the Connect button needs it even
+     * with nothing granted yet, unlike [HealthRecordState.historyAllowed]. */
+    @Test
+    fun `history offered is kept even with nothing granted`() {
+        val state = HealthRecordState.from(
+            days = 0, earliest = null, syncRows = emptyList(), granted = emptySet(), historyOffered = true,
+        )
+
+        assertThat(state.historyOffered).isTrue()
+        assertThat(state.historyAllowed).isNull()
+    }
+
     @Test
     fun `a kind not allowed still asks for Connect`() {
         val state = HealthRecordState.from(

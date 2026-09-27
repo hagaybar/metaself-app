@@ -420,7 +420,16 @@ fun MetaSelfNavHost(
                 onSetWindow = settingsViewModel::setEatingWindow,
                 onSetRatio = settingsViewModel::setMeasuredWindow,
                 onClearWindow = settingsViewModel::clearEatingWindow,
-                onConnectSteps = { askForSteps.launch(HealthPermissions.ALL) },
+                onConnectSteps = {
+                    // A phone whose own Health Connect cannot grant history older than 30 days (D72)
+                    // is not asked for it: that permission would only ever come back refused.
+                    val permissions = if (settingsState.healthRecord.historyOffered) {
+                        HealthPermissions.ALL
+                    } else {
+                        HealthPermissions.withoutHistory
+                    }
+                    askForSteps.launch(permissions)
+                },
                 onPickBackupFolder = { chooseBackupFolder.launch(null) },
                 onForgetBackupFolder = settingsViewModel::forgetBackupFolder,
                 onBackUpNow = settingsViewModel::backUpNow,

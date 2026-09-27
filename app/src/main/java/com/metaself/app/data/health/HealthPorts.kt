@@ -64,10 +64,12 @@ interface HealthSource {
      */
     suspend fun historyAvailable(): Boolean
     /**
-     * Whether history older than 30 days may be read: the feature is available AND its permission is
-     * granted (D72). Never throws (D8): anything that goes wrong is false.
+     * Whether history older than 30 days may be read: [available] AND its permission is granted (D72).
+     * [available] is the caller's own [historyAvailable], passed in rather than asked for again here,
+     * so a caller that needs both never queries the feature twice. Never throws (D8): anything that
+     * goes wrong is false.
      */
-    suspend fun historyGranted(): Boolean
+    suspend fun historyGranted(available: Boolean): Boolean
 }
 
 /** What the copying writes to. The real one is Room; tests use a fake. */
@@ -175,6 +177,13 @@ data class HealthRecordState(
      * cannot offer it, and when nothing is granted at all (as with [notAllowed]).
      */
     val historyAllowed: Boolean? = null,
+    /**
+     * Whether this phone's Health Connect can grant history older than 30 days at all (D72), regardless
+     * of whether anything is granted yet. Unlike [historyAllowed], this is never folded into null by
+     * [notAllowed] being non-empty: the Connect button needs to know, before anything is granted, whether
+     * to ask for that permission at all.
+     */
+    val historyOffered: Boolean = false,
 ) {
     /** Whether Settings offers the Connect button for the record: a kind, or the history, not allowed. */
     val asksToConnect: Boolean get() = notAllowed.isNotEmpty() || historyAllowed == false
@@ -185,7 +194,9 @@ data class HealthRecordState(
          * granted at all, [notAllowed] is left empty: the existing "Off. Allow MetaSelf to read your
          * steps and a long walk will add to that day's allowance" line and the Connect button already
          * say it, and naming all thirteen kinds on top would be noise. [history] is null when the
-         * phone cannot offer older history (D72), and is dropped for the same reason.
+         * phone cannot offer older history (D72), and is dropped for the same reason; [historyOffered]
+         * carries that same fact without being dropped, since the Connect button needs it even when
+         * nothing has been granted yet.
          */
         fun from(
             days: Int,
@@ -193,6 +204,7 @@ data class HealthRecordState(
             syncRows: List<HealthSyncEntity>,
             granted: Set<HealthKind>,
             history: Boolean? = null,
+            historyOffered: Boolean = false,
         ): HealthRecordState {
             // Only rows that are kinds: the older-history marker (D72) shares the table.
             val syncByKind = syncRows.mapNotNull { row -> HealthKind.parse(row.kind)?.let { it to row } }.toMap()
@@ -206,6 +218,7 @@ data class HealthRecordState(
                 catchingUp = catchingUp,
                 notAllowed = notAllowed,
                 historyAllowed = if (granted.isEmpty()) null else history,
+                historyOffered = historyOffered,
             )
         }
     }

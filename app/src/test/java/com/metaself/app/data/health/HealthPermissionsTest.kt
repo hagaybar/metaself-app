@@ -17,4 +17,13 @@ class HealthPermissionsTest {
             com.metaself.app.domain.health.HealthKind.entries.map(HealthPermissions::of),
         )
     }
+
+    @Test
+    fun `without history drops just the history permission`() {
+        assertThat(HealthPermissions.withoutHistory)
+            .doesNotContain("android.permission.health.READ_HEALTH_DATA_HISTORY")
+        assertThat(HealthPermissions.withoutHistory).containsAtLeastElementsIn(
+            com.metaself.app.domain.health.HealthKind.entries.map(HealthPermissions::of),
+        )
+    }
 }

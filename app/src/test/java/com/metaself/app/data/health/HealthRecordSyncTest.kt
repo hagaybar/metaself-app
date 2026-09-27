@@ -400,17 +400,20 @@ class HealthRecordSyncTest {
         assertThat(source.calls.first { it.startsWith("window") }).isEqualTo("window STEPS ${63 * DAY}..${70 * DAY}")
     }
 
-    /** Two years back is the furthest a catch-up goes (rule 4); one already there has nothing to add. */
+    /**
+     * A cursor already at two years back is re-opened too, not left finished: before the permission, a
+     * catch-up could have walked all the way there on empty weeks alone, so being at the bound proves
+     * nothing about what is really there.
+     */
     @Test
-    fun `a catch-up that reached two years back is left finished`() = runTest {
+    fun `a catch-up that reached two years back is re-opened at the thirty-day edge too`() = runTest {
         source.granted = setOf(HealthKind.STEPS)
         source.history = true
         store.bookmarks[HealthKind.STEPS] = done("t").copy(catchUpCursorMillis = -630 * DAY)
 
         sync.copyNow()
 
-        assertThat(source.calls.filter { it.startsWith("window") }).isEmpty()
-        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isTrue()
+        assertThat(source.calls.first { it.startsWith("window") }).isEqualTo("window STEPS ${63 * DAY}..${70 * DAY}")
         assertThat(store.historyMarked).isTrue()
     }
 
@@ -499,9 +502,9 @@ class HealthRecordSyncTest {
         private var tokens = 0
 
         override suspend fun historyAvailable(): Boolean = true
-        override suspend fun historyGranted(): Boolean {
+        override suspend fun historyGranted(available: Boolean): Boolean {
             historyAsked++
-            return history
+            return available && history
         }
 
         override suspend fun grantedKinds(): Set<HealthKind> {

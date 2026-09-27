@@ -74,17 +74,25 @@ class HealthConnectReader @Inject constructor(
 
     /** A Health Connect too old to know the feature answers unavailable rather than failing. */
     override suspend fun historyAvailable(): Boolean = withContext(Dispatchers.IO) {
-        runCatching {
+        try {
             client?.features?.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY) ==
                 HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
-        }.getOrDefault(false)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            false
+        }
     }
 
-    override suspend fun historyGranted(): Boolean = withContext(Dispatchers.IO) {
-        historyAvailable() && runCatching {
+    override suspend fun historyGranted(available: Boolean): Boolean = withContext(Dispatchers.IO) {
+        available && try {
             HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in
                 (client?.permissionController?.getGrantedPermissions() ?: emptySet())
-        }.getOrDefault(false)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            false
+        }
     }
 
     override suspend fun changesToken(kind: HealthKind): String = withContext(Dispatchers.IO) {
