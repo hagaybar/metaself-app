@@ -27,7 +27,7 @@ kotlinx.serialization, JUnit 5 + Truth (JUnit 4 only for Robolectric/Compose ren
 
 - `export ANDROID_HOME=/home/ubuntu/android-sdk`; build only with `~/bin/gradlew-safe`; `free -m` first
   (under 4000 MB available: wait 60 s and recheck, up to ~20 min). Never pipe a build whose result is
-  reported: redirect to `/home/ubuntu/.claude/jobs/ab41799a/tmp/<name>.log` and check `$?`.
+  reported: redirect it to a log file and check `$?`.
 - A targeted run: `~/bin/gradlew-safe :app:testDebugUnitTest --tests '<fqcn>' > $LOG 2>&1; echo $?`.
 - Stage explicit paths only. Commit messages end with
   `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and carry no session link.
@@ -252,17 +252,23 @@ three tests that build a `BackupRepository` (`BackupRoundTripTest`, `BackupResto
 3. **"These are two sessions" with three or more witnesses** splits the lead from each other witness,
    as the spec says. Two non-lead witnesses that overlap each other stay one session between them — the
    button is on that session too if the owner wants it apart.
-4. **No way to undo a split** is built; the spec has none. A wrong split can only be put back by a
-   restore. Raised for the owner rather than invented here.
-5. **A split that fails to write** is logged (D8) and the session simply stays combined on screen; no
-   separate error line was added.
+4. **A split can be undone** (decided after review). Right after "These are two sessions" the screen
+   offers Undo, in the line pinned under the title bar that the typed-workout delete already uses on
+   this screen — the app has no snackbar, and the bottom edge is "Log a workout"'s. Undo removes exactly
+   the pairs just written. Later, a session parted from a partner it still overlaps shows **Put back
+   together**, which removes those splits; a split whose workouts no longer overlap offers nothing.
+5. **A split, Undo or Put back together that fails** is logged (D8) and the sessions stay as they were;
+   no separate error line was added.
 6. **Kind "other"** includes a kind this version does not know (UNRECOGNISED): neither says what was
    done. The session's title comes with the kind it took, so a named "Running" does not sit on a walk.
 7. **Distance disagreement** is measured against the larger of the two figures (symmetric); exactly 15 %
    is not shown; with several disagreeing witnesses the widest gap is shown, one line only.
 8. **"Typed by the owner" distance** is a typed workout's own distance (stored with no source) or one
-   marked TYPED over a file's. On a combined session it is marked TYPED, which reads exactly as a typed
-   distance does today.
+   marked TYPED over a file's. On a combined session it is marked TYPED. On a session a band or a file
+   leads it says "(you typed)" (D4), beside any disagreeing distance too; on a typed session it reads
+   as a typed distance does today.
+8a. **Pace** is worked from the distance and the minutes of the same witness: a distance lent by another
+   witness is paced over that witness's minutes (`Workout.distanceMinutes`), never the lead's.
 9. **The D77 reading.** It counts typed-led sessions (typed or added from a file, with no synced
    witness), with the session's calories. A typed workout that is a witness of a synced session is the
    band's session now, and is no longer a reading of its own: its time is already in the band's day.
@@ -277,10 +283,13 @@ three tests that build a `BackupRepository` (`BackupRoundTripTest`, `BackupResto
 13. **Hide.** No Hide button exists yet (planned in the activity module's corrections phase). The rule
     is written as `SessionWitnesses.toHide(session)` — every synced witness, no typed one — for that
     phase to call. Nothing on screen changes here.
-14. **Not combined:** the band report (it counts what arrived, per app, on purpose); the stored daily
-    summary's workout count (`health_days.workoutCount`, only read as "the day has workouts"); the day
-    screen's session names, read straight from Health Connect and never counted; "Earlier sessions" on
-    the trainer screen, which lists each review beside its own workout.
+14. **Not combined:** the band report (it counts what arrived, per app, on purpose); the day screen's
+    session names, read straight from Health Connect and never counted; "Earlier sessions" on the
+    trainer screen, which lists each review beside its own workout.
+14a. **The stored daily summary's workout count and minutes** (`health_days`) follow combined sessions
+    (decided after review): they are in the backup, so they must not count one session twice. They
+    are worked out with the splits, and a split, Undo or Put back together summarises its days again in
+    the same transaction. They are not in the Drive archive, which holds raw readings only.
 15. **Backup positions.** A split is written as the two workouts' positions in the file's `workouts`
     list, counted from 1, as a person reading the file would count them; the restore gives the workouts
     ids 1…n in order, so positions become ids after the file's own duplicates are dropped.
