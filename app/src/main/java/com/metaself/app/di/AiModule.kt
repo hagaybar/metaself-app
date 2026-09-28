@@ -12,6 +12,7 @@ import com.metaself.app.data.ai.EncryptedApiKeyStore
 import com.metaself.app.data.ai.OpenAiFoodReviewer
 import com.metaself.app.data.ai.OpenAiMealConversation
 import com.metaself.app.data.ai.OpenAiMealEstimator
+import com.metaself.app.data.ai.OpenAiTrainer
 import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
@@ -19,6 +20,7 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
+import com.metaself.app.domain.trainer.Trainer
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -109,4 +111,15 @@ object AiModule {
         profiles: RequestProfileStore,
         problems: ProblemLog,
     ): FoodReviewer = OpenAiFoodReviewer(keys, settings, client, profiles, problems)
+
+    /** The trainer (D84): the same key, ceiling, client, profiles and log as the estimator. */
+    @Provides
+    @Singleton
+    fun provideTrainer(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        profiles: RequestProfileStore,
+        problems: ProblemLog,
+    ): Trainer = OpenAiTrainer(keys, settings, client, profiles, problems)
 }
