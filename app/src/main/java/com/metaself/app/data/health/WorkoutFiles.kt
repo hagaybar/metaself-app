@@ -47,6 +47,8 @@ class RoomWorkoutFileStore @Inject constructor(
         var filling: WorkoutFileMatch.Filling? = null
         transaction.run {
             val row = workouts.byId(id) ?: return@run
+            // Hidden since it was offered: a file never fills a session it may not (D82).
+            if (WorkoutFileMatch.candidates(listOf(row.toWorkout())).isEmpty()) return@run
             val result = WorkoutFileMatch.fill(row.toWorkout(), file)
             if (result.added.any) {
                 val now = result.workout
@@ -122,16 +124,27 @@ class ImportWorkoutFile(
                     is TcxRead.Read -> read.workout
                 }
             }
-            // One read of the file's days serves both the match and, failing one, D91's same-kind offer:
-            // the wall clock's own day is always among them.
+            // One read of the file's days serves both the match and, failing one, D91's same-kind offer.
             val zone = zone()
             val stored = store.on(WorkoutFileMatch.days(file, zone))
-            matchAndFill(file, stored, zone) ?: ImportOutcome.NoMatch(file, WorkoutFileMatch.sameKind(file, stored))
+            matchAndFill(file, stored, zone) ?: ImportOutcome.NoMatch(file, WorkoutFileMatch.sameKind(file, stored, zone))
         }
     }
 
-    /** One of [ImportOutcome.Several]'s workouts, or of [ImportOutcome.NoMatch.sameKind] (D91), chosen. */
-    override suspend fun choose(file: FileWorkout, id: Long): ImportOutcome = guarded { fillOne(file, id) }
+    /**
+     * One of [ImportOutcome.Several]'s workouts, or of [ImportOutcome.NoMatch.sameKind] (D91), chosen.
+     * Checked again at the tap: a session hidden or gone since the offer is not filled, and the file's
+     * same-kind sessions are offered again as they now are.
+     */
+    override suspend fun choose(file: FileWorkout, id: Long): ImportOutcome = guarded {
+        val zone = zone()
+        val stored = store.on(WorkoutFileMatch.days(file, zone))
+        if (WorkoutFileMatch.candidates(stored).any { it.id == id }) {
+            fillOne(file, id)
+        } else {
+            ImportOutcome.NoMatch(file, WorkoutFileMatch.sameKind(file, stored, zone))
+        }
+    }
 
     /**
      * "Add it as a workout". Matched once more first: a session that arrived since, or a second

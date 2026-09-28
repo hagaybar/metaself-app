@@ -131,6 +131,20 @@ class ImportWorkoutFileTest {
         assertThat((chosen as ImportOutcome.Filled).added).isEqualTo(AddedFigures(distanceM = 3_000))
     }
 
+    /** D91: a session hidden between the offer and the tap is not filled; the offer is made again without it. */
+    @Test
+    fun `a session hidden before it is chosen is not filled`() = runTest {
+        store.rows += walk.copy(durationMinutes = 60)
+        files.texts[URI] = tcx(metres = 3_000)
+        val none = import.import(URI) as ImportOutcome.NoMatch
+        store.rows[0] = store.rows[0].copy(hidden = true)
+
+        val chosen = import.choose(none.file, 1)
+
+        assertThat(chosen).isEqualTo(ImportOutcome.NoMatch(none.file, emptyList()))
+        assertThat(store.rows.single().distanceM).isNull()
+    }
+
     @Test
     fun `no match on a day with no session of its kind offers none`() = runTest {
         store.rows += walk.copy(durationMinutes = 60, kind = WorkoutKind.RUN)

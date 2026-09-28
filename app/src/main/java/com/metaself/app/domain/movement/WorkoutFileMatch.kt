@@ -40,13 +40,13 @@ object WorkoutFileMatch {
 
     /**
      * D91: when [file] matches nothing, the sessions it might still be — those it may fill
-     * ([candidates]) of its kind ([kindOf] its sport, as "Add it as a workout" reads it) on the day its
-     * wall clock falls on — by start. Only [stored] on that day are looked at.
+     * ([candidates]) of its kind ([kindOf] its sport, as "Add it as a workout" reads it) on a day either
+     * reading of its start falls on ([days]) — by start.
      */
-    fun sameKind(file: FileWorkout, stored: List<Workout>): List<Workout> {
-        val day = file.writtenAt.toLocalDate().toEpochDay()
+    fun sameKind(file: FileWorkout, stored: List<Workout>, zone: ZoneId): List<Workout> {
+        val days = days(file, zone)
         val kind = kindOf(file.sport)
-        return candidates(stored).filter { it.kind == kind && it.epochDay == day }.sortedBy { it.startedAtMillis }
+        return candidates(stored).filter { it.kind == kind && it.epochDay in days }.sortedBy { it.startedAtMillis }
     }
 
     fun matches(file: FileWorkout, stored: List<Workout>, zone: ZoneId): List<Workout> {

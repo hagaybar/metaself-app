@@ -27,6 +27,11 @@ object WorkoutFileWording {
     private val DAY_WITH_YEAR = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.US)
     private const val SEP = " · "
 
+    /**
+     * A file's time is its wall clock as written, which is the phone's-zone reading "Add it as a
+     * workout" stores; a session's is its start in the phone's zone ([choice]). So after no match
+     * (D91) the header's time and the offered sessions' times compare directly.
+     */
     fun line(outcome: ImportOutcome, zone: ZoneId): String = when (outcome) {
         is ImportOutcome.Refused -> reason(outcome.reason)
         is ImportOutcome.Filled -> filled(outcome, zone)
