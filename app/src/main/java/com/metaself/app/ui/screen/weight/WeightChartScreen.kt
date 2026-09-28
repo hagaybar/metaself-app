@@ -20,7 +20,8 @@ import com.metaself.app.ui.theme.Spacing
  * The same ranges and the same drawing as on the weight screen, given the height the weight screen
  * cannot spare. Turning the phone needs nothing declared: the manifest fixes no orientation, so
  * Android recreates the screen landscape — and because the chosen range is stored rather than
- * remembered in the composition, it survives that recreation.
+ * remembered in the composition, it survives that recreation. Sideways it gives up its title bar
+ * and Close button as well, and becomes [WeightChartSideways].
  *
  * It closes by its own labelled button as well as by the title bar's arrow and the system's own
  * gesture. The arrow is drawn by every screen in the app and carries a description rather than a
@@ -34,6 +35,19 @@ fun WeightChartScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Sideways, even the title bar and the Close button cost the plot height it cannot spare.
+    if (isSideways() && state.trend.isNotEmpty()) {
+        WeightChartSideways(
+            trend = state.trend,
+            range = state.range,
+            todayEpochDay = todayEpochDay,
+            onRange = onRange,
+            targetKg = state.progress?.targetKg,
+            modifier = modifier,
+        )
+        return
+    }
+
     MetaSelfScreen(
         title = stringResource(R.string.weight_chart_title),
         modifier = modifier,

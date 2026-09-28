@@ -81,6 +81,20 @@ fun WeightScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Sideways, the chart is the whole screen (see WeightChartSideways). With nothing logged there
+    // is no chart to give it to, and the upright screen's way to log a weight is what is needed.
+    if (isSideways() && state.trend.isNotEmpty()) {
+        WeightChartSideways(
+            trend = state.trend,
+            range = state.range,
+            todayEpochDay = todayEpochDay,
+            onRange = onRange,
+            targetKg = state.progress?.targetKg,
+            modifier = modifier,
+        )
+        return
+    }
+
     val today = LocalDate.ofEpochDay(todayEpochDay)
 
     MetaSelfScreen(
