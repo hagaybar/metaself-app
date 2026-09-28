@@ -22,15 +22,27 @@ fun interface WorkoutFileSource {
 }
 
 /**
- * A shared or picked file's text through the content resolver, as UTF-8. Whatever type the file
- * arrived as, only its content decides (`TcxReader`). A file over [MAX_BYTES] is refused without
- * reading the rest.
+ * Marks text shared inline (a share with no attached stream, `Intent.EXTRA_TEXT` instead) so it can
+ * travel the same String "uri" the rest of the D82 pipeline passes around, and
+ * [ContentWorkoutFileSource] reads it back as text in hand rather than opening it through the content
+ * resolver. Never a real content Uri.
+ */
+private const val INLINE_TEXT_PREFIX = "metaself-inline-workout-text:"
+
+/** Wraps [text] shared inline so it reads as itself, not as a Uri to open. */
+fun inlineWorkoutText(text: String): String = INLINE_TEXT_PREFIX + text
+
+/**
+ * A shared or picked file's text through the content resolver, as UTF-8 — or, for text shared inline
+ * ([inlineWorkoutText]), the text itself. Whatever type the file arrived as, only its content decides
+ * (`TcxReader`). Either way, anything over [MAX_BYTES] is refused without reading the rest.
  */
 class ContentWorkoutFileSource @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : WorkoutFileSource {
 
     override suspend fun read(uri: String): FileText = withContext(Dispatchers.IO) {
+        if (uri.startsWith(INLINE_TEXT_PREFIX)) return@withContext inlineText(uri.removePrefix(INLINE_TEXT_PREFIX))
         val stream = context.contentResolver.openInputStream(uri.toUri())
             ?: throw IOException("no stream for the file")
         stream.use { input ->
@@ -46,6 +58,10 @@ class ContentWorkoutFileSource @Inject constructor(
             else FileText.Text(out.toString(Charsets.UTF_8.name()))
         }
     }
+
+    private fun inlineText(text: String): FileText =
+        if (text.toByteArray(Charsets.UTF_8).size > MAX_BYTES) FileText.Refused(WorkoutFileRefusal.TOO_LARGE)
+        else FileText.Text(text)
 
     companion object {
         /**
