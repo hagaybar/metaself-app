@@ -331,6 +331,12 @@ class HealthRecordStoreTest {
         assertThat(db.healthDayDao().day(day)!!.steps).isEqualTo(9_000)
         assertThat(typed.delete(aTypedWorkout(id = id, epochDay = day))).isFalse()
 
+        // Undo (D76): back under its own id, which AUTOINCREMENT never handed to anything else.
+        assertThat(typed.restore(aTypedWorkout(id = id, epochDay = day, minutes = 60))).isEqualTo(id)
+        assertThat(db.workoutDao().byId(id)!!.durationMinutes).isEqualTo(60)
+        assertThat(db.healthDayDao().day(day)!!.workoutCount).isEqualTo(2)
+        assertThat(typed.delete(aTypedWorkout(id = id, epochDay = day))).isTrue()
+
         val again = typed.log(aTypedWorkout(id = syncedId, epochDay = day, minutes = 45))
         assertThat(again).isNotEqualTo(syncedId)
         assertThat(db.workoutDao().all().map { it.id }).containsExactly(syncedId, again)

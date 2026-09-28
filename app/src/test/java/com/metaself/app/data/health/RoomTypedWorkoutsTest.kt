@@ -189,6 +189,33 @@ class RoomTypedWorkoutsTest {
         assertThat(store.summarised).isEmpty()
     }
 
+    /** Undo (D76): the workout comes back under its own id, so a trainer review of it (D88) is its own again. */
+    @Test
+    fun `a restored workout comes back under its own id, and its day is summarised again`() = runTest {
+        val id = typed.log(aTypedWorkout(id = 0, minutes = 30))
+        typed.delete(aTypedWorkout(id = id))
+        store.summarised.clear()
+
+        val back = typed.restore(aTypedWorkout(id = id, minutes = 30))
+
+        assertThat(back).isEqualTo(id)
+        assertThat(dao.rows.single().id).isEqualTo(id)
+        assertThat(dao.rows.single().durationMinutes).isEqualTo(30)
+        assertThat(store.summarised).containsExactly(setOf(TEST_EPOCH_DAY))
+        assertThat(store.insideTransaction.last()).isTrue()
+    }
+
+    @Test
+    fun `a restore whose id is taken comes back under a new one`() = runTest {
+        dao.rows += syncedRow(id = 50)
+
+        val back = typed.restore(aTypedWorkout(id = 50))
+
+        assertThat(back).isNotEqualTo(50L)
+        assertThat(dao.rows.map { it.id }).containsExactly(50L, back)
+        assertThat(dao.rows.first()).isEqualTo(syncedRow(id = 50))
+    }
+
     private fun syncedRow(id: Long) = WorkoutEntity(
         id = id, epochDay = TEST_EPOCH_DAY, startedAtMillis = 0, durationMinutes = 32, kind = "RUN",
         title = "Running", distanceM = 6_200, energyKcal = null, energySource = "NONE", effort = null,
@@ -244,8 +271,9 @@ class RoomTypedWorkoutsTest {
         override fun observeBetween(from: Long, to: Long): Flow<List<WorkoutEntity>> =
             changes.map { rows.filter { it.epochDay in from..to }.sortedBy { it.startedAtMillis } }
 
+        /** As Room's: an explicit id is kept (the caller has checked it is free); 0 takes the next. */
         override suspend fun insert(workout: WorkoutEntity): Long {
-            val id = nextId++
+            val id = if (workout.id != 0L) workout.id else nextId++
             rows += workout.copy(id = id)
             changes.value++
             return id

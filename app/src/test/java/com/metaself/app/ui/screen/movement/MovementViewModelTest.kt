@@ -383,8 +383,8 @@ class MovementViewModelTest {
 
     /**
      * Undo puts back the workout as it was — its day, start, kind, figures, energy's source, effort,
-     * note and hidden flag — through the store's log, which gives it a new id and works its day out
-     * again. Every figure is invented.
+     * note and hidden flag — under its own id, so a trainer review of it (D88) is its own again;
+     * the store works its day out again. Every figure is invented.
      */
     @Test
     fun `Undo puts the deleted workout back as it was, and is then spent`() = runTest {
@@ -405,12 +405,12 @@ class MovementViewModelTest {
 
         model.state.first { !it.canUndo }
         advanceUntilIdle()
-        assertThat(typed.logged).containsExactly(workout)
-        assertThat(typed.workouts.value.single().copy(id = 9)).isEqualTo(workout)
+        assertThat(typed.restored).containsExactly(workout)
+        assertThat(typed.workouts.value.single()).isEqualTo(workout)
 
         model.undoDelete()
         advanceUntilIdle()
-        assertThat(typed.logged).hasSize(1)
+        assertThat(typed.restored).hasSize(1)
     }
 
     @Test
@@ -429,12 +429,12 @@ class MovementViewModelTest {
 
         model.undoDelete()
         advanceUntilIdle()
-        assertThat(typed.logged).containsExactly(second)
+        assertThat(typed.restored).containsExactly(second)
         assertThat(model.state.first { it.week != null }.canUndo).isTrue()
 
         model.undoDelete()
         advanceUntilIdle()
-        assertThat(typed.logged).containsExactly(second, first).inOrder()
+        assertThat(typed.restored).containsExactly(second, first).inOrder()
         assertThat(model.state.first { !it.canUndo }.canUndo).isFalse()
     }
 
@@ -518,7 +518,7 @@ class MovementViewModelTest {
         model.undoDelete()
         val after = model.state.first { !it.canUndo }
         assertThat(after.undoFailed).isFalse()
-        assertThat(typed.logged).containsExactly(workout)
+        assertThat(typed.restored).containsExactly(workout)
     }
 
     /** D8: said on the sheet, logged, never thrown; what was typed is kept. */

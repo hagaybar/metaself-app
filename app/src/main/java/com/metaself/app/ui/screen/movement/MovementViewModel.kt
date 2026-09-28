@@ -337,9 +337,9 @@ class MovementViewModel(
 
     /**
      * Put back the last typed workout deleted here, on its own day, at its own start, with its own
-     * figures, effort, note and hidden flag. Through [TypedWorkouts.log], so it comes back under a new
-     * id — nothing else refers to a typed workout's id — and its day's summary is worked out again in
-     * the same transaction.
+     * figures, effort, note and hidden flag. Through [TypedWorkouts.restore], so it comes back under
+     * its own id — a trainer review refers to it by that id (D88), and is its own again — and its day's
+     * summary is worked out again in the same transaction.
      *
      * Cleared as it is used, so a second press does not put it back twice. A restore that throws puts
      * the receipt back, so Undo is still there to try again, and the screen says it failed (D8).
@@ -349,7 +349,7 @@ class MovementViewModel(
         undo.value = UndoState(offered = undoable.isNotEmpty())
         viewModelScope.launch {
             try {
-                typed.log(workout)
+                typed.restore(workout)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
