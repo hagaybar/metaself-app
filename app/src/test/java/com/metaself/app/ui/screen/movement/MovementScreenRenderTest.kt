@@ -93,7 +93,7 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("410 kcal · Running 6.2 km · slept 7 h 10")
         assertThat(texts).contains("410 kcal of movement · phone and band")
         assertThat(texts).contains("9,000 steps · phone and band")
-        assertThat(texts).contains("Running · 6.2 km · 32 min · 5:10 /km")
+        assertThat(texts.any(RUNNING_LINE::matches)).isTrue()
         assertThat(texts).contains("Slept 7 h 10")
         // The heading and the summary are one button; the detail lines are drawn after it, not in it.
         assertThat(render.clickLabelOf("410 kcal · Running")).isEqualTo("close this day")
@@ -116,7 +116,7 @@ class MovementScreenRenderTest {
 
         assertThat(texts).contains("410 kcal · Running 6.2 km · slept 7 h 10")
         assertThat(texts).doesNotContain("410 kcal of movement · phone and band")
-        assertThat(texts).doesNotContain("Running · 6.2 km · 32 min · 5:10 /km")
+        assertThat(texts.none(RUNNING_LINE::matches)).isTrue()
     }
 
     @Test
@@ -212,10 +212,10 @@ class MovementScreenRenderTest {
         var opened: Workout? = null
         draw(state = MovementUiState(week = withTyped, openDay = TEST_EPOCH_DAY), onOpenWorkout = { opened = it })
 
-        assertThat(render.roleOf("Weights · 45 min")).isEqualTo(Role.Button)
-        assertThat(render.clickLabelOf("Weights · 45 min")).isEqualTo("change this workout")
-        assertThat(render.clickLabelOf("Running · 6.2 km")).isNull()
-        render.click("Weights · 45 min")
+        assertThat(render.roleOf("Weights · ")).isEqualTo(Role.Button)
+        assertThat(render.clickLabelOf("Weights · ")).isEqualTo("change this workout")
+        assertThat(render.clickLabelOf("Running · ")).isNull()
+        render.click("Weights · ")
         assertThat(opened).isEqualTo(typed)
     }
 
@@ -484,7 +484,7 @@ class MovementScreenRenderTest {
         val texts = draw(openDay = TEST_EPOCH_DAY, onReview = { asked = it })
 
         assertThat(texts).contains("How did it go?")
-        assertThat(render.isDrawnBefore("Running · 6.2 km", "How did it go?")).isTrue()
+        assertThat(render.isDrawnBefore("Running · ", "How did it go?")).isTrue()
         render.click("How did it go?")
         assertThat(asked).isEqualTo(1L)
     }
@@ -515,7 +515,7 @@ class MovementScreenRenderTest {
     fun `with the reviews unread, a session has no button`() {
         val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, reviews = null))
 
-        assertThat(texts).contains("Running · 6.2 km · 32 min · 5:10 /km")
+        assertThat(texts.any(RUNNING_LINE::matches)).isTrue()
         assertThat(texts).doesNotContain("How did it go?")
     }
 
@@ -559,5 +559,10 @@ class MovementScreenRenderTest {
             onTrainer = onTrainer,
             onReview = onReview,
         )
+    }
+
+    private companion object {
+        /** The run's line, whatever the machine's zone makes its start time (D91). */
+        val RUNNING_LINE = Regex("Running · \\d\\d:\\d\\d · 6\\.2 km · 32 min · 5:10 /km")
     }
 }

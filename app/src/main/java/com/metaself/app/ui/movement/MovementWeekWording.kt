@@ -9,7 +9,10 @@ import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -35,6 +38,7 @@ object MovementWeekWording {
      */
     private val SHORT_DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
     private val DATE_WITH_YEAR = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.US)
+    private val TIME = DateTimeFormatter.ofPattern("HH:mm", Locale.US)
 
     private const val SEP = " · "
 
@@ -94,7 +98,8 @@ object MovementWeekWording {
             sessions(day.workouts),
             health?.sleepMinutes?.let { "slept ${duration(it)}" },
         )
-        return if (parts.isNotEmpty()) parts.joinToString(SEP) else partLines(day).firstOrNull()?.text ?: NOTHING
+        // With no part there is no session, so no start time is said and the zone does not matter.
+        return if (parts.isNotEmpty()) parts.joinToString(SEP) else partLines(day, ZoneOffset.UTC).firstOrNull()?.text ?: NOTHING
     }
 
     /**
@@ -102,13 +107,13 @@ object MovementWeekWording {
      * A line the summary already says is not repeated, so a day with nothing but steps, or nothing at
      * all, has nothing beneath.
      */
-    fun detailRows(day: MovementDay): List<DetailLine> {
+    fun detailRows(day: MovementDay, zone: ZoneId): List<DetailLine> {
         val summary = summaryLine(day)
-        return partLines(day).filterNot { it.text == summary }
+        return partLines(day, zone).filterNot { it.text == summary }
     }
 
     /** [detailRows]' words alone. */
-    fun detailLines(day: MovementDay): List<String> = detailRows(day).map { it.text }
+    fun detailLines(day: MovementDay, zone: ZoneId): List<String> = detailRows(day, zone).map { it.text }
 
     /** "Last four weeks: 38.1 · 45.0 · — · 44.7 km"; null when none of the four has a distance. */
     fun lastFourWeeks(week: MovementWeek): String? {
@@ -161,7 +166,7 @@ object MovementWeekWording {
         String.format(Locale.US, "%d:%02d /km", secondsPerKm / 60, secondsPerKm % 60)
 
     /** One line per recorded part of the day, in the order an open day shows them. */
-    private fun partLines(day: MovementDay): List<DetailLine> {
+    private fun partLines(day: MovementDay, zone: ZoneId): List<DetailLine> {
         val health = day.health
         val movement = if (health == null) {
             emptyList()
@@ -177,12 +182,14 @@ object MovementWeekWording {
             day.eatenKcal?.let { "${number(it)} kcal eaten" },
         )
         return movement.map { DetailLine(it) } +
-            day.workouts.map { DetailLine(workoutLine(it), it) } +
+            day.workouts.map { DetailLine(workoutLine(it, zone), it) } +
             rest.map { DetailLine(it) }
     }
 
-    private fun workoutLine(workout: Workout): String = listOfNotNull(
+    /** "Walking · 10:20 · 2.0 km · 25 min · avg 105 bpm" (invented): its start time in [zone] (D91) after its name. */
+    private fun workoutLine(workout: Workout, zone: ZoneId): String = listOfNotNull(
         name(workout),
+        Instant.ofEpochMilli(workout.startedAtMillis).atZone(zone).format(TIME),
         workout.distanceM?.let { metres ->
             // D82: a file's distance says so, to the two decimals it was written with.
             if (workout.distanceSource == WorkoutFigureSource.FILE) WorkoutFileWording.fileKm(metres) + " (from file)" else km(metres)

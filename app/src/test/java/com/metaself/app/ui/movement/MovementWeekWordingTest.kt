@@ -14,6 +14,7 @@ import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
+import java.time.ZoneOffset
 
 /**
  * Every sentence the Movement screen says (D73, D74). Every figure here is invented — they are the
@@ -21,6 +22,9 @@ import java.time.LocalDate
  * TEST_EPOCH_DAY is Thursday 3 September 2026.
  */
 class MovementWeekWordingTest {
+
+    /** The phone's zone for a session's start time (D91): UTC here, so 07:00 on the day reads 07:00. */
+    private val zone = ZoneOffset.UTC
 
     private val running = workout(title = "Running", minutes = 32, distanceM = 6_200, avgHeartRate = 142)
 
@@ -135,7 +139,7 @@ class MovementWeekWordingTest {
         val day = MovementDay(TEST_EPOCH_DAY, null, emptyList(), eatenKcal = null)
 
         assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("nothing recorded")
-        assertThat(MovementWeekWording.detailLines(day)).isEmpty()
+        assertThat(MovementWeekWording.detailLines(day, zone)).isEmpty()
     }
 
     /** Design question 2 in the plan: never "nothing recorded" over a day that has steps. */
@@ -149,7 +153,7 @@ class MovementWeekWordingTest {
         )
 
         assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("9,000 steps · phone and band")
-        assertThat(MovementWeekWording.detailLines(day)).isEmpty()
+        assertThat(MovementWeekWording.detailLines(day, zone)).isEmpty()
     }
 
     @Test
@@ -162,15 +166,15 @@ class MovementWeekWordingTest {
         )
 
         assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("9,000 steps · phone and band")
-        assertThat(MovementWeekWording.detailLines(day)).containsExactly("1,840 kcal eaten")
+        assertThat(MovementWeekWording.detailLines(day, zone)).containsExactly("1,840 kcal eaten")
     }
 
     @Test
     fun `beneath an open day's summary, one line per part`() {
-        assertThat(MovementWeekWording.detailLines(fullDay)).containsExactly(
+        assertThat(MovementWeekWording.detailLines(fullDay, zone)).containsExactly(
             "410 kcal of movement · phone and band",
             "9,000 steps · phone and band",
-            "Running · 6.2 km · 32 min · 5:10 /km · avg 142 bpm",
+            "Running · 07:00 · 6.2 km · 32 min · 5:10 /km · avg 142 bpm",
             "Slept 7 h 10 — deep 1 h 20 · REM 1 h 35 · light 4 h 15",
             "Resting 58 · HRV 42 ms · oxygen 97% · breathing 14/min",
             "1,840 kcal eaten",
@@ -180,7 +184,7 @@ class MovementWeekWordingTest {
     @Test
     fun `a figure the owner set says so`() {
         val corrected = fullHealth.copy(stepsSource = FigureSource.CORRECTED, activeKcalSource = FigureSource.CORRECTED)
-        val lines = MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, corrected, emptyList(), null))
+        val lines = MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, corrected, emptyList(), null), zone)
 
         assertThat(lines).contains("410 kcal of movement · you set this")
         assertThat(lines).contains("9,000 steps · you set this")
@@ -190,7 +194,7 @@ class MovementWeekWordingTest {
     fun `a source this version does not know is not guessed at`() {
         val unknown = HealthDay(TEST_EPOCH_DAY, activeKcal = 410, activeKcalSource = FigureSource.UNRECOGNISED)
 
-        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, unknown, emptyList(), null)))
+        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, unknown, emptyList(), null), zone))
             .containsExactly("410 kcal of movement")
     }
 
@@ -200,9 +204,9 @@ class MovementWeekWordingTest {
         val sparse = HealthDay(TEST_EPOCH_DAY, sleepMinutes = 430, restingHeartRate = 58)
         val bare = workout(title = "Running", minutes = 32, distanceM = null)
 
-        val lines = MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, sparse, listOf(bare), null))
+        val lines = MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, sparse, listOf(bare), null), zone)
 
-        assertThat(lines).containsExactly("Running · 32 min", "Slept 7 h 10", "Resting 58").inOrder()
+        assertThat(lines).containsExactly("Running · 07:00 · 32 min", "Slept 7 h 10", "Resting 58").inOrder()
     }
 
     @Test
@@ -295,35 +299,47 @@ class MovementWeekWordingTest {
         assertThat(MovementWeekWording.summaryLine(day)).isEqualTo("Running 6.2 km, Walking ×2 · 1 h 30")
     }
 
+    /** D91: a session line says when it started, in the phone's zone — so a file whose time differs shows. */
+    @Test
+    fun `a session line says when it started, in the phone's zone`() {
+        val walk = workout(title = "Walking", minutes = 25, distanceM = 2_000, kind = WorkoutKind.WALK, avgHeartRate = 105)
+            .copy(startedAtMillis = SEVEN + 3 * 3_600_000L + 20 * 60_000L)
+
+        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(walk), null), zone))
+            .containsExactly("Walking · 10:20 · 2.0 km · 25 min · avg 105 bpm")
+        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(walk), null), ZoneOffset.ofHours(5)))
+            .containsExactly("Walking · 15:20 · 2.0 km · 25 min · avg 105 bpm")
+    }
+
     /** D78: pace for runs only. */
     @Test
     fun `a walk with a distance shows no pace`() {
         val walk = workout(title = "Walking", minutes = 50, distanceM = 4_000, kind = WorkoutKind.WALK)
 
-        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(walk), null)))
-            .containsExactly("Walking · 4.0 km · 50 min")
+        assertThat(MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(walk), null), zone))
+            .containsExactly("Walking · 07:00 · 4.0 km · 50 min")
     }
 
     /** D4: a typed workout's energy says where it came from. */
     @Test
     fun `a typed workout's line says its energy and where it came from`() {
         fun line(workout: Workout) =
-            MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(workout), null)).single()
+            MovementWeekWording.detailLines(MovementDay(TEST_EPOCH_DAY, null, listOf(workout), null), zone).single()
 
-        assertThat(line(aTypedWorkout())).isEqualTo("Weights · 45 min · about 150 kcal, estimated")
-        assertThat(line(aTypedWorkout(energyKcal = 300, energySource = EnergySource.TYPED)))
-            .isEqualTo("Weights · 45 min · 300 kcal, you set this")
-        assertThat(line(aTypedWorkout(energyKcal = null, energySource = EnergySource.NONE)))
-            .isEqualTo("Weights · 45 min")
+        assertThat(line(aTypedWorkout(startedAtMillis = SEVEN))).isEqualTo("Weights · 07:00 · 45 min · about 150 kcal, estimated")
+        assertThat(line(aTypedWorkout(energyKcal = 300, energySource = EnergySource.TYPED, startedAtMillis = SEVEN)))
+            .isEqualTo("Weights · 07:00 · 45 min · 300 kcal, you set this")
+        assertThat(line(aTypedWorkout(energyKcal = null, energySource = EnergySource.NONE, startedAtMillis = SEVEN)))
+            .isEqualTo("Weights · 07:00 · 45 min")
     }
 
     @Test
     fun `an open day's workout line carries its workout, and no other line does`() {
-        val typed = aTypedWorkout()
-        val rows = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(typed), 1_840))
+        val typed = aTypedWorkout(startedAtMillis = SEVEN)
+        val rows = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(typed), 1_840), zone)
 
         assertThat(rows.mapNotNull { it.workout }).containsExactly(typed)
-        assertThat(rows.single { it.workout != null }.text).isEqualTo("Weights · 45 min · about 150 kcal, estimated")
+        assertThat(rows.single { it.workout != null }.text).isEqualTo("Weights · 07:00 · 45 min · about 150 kcal, estimated")
     }
 
     /** D82: a file's distance says so, to its metre-true two decimals; a file's calories say so too. */
@@ -331,15 +347,15 @@ class MovementWeekWordingTest {
     fun `a workout's figures from a file say they are from the file`() {
         val filled = workout(title = "Walking", minutes = 40, distanceM = 3_250, kind = WorkoutKind.WALK)
             .copy(distanceSource = WorkoutFigureSource.FILE)
-        val added = aTypedWorkout(kind = WorkoutKind.WALK, minutes = 40, energyKcal = 250, energySource = EnergySource.FILE)
+        val added = aTypedWorkout(kind = WorkoutKind.WALK, minutes = 40, energyKcal = 250, energySource = EnergySource.FILE, startedAtMillis = SEVEN)
 
-        val filledRow = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(filled), 1_840))
+        val filledRow = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(filled), 1_840), zone)
             .single { it.workout != null }.text
-        val addedRow = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(added), 1_840))
+        val addedRow = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(added), 1_840), zone)
             .single { it.workout != null }.text
 
-        assertThat(filledRow).isEqualTo("Walking · 3.25 km (from file) · 40 min")
-        assertThat(addedRow).isEqualTo("Walking · 40 min · 250 kcal, from the file")
+        assertThat(filledRow).isEqualTo("Walking · 07:00 · 3.25 km (from file) · 40 min")
+        assertThat(addedRow).isEqualTo("Walking · 07:00 · 40 min · 250 kcal, from the file")
     }
 
     private fun workout(
@@ -348,11 +364,16 @@ class MovementWeekWordingTest {
         distanceM: Int?,
         kind: WorkoutKind = WorkoutKind.RUN,
         avgHeartRate: Int? = null,
-        startedAtMillis: Long = 0,
+        startedAtMillis: Long = SEVEN,
     ) = Workout(
         id = 0, epochDay = TEST_EPOCH_DAY, startedAtMillis = startedAtMillis, durationMinutes = minutes,
         kind = kind, title = title, distanceM = distanceM, energyKcal = null,
         energySource = EnergySource.NONE, effort = null, source = WorkoutSource.SYNCED,
         hidden = false, note = null, avgHeartRate = avgHeartRate,
     )
+
+    private companion object {
+        /** 07:00 UTC on TEST_EPOCH_DAY. */
+        const val SEVEN = TEST_EPOCH_DAY * 86_400_000L + 7 * 3_600_000L
+    }
 }

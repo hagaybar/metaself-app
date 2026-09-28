@@ -381,7 +381,7 @@ private fun DayRow(
             )
         }
         if (open) {
-            val details = MovementWeekWording.detailRows(day)
+            val details = MovementWeekWording.detailRows(day, ZoneId.systemDefault())
             if (details.isNotEmpty()) {
                 Column(
                     modifier = Modifier
