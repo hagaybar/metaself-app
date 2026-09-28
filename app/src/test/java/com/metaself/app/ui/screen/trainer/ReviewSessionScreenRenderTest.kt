@@ -96,11 +96,37 @@ class ReviewSessionScreenRenderTest {
 
     @Test
     fun `working, saved and a failure after saving are said`() {
-        assertThat(draw(form.copy(felt = Felt.EASY, working = true))).contains("Saving and asking the trainer…")
+        assertThat(draw(form.copy(felt = Felt.EASY, working = true, askingTrainer = true))).contains("Saving and asking the trainer…")
         assertThat(draw(form.copy(felt = Felt.EASY, saved = true))).contains("Saved.")
         val failed = draw(form.copy(felt = Felt.EASY, saved = true, failure = EstimateResult.Unreachable()))
         assertThat(failed).contains("Your words are saved. Could not reach the model. Get feedback is on the session's row.")
         assertThat(failed).doesNotContain("Saved.")
+    }
+
+    /** Just save asks nobody, so it says only that it is saving. */
+    @Test
+    fun `just saving says Saving, not asking the trainer`() {
+        val texts = draw(form.copy(felt = Felt.EASY, working = true, askingTrainer = false))
+
+        assertThat(texts).contains("Saving…")
+        assertThat(texts).doesNotContain("Saving and asking the trainer…")
+    }
+
+    /** What is saved is what is on screen: nothing can be changed while a save is under way. */
+    @Test
+    fun `while saving, the chips, the words and Not this plan are disabled`() {
+        draw(form.copy(felt = Felt.EASY, working = true, plan = storedPlan(createdAt = NOW).copy(id = 1)))
+
+        assertThat(render.isEnabled("Easy")).isFalse()
+        assertThat(render.isEnabled("Hard")).isFalse()
+        assertThat(render.isEnabled("In your words")).isFalse()
+        assertThat(render.isEnabled("Not this plan")).isFalse()
+
+        draw(form.copy(felt = Felt.EASY, plan = storedPlan(createdAt = NOW).copy(id = 1)))
+
+        assertThat(render.isEnabled("Easy")).isTrue()
+        assertThat(render.isEnabled("In your words")).isTrue()
+        assertThat(render.isEnabled("Not this plan")).isTrue()
     }
 
     @Test

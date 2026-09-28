@@ -8,6 +8,7 @@ import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.data.trainer.TrainerStore
+import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.PlanActivity
@@ -17,7 +18,9 @@ import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
+import com.metaself.app.ui.outlived
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +32,9 @@ import javax.inject.Inject
 /**
  * D86: the form, one ask, the suggestion, Keep and Ask again. The trainer is asked only from [ask] —
  * a tap — never from `init` (D84).
+ *
+ * The ask, and the storing of its suggestion, runs in [outliving]: leaving the screen mid-request does
+ * not throw away a paid answer. While it is asked the form cannot be changed.
  */
 @HiltViewModel
 class PlanSessionViewModel @Inject constructor(
@@ -37,6 +43,7 @@ class PlanSessionViewModel @Inject constructor(
     private val store: TrainerStore,
     settings: AiSettingsStore,
     private val problems: ProblemLog,
+    @ApplicationScope private val outliving: CoroutineScope,
 ) : ViewModel() {
 
     /** The form's four rows and its words; a row is null until answered. */
@@ -53,7 +60,9 @@ class PlanSessionViewModel @Inject constructor(
         }
     }
 
+    /** @property loading opened for the kept plan, which is still being read; nothing is drawn yet. */
     data class State(
+        val loading: Boolean = false,
         val form: Form = Form(),
         val asking: Boolean = false,
         val failure: EstimateResult? = null,
@@ -65,27 +74,36 @@ class PlanSessionViewModel @Inject constructor(
         val canAsk: Boolean get() = form.answers() != null && !asking
     }
 
-    private val local = MutableStateFlow(State())
+    private val openedOnKept = savedState.get<String>(SHOW) == KEPT
+
+    private val local = MutableStateFlow(State(loading = openedOnKept))
 
     val state: StateFlow<State> = combine(local, settings.settings) { s, ai -> s.copy(ceiling = ai.dailyCeiling) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), State())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
     init {
-        if (savedState.get<String>(SHOW) == KEPT) {
-            guarded(problems, onRefused = { local.update { it.copy(refused = ActionRefused.COULD_NOT_OPEN) } }) {
-                store.keptPlan()?.let { kept -> local.update { it.copy(shown = kept, kept = true) } }
+        if (openedOnKept) {
+            guarded(problems, onRefused = { local.update { it.copy(loading = false, refused = ActionRefused.COULD_NOT_OPEN) } }) {
+                // No kept plan any more (it lapsed, or feedback used it): the form, as Ask again would.
+                val kept = store.keptPlan()
+                local.update { it.copy(loading = false, shown = kept, kept = kept != null) }
             }
         }
     }
 
-    fun change(form: Form) = local.update { it.copy(form = form, failure = null) }
+    fun change(form: Form) = local.update { if (it.asking) it else it.copy(form = form, failure = null) }
 
     fun ask() {
         val answers = local.value.form.answers() ?: return
         if (local.value.asking) return
         local.update { it.copy(asking = true, failure = null, refused = null) }
-        guarded(problems, onRefused = { local.update { it.copy(asking = false, refused = ActionRefused.NOTHING_CHANGED) } }) {
-            when (val outcome = ask.suggest(answers)) {
+        outlived(
+            outliving,
+            problems,
+            onRefused = { local.update { it.copy(asking = false, refused = ActionRefused.NOTHING_CHANGED) } },
+            work = { ask.suggest(answers) },
+        ) { outcome ->
+            when (outcome) {
                 is AskTheTrainer.Suggested.Planned -> local.update { it.copy(asking = false, shown = outcome.plan, kept = false) }
                 is AskTheTrainer.Suggested.Failed -> local.update { it.copy(asking = false, failure = outcome.failure) }
             }

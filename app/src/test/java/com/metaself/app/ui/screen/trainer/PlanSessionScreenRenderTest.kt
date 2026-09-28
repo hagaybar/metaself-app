@@ -116,6 +116,30 @@ class PlanSessionScreenRenderTest {
         )
     }
 
+    /** What the trainer is asked is what is on screen: nothing can be changed while it is asked. */
+    @Test
+    fun `while asking, the chips and the words are disabled`() {
+        draw(PlanSessionViewModel.State(form = FILLED, asking = true))
+
+        assertThat(render.isEnabled("Run")).isFalse()
+        assertThat(render.isEnabled("45 min")).isFalse()
+        assertThat(render.isEnabled("Anything else?")).isFalse()
+
+        draw(PlanSessionViewModel.State(form = FILLED))
+
+        assertThat(render.isEnabled("Run")).isTrue()
+        assertThat(render.isEnabled("Anything else?")).isTrue()
+    }
+
+    /** Opened for the kept plan, the form is not drawn while the plan is read. */
+    @Test
+    fun `loading draws neither the form nor a plan`() {
+        val texts = draw(PlanSessionViewModel.State(loading = true))
+
+        assertThat(texts).doesNotContain("WHAT")
+        assertThat(texts).doesNotContain("Ask the trainer")
+    }
+
     private fun draw(
         state: PlanSessionViewModel.State,
         onChange: (PlanSessionViewModel.Form) -> Unit = {},

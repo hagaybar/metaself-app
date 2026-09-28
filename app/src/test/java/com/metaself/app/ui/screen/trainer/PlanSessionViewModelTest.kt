@@ -1,6 +1,8 @@
 package com.metaself.app.ui.screen.trainer
 
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.health.FakeMovementRecord
@@ -22,7 +24,10 @@ import com.metaself.app.ui.screen.trainer.TrainerScreens.HOUR
 import com.metaself.app.ui.screen.trainer.TrainerScreens.NOW
 import com.metaself.app.ui.screen.trainer.TrainerScreens.PLAN
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -40,6 +45,13 @@ import org.junit.jupiter.api.Test
 class PlanSessionViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
+
+    /**
+     * What stands in for the app's own scope: on the test's dispatcher, so the test runs it, and apart
+     * from the view model's, so clearing the view model leaves it running. Not `backgroundScope`, whose
+     * work the test's `advanceUntilIdle` does not wait for.
+     */
+    private val outliving = CoroutineScope(SupervisorJob() + dispatcher)
     private val record = FakeMovementRecord()
     private val store = FakeTrainerStore()
     private val trainer = FakeTrainer()
@@ -52,7 +64,10 @@ class PlanSessionViewModelTest {
     fun setUp() = Dispatchers.setMain(dispatcher)
 
     @AfterEach
-    fun tearDown() = Dispatchers.resetMain()
+    fun tearDown() {
+        outliving.cancel()
+        Dispatchers.resetMain()
+    }
 
     @Test
     fun `ask is not possible until all four rows are answered`() = runTest {
@@ -152,6 +167,76 @@ class PlanSessionViewModelTest {
         assertThat(trainer.asked).isEmpty()
     }
 
+    /** Opened for the kept plan, nothing is drawn until it is read — never the empty form first. */
+    @Test
+    fun `opened on the kept plan it is loading until the plan is read`() = runTest {
+        store.keep(store.addPlan(TrainerScreens.storedPlan(createdAt = NOW - HOUR)))
+
+        val viewModel = watched(SavedStateHandle(mapOf(PlanSessionViewModel.SHOW to PlanSessionViewModel.KEPT)))
+
+        assertThat(viewModel.state.value.loading).isTrue()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.loading).isFalse()
+        assertThat(viewModel.state.value.shown).isNotNull()
+    }
+
+    @Test
+    fun `opened on the form it is never loading`() = runTest {
+        assertThat(watched().state.value.loading).isFalse()
+    }
+
+    @Test
+    fun `opened on a kept plan that is no longer there it shows the form`() = runTest {
+        val viewModel = watched(SavedStateHandle(mapOf(PlanSessionViewModel.SHOW to PlanSessionViewModel.KEPT)))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.loading).isFalse()
+        assertThat(viewModel.state.value.shown).isNull()
+    }
+
+    /** While the trainer is asked the answers are fixed: what it was asked is what is on screen. */
+    @Test
+    fun `the form cannot be changed while the trainer is asked`() = runTest {
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+        val gate = CompletableDeferred<Unit>()
+        val viewModel = watched(trainer = gated(gate))
+        viewModel.change(filled)
+        viewModel.ask()
+        advanceUntilIdle()
+
+        viewModel.change(filled.copy(words = "Typed while asking."))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.form).isEqualTo(filled)
+        gate.complete(Unit)
+        advanceUntilIdle()
+    }
+
+    /** A paid request is not thrown away by leaving: the suggestion is stored all the same. */
+    @Test
+    fun `leaving while the trainer is asked still stores the suggestion`() = runTest {
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+        val gate = CompletableDeferred<Unit>()
+        val entry = ViewModelStore()
+        val viewModel = watched(trainer = gated(gate), entry = entry)
+        viewModel.change(filled)
+        viewModel.ask()
+        advanceUntilIdle()
+
+        entry.clear()
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertThat(store.plans.value.single().plan).isEqualTo(PLAN)
+    }
+
+    private fun gated(gate: CompletableDeferred<Unit>): Trainer = object : Trainer by trainer {
+        override suspend fun suggest(request: TrainerRequest): TrainerReply<SessionPlan> {
+            gate.await()
+            return trainer.suggest(request)
+        }
+    }
+
     @Test
     fun `a keep that fails says nothing changed and is logged`() = runTest {
         trainer.plans += TrainerReply.Answered(PLAN, "a-model")
@@ -180,8 +265,14 @@ class PlanSessionViewModelTest {
     }
 
     /** A view model whose state is collected for the length of the test, as a screen would. */
-    private fun TestScope.watched(saved: SavedStateHandle = SavedStateHandle(), trainer: Trainer = this@PlanSessionViewModelTest.trainer): PlanSessionViewModel {
-        val viewModel = PlanSessionViewModel(saved, TrainerScreens.ask(record, store, trainer), store, settings, problems)
+    private fun TestScope.watched(
+        saved: SavedStateHandle = SavedStateHandle(),
+        trainer: Trainer = this@PlanSessionViewModelTest.trainer,
+        entry: ViewModelStore = ViewModelStore(),
+    ): PlanSessionViewModel {
+        val make = { PlanSessionViewModel(saved, TrainerScreens.ask(record, store, trainer), store, settings, problems, outliving) }
+        // Held in a store, as the nav host's entry holds it, so clearing the store is leaving the screen.
+        val viewModel = ViewModelProvider(entry, TrainerScreens.factory(make))[PlanSessionViewModel::class.java]
         backgroundScope.launch { viewModel.state.collect {} }
         return viewModel
     }

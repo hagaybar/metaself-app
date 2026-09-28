@@ -218,6 +218,7 @@
     <string name="review_save_ask">Save and get feedback</string>
     <string name="review_just_save">Just save</string>
     <string name="review_working">Saving and asking the trainer…</string>
+    <string name="review_saving">Saving…</string>
     <string name="review_saved">Saved.</string>
     <string name="review_gone">This session is no longer in the record.</string>
     <string name="review_gone_saved">Your words are saved, but this session is no longer in the record, so no feedback was asked for.</string>

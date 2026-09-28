@@ -9,6 +9,7 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.data.trainer.TrainerStore
+import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.Feedback
@@ -17,7 +18,9 @@ import com.metaself.app.domain.trainer.PlanMatch
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
+import com.metaself.app.ui.outlived
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +33,10 @@ import javax.inject.Inject
  * D87 for one session: its figures, the matched plan, the felt effort and words, then feedback. The
  * trainer is asked only from [saveAndAsk] — a tap — never from `init` (D84). The felt effort is the
  * review's own; it never overwrites the workout's effort (D77).
+ *
+ * A save, and the feedback it asks for, runs in [outliving]: leaving the screen mid-request does not
+ * throw away a paid answer — it is stored all the same, and shown if the screen is still open. While a
+ * save is under way nothing on the form can be changed, so what is saved is what is on screen.
  */
 @HiltViewModel
 class ReviewSessionViewModel @Inject constructor(
@@ -39,11 +46,13 @@ class ReviewSessionViewModel @Inject constructor(
     settings: AiSettingsStore,
     today: Today,
     private val problems: ProblemLog,
+    @ApplicationScope private val outliving: CoroutineScope,
 ) : ViewModel() {
 
     /**
      * @property gone the session is not in the record: at opening, or it left while the form was open —
      *   then [saved] is also true, because the words were kept anyway (D88).
+     * @property askingTrainer the save under way also asks for feedback; false for Just save.
      */
     data class State(
         val workout: Workout? = null,
@@ -51,6 +60,7 @@ class ReviewSessionViewModel @Inject constructor(
         val felt: Felt? = null,
         val words: String = "",
         val working: Boolean = false,
+        val askingTrainer: Boolean = false,
         val saved: Boolean = false,
         val feedback: Feedback? = null,
         val failure: EstimateResult? = null,
@@ -88,11 +98,19 @@ class ReviewSessionViewModel @Inject constructor(
         }
     }
 
-    fun feel(felt: Felt) = local.update { it.copy(felt = felt, saved = false, refused = null) }
+    fun feel(felt: Felt) = edit { it.copy(felt = felt) }
 
-    fun words(words: String) = local.update { it.copy(words = words, saved = false, refused = null) }
+    fun words(words: String) = edit { it.copy(words = words) }
 
-    fun notThisPlan() = local.update { it.copy(plan = null, saved = false) }
+    fun notThisPlan() = edit { it.copy(plan = null) }
+
+    /**
+     * A change to the form: what was said about the last save — saved, or saved without feedback — no
+     * longer holds for what is on screen, so it goes. Nothing changes while a save is under way.
+     */
+    private fun edit(change: (State) -> State) = local.update { now ->
+        if (now.working) now else change(now).copy(saved = false, failure = null, refused = null)
+    }
 
     fun justSave() = save(withFeedback = false)
 
@@ -101,16 +119,19 @@ class ReviewSessionViewModel @Inject constructor(
     private fun save(withFeedback: Boolean) {
         val now = local.value
         if (!now.canSave) return
-        local.update { it.copy(working = true, failure = null, refused = null) }
-        guarded(problems, onRefused = { local.update { it.copy(working = false, refused = ActionRefused.MAYBE_PARTIAL) } }) {
-            when (val outcome = ask.save(workoutId, now.felt, now.words, now.plan?.id, withFeedback)) {
-                is AskTheTrainer.Reviewed.Saved -> local.update { it.copy(working = false, saved = true) }
-                is AskTheTrainer.Reviewed.WithFeedback ->
-                    local.update { it.copy(working = false, saved = true, feedback = outcome.review.feedback) }
-                is AskTheTrainer.Reviewed.NoFeedback ->
-                    local.update { it.copy(working = false, saved = true, failure = outcome.failure) }
-                is AskTheTrainer.Reviewed.SessionGone ->
-                    local.update { it.copy(working = false, saved = true, gone = true) }
+        local.update { it.copy(working = true, askingTrainer = withFeedback, failure = null, refused = null) }
+        outlived(
+            outliving,
+            problems,
+            onRefused = { local.update { it.copy(working = false, askingTrainer = false, refused = ActionRefused.MAYBE_PARTIAL) } },
+            work = { ask.save(workoutId, now.felt, now.words, now.plan?.id, withFeedback) },
+        ) { outcome ->
+            local.update { it.copy(working = false, askingTrainer = false, saved = true) }
+            when (outcome) {
+                is AskTheTrainer.Reviewed.Saved -> Unit
+                is AskTheTrainer.Reviewed.WithFeedback -> local.update { it.copy(feedback = outcome.review.feedback) }
+                is AskTheTrainer.Reviewed.NoFeedback -> local.update { it.copy(failure = outcome.failure) }
+                is AskTheTrainer.Reviewed.SessionGone -> local.update { it.copy(gone = true) }
             }
         }
     }

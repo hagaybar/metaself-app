@@ -8,6 +8,7 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 /**
@@ -47,6 +48,32 @@ fun ViewModel.guarded(
         runCatching { problems.record(kind = "refused", detail = problemDetail(failure)) }
         onRefused(failure)
     }
+}
+
+/**
+ * [guarded] for work that must finish even if the screen is left — a paid request and the storing of
+ * its answer. [work] runs in [outliving], a scope that outlives the view model; [then] and [onRefused]
+ * run on the screen only while it is still there. A failure is written to [problems] as `"refused"`
+ * from inside [outliving], so it is logged once, whether or not anyone is left to be told.
+ */
+fun <T> ViewModel.outlived(
+    outliving: CoroutineScope,
+    problems: ProblemLog,
+    onRefused: (Throwable) -> Unit,
+    work: suspend () -> T,
+    then: (T) -> Unit,
+): Job {
+    val running = outliving.async {
+        try {
+            Result.success(work())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            runCatching { problems.record(kind = "refused", detail = problemDetail(failure)) }
+            Result.failure(failure)
+        }
+    }
+    return viewModelScope.launch { running.await().fold(then, onRefused) }
 }
 
 /**

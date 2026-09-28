@@ -1,5 +1,7 @@
 package com.metaself.app.ui.screen.trainer
 
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.health.FakeMovementRecord
@@ -8,7 +10,7 @@ import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AskTheTrainer
-import com.metaself.app.data.trainer.FakeTrainerStore
+import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
@@ -63,7 +65,13 @@ internal object TrainerScreens {
 
     val today = Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }
 
-    fun ask(record: FakeMovementRecord, store: FakeTrainerStore, trainer: Trainer) = AskTheTrainer(
+    /** Makes the one view model [make] builds, as `hiltViewModel()` would, so a test can hold it in a store. */
+    fun <VM : ViewModel> factory(make: () -> VM) = object : ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = make() as T
+    }
+
+    fun ask(record: FakeMovementRecord, store: TrainerStore, trainer: Trainer) = AskTheTrainer(
         record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer,
         today, Now { NOW }, CurrentYear { TEST_YEAR },
     )

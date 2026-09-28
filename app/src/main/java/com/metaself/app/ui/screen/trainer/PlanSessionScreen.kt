@@ -48,8 +48,10 @@ fun PlanSessionScreen(
     val shown = state.shown
     val title = stringResource(if (shown == null) R.string.plan_title else R.string.plan_result_title)
     MetaSelfScreen(title = title, modifier = modifier, onBack = onBack) {
-        when (shown) {
-            null -> PlanForm(state, onChange, onAsk)
+        when {
+            // Opened for the kept plan: nothing until it is read, never the empty form first.
+            state.loading -> Unit
+            shown == null -> PlanForm(state, onChange, onAsk)
             else -> Suggestion(shown, state.kept, onKeep, onAskAgain)
         }
         state.refused?.let { refused ->
@@ -66,21 +68,24 @@ private fun PlanForm(
 ) {
     val form = state.form
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
-        ChoiceRow(R.string.plan_row_what, PlanActivity.entries, form.activity, TrainerWording::activity) {
+        // What the trainer is asked is what is on screen: nothing changes while it is asked.
+        val open = !state.asking
+        ChoiceRow(R.string.plan_row_what, PlanActivity.entries, form.activity, TrainerWording::activity, open) {
             onChange(form.copy(activity = it))
         }
-        ChoiceRow(R.string.plan_row_time, TimeAvailable.entries, form.time, TrainerWording::time) {
+        ChoiceRow(R.string.plan_row_time, TimeAvailable.entries, form.time, TrainerWording::time, open) {
             onChange(form.copy(time = it))
         }
-        ChoiceRow(R.string.plan_row_feel, Feeling.entries, form.feeling, TrainerWording::feeling) {
+        ChoiceRow(R.string.plan_row_feel, Feeling.entries, form.feeling, TrainerWording::feeling, open) {
             onChange(form.copy(feeling = it))
         }
-        ChoiceRow(R.string.plan_row_want, Wish.entries, form.wish, TrainerWording::wish) {
+        ChoiceRow(R.string.plan_row_want, Wish.entries, form.wish, TrainerWording::wish, open) {
             onChange(form.copy(wish = it))
         }
         OutlinedTextField(
             value = form.words,
             onValueChange = { onChange(form.copy(words = it)) },
+            enabled = open,
             label = { Text(stringResource(R.string.plan_words)) },
             minLines = 2,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -110,6 +115,7 @@ private fun <T> ChoiceRow(
     choices: List<T>,
     picked: T?,
     word: (T) -> String,
+    enabled: Boolean,
     onPick: (T) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -124,7 +130,7 @@ private fun <T> ChoiceRow(
             verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
         ) {
             choices.forEach { choice ->
-                FilterChip(selected = picked == choice, onClick = { onPick(choice) }, label = { Text(word(choice)) })
+                FilterChip(selected = picked == choice, onClick = { onPick(choice) }, label = { Text(word(choice)) }, enabled = enabled)
             }
         }
     }

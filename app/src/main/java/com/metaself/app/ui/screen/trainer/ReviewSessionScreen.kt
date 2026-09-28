@@ -83,7 +83,7 @@ private fun ReviewForm(
         state.plan?.let { plan ->
             Column {
                 Text(TrainerWording.planned(plan.plan.title), style = MaterialTheme.typography.bodyMedium)
-                TextButton(onClick = onNotThisPlan) { Text(stringResource(R.string.review_not_this_plan)) }
+                TextButton(onClick = onNotThisPlan, enabled = !state.working) { Text(stringResource(R.string.review_not_this_plan)) }
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -101,6 +101,7 @@ private fun ReviewForm(
                     FilterChip(
                         selected = state.felt == felt,
                         onClick = { onFeel(felt) },
+                        enabled = !state.working,
                         label = { Text(TrainerWording.felt(felt)) },
                     )
                 }
@@ -109,6 +110,8 @@ private fun ReviewForm(
         OutlinedTextField(
             value = state.words,
             onValueChange = onWords,
+            // What is saved is what is on screen: nothing changes while a save is under way.
+            enabled = !state.working,
             label = { Text(stringResource(R.string.review_words)) },
             supportingText = { Text(stringResource(R.string.review_voice_hint)) },
             minLines = 3,
@@ -129,7 +132,10 @@ private fun ReviewForm(
             )
             val failure = state.failure
             when {
-                state.working -> Text(stringResource(R.string.review_working), style = MaterialTheme.typography.bodyMedium)
+                state.working -> Text(
+                    stringResource(if (state.askingTrainer) R.string.review_working else R.string.review_saving),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
                 failure != null -> Text(TrainerWording.savedWithoutFeedback(failure), color = MaterialTheme.colorScheme.error)
                 state.saved -> Text(stringResource(R.string.review_saved), style = MaterialTheme.typography.bodyMedium)
                 else -> Unit
