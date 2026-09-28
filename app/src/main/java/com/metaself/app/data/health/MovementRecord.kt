@@ -1,5 +1,6 @@
 package com.metaself.app.data.health
 
+import com.metaself.app.domain.health.HeartRateZones
 import com.metaself.app.domain.movement.CountedWorkouts
 import com.metaself.app.domain.movement.Effort
 import com.metaself.app.domain.movement.EnergySource
@@ -104,6 +105,9 @@ fun WorkoutEntity.toWorkout(uncountedWalkApps: Set<String> = emptySet()): Workou
     distanceSource = WorkoutFigureSource.parse(distanceSource),
     steps = steps,
     stepsSource = WorkoutFigureSource.parse(stepsSource),
+    maxHeartRate = maxHeartRate,
+    zoneSeconds = HeartRateZones.zonesFromText(zoneSeconds),
+    zoneMaxSource = zoneMaxSource,
 )
 
 /** A typed workout as it is stored (D76): no origin, `source = TYPED`, every enum by its name. */

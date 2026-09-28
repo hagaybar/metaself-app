@@ -103,4 +103,16 @@ class HeartRateZonesTest {
         assertThat(HeartRateZones.Figures(140, 160, listOf(0, 300, 900, 600, 0)).zonesAsText())
             .isEqualTo("0,300,900,600,0")
     }
+
+    /** The stored form is five comma-separated second counts, zone 1 to 5 (invented figures). */
+    @Test
+    fun `stored zones read back as five numbers, and anything else as none`() {
+        assertThat(HeartRateZones.zonesFromText("600,1200,600,0,0")).containsExactly(600, 1200, 600, 0, 0).inOrder()
+        assertThat(HeartRateZones.zonesFromText(HeartRateZones.Figures(110, 130, listOf(1, 2, 3, 4, 5)).zonesAsText()))
+            .containsExactly(1, 2, 3, 4, 5).inOrder()
+        assertThat(HeartRateZones.zonesFromText(null)).isNull()
+        assertThat(HeartRateZones.zonesFromText("600,1200")).isNull()
+        assertThat(HeartRateZones.zonesFromText("600,x,600,0,0")).isNull()
+        assertThat(HeartRateZones.zonesFromText("600,-1,600,0,0")).isNull()
+    }
 }

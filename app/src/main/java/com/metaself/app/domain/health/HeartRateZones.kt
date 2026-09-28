@@ -22,6 +22,16 @@ object HeartRateZones {
     fun estimatedMax(birthYear: Int, currentYear: Int): Int = 220 - (currentYear - birthYear)
 
     /**
+     * The stored form ([Figures.zonesAsText]) read back: five whole, non-negative second counts, zone
+     * 1 to 5; anything else is none rather than a guess.
+     */
+    fun zonesFromText(text: String?): List<Int>? {
+        val parts = text?.split(",")?.map { it.trim().toIntOrNull() } ?: return null
+        if (parts.size != 5 || parts.any { it == null || it < 0 }) return null
+        return parts.map { it!! }
+    }
+
+    /**
      * @property average the plain mean of the samples, rounded — not weighted by time.
      * @property zoneSeconds five totals, zone 1 to 5.
      */
