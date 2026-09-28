@@ -122,6 +122,15 @@ class TrainerPromptTest {
             }
     }
 
+    /** The profile's sex is sent as data; the instructions assume none, so they are right for any profile. */
+    @Test
+    fun `the instructions name no gender`() {
+        val gendered = Regex("\\b(he|his|him|himself|she|her|hers|herself)\\b", RegexOption.IGNORE_CASE)
+        listOf(TrainerPrompt.feedbackBody("a-model", reviewRequest()), TrainerPrompt.planBody("a-model", planRequest()))
+            .map(::systemContent)
+            .forEach { system -> assertThat(gendered.findAll(system).map { it.value }.toList()).isEmpty() }
+    }
+
     @Test
     fun `the rhythm is the phone's count, never the model's`() {
         val system = systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))
