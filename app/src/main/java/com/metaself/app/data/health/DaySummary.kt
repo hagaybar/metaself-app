@@ -1,5 +1,7 @@
 package com.metaself.app.data.health
 
+import com.metaself.app.domain.movement.CountedWorkouts
+import com.metaself.app.domain.movement.WorkoutKind
 import kotlin.math.roundToInt
 
 /**
@@ -8,6 +10,9 @@ import kotlin.math.roundToInt
  * Every figure says where it came from: TOTAL (Health Connect's de-duplicated aggregate), READ (one
  * record), COMPUTED (worked out here from the day's rows) or CORRECTED (the owner's figure, D12d).
  * No data is null, never zero; a day with nothing at all has no summary.
+ *
+ * A workout counts toward the day unless it is hidden or is a walk from an app in
+ * `uncountedWalkApps` (D81, [CountedWorkouts]); either way it stays stored.
  */
 object DaySummary {
 
@@ -23,6 +28,7 @@ object DaySummary {
         workouts: List<WorkoutEntity>,
         correction: MovementCorrectionEntity?,
         nowMillis: Long,
+        uncountedWalkApps: Set<String> = emptySet(),
     ): HealthDayEntity? {
         fun mean(kind: String): Double? =
             readings.filter { it.kind == kind }.map { it.value }.takeIf { it.isNotEmpty() }?.average()
@@ -34,7 +40,7 @@ object DaySummary {
         val resting = readings.filter { it.kind == "RESTING_HEART_RATE" }.maxByOrNull { it.startMillis }
         val steps = correction?.steps ?: totals.steps
         val active = correction?.activeKcal ?: totals.activeKcal
-        val visible = workouts.filterNot { it.hidden }
+        val visible = workouts.filter { !it.hidden && counts(it, uncountedWalkApps) }
         val sleep = sleepOf(nights)
 
         val nothing = steps == null && totals.distanceM == null && active == null && totals.totalKcal == null &&
@@ -74,6 +80,9 @@ object DaySummary {
             workoutSource = "COMPUTED".takeIf { visible.isNotEmpty() },
         )
     }
+
+    fun counts(workout: WorkoutEntity, uncountedWalkApps: Set<String>): Boolean =
+        CountedWorkouts.counts(WorkoutKind.parse(workout.kind), workout.origin, uncountedWalkApps)
 
     private fun source(value: Int?, corrected: Boolean, otherwise: String): String? = when {
         value == null -> null

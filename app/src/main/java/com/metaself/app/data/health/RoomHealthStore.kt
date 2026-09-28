@@ -7,6 +7,8 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.health.HealthKind
 import com.metaself.app.domain.health.HeartRateZones
+import com.metaself.app.domain.movement.CountedWorkouts
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
@@ -35,6 +37,7 @@ class RoomHealthStore @Inject constructor(
     private val profiles: ProfileRepository,
     private val today: Today,
     private val now: Now,
+    private val walks: WalkChoices,
 ) : HealthStore, ArchiveRecord {
 
     private val readingDao get() = database.healthReadingDao()
@@ -112,6 +115,41 @@ class RoomHealthStore @Inject constructor(
         return touched
     }
 
+    override suspend fun sessionGaps(days: Set<Long>): List<SessionGap> {
+        if (days.isEmpty()) return emptyList()
+        val uncounted = walks.uncounted.first()
+        return workoutDao.missingTotalsOn(days.toList())
+            .filter { CountedWorkouts.counts(WorkoutKind.parse(it.kind), it.origin, uncounted) }
+            .map { row ->
+                SessionGap(
+                    id = row.id,
+                    epochDay = row.epochDay,
+                    startMillis = row.startedAtMillis,
+                    endMillis = endOf(row),
+                    needsDistance = row.distanceM == null,
+                    needsEnergy = row.energyKcal == null && row.energySource == "NONE",
+                )
+            }
+    }
+
+    /**
+     * Read and written in one transaction, so a re-read of the session landing between the two cannot
+     * be overwritten with the older row. Marks no archive month: workouts are not in the archive.
+     */
+    override suspend fun fillSessionTotals(id: Long, totals: SessionTotals) {
+        transaction.run {
+            val row = workoutDao.byId(id) ?: return@run
+            if (row.source != WorkoutSource.SYNCED.name) return@run
+            val energy = totals.energyKcal?.takeIf { row.energyKcal == null && row.energySource == "NONE" }
+            val filled = row.copy(
+                distanceM = row.distanceM ?: totals.distanceM,
+                energyKcal = energy ?: row.energyKcal,
+                energySource = if (energy != null) "BAND" else row.energySource,
+            )
+            if (filled != row) workoutDao.update(filled)
+        }
+    }
+
     /** One record, replacing its earlier rows. Inside a transaction the caller holds. */
     private suspend fun store(record: ReadRecord): Set<Long> = when (record) {
         is ReadRecord.Reading -> {
@@ -136,6 +174,10 @@ class RoomHealthStore @Inject constructor(
                 workoutDao.insert(fresh)
                 setOf(fresh.epochDay)
             } else {
+                // D82: a workout file's figures are kept — its steps always, its distance and
+                // calories while Health Connect still gives none; once it does, its own is taken.
+                val fileDistance = fresh.distanceM == null && existing.distanceSource == FILE_SOURCE
+                val fileEnergy = fresh.energyKcal == null && existing.energySource == FILE_SOURCE
                 workoutDao.update(
                     fresh.copy(
                         id = existing.id,
@@ -145,6 +187,12 @@ class RoomHealthStore @Inject constructor(
                         maxHeartRate = existing.maxHeartRate,
                         zoneSeconds = existing.zoneSeconds,
                         zoneMaxSource = existing.zoneMaxSource,
+                        distanceM = if (fileDistance) existing.distanceM else fresh.distanceM,
+                        distanceSource = if (fileDistance) existing.distanceSource else fresh.distanceSource,
+                        energyKcal = if (fileEnergy) existing.energyKcal else fresh.energyKcal,
+                        energySource = if (fileEnergy) existing.energySource else fresh.energySource,
+                        steps = existing.steps,
+                        stepsSource = existing.stepsSource,
                     ),
                 )
                 setOf(existing.epochDay, fresh.epochDay)
@@ -157,18 +205,21 @@ class RoomHealthStore @Inject constructor(
      * that runs past midnight has samples filed on this day, so its figures are worked out again too;
      * the day before is not re-summarised, as its summary counts that workout's minutes, not its
      * heart rate.
+     *
+     * Which apps' walks do not count (D81) is read once for the whole call.
      */
     override suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long) {
         val maxHeartRate = profiles.profile.first()
             ?.let { HeartRateZones.estimatedMax(it.birthYear, today().year) }
+        val uncounted = walks.uncounted.first()
         days.sorted().forEach { epochDay ->
             transaction.run {
                 if (epochDay - 1 !in days) {
                     workoutDao.onDay(epochDay - 1)
                         .filter { rows.dayOf(endOf(it) - 1) >= epochDay }
-                        .forEach { withHeartRate(it, maxHeartRate) }
+                        .forEach { withHeartRate(it, maxHeartRate, uncounted) }
                 }
-                val dayWorkouts = workoutDao.onDay(epochDay).map { withHeartRate(it, maxHeartRate) }
+                val dayWorkouts = workoutDao.onDay(epochDay).map { withHeartRate(it, maxHeartRate, uncounted) }
                 val summary = DaySummary.of(
                     epochDay = epochDay,
                     totals = keepingStored(totals.byDay[epochDay] ?: DayTotals(), totals.failed, dayDao.day(epochDay)),
@@ -177,6 +228,7 @@ class RoomHealthStore @Inject constructor(
                     workouts = dayWorkouts,
                     correction = correctionDao.day(epochDay),
                     nowMillis = nowMillis,
+                    uncountedWalkApps = uncounted,
                 )
                 if (summary == null) dayDao.delete(epochDay) else dayDao.put(summary)
             }
@@ -206,10 +258,11 @@ class RoomHealthStore @Inject constructor(
      *
      * A typed workout (D4) is never given figures this way: nothing recorded it, so a reading that
      * happens to fall inside its typed window is not its heart rate. All four fields stay, or are
-     * made, null.
+     * made, null. A walk from an app whose walks do not count (D81) is treated the same, as it is
+     * counted nowhere; its readings stay, so switching the app back on works the figures out again.
      */
-    private suspend fun withHeartRate(workout: WorkoutEntity, maxHeartRate: Int?): WorkoutEntity {
-        if (workout.source == WorkoutSource.TYPED.name) {
+    private suspend fun withHeartRate(workout: WorkoutEntity, maxHeartRate: Int?, uncounted: Set<String>): WorkoutEntity {
+        if (workout.source == WorkoutSource.TYPED.name || !DaySummary.counts(workout, uncounted)) {
             if (workout.avgHeartRate == null && workout.maxHeartRate == null &&
                 workout.zoneSeconds == null && workout.zoneMaxSource == null
             ) {
@@ -306,3 +359,6 @@ class RoomHealthStore @Inject constructor(
         }
     }
 }
+
+/** A workout figure's source when a workout file gave it (D82), as stored. */
+private const val FILE_SOURCE = "FILE"

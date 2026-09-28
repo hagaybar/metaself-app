@@ -368,7 +368,7 @@ class HealthRecordDaoTest {
         db.workoutDao().insert(typed())
         db.healthDayDao().put(HealthDayEntity(epochDay = TEST_EPOCH_DAY, computedAtMillis = 0, steps = 9_000))
 
-        val report = RoomBandRecord(db).report(BandReport.fromDayFor(TEST_EPOCH_DAY), TEST_EPOCH_DAY)
+        val report = RoomBandRecord(db, FakeWalkChoices()).report(BandReport.fromDayFor(TEST_EPOCH_DAY), TEST_EPOCH_DAY)
 
         assertThat(report.kinds.single { it.kind == HealthKind.HEART_RATE }.count).isEqualTo(2)
         assertThat(report.kinds.single { it.kind == HealthKind.SLEEP }.count).isEqualTo(1)
@@ -379,6 +379,73 @@ class HealthRecordDaoTest {
         assertThat(report.workouts.typed).isEqualTo(1)
         assertThat(report.daysWith.getValue(DayFigure.STEPS)).isEqualTo(1)
     }
+
+    // --- Whose walks count (D81) ---------------------------------------------------------------------
+
+    @Test
+    fun `the days of an app's synced walks, and no other app's, kind or typed workout`() = runTest {
+        val dao = db.workoutDao()
+        dao.insert(synced("w1", day = TEST_EPOCH_DAY).copy(kind = "WALK"))
+        dao.insert(synced("w2", day = TEST_EPOCH_DAY).copy(kind = "WALK"))
+        dao.insert(synced("w3", day = TEST_EPOCH_DAY - 40).copy(kind = "WALK", hidden = true))
+        dao.insert(synced("r1", day = TEST_EPOCH_DAY - 1))
+        dao.insert(synced("p1", day = TEST_EPOCH_DAY - 2).copy(kind = "WALK", origin = OTHER))
+        dao.insert(typed(day = TEST_EPOCH_DAY - 3).copy(kind = "WALK"))
+
+        assertThat(dao.syncedWalkDays(ORIGIN)).containsExactly(TEST_EPOCH_DAY, TEST_EPOCH_DAY - 40)
+    }
+
+    /**
+     * D81: a workout is marked when its own app wrote a distance reading overlapping it. Every workout
+     * starts 1,000 ms into its own day and runs 30 minutes; each reading is placed relative to the
+     * start of its own day, so one day's reading cannot overlap a neighbouring day's workout. Every
+     * figure is invented.
+     *
+     * - inside (day 0): its app's reading at 1–2 min, inside the run → found.
+     * - otherApp (day −1): a reading at 1–2 min, but by another app → not found.
+     * - outside (day −2): its app's reading at 40–50 min, after the run's 30 min → not found.
+     * - straddles (day −3): its app's reading from 0 to 2,000 ms, over the run's start → found.
+     * - day −40: outside the asked days, whatever its readings → not found.
+     */
+    @Test
+    fun `a workout is found when its own app wrote a distance during it, and not otherwise`() = runTest {
+        val dao = db.workoutDao()
+        fun at(day: Long, offset: Long) = day * DAY_MILLIS + offset
+        fun workout(id: String, day: Long) = synced(id, day = day).copy(startedAtMillis = at(day, 1_000))
+        val inside = dao.insert(workout("s1", TEST_EPOCH_DAY))
+        val otherApp = dao.insert(workout("s2", TEST_EPOCH_DAY - 1))
+        val outside = dao.insert(workout("s3", TEST_EPOCH_DAY - 2))
+        val straddles = dao.insert(workout("s4", TEST_EPOCH_DAY - 3))
+        val longAgo = dao.insert(workout("s5", TEST_EPOCH_DAY - 40))
+        db.healthReadingDao().insertAll(
+            listOf(
+                distance("d1", TEST_EPOCH_DAY, from = at(TEST_EPOCH_DAY, 60_000), to = at(TEST_EPOCH_DAY, 120_000)),
+                distance(
+                    "d2", TEST_EPOCH_DAY - 1,
+                    from = at(TEST_EPOCH_DAY - 1, 60_000), to = at(TEST_EPOCH_DAY - 1, 120_000), origin = OTHER,
+                ),
+                distance("d3", TEST_EPOCH_DAY - 2, from = at(TEST_EPOCH_DAY - 2, 40 * 60_000), to = at(TEST_EPOCH_DAY - 2, 50 * 60_000)),
+                distance("d4", TEST_EPOCH_DAY - 3, from = at(TEST_EPOCH_DAY - 3, 0), to = at(TEST_EPOCH_DAY - 3, 2_000)),
+                distance("d5", TEST_EPOCH_DAY - 40, from = at(TEST_EPOCH_DAY - 40, 60_000), to = at(TEST_EPOCH_DAY - 40, 120_000)),
+            ),
+        )
+
+        val found = dao.idsWithOwnDistance(TEST_EPOCH_DAY - 29, TEST_EPOCH_DAY)
+
+        assertThat(found).containsExactly(inside, straddles)
+        assertThat(found).containsNoneOf(otherApp, outside, longAgo)
+    }
+
+    private fun distance(record: String, day: Long, from: Long, to: Long, origin: String = ORIGIN) = HealthReadingEntity(
+        kind = "DISTANCE",
+        startMillis = from,
+        endMillis = to,
+        value = 100.0,
+        unit = "m",
+        origin = origin,
+        recordId = record,
+        epochDay = day,
+    )
 
     private fun typed(day: Long = TEST_EPOCH_DAY, startedAt: Long = 1_000) = WorkoutEntity(
         epochDay = day,
@@ -445,5 +512,7 @@ class HealthRecordDaoTest {
 
     private companion object {
         const val ORIGIN = "com.example.band"
+        const val OTHER = "com.example.phone"
+        const val DAY_MILLIS = 86_400_000L
     }
 }

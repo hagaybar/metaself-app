@@ -12,6 +12,7 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.health.HealthKind
+import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.profile.aProfile
 import kotlinx.coroutines.flow.first
@@ -35,6 +36,7 @@ class HealthRecordStoreTest {
 
     private lateinit var db: MetaSelfDatabase
     private lateinit var store: RoomHealthStore
+    private val walks = FakeWalkChoices()
 
     private val day = TEST_EPOCH_DAY
 
@@ -52,6 +54,7 @@ class HealthRecordStoreTest {
             FakeProfileRepository(aProfile()),
             Today { LocalDate.of(2026, 9, 3) },
             Now { STAMP },
+            walks,
         )
     }
 
@@ -344,6 +347,157 @@ class HealthRecordStoreTest {
         assertThat(workout.zoneMaxSource).isNull()
     }
 
+    /**
+     * D81: a walk from an app switched off is counted nowhere, its heart-rate figures included; its
+     * readings stay, so switching the app back on works them out again.
+     */
+    @Test
+    fun `a walk from an app switched off keeps no heart-rate figures, and gets them back when switched on`() = runTest {
+        store.apply(
+            listOf(session("w-1").copy(kind = "WALK"), heart("hr-1", listOf(100.0, 120.0), at = day * DAY + 60_000)),
+            emptyList(),
+        )
+        store.summarise(setOf(day), TotalsResult(), nowMillis = 1_000)
+        assertThat(db.workoutDao().all().single().avgHeartRate).isEqualTo(110)
+
+        walks.setCounted(ORIGIN, counted = false)
+        store.summarise(setOf(day), TotalsResult.ALL_FAILED, nowMillis = 2_000)
+
+        val left = db.workoutDao().all().single()
+        assertThat(left.avgHeartRate).isNull()
+        assertThat(left.maxHeartRate).isNull()
+        assertThat(left.zoneSeconds).isNull()
+        assertThat(left.zoneMaxSource).isNull()
+
+        walks.setCounted(ORIGIN, counted = true)
+        store.summarise(setOf(day), TotalsResult.ALL_FAILED, nowMillis = 3_000)
+
+        assertThat(db.workoutDao().all().single().avgHeartRate).isEqualTo(110)
+    }
+
+    /** D81: switching re-summarises with every total failed, so the stored totals stand. */
+    @Test
+    fun `summarised again after a switch, the day keeps its totals and loses the walk`() = runTest {
+        store.apply(listOf(session("w-1").copy(kind = "WALK"), session("r-1", at = day * DAY + 60 * MINUTE)), emptyList())
+        store.summarise(setOf(day), totals(DayTotals(steps = 9_000, distanceM = 6_000)), nowMillis = 1_000)
+        assertThat(db.healthDayDao().day(day)!!.workoutCount).isEqualTo(2)
+
+        walks.setCounted(ORIGIN, counted = false)
+        store.summarise(setOf(day), TotalsResult.ALL_FAILED, nowMillis = 2_000)
+
+        val summary = db.healthDayDao().day(day)!!
+        assertThat(summary.workoutCount).isEqualTo(1)
+        assertThat(summary.workoutMinutes).isEqualTo(30)
+        assertThat(summary.steps).isEqualTo(9_000)
+        assertThat(summary.distanceM).isEqualTo(6_000)
+    }
+
+    /**
+     * D81's investigation: a synced session missing its distance or its calories is a gap, found by
+     * day, and filled once Health Connect has the figure; a figure already there is never replaced,
+     * and a typed or hidden workout is never a gap.
+     */
+    @Test
+    fun `a session missing a figure is found by its day and filled, and a figure there is never replaced`() = runTest {
+        store.apply(listOf(session("w-1", distanceM = null), session("w-2", distanceM = 4_000, at = day * DAY + 60 * MINUTE)), emptyList())
+        store.apply(listOf(session("w-3", distanceM = null, at = day * DAY + 120 * MINUTE)), emptyList())
+        db.workoutDao().update(db.workoutDao().all().single { it.originId == "w-3" }.copy(hidden = true))
+        db.workoutDao().insert(
+            WorkoutEntity(
+                epochDay = day, startedAtMillis = day * DAY, durationMinutes = 45, kind = "RUN",
+                title = null, distanceM = null, energyKcal = null, energySource = "NONE",
+                effort = "MODERATE", source = "TYPED", origin = null, originId = null, note = null,
+            ),
+        )
+
+        val gaps = store.sessionGaps(setOf(day))
+
+        val first = db.workoutDao().all().single { it.originId == "w-1" }
+        val second = db.workoutDao().all().single { it.originId == "w-2" }
+        assertThat(gaps).containsExactly(
+            SessionGap(first.id, day, day * DAY, day * DAY + 30 * MINUTE, needsDistance = true, needsEnergy = true),
+            SessionGap(second.id, day, day * DAY + 60 * MINUTE, day * DAY + 90 * MINUTE, needsDistance = false, needsEnergy = true),
+        )
+        assertThat(store.sessionGaps(setOf(day - 1))).isEmpty()
+
+        store.fillSessionTotals(first.id, SessionTotals(distanceM = 5_000, energyKcal = 300))
+        store.fillSessionTotals(second.id, SessionTotals(distanceM = 9_000))
+
+        val filled = db.workoutDao().byId(first.id)!!
+        assertThat(filled.distanceM).isEqualTo(5_000)
+        assertThat(filled.energyKcal).isEqualTo(300)
+        assertThat(filled.energySource).isEqualTo("BAND")
+        assertThat(db.workoutDao().byId(second.id)!!.distanceM).isEqualTo(4_000)
+        assertThat(store.sessionGaps(setOf(day)).map { it.id }).containsExactly(second.id)
+    }
+
+    /** D81: a walk that does not count is counted nowhere, so it is not asked about either. */
+    @Test
+    fun `a walk from an app switched off is not a gap, and its run still is`() = runTest {
+        store.apply(
+            listOf(
+                session("w-1", distanceM = null).copy(kind = "WALK"),
+                session("r-1", distanceM = null, at = day * DAY + 60 * MINUTE),
+            ),
+            emptyList(),
+        )
+        walks.setCounted(ORIGIN, counted = false)
+
+        val run = db.workoutDao().all().single { it.originId == "r-1" }
+        assertThat(store.sessionGaps(setOf(day)).map { it.id }).containsExactly(run.id)
+    }
+
+    /**
+     * D82: a session re-read by the sync keeps what a workout file gave it — steps always, the file's
+     * distance while Health Connect still has none — and takes Health Connect's once it has one.
+     */
+    @Test
+    fun `a re-read session keeps a file's figures until Health Connect has its own`() = runTest {
+        store.apply(listOf(session("w-1", distanceM = null)), emptyList())
+        val row = db.workoutDao().all().single()
+        db.workoutDao().update(row.copy(distanceM = 3_250, distanceSource = "FILE", steps = 4_000, stepsSource = "FILE"))
+
+        store.apply(listOf(session("w-1", distanceM = null)), emptyList())
+        val kept = db.workoutDao().all().single()
+        assertThat(kept.distanceM).isEqualTo(3_250)
+        assertThat(kept.distanceSource).isEqualTo("FILE")
+        assertThat(kept.steps).isEqualTo(4_000)
+
+        store.apply(listOf(session("w-1", distanceM = 5_000)), emptyList())
+        val measured = db.workoutDao().all().single()
+        assertThat(measured.distanceM).isEqualTo(5_000)
+        assertThat(measured.distanceSource).isNull()
+        assertThat(measured.steps).isEqualTo(4_000)
+        assertThat(measured.stepsSource).isEqualTo("FILE")
+    }
+
+    /** D82 over the real table: a file fills a synced session once, with its sources; again, nothing. */
+    @Test
+    fun `a workout file fills a stored session once, and the same file again changes nothing`() = runTest {
+        store.apply(listOf(session("w-1", distanceM = null)), emptyList())
+        val files = RoomWorkoutFileStore(
+            db.workoutDao(),
+            RoomDatabaseTransaction(db),
+            RoomTypedWorkouts(db.workoutDao(), RoomDatabaseTransaction(db), store, Now { STAMP }),
+        )
+        val id = db.workoutDao().all().single().id
+        val file = FileWorkout(
+            writtenAt = java.time.LocalDateTime.of(2026, 9, 3, 0, 0), instant = null, seconds = 1_800,
+            distanceM = 3_250.0, steps = 4_000,
+        )
+
+        assertThat(files.fill(id, file)!!.added.any).isTrue()
+        val filled = db.workoutDao().byId(id)!!
+        assertThat(filled.distanceM).isEqualTo(3_250)
+        assertThat(filled.distanceSource).isEqualTo("FILE")
+        assertThat(filled.steps).isEqualTo(4_000)
+        assertThat(filled.stepsSource).isEqualTo("FILE")
+        assertThat(files.on(setOf(day)).single().fromFile).isTrue()
+
+        assertThat(files.fill(id, file)!!.added.any).isFalse()
+        assertThat(db.workoutDao().byId(id)).isEqualTo(filled)
+    }
+
     /** M1: figures from readings since deleted are cleared, not left standing. */
     @Test
     fun `a workout whose readings are gone loses its heart-rate figures`() = runTest {
@@ -438,7 +592,7 @@ class HealthRecordStoreTest {
         // A change stamped by a later clock moves changedAt on; the old mark no longer covers it.
         val later = RoomHealthStore(
             db, RoomDatabaseTransaction(db), HealthRows(ZoneOffset.UTC), FakeProfileRepository(aProfile()),
-            Today { LocalDate.of(2026, 9, 3) }, Now { STAMP + 1 },
+            Today { LocalDate.of(2026, 9, 3) }, Now { STAMP + 1 }, walks,
         )
         later.apply(listOf(heart("hr-2", listOf(62.0))), emptyList())
         assertThat(store.monthsOutOfDate()).containsExactly("2026-09")
@@ -472,7 +626,7 @@ class HealthRecordStoreTest {
         store.markWritten("2026-09", store.readingsIn("2026-09").changedAtMillis)
         val later = RoomHealthStore(
             db, RoomDatabaseTransaction(db), HealthRows(ZoneOffset.UTC), FakeProfileRepository(aProfile()),
-            Today { LocalDate.of(2026, 9, 3) }, Now { STAMP + 1 },
+            Today { LocalDate.of(2026, 9, 3) }, Now { STAMP + 1 }, walks,
         )
 
         val added = later.insertMissing(

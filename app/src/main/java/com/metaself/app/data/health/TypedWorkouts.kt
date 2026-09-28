@@ -3,6 +3,7 @@ package com.metaself.app.data.health
 import com.metaself.app.data.day.DatabaseTransaction
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -76,6 +77,10 @@ class RoomTypedWorkouts @Inject constructor(
     /**
      * The row is read by its id, never searched for on [workout]'s day: the day it is summarised under
      * is the STORED one. The day is kept, so the row never moves and only that day needs summarising.
+     *
+     * D82: the sheet knows nothing of a workout file, so what a file gave is kept here — its steps
+     * always; its distance and calories, with the file as their source, while the figure is the one
+     * stored. A distance the owner changed is his own (TYPED); calories he changed are TYPED already.
      */
     override suspend fun change(workout: Workout): Boolean {
         var changed = false
@@ -91,7 +96,7 @@ class RoomTypedWorkouts @Inject constructor(
                     maxHeartRate = stored.maxHeartRate,
                     zoneSeconds = stored.zoneSeconds,
                     zoneMaxSource = stored.zoneMaxSource,
-                ),
+                ).keepingFileFigures(stored),
             )
             summariseAgain(stored.epochDay)
             changed = true
@@ -111,11 +116,26 @@ class RoomTypedWorkouts @Inject constructor(
         return deleted
     }
 
+    private fun WorkoutEntity.keepingFileFigures(stored: WorkoutEntity): WorkoutEntity {
+        val fileDistance = stored.distanceSource == FILE
+        return copy(
+            distanceSource = when {
+                fileDistance && distanceM == stored.distanceM -> FILE
+                fileDistance && distanceM != null -> WorkoutFigureSource.TYPED.name
+                else -> distanceSource
+            },
+            energySource = if (stored.energySource == FILE && energyKcal == stored.energyKcal) FILE else energySource,
+            steps = stored.steps,
+            stepsSource = stored.stepsSource,
+        )
+    }
+
     private suspend fun summariseAgain(epochDay: Long) {
         store.summarise(setOf(epochDay), TotalsResult.ALL_FAILED, now())
     }
 
     private companion object {
         val TYPED = WorkoutSource.TYPED.name
+        val FILE = WorkoutFigureSource.FILE.name
     }
 }

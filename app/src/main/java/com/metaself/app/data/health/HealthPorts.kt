@@ -33,6 +33,30 @@ data class TotalsResult(
     }
 }
 
+/**
+ * A workout's distance and movement calories: Health Connect's aggregate over its time, every app's
+ * figures de-duplicated (the same provenance as the figures read with the session). Null for a figure
+ * not asked for, with no data, or whose call failed.
+ */
+data class SessionTotals(val distanceM: Int? = null, val energyKcal: Int? = null)
+
+/**
+ * A synced workout missing a figure Health Connect may have since received (D81's investigation), on
+ * its stored [epochDay].
+ *
+ * [startMillis] is the session's own start, exact. Only [endMillis] is approximate: it is the start
+ * plus the stored duration, which is rounded to whole minutes — the store keeps no end — so the span
+ * asked about may end up to half a minute early or late. Accepted.
+ */
+data class SessionGap(
+    val id: Long,
+    val epochDay: Long,
+    val startMillis: Long,
+    val endMillis: Long,
+    val needsDistance: Boolean,
+    val needsEnergy: Boolean,
+)
+
 /** One page of changes since a token. */
 data class ChangesPage(
     val upserts: List<ReadRecord>,
@@ -58,6 +82,11 @@ interface HealthSource {
      * call failed is in [TotalsResult.failed]; it never throws for one metric's failure.
      */
     suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult
+    /**
+     * A workout's [SessionTotals] over [startMillis, endMillis), asking only for what is flagged: one
+     * aggregation call per figure. A figure whose call failed is null and logged; never throws for it.
+     */
+    suspend fun sessionTotals(startMillis: Long, endMillis: Long, distance: Boolean, energy: Boolean): SessionTotals
     /**
      * Whether this phone's Health Connect can grant reading history older than 30 days at all (D72).
      * Never throws: anything that goes wrong is false.
@@ -93,6 +122,17 @@ interface HealthStore {
     ): Set<Long>
     /** Recomputes each day's summary and its workouts' heart-rate figures. Marks no archive month. */
     suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long)
+    /**
+     * The visible synced workouts on [days] with no distance, or with no calories from their app — a
+     * figure the copying may ask Health Connect for again. A walk that does not count (D81) is left
+     * out: it is counted nowhere, so it is not worth a call.
+     */
+    suspend fun sessionGaps(days: Set<Long>): List<SessionGap>
+    /**
+     * Fills in whichever of [totals] the workout [id] still lacks; a figure already there is never
+     * replaced, and a typed workout is never touched. Calories filled here are the band's (BAND).
+     */
+    suspend fun fillSessionTotals(id: Long, totals: SessionTotals)
     /** Whether the catch-ups have already been re-opened for older history (D72). */
     suspend fun historyActedOn(): Boolean
     /** Records that they have. */

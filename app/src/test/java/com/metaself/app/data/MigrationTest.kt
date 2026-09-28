@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.day.MIGRATION_4_5
 import com.metaself.app.data.day.MIGRATION_5_6
+import com.metaself.app.data.day.MIGRATION_6_7
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -583,6 +584,42 @@ class MigrationTest {
                 assertThat(cursor.moveToFirst()).isTrue()
                 assertThat(cursor.getInt(0)).isEqualTo(0)
             }
+        }
+        migrated.close()
+    }
+
+    /** D82: three nullable columns on `workouts`; an existing workout keeps every figure. Invented figures. */
+    @Test
+    fun `a version 6 database migrates to version 7 and keeps its workouts, the new columns empty`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 6).use { db ->
+            db.execSQL(
+                "INSERT INTO workouts (id, epochDay, startedAtMillis, durationMinutes, kind, title, distanceM, " +
+                    "energyKcal, energySource, source, origin, originId, hidden) VALUES " +
+                    "(1, 20699, 1000, 30, 'WALK', 'Walking', 3000, 150, 'BAND', 'SYNCED', 'com.example.band', 'w-1', 0)",
+            )
+            db.execSQL("INSERT INTO meals (id, epochDay, loggedAtMillis, note) VALUES (1, 20699, 1000, NULL)")
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 7, true, MIGRATION_6_7)
+
+        migrated.query(
+            "SELECT distanceM, energyKcal, energySource, originId, distanceSource, steps, stepsSource FROM workouts",
+        ).use { cursor ->
+            assertThat(cursor.count).isEqualTo(1)
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(3000)
+            assertThat(cursor.getInt(1)).isEqualTo(150)
+            assertThat(cursor.getString(2)).isEqualTo("BAND")
+            assertThat(cursor.getString(3)).isEqualTo("w-1")
+            assertThat(cursor.isNull(4)).isTrue()
+            assertThat(cursor.isNull(5)).isTrue()
+            assertThat(cursor.isNull(6)).isTrue()
+        }
+        migrated.query("SELECT COUNT(*) FROM meals").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(1)
         }
         migrated.close()
     }

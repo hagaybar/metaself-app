@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.Problem
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.health.HealthKind
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -475,6 +476,210 @@ class HealthRecordSyncTest {
         assertThat(problems.logged.map { it.detail }.any { it.contains("older history") }).isTrue()
     }
 
+    // --- A workout's missing distance, asked again (D81's investigation) ---------------------------
+
+    /**
+     * A session read before its app wrote the distance of that stretch had none, and was never asked
+     * again. Now a synced session missing a figure, on a day that has just received that figure's
+     * readings, is asked again.
+     */
+    @Test
+    fun `a session missing its distance on a day distance just arrived is asked for it again, and it is stored`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.ACTIVE_KCAL, HealthKind.EXERCISE)
+        source.pages = mutableListOf(page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)))
+        store.gaps = listOf(gap(7, 99, needsDistance = true, needsEnergy = true))
+        source.sessionTotals = { _, _ -> SessionTotals(distanceM = 5_000) }
+
+        sync.copyNow()
+
+        assertThat(store.gapsAsked.single()).containsExactly(98L, 99L)
+        assertThat(sessionCalls()).containsExactly("session ${99 * DAY}..${99 * DAY + 30 * MINUTE} distance=true energy=false")
+        assertThat(store.filled).containsExactly(7L to SessionTotals(distanceM = 5_000))
+    }
+
+    @Test
+    fun `a session missing its calories on a day calories just arrived is asked for calories only`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.ACTIVE_KCAL, HealthKind.EXERCISE)
+        // Distance drains first (HealthKind's order) and gets the empty page; calories get the second.
+        source.pages = mutableListOf(page(), page(reading(HealthKind.ACTIVE_KCAL, "k-1", 99 * DAY)))
+        store.gaps = listOf(gap(7, 99, needsDistance = true, needsEnergy = true))
+
+        sync.copyNow()
+
+        assertThat(sessionCalls()).containsExactly("session ${99 * DAY}..${99 * DAY + 30 * MINUTE} distance=false energy=true")
+    }
+
+    /** A session filed the day before, running past midnight, may have its distance filed on this day. */
+    @Test
+    fun `a session on the day before a day distance arrived is asked too, and one two days before is not`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        source.pages = mutableListOf(page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)))
+        store.gaps = listOf(gap(7, 98, needsDistance = true), gap(8, 97, needsDistance = true))
+
+        sync.copyNow()
+
+        assertThat(sessionCalls()).containsExactly("session ${98 * DAY}..${98 * DAY + 30 * MINUTE} distance=true energy=false")
+    }
+
+    /** Only distance or calories arriving can change a session's missing figures; steps cannot. */
+    @Test
+    fun `days that received only other kinds are not looked at`() = runTest {
+        grantedAllDone(HealthKind.STEPS, HealthKind.DISTANCE, HealthKind.EXERCISE)
+        source.pages = mutableListOf(page(reading(HealthKind.STEPS, "st-1", 99 * DAY)))
+        store.gaps = listOf(gap(7, 99, needsDistance = true))
+
+        sync.copyNow()
+
+        assertThat(store.gapsAsked).isEmpty()
+        assertThat(sessionCalls()).isEmpty()
+    }
+
+    @Test
+    fun `nothing is asked when no session is missing anything`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        source.pages = mutableListOf(page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)))
+
+        sync.copyNow()
+
+        assertThat(store.gapsAsked).hasSize(1)
+        assertThat(sessionCalls()).isEmpty()
+        assertThat(store.filled).isEmpty()
+    }
+
+    @Test
+    fun `a figure the session already has is not asked for, though its readings arrived`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.ACTIVE_KCAL, HealthKind.EXERCISE)
+        source.pages = mutableListOf(
+            page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)),
+            page(reading(HealthKind.ACTIVE_KCAL, "k-1", 99 * DAY)),
+        )
+        store.gaps = listOf(
+            gap(7, 99, needsDistance = false, needsEnergy = true),
+            gap(8, 99, startMinute = 60, needsDistance = true, needsEnergy = false),
+        )
+
+        sync.copyNow()
+
+        assertThat(sessionCalls()).containsExactly(
+            "session ${99 * DAY + 60 * MINUTE}..${99 * DAY + 90 * MINUTE} distance=true energy=false",
+            "session ${99 * DAY}..${99 * DAY + 30 * MINUTE} distance=false energy=true",
+        ).inOrder()
+    }
+
+    @Test
+    fun `without workouts allowed, no session is looked for`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE)
+        source.pages = mutableListOf(page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)))
+
+        sync.copyNow()
+
+        assertThat(store.gapsAsked).isEmpty()
+    }
+
+    /** An expired token's re-read of the window touches every day it holds; that is not an arrival. */
+    @Test
+    fun `days only an expired token's re-read touched are not asked again`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        source.pages = mutableListOf(ChangesPage(emptyList(), emptyList(), "x", hasMore = false, expired = true))
+        store.replacedDays = setOf(95L, 99L)
+        store.gaps = listOf(gap(7, 99, needsDistance = true))
+
+        sync.copyNow()
+
+        assertThat(store.replaced).isNotEmpty()
+        assertThat(store.gapsAsked).isEmpty()
+        assertThat(sessionCalls()).isEmpty()
+    }
+
+    @Test
+    fun `an ask that fails is logged, and the next session is still asked`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        source.pages = mutableListOf(page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)))
+        store.gaps = listOf(gap(7, 99, needsDistance = true), gap(8, 99, startMinute = 60, needsDistance = true))
+        source.sessionTotals = { start, _ ->
+            if (start == 99 * DAY + 60 * MINUTE) throw IllegalStateException("unavailable") else SessionTotals(distanceM = 3_000)
+        }
+
+        sync.copyNow()
+
+        assertThat(store.filled).containsExactly(7L to SessionTotals(distanceM = 3_000))
+        assertThat(problems.logged.map { it.detail }).contains("workout totals: IllegalStateException unavailable")
+    }
+
+    /** Leaving the screen stops the copying; asking again must not swallow that (D8 is for failures). */
+    @Test
+    fun `a cancellation while asking again is not logged and stops the copying`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        source.pages = mutableListOf(page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)))
+        store.gaps = listOf(gap(7, 99, needsDistance = true), gap(8, 99, startMinute = 60, needsDistance = true))
+        source.sessionTotals = { _, _ -> throw CancellationException("left") }
+
+        val outcome = runCatching { sync.copyNow() }
+
+        assertThat(outcome.exceptionOrNull()).isInstanceOf(CancellationException::class.java)
+        assertThat(sessionCalls()).hasSize(1)
+        assertThat(store.summarised).isEmpty()
+        assertThat(problems.logged).isEmpty()
+    }
+
+    /** The cap is a choice ([HealthRecordSync.SESSION_ASKS_PER_OPEN]); the newest sessions go first. */
+    @Test
+    fun `at most the cap of sessions are asked in one open, newest first, and the rest are logged`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        source.pages = mutableListOf(page(reading(HealthKind.DISTANCE, "d-1", 99 * DAY)))
+        val cap = HealthRecordSync.SESSION_ASKS_PER_OPEN
+        store.gaps = (0 until cap + 2).map { n -> gap(n.toLong(), 99, startMinute = n * 40L, needsDistance = true) }
+
+        sync.copyNow()
+
+        val asked = sessionCalls()
+        assertThat(asked).hasSize(cap)
+        assertThat(asked.first()).startsWith("session ${99 * DAY + (cap + 1) * 40 * MINUTE}..")
+        assertThat(asked.joinToString()).doesNotContain("session ${99 * DAY}..")
+        assertThat(problems.logged.map { it.detail }).contains("workout totals: 2 more not asked this open")
+    }
+
+    /** Catch-up weeks were read just now, sessions and all; they are not asked twice in one open. */
+    @Test
+    fun `days only a catch-up week touched are not asked again`() = runTest {
+        source.granted = setOf(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        store.bookmarks[HealthKind.DISTANCE] = HealthSyncEntity(
+            kind = "DISTANCE", changesToken = "a", tokenAtMillis = 0, catchUpCursorMillis = 100 * DAY, catchUpDone = false,
+        )
+        store.bookmarks[HealthKind.EXERCISE] = done("e", HealthKind.EXERCISE)
+        source.windowRecords = { from, _ -> if (from == 93 * DAY) listOf(reading(HealthKind.DISTANCE, "d-1", 95 * DAY)) else emptyList() }
+        store.gaps = listOf(gap(7, 95, needsDistance = true))
+
+        sync.copyNow()
+
+        assertThat(store.gapsAsked).isEmpty()
+        assertThat(sessionCalls()).isEmpty()
+    }
+
+    private fun sessionCalls() = source.calls.filter { it.startsWith("session") }
+
+    private fun page(vararg records: ReadRecord) = ChangesPage(records.toList(), emptyList(), "next", hasMore = false, expired = false)
+
+    private fun reading(kind: HealthKind, id: String, at: Long) = ReadRecord.Reading(
+        kind, "com.example.band", id, listOf(Sample(at, at + 60_000, 100.0)),
+    )
+
+    /** A session on [day], starting [startMinute] minutes into it and lasting 30. */
+    private fun gap(id: Long, day: Long, startMinute: Long = 0, needsDistance: Boolean = false, needsEnergy: Boolean = false) =
+        SessionGap(
+            id = id,
+            epochDay = day,
+            startMillis = day * DAY + startMinute * MINUTE,
+            endMillis = day * DAY + (startMinute + 30) * MINUTE,
+            needsDistance = needsDistance,
+            needsEnergy = needsEnergy,
+        )
+
+    private fun grantedAllDone(vararg kinds: HealthKind) {
+        source.granted = kinds.toSet()
+        kinds.forEach { store.bookmarks[it] = done("t-$it", it) }
+    }
+
     // --- Fakes -----------------------------------------------------------------------------------
 
     private fun done(token: String, kind: HealthKind = HealthKind.STEPS) = HealthSyncEntity(
@@ -527,6 +732,11 @@ class HealthRecordSyncTest {
             refuseBefore?.let { if (toMillis <= it) throw refusal() }
             return windowRecords(fromMillis, toMillis)
         }
+        var sessionTotals: (Long, Long) -> SessionTotals = { _, _ -> SessionTotals() }
+        override suspend fun sessionTotals(startMillis: Long, endMillis: Long, distance: Boolean, energy: Boolean): SessionTotals {
+            calls += "session $startMillis..$endMillis distance=$distance energy=$energy"
+            return sessionTotals(startMillis, endMillis)
+        }
         override suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult {
             calls += "totals $fromDay..$toDay"
             totalsThrowFrom?.let { if (fromDay >= it) throw IllegalStateException("unavailable") }
@@ -557,13 +767,24 @@ class HealthRecordSyncTest {
             return records.filterIsInstance<ReadRecord.Reading>()
                 .flatMap { r -> r.samples.map { it.startMillis / DAY } }.toSet()
         }
+        var replacedDays = emptySet<Long>()
         override suspend fun replaceWindow(kind: HealthKind, fromMillis: Long, toMillis: Long, records: List<ReadRecord>): Set<Long> {
             replaced += "$kind $fromMillis..$toMillis"
-            return emptySet()
+            return replacedDays
         }
         override suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long) {
             summarised += days
             totalsGiven += totals
+        }
+        var gaps = emptyList<SessionGap>()
+        val gapsAsked = mutableListOf<Set<Long>>()
+        val filled = mutableListOf<Pair<Long, SessionTotals>>()
+        override suspend fun sessionGaps(days: Set<Long>): List<SessionGap> {
+            gapsAsked += days
+            return gaps
+        }
+        override suspend fun fillSessionTotals(id: Long, totals: SessionTotals) {
+            filled += id to totals
         }
     }
 
@@ -576,5 +797,6 @@ class HealthRecordSyncTest {
 
     private companion object {
         const val DAY = 86_400_000L
+        const val MINUTE = 60_000L
     }
 }

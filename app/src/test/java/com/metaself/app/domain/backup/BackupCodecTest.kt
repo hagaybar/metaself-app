@@ -133,8 +133,37 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 3`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(3)
+    fun `the format is version 4`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(4)
+    }
+
+    /** D82: what a workout file added, and its source, is in the file. Invented figures. */
+    @Test
+    fun `a workout's file figures and their sources survive the file`() {
+        val workout = BackupWorkout(
+            epochDay = 20_699, startedAtMillis = 1_000, durationMinutes = 30, kind = "WALK",
+            distanceM = 3_000, energySource = "NONE", source = "SYNCED", origin = "com.example.band",
+            originId = "w-1", distanceSource = "FILE", steps = 4_000, stepsSource = "FILE",
+        )
+
+        val text = BackupCodec.encode(Backup(exportedAtMillis = 1, workouts = listOf(workout)))
+
+        assertThat(text).contains("\"distance_source\": \"FILE\"")
+        assertThat(text).contains("\"steps_source\": \"FILE\"")
+        assertThat(BackupCodec.decode(text)!!.workouts.single()).isEqualTo(workout)
+    }
+
+    /** A version 3 file's workouts have none of the three; they read as none. */
+    @Test
+    fun `a version 3 workout reads with no file figures`() {
+        val version3 = """{"version": 3, "exported_at": 1000, "workouts": [{"epoch_day": 20699, "started_at": 1000,
+            "duration_minutes": 30, "kind": "WALK", "energy_source": "NONE", "source": "SYNCED"}]}"""
+
+        val workout = BackupCodec.decode(version3)!!.workouts.single()
+
+        assertThat(workout.distanceSource).isNull()
+        assertThat(workout.steps).isNull()
+        assertThat(workout.stepsSource).isNull()
     }
 
     /**

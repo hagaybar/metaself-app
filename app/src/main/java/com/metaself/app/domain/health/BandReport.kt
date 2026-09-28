@@ -1,5 +1,6 @@
 package com.metaself.app.domain.health
 
+import com.metaself.app.domain.movement.CountedWorkouts
 import com.metaself.app.domain.movement.WorkoutKind
 
 /** How many of [kind]'s rows [origin] wrote on [epochDay]. A night is one sleep row. */
@@ -18,6 +19,27 @@ data class ArrivedWorkout(
     /** Worked out here from the readings inside the session (D70). */
     val hasHeartRate: Boolean,
     val hasTitle: Boolean,
+    /**
+     * Its writing app itself stored a distance reading overlapping it (D81) — whatever the workout's
+     * own distance, which is Health Connect's total over its time from every app.
+     */
+    val ownDistance: Boolean = false,
+)
+
+/**
+ * One app that wrote workouts in the window, or whose walks were switched off (D81).
+ *
+ * @property withDistance its workouts that carry a distance.
+ * @property withOwnDistance its workouts during which it wrote a distance reading itself.
+ * @property walksCounted false when the owner switched its walks off.
+ */
+data class WorkoutApp(
+    val origin: String,
+    val workouts: Int,
+    val walks: Int,
+    val withDistance: Int,
+    val withOwnDistance: Int,
+    val walksCounted: Boolean,
 )
 
 /** The figures of the daily summary (D69) the report counts days for, in the spec's order. */
@@ -65,8 +87,17 @@ data class WorkoutArrivals(
     val typed: Int = 0,
     val copiedWithDistance: Int = 0,
     val copiedWithCalories: Int = 0,
+    /**
+     * The copied ones carrying heart-rate figures worked out here (D70). A walk that does not count
+     * (D81) has its figures cleared at every summarise, so it is never among these: with walks
+     * switched off, this falls short of [copied] by at least those walks, whatever their readings.
+     */
     val copiedWithHeartRate: Int = 0,
     val copiedWithTitle: Int = 0,
+    /** Walks from an app switched off (D81): arrived, stored, and counted nowhere. */
+    val notCounted: Int = 0,
+    /** Most workouts first, a tie by name; an app switched off with none in the window comes last. */
+    val apps: List<WorkoutApp> = emptyList(),
 )
 
 /**
@@ -81,6 +112,8 @@ data class BandReport(
     val workouts: WorkoutArrivals,
     /** On how many days of the window each figure has a value; every figure is a key. */
     val daysWith: Map<DayFigure, Int>,
+    /** The packages whose walks do not count (D81), as they stood when the report was read. */
+    val uncountedWalkApps: Set<String> = emptySet(),
 ) {
     val windowDays: Int get() = (toDay - fromDay + 1).toInt()
 
@@ -104,6 +137,7 @@ data class BandReport(
             arrivals: List<Arrival>,
             workouts: List<ArrivedWorkout>,
             days: List<DayCoverage>,
+            uncountedWalkApps: Set<String> = emptySet(),
         ): BandReport {
             val window = fromDay..toDay
             val theWorkouts = workouts.filter { it.epochDay in window }
@@ -129,9 +163,27 @@ data class BandReport(
                     copiedWithCalories = copied.count { it.hasCalories },
                     copiedWithHeartRate = copied.count { it.hasHeartRate },
                     copiedWithTitle = copied.count { it.hasTitle },
+                    notCounted = theWorkouts.count { !CountedWorkouts.counts(it.kind, it.origin, uncountedWalkApps) },
+                    apps = apps(copied, uncountedWalkApps),
                 ),
                 daysWith = DayFigure.entries.associateWith { figure -> theDays.count { figure in it.figures } },
+                uncountedWalkApps = uncountedWalkApps,
             )
+        }
+
+        private fun apps(copied: List<ArrivedWorkout>, uncounted: Set<String>): List<WorkoutApp> {
+            val byApp = copied.filter { it.origin != null }.groupBy { it.origin!! }
+            return (byApp.keys + uncounted).map { origin ->
+                val own = byApp[origin].orEmpty()
+                WorkoutApp(
+                    origin = origin,
+                    workouts = own.size,
+                    walks = own.count { it.kind == WorkoutKind.WALK },
+                    withDistance = own.count { it.hasDistance },
+                    withOwnDistance = own.count { it.ownDistance },
+                    walksCounted = origin !in uncounted,
+                )
+            }.sortedWith(compareByDescending<WorkoutApp> { it.workouts }.thenBy { it.origin })
         }
     }
 }

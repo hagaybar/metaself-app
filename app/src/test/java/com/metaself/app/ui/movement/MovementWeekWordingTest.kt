@@ -8,6 +8,7 @@ import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
@@ -299,6 +300,22 @@ class MovementWeekWordingTest {
 
         assertThat(rows.mapNotNull { it.workout }).containsExactly(typed)
         assertThat(rows.single { it.workout != null }.text).isEqualTo("Weights · 45 min · about 150 kcal, estimated")
+    }
+
+    /** D82: a file's distance says so, to its metre-true two decimals; a file's calories say so too. */
+    @Test
+    fun `a workout's figures from a file say they are from the file`() {
+        val filled = workout(title = "Walking", minutes = 40, distanceM = 3_250, kind = WorkoutKind.WALK)
+            .copy(distanceSource = WorkoutFigureSource.FILE)
+        val added = aTypedWorkout(kind = WorkoutKind.WALK, minutes = 40, energyKcal = 250, energySource = EnergySource.FILE)
+
+        val filledRow = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(filled), 1_840))
+            .single { it.workout != null }.text
+        val addedRow = MovementWeekWording.detailRows(MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(added), 1_840))
+            .single { it.workout != null }.text
+
+        assertThat(filledRow).isEqualTo("Walking · 3.25 km (from file) · 40 min")
+        assertThat(addedRow).isEqualTo("Walking · 40 min · 250 kcal, from the file")
     }
 
     private fun workout(

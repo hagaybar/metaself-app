@@ -5,10 +5,13 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.FigureSource
+import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.movement.WorkoutFileRefusal
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.ui.ComposeRender
@@ -16,6 +19,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.time.LocalDateTime
 
 /**
  * JUnit 4 by necessity — Robolectric's runner is JUnit 4.
@@ -260,6 +264,68 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("The movement record could not be read; Recent problems says why.")
     }
 
+    // --- A workout file (D82). What this proves: the words and their order, and that each button
+    // calls back. What it cannot: the system picker opening, or the share list — phone checks. ---
+
+    /** An invented file: a walk at 10:00 on 3 September 2026. */
+    private val aFile = FileWorkout(writtenAt = LocalDateTime.of(2026, 9, 3, 10, 0), instant = null, seconds = 1_800, distanceM = 3_000.0)
+
+    @Test
+    fun `the way to import a workout file is drawn after the week, and asks for a file`() {
+        var asked = 0
+        draw(onChooseFile = { asked++ })
+
+        assertThat(render.isDrawnBefore("Mon 31 Aug", "Import a workout file")).isTrue()
+        render.click("Import a workout file")
+
+        assertThat(asked).isEqualTo(1)
+    }
+
+    @Test
+    fun `a file that matched nothing says so and offers to add it`() {
+        var added = 0
+        val texts = draw(
+            state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, fileImport = FileImportState(ImportOutcome.NoMatch(aFile))),
+            onAddFromFile = { added++ },
+        )
+
+        assertThat(texts).contains("No workout matches this file (Thu 3 Sep 10:00).")
+        assertThat(render.isDrawnBefore("No workout matches", "Add it as a workout")).isTrue()
+        render.click("Add it as a workout")
+        assertThat(added).isEqualTo(1)
+    }
+
+    @Test
+    fun `several matches are listed, and choosing one calls back with it`() {
+        var chosen: Long? = null
+        val choices = listOf(aTypedWorkout(id = 4, kind = WorkoutKind.WALK), aTypedWorkout(id = 5, kind = WorkoutKind.RUN, minutes = 30))
+        val texts = draw(
+            state = MovementUiState(week = week, openDay = null, fileImport = FileImportState(ImportOutcome.Several(aFile, choices))),
+            onChooseForFile = { chosen = it },
+        )
+
+        assertThat(texts).contains("Several workouts match this file; choose one.")
+        render.click("Running ·")
+        assertThat(chosen).isEqualTo(5L)
+    }
+
+    @Test
+    fun `a refused file says why, and the line can be dismissed`() {
+        var dismissed = 0
+        val texts = draw(
+            state = MovementUiState(
+                week = week, openDay = TEST_EPOCH_DAY,
+                fileImport = FileImportState(ImportOutcome.Refused(WorkoutFileRefusal.NOTHING_TO_ADD)),
+            ),
+            onDismissFile = { dismissed++ },
+        )
+
+        assertThat(texts).contains("The file has no distance, steps or calories to add.")
+        assertThat(texts).doesNotContain("Add it as a workout")
+        render.click("Done")
+        assertThat(dismissed).isEqualTo(1)
+    }
+
     private fun draw(
         openDay: Long? = TEST_EPOCH_DAY,
         state: MovementUiState = MovementUiState(week = week, openDay = openDay),
@@ -267,6 +333,10 @@ class MovementScreenRenderTest {
         onLogWorkout: () -> Unit = {},
         onOpenWorkout: (Workout) -> Unit = {},
         onUndoDelete: () -> Unit = {},
+        onChooseFile: () -> Unit = {},
+        onAddFromFile: () -> Unit = {},
+        onChooseForFile: (Long) -> Unit = {},
+        onDismissFile: () -> Unit = {},
     ): List<String> = render.texts {
         MovementScreen(
             state = state,
@@ -275,6 +345,10 @@ class MovementScreenRenderTest {
             onLogWorkout = onLogWorkout,
             onOpenWorkout = onOpenWorkout,
             onUndoDelete = onUndoDelete,
+            onChooseFile = onChooseFile,
+            onAddFromFile = onAddFromFile,
+            onChooseForFile = onChooseForFile,
+            onDismissFile = onDismissFile,
         )
     }
 }

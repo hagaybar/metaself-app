@@ -125,6 +125,23 @@ class MovementWeekTest {
         assertThat(week.workoutMinutes).isEqualTo(135)
     }
 
+    /** D81: a walk from an app switched off is left out as a hidden session is: rows, counts and time. */
+    @Test
+    fun `a walk that does not count is left out of the rows, the counts and the time`() {
+        val workouts = listOf(
+            workout(20_699, minutes = 30),
+            workout(20_699, minutes = 40, kind = WorkoutKind.WALK, counted = false),
+            workout(20_698, minutes = 50, kind = WorkoutKind.WALK),
+        )
+
+        val week = MovementWeek.of(today, emptyList(), workouts, emptyMap())
+
+        assertThat(week.workoutCount).isEqualTo(1)
+        assertThat(week.walkCount).isEqualTo(1)
+        assertThat(week.workoutMinutes).isEqualTo(80)
+        assertThat(week.days.first().workouts.map { it.durationMinutes }).containsExactly(30)
+    }
+
     @Test
     fun `a day's workouts are in the order they started`() {
         val workouts = listOf(
@@ -198,10 +215,11 @@ class MovementWeekTest {
         hidden: Boolean = false,
         startedAtMillis: Long = 0,
         kind: WorkoutKind = WorkoutKind.RUN,
+        counted: Boolean = true,
     ) = Workout(
         id = 0, epochDay = epochDay, startedAtMillis = startedAtMillis, durationMinutes = minutes,
         kind = kind, title = "Running", distanceM = null, energyKcal = null,
         energySource = EnergySource.NONE, effort = null, source = WorkoutSource.SYNCED,
-        hidden = hidden, note = null,
+        hidden = hidden, note = null, counted = counted,
     )
 }

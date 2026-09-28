@@ -183,6 +183,38 @@ class DaySummaryTest {
         assertThat(summary?.workoutCount).isEqualTo(1)
     }
 
+    /** D81: a walk from an app switched off is not one of the day's workouts; its run still is. */
+    @Test
+    fun `a walk from an app whose walks do not count is left out, its run is not`() {
+        val summary = DaySummary.of(
+            day, DayTotals(), emptyList(), emptyList(),
+            listOf(workout(30), walk(40), walk(50, origin = PHONE)),
+            null, 1_000, uncountedWalkApps = setOf(ORIGIN),
+        )!!
+
+        assertThat(summary.workoutCount).isEqualTo(2)
+        assertThat(summary.workoutMinutes).isEqualTo(80)
+    }
+
+    @Test
+    fun `a day holding nothing but a walk that does not count has no summary`() {
+        val summary = DaySummary.of(
+            day, DayTotals(), emptyList(), emptyList(), listOf(walk(40)), null, 1_000, uncountedWalkApps = setOf(ORIGIN),
+        )
+
+        assertThat(summary).isNull()
+    }
+
+    @Test
+    fun `with no app switched off, every walk counts`() {
+        val summary = DaySummary.of(day, DayTotals(), emptyList(), emptyList(), listOf(walk(40)), null, 1_000)!!
+
+        assertThat(summary.workoutCount).isEqualTo(1)
+    }
+
+    private fun walk(minutes: Int, origin: String = ORIGIN) =
+        workout(minutes).copy(kind = "WALK", origin = origin, originId = "walk-$origin-$minutes")
+
     private fun typed(minutes: Int) = workout(minutes).copy(
         kind = "STRENGTH", source = "TYPED", origin = null, originId = null,
         effort = "MODERATE", energySource = "MET_ESTIMATE", energyKcal = 150,
@@ -219,6 +251,7 @@ class DaySummaryTest {
 
     private companion object {
         const val ORIGIN = "com.example.band"
+        const val PHONE = "com.example.phone"
         const val MINUTE = 60_000L
     }
 }

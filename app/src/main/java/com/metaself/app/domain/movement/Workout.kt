@@ -24,9 +24,21 @@ enum class Effort { EASY, MODERATE, HARD }
 
 /**
  * Where a workout's energy figure came from (D4). A band's own number, a formula's guess from kind
- * and effort, the owner's typed figure, or nothing — and the screen says which.
+ * and effort, the owner's typed figure, nothing — or a workout file's (D82) — and the screen says which.
  */
-enum class EnergySource { BAND, MET_ESTIMATE, TYPED, NONE }
+enum class EnergySource { BAND, MET_ESTIMATE, TYPED, NONE, FILE }
+
+/**
+ * Where a workout's distance or steps came from when it is not Health Connect's total over the
+ * session (D82): a workout file, or the owner's typing. Null means Health Connect's, as before D82.
+ */
+enum class WorkoutFigureSource {
+    FILE, TYPED;
+
+    companion object {
+        fun parse(stored: String?): WorkoutFigureSource? = entries.firstOrNull { it.name == stored }
+    }
+}
 
 /** Whether the band recorded it or the owner did. */
 enum class WorkoutSource { SYNCED, TYPED }
@@ -60,7 +72,25 @@ data class Workout(
      * null when there were none. Defaulted, so every workout built before the Movement screen still compiles.
      */
     val avgHeartRate: Int? = null,
+    /**
+     * False for a walk from an app whose walks the owner switched off (D81, [CountedWorkouts]): it
+     * stays stored but is counted nowhere, as a hidden one is. Worked out as it is read, never stored.
+     */
+    val counted: Boolean = true,
+    /**
+     * Where [distanceM] came from when a workout file is involved (D82): FILE, or TYPED over a file's.
+     * Null is a synced session's Health Connect total, or a typed workout's typed distance.
+     */
+    val distanceSource: WorkoutFigureSource? = null,
+    /** Steps in the session: only ever a workout file's (D82). */
+    val steps: Int? = null,
+    val stepsSource: WorkoutFigureSource? = null,
 ) {
+    /** A file gave it any figure (D82) — how a second import of the same file finds it again. */
+    val fromFile: Boolean
+        get() = distanceSource == WorkoutFigureSource.FILE || stepsSource == WorkoutFigureSource.FILE ||
+            energySource == EnergySource.FILE
+
     /** Seconds per kilometre — "5:30 /km" on screen — or null without a distance. */
     val paceSecondsPerKm: Int?
         get() = distanceM?.takeIf { it > 0 && durationMinutes > 0 }

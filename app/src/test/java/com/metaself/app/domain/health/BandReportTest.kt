@@ -82,8 +82,56 @@ class BandReportTest {
                 copiedWithCalories = 1,
                 copiedWithHeartRate = 4,
                 copiedWithTitle = 3,
+                apps = listOf(WorkoutApp(BAND, workouts = 4, walks = 3, withDistance = 3, withOwnDistance = 0, walksCounted = true)),
             ),
         )
+    }
+
+    /** D81: a walk from an app switched off is still counted as arrived, and marked as not counted. */
+    @Test
+    fun `walks from an app switched off are counted as arrived and as not counted`() {
+        val workouts = List(3) { copied(WorkoutKind.WALK) } + copied(WorkoutKind.RUN) +
+            copied(WorkoutKind.WALK, origin = PHONE) + typed(WorkoutKind.WALK)
+
+        val report = report(workouts = workouts, uncounted = setOf(BAND))
+
+        assertThat(report.workouts.total).isEqualTo(6)
+        assertThat(report.workouts.notCounted).isEqualTo(3)
+        assertThat(report.uncountedWalkApps).containsExactly(BAND)
+    }
+
+    @Test
+    fun `each app that wrote workouts is listed, most first, with its walks and distances`() {
+        val workouts = listOf(
+            copied(WorkoutKind.WALK, distance = true, ownDistance = true),
+            copied(WorkoutKind.WALK, distance = true),
+            copied(WorkoutKind.RUN),
+            copied(WorkoutKind.WALK, origin = PHONE),
+            typed(WorkoutKind.WALK),
+        )
+
+        assertThat(report(workouts = workouts, uncounted = setOf(PHONE)).workouts.apps).containsExactly(
+            WorkoutApp(BAND, workouts = 3, walks = 2, withDistance = 2, withOwnDistance = 1, walksCounted = true),
+            WorkoutApp(PHONE, workouts = 1, walks = 1, withDistance = 0, withOwnDistance = 0, walksCounted = false),
+        ).inOrder()
+    }
+
+    @Test
+    fun `apps with as many workouts are listed by name`() {
+        val workouts = listOf(copied(WorkoutKind.RUN, origin = PHONE), copied(WorkoutKind.RUN))
+
+        assertThat(report(workouts = workouts).workouts.apps.map { it.origin }).containsExactly(BAND, PHONE).inOrder()
+    }
+
+    /** So a choice can always be undone from the page that made it. */
+    @Test
+    fun `an app switched off with no workouts in the window is still listed`() {
+        val apps = report(workouts = listOf(copied(WorkoutKind.RUN)), uncounted = setOf(PHONE)).workouts.apps
+
+        assertThat(apps).containsExactly(
+            WorkoutApp(BAND, workouts = 1, walks = 0, withDistance = 0, withOwnDistance = 0, walksCounted = true),
+            WorkoutApp(PHONE, workouts = 0, walks = 0, withDistance = 0, withOwnDistance = 0, walksCounted = false),
+        ).inOrder()
     }
 
     @Test
@@ -114,7 +162,8 @@ class BandReportTest {
         arrivals: List<Arrival> = emptyList(),
         workouts: List<ArrivedWorkout> = emptyList(),
         days: List<DayCoverage> = emptyList(),
-    ) = BandReport.of(from, today, arrivals, workouts, days)
+        uncounted: Set<String> = emptySet(),
+    ) = BandReport.of(from, today, arrivals, workouts, days, uncounted)
 
     private fun copied(
         kind: WorkoutKind,
@@ -122,7 +171,9 @@ class BandReportTest {
         calories: Boolean = false,
         heartRate: Boolean = false,
         title: Boolean = false,
-    ) = ArrivedWorkout(today, kind, typed = false, origin = BAND, distance, calories, heartRate, title)
+        origin: String = BAND,
+        ownDistance: Boolean = false,
+    ) = ArrivedWorkout(today, kind, typed = false, origin = origin, distance, calories, heartRate, title, ownDistance)
 
     private fun typed(kind: WorkoutKind) =
         ArrivedWorkout(today, kind, typed = true, origin = null, hasDistance = false, hasCalories = false, hasHeartRate = false, hasTitle = false)

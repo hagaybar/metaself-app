@@ -233,4 +233,13 @@ class WorkoutDraftTest {
         const val DAY_MS = 86_400_000L
         const val HOUR_MS = 3_600_000L
     }
+
+    /** D82: a file's calories open as the workout's own figure, so saving the sheet keeps them. */
+    @Test
+    fun `a workout's calories from a file open as its own figure`() {
+        val draft = WorkoutDraft.from(aTypedWorkout(energyKcal = 150, energySource = EnergySource.FILE))
+
+        assertThat(draft.ownEnergy).isTrue()
+        assertThat(draft.energyKcal).isEqualTo("150")
+    }
 }

@@ -5,6 +5,7 @@ import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.FakeTypedWorkouts
 import com.metaself.app.data.health.MovementRecord
+import com.metaself.app.data.health.WorkoutFileImporter
 import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.profile.ProfileRepository
@@ -13,7 +14,9 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
+import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
@@ -42,6 +45,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
@@ -528,12 +532,63 @@ class MovementViewModelTest {
         assertThat(problems.recorded.single().kind).isEqualTo("movement")
     }
 
+    // --- A workout file (D82) ----------------------------------------------------------------------
+
+    /** An invented file: a walk at 10:00 on 3 September 2026. */
+    private val aFile = FileWorkout(writtenAt = LocalDateTime.of(2026, 9, 3, 10, 0), instant = null, seconds = 1_800, distanceM = 3_000.0)
+
+    @Test
+    fun `a picked file is imported, and Add and a choice act on the file it read`() = runTest {
+        val importer = FakeImporter(ImportOutcome.NoMatch(aFile))
+        val model = viewModel(importer = importer)
+        val job = launch { model.state.collect {} }
+
+        model.importFile("content://example/b.tcx")
+        advanceUntilIdle()
+        model.addFromFile()
+        advanceUntilIdle()
+
+        assertThat(importer.calls).containsExactly("import content://example/b.tcx", "add").inOrder()
+
+        importer.next = ImportOutcome.Several(aFile, listOf(aTypedWorkout(id = 4), aTypedWorkout(id = 5)))
+        model.importFile("content://example/b.tcx")
+        advanceUntilIdle()
+        model.chooseForFile(5)
+        advanceUntilIdle()
+
+        assertThat(importer.calls.last()).isEqualTo("choose 5")
+        model.dismissFile()
+        advanceUntilIdle()
+        assertThat(model.state.value.fileImport).isNull()
+        job.cancel()
+    }
+
+    @Test
+    fun `Add without a file that matched nothing does nothing`() = runTest {
+        val importer = FakeImporter(ImportOutcome.Failed)
+        val model = viewModel(importer = importer)
+
+        model.addFromFile()
+        model.chooseForFile(1)
+        advanceUntilIdle()
+
+        assertThat(importer.calls).isEmpty()
+    }
+
+    private class FakeImporter(var next: ImportOutcome) : WorkoutFileImporter {
+        val calls = mutableListOf<String>()
+        override suspend fun import(uri: String): ImportOutcome = next.also { calls += "import $uri" }
+        override suspend fun choose(file: FileWorkout, id: Long): ImportOutcome = next.also { calls += "choose $id" }
+        override suspend fun add(file: FileWorkout): ImportOutcome = next.also { calls += "add" }
+    }
+
     private fun viewModel(
         record: MovementRecord = FakeRecord(),
         typed: TypedWorkouts = FakeTypedWorkouts(),
         profiles: ProfileRepository = FakeProfileRepository(aProfile()),
         problems: ProblemLog = ProblemLog.NONE,
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now)
+        importer: WorkoutFileImporter = WorkoutFileImporter.NONE,
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())

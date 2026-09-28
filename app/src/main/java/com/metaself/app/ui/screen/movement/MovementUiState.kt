@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.movement
 
+import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
@@ -16,6 +17,7 @@ import com.metaself.app.domain.movement.WorkoutDraft
  *   workout is still there to put back once the record reads again.
  * @property undoFailed the last Undo did not put the workout back; the screen says so, and Undo is
  *   still offered (D8).
+ * @property fileImport the last workout file's import (D82), until dismissed; null when there is none.
  */
 data class MovementUiState(
     val week: MovementWeek? = null,
@@ -24,7 +26,16 @@ data class MovementUiState(
     val sheet: WorkoutSheetState? = null,
     val canUndo: Boolean = false,
     val undoFailed: Boolean = false,
+    val fileImport: FileImportState? = null,
 )
+
+/**
+ * A workout file being imported, or what it came to (D82).
+ *
+ * @property outcome what the last step said; null while the first is under way.
+ * @property working a step is under way; the file's buttons wait for it.
+ */
+data class FileImportState(val outcome: ImportOutcome? = null, val working: Boolean = false)
 
 /**
  * The log-a-workout sheet (D76).

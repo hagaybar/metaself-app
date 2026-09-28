@@ -88,6 +88,19 @@
             <intent-filter>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
+            <!--
+              D82: MetaSelf in the share list for a workout file (TCX). A TCX share arrives under any
+              of these types, octet-stream included; the file's content, not its type, decides whether
+              it is read, and anything else is refused with a reason on the Movement screen.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.garmin.tcx+xml" />
+                <data android:mimeType="application/xml" />
+                <data android:mimeType="text/xml" />
+                <data android:mimeType="application/octet-stream" />
+            </intent-filter>
         </activity>
 
         <!--

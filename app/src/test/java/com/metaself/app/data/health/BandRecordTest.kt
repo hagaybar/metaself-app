@@ -38,6 +38,13 @@ class BandRecordTest {
             .containsExactly(false, false, false, false)
     }
 
+    /** D81: whether the writing app itself wrote a distance reading during it, found by the query. */
+    @Test
+    fun `a copied workout carries whether its own app wrote a distance during it`() {
+        assertThat(aWorkout().toArrived(ownDistance = true).ownDistance).isTrue()
+        assertThat(aWorkout().toArrived().ownDistance).isFalse()
+    }
+
     @Test
     fun `a typed workout is typed`() {
         assertThat(aWorkout(source = "TYPED", origin = null).toArrived().typed).isTrue()

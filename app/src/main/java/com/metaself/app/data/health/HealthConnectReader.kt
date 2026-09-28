@@ -244,8 +244,18 @@ class HealthConnectReader @Inject constructor(
      * entirely — no call, no log — when that reading is not granted (D8). A failed call leaves its
      * figure null and is logged.
      *
-     * These two aggregate calls are outside the copying's read budget: `HealthRecordSync` counts only
-     * the change and window reads it makes itself. Accepted, because sessions are few.
+     * An `ExerciseSessionRecord` carries no distance of its own in connect-client 1.1.0 (checked on the
+     * pinned jar: only segments, laps with an optional length, and a route behind its own permission),
+     * so these are the `DistanceRecord`s and `ActiveCaloriesBurnedRecord`s of every app over its time,
+     * de-duplicated — unfiltered by origin, as a filter could only find the same or less. They are
+     * whatever Health Connect holds at the moment of reading: a figure its app writes later is asked
+     * for again by `HealthRecordSync` (D81's investigation).
+     *
+     * These aggregate calls are outside the copying's read budget: `HealthRecordSync` counts only the
+     * change and window reads it makes itself. What bounds them: a session is read only when it changes
+     * or when its week is read (a catch-up week, or the window re-read after an expired token), so these
+     * are two calls per session so read — as many as that stretch holds, not capped here. The later
+     * re-asks for a missing figure are capped separately (`HealthRecordSync.SESSION_ASKS_PER_OPEN`).
      */
     private suspend fun session(
         record: ExerciseSessionRecord,
@@ -253,13 +263,11 @@ class HealthConnectReader @Inject constructor(
         id: String,
         granted: Set<HealthKind>,
     ): ReadRecord.Session {
-        val range = TimeRangeFilter.between(record.startTime, record.endTime)
-        val distance = if (HealthKind.DISTANCE in granted) {
-            sessionTotal(DistanceRecord.DISTANCE_TOTAL, "distance", range)
-        } else null
-        val energy = if (HealthKind.ACTIVE_KCAL in granted) {
-            sessionTotal(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, "active calories", range)
-        } else null
+        val totals = totalsOver(
+            TimeRangeFilter.between(record.startTime, record.endTime),
+            distance = HealthKind.DISTANCE in granted,
+            energy = HealthKind.ACTIVE_KCAL in granted,
+        )
         return ReadRecord.Session(
             origin = origin,
             recordId = id,
@@ -267,10 +275,30 @@ class HealthConnectReader @Inject constructor(
             endMillis = record.endTime.toEpochMilli(),
             kind = WorkoutKinds.of(record.exerciseType),
             title = ExerciseNames.of(record.exerciseType, record.title),
-            distanceM = distance?.inMeters?.roundToInt(),
-            energyKcal = energy?.inKilocalories?.roundToInt(),
+            distanceM = totals.distanceM,
+            energyKcal = totals.energyKcal,
         )
     }
+
+    override suspend fun sessionTotals(startMillis: Long, endMillis: Long, distance: Boolean, energy: Boolean): SessionTotals =
+        withContext(Dispatchers.IO) {
+            totalsOver(
+                TimeRangeFilter.between(Instant.ofEpochMilli(startMillis), Instant.ofEpochMilli(endMillis)),
+                distance,
+                energy,
+            )
+        }
+
+    private suspend fun totalsOver(range: TimeRangeFilter, distance: Boolean, energy: Boolean): SessionTotals =
+        SessionTotals(
+            distanceM = if (distance) {
+                sessionTotal(DistanceRecord.DISTANCE_TOTAL, "distance", range)?.inMeters?.roundToInt()
+            } else null,
+            energyKcal = if (energy) {
+                sessionTotal(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL, "active calories", range)
+                    ?.inKilocalories?.roundToInt()
+            } else null,
+        )
 
     private suspend fun <T : Any> sessionTotal(metric: AggregateMetric<T>, name: String, range: TimeRangeFilter): T? =
         try {

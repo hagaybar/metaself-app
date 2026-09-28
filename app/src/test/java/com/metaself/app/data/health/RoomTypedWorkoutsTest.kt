@@ -5,6 +5,9 @@ import com.metaself.app.data.day.DatabaseTransaction
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.health.HealthKind
+import com.metaself.app.domain.movement.EnergySource
+import com.metaself.app.domain.movement.WorkoutFigureSource
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import kotlinx.coroutines.flow.Flow
@@ -78,6 +81,35 @@ class RoomTypedWorkoutsTest {
         assertThat(row.epochDay).isEqualTo(TEST_EPOCH_DAY)
         assertThat(row.hidden).isTrue()
         assertThat(store.summarised).containsExactly(setOf(TEST_EPOCH_DAY))
+    }
+
+    /**
+     * D82: a workout a file added, opened and saved in the sheet, keeps each figure the owner did not
+     * change with the file as its source; a distance he changed becomes his own. Invented figures.
+     */
+    @Test
+    fun `a change keeps the file's steps, and each file figure left as it was`() = runTest {
+        val fromFile = aTypedWorkout(id = 0, kind = WorkoutKind.WALK, distanceM = 3_000, energyKcal = 150, energySource = EnergySource.FILE)
+            .copy(effort = null, distanceSource = WorkoutFigureSource.FILE, steps = 4_000, stepsSource = WorkoutFigureSource.FILE)
+        val id = typed.log(fromFile)
+        // What the sheet saves: the same figures, its energy as the owner's own, no steps, no sources.
+        val saved = aTypedWorkout(id = id, kind = WorkoutKind.WALK, distanceM = 3_000, energyKcal = 150, energySource = EnergySource.TYPED)
+
+        typed.change(saved)
+
+        val kept = dao.rows.single()
+        assertThat(kept.distanceSource).isEqualTo("FILE")
+        assertThat(kept.energySource).isEqualTo("FILE")
+        assertThat(kept.steps).isEqualTo(4_000)
+        assertThat(kept.stepsSource).isEqualTo("FILE")
+
+        typed.change(saved.copy(distanceM = 3_500, energyKcal = 160))
+
+        val changed = dao.rows.single()
+        assertThat(changed.distanceM).isEqualTo(3_500)
+        assertThat(changed.distanceSource).isEqualTo("TYPED")
+        assertThat(changed.energySource).isEqualTo("TYPED")
+        assertThat(changed.steps).isEqualTo(4_000)
     }
 
     /** D76: a synced session is not editable here. */
@@ -199,6 +231,8 @@ class RoomTypedWorkoutsTest {
         ): Set<Long> = error("not used")
         override suspend fun historyActedOn(): Boolean = error("not used")
         override suspend fun markHistoryActedOn(): Unit = error("not used")
+        override suspend fun sessionGaps(days: Set<Long>): List<SessionGap> = error("not used")
+        override suspend fun fillSessionTotals(id: Long, totals: SessionTotals): Unit = error("not used")
     }
 
     /** Only what the typed store calls behaves; the rest says it was not expected. */
@@ -245,6 +279,9 @@ class RoomTypedWorkoutsTest {
         override suspend fun deleteSynced(originId: String): Unit = error("not used")
         override suspend fun visibleSyncedBetween(from: Long, to: Long): List<WorkoutEntity> = error("not used")
         override suspend fun deleteSyncedRow(id: Long): Unit = error("not used")
+        override suspend fun syncedWalkDays(origin: String): List<Long> = error("not used")
+        override suspend fun idsWithOwnDistance(from: Long, to: Long): List<Long> = error("not used")
+        override suspend fun missingTotalsOn(days: List<Long>): List<WorkoutEntity> = error("not used")
     }
 
     private companion object {

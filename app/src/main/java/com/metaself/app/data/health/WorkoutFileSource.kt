@@ -1,0 +1,59 @@
+package com.metaself.app.data.health
+
+import android.content.Context
+import androidx.core.net.toUri
+import com.metaself.app.domain.movement.WorkoutFileRefusal
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import javax.inject.Inject
+
+/** A workout file's text, or why it was not read. */
+sealed interface FileText {
+    data class Text(val text: String) : FileText
+    data class Refused(val reason: WorkoutFileRefusal) : FileText
+}
+
+/** Where a workout file's text comes from (D82). Throws when the file cannot be opened. */
+fun interface WorkoutFileSource {
+    suspend fun read(uri: String): FileText
+}
+
+/**
+ * A shared or picked file's text through the content resolver, as UTF-8. Whatever type the file
+ * arrived as, only its content decides (`TcxReader`). A file over [MAX_BYTES] is refused without
+ * reading the rest.
+ */
+class ContentWorkoutFileSource @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : WorkoutFileSource {
+
+    override suspend fun read(uri: String): FileText = withContext(Dispatchers.IO) {
+        val stream = context.contentResolver.openInputStream(uri.toUri())
+            ?: throw IOException("no stream for the file")
+        stream.use { input ->
+            // Read by hand: InputStream.readNBytes is API 33, above this app's minimum.
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(BUFFER)
+            while (out.size() <= MAX_BYTES) {
+                val n = input.read(buffer)
+                if (n < 0) break
+                out.write(buffer, 0, n)
+            }
+            if (out.size() > MAX_BYTES) FileText.Refused(WorkoutFileRefusal.TOO_LARGE)
+            else FileText.Text(out.toString(Charsets.UTF_8.name()))
+        }
+    }
+
+    companion object {
+        /**
+         * A choice, not a measurement: 5 MB. A session-totals file is a few kilobytes; even a file with
+         * second-by-second points for a long session is far below this.
+         */
+        const val MAX_BYTES = 5 * 1024 * 1024
+
+        private const val BUFFER = 8 * 1024
+    }
+}
