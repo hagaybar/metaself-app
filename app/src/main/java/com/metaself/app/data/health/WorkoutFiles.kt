@@ -11,13 +11,17 @@ import com.metaself.app.domain.movement.WorkoutFileMatch
 import com.metaself.app.domain.movement.WorkoutFileRefusal
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.time.ZoneId
 import javax.inject.Inject
 
 /** What importing a workout file (D82) reads and writes. The real one is Room; tests use a fake. */
 interface WorkoutFileStore {
-    /** Every stored workout on [days], hidden and typed ones included; the matcher chooses. */
+    /**
+     * Every session on [days] as the record reads it (D92: overlapping workouts combined, the lead's id
+     * standing for the session), hidden and typed ones included; the matcher chooses.
+     */
     suspend fun on(days: Set<Long>): List<Workout>
 
     /**
@@ -31,17 +35,21 @@ interface WorkoutFileStore {
 }
 
 /**
- * Over [WorkoutDao] and [TypedWorkouts]. A fill changes a workout's figures, not its count or
+ * Over [WorkoutDao], [TypedWorkouts] and the [MovementRecord]'s sessions. A fill changes a workout's figures, not its count or
  * minutes, so its day is not summarised again; an added workout is, by [TypedWorkouts.log].
  */
 class RoomWorkoutFileStore @Inject constructor(
     private val workouts: WorkoutDao,
     private val transaction: DatabaseTransaction,
     private val typed: TypedWorkouts,
+    private val record: MovementRecord,
 ) : WorkoutFileStore {
 
-    override suspend fun on(days: Set<Long>): List<Workout> =
-        days.sorted().flatMap { workouts.onDay(it) }.map { it.toWorkout() }
+    /** D92: a file fill goes to a session's lead — its identity — so one choice is offered per session. */
+    override suspend fun on(days: Set<Long>): List<Workout> {
+        if (days.isEmpty()) return emptyList()
+        return record.observeWorkouts(days.min(), days.max()).first().filter { it.epochDay in days }
+    }
 
     override suspend fun fill(id: Long, file: FileWorkout): WorkoutFileMatch.Filling? {
         var filling: WorkoutFileMatch.Filling? = null

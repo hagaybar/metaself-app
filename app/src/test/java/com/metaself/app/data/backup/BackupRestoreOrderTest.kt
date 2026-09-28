@@ -21,6 +21,7 @@ import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.trainer.AboutMeStore
+import com.metaself.app.data.health.SessionSplitEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupAi
@@ -39,6 +40,7 @@ import com.metaself.app.domain.backup.BackupSavedMeal
 import com.metaself.app.domain.backup.BackupSleep
 import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupTrainerPlan
+import com.metaself.app.domain.backup.BackupSessionSplit
 import com.metaself.app.domain.backup.BackupTrainerReview
 import com.metaself.app.domain.backup.BackupWeight
 import com.metaself.app.domain.backup.BackupWorkout
@@ -87,6 +89,7 @@ class BackupRestoreOrderTest {
                 "corrections.deleteAll",
                 "trainer.deleteReviews",
                 "trainer.deletePlans",
+                "splits.deleteAll",
                 "bookkeeping.clearSync",
                 "findOrCreate Yoghurt",
                 "create Breakfast",
@@ -95,6 +98,7 @@ class BackupRestoreOrderTest {
                 "insertItems",
                 "weights.upsert",
                 "workouts.insertAll",
+                "splits.insertAll",
                 "sleep.insertSession",
                 "sleep.insertStages",
                 "days.insertAll",
@@ -279,6 +283,7 @@ class BackupRestoreOrderTest {
                 corrections = dao(prefix = "corrections."),
                 bookkeeping = dao(prefix = "bookkeeping."),
                 trainer = dao(prefix = "trainer."),
+                splits = dao(prefix = "splits."),
                 profiles = Profiles(),
                 reminders = Reminders(),
                 scheduler = Scheduler(),
@@ -316,6 +321,21 @@ class BackupRestoreOrderTest {
         assertThat(rows.map { it.workoutId to it.words }).containsExactly(2L to "On two.", -1L to "Gone.").inOrder()
         assertThat(result.trainerReviews).isEqualTo(2)
         assertThat(result.trainerPlans).isEqualTo(1)
+    }
+
+    /** D92: the splits are replaced inside the transaction, each under its workouts' restored ids. */
+    @Test
+    fun `session splits are emptied and restored with the workouts`() = runTest {
+        val walk = aFile().workouts.single()
+        val file = aFile().copy(
+            workouts = listOf(walk, walk.copy(startedAtMillis = 2_000, originId = "other")),
+            sessionSplits = listOf(BackupSessionSplit(2, 1)),
+        )
+
+        restorer().restore(file)
+
+        assertThat(log).containsAtLeast("splits.deleteAll", "workouts.insertAll", "splits.insertAll", "commit").inOrder()
+        assertThat(written.getValue("splits.insertAll").first() as List<*>).containsExactly(SessionSplitEntity(1, 2))
     }
 
     /** D88: a version 1–4 file holds no trainer record, and a restore replaces — so there is none after. */
@@ -425,6 +445,7 @@ class BackupRestoreOrderTest {
         corrections = dao(prefix = "corrections."),
         bookkeeping = dao(prefix = "bookkeeping."),
         trainer = dao(prefix = "trainer."),
+        splits = dao(prefix = "splits."),
         profiles = profiles,
         reminders = Reminders(),
         scheduler = Scheduler(),

@@ -2,6 +2,7 @@ package com.metaself.app.data.trainer
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.day.DatabaseTransaction
+import com.metaself.app.data.health.FakeMovementRecord
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.TrainerReview
 import kotlinx.coroutines.test.runTest
@@ -45,7 +46,7 @@ class RoomTrainerStoreWritesTest {
         assertThat(planQueries.flatten()).containsExactlyElementsIn(1L..1_200L)
     }
 
-    private fun store() = RoomTrainerStore(dao(), Transaction())
+    private fun store() = RoomTrainerStore(dao(), Transaction(), FakeMovementRecord())
 
     private inner class Transaction : DatabaseTransaction {
         override suspend fun run(block: suspend () -> Unit) {

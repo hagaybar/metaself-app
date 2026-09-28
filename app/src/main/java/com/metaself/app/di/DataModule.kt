@@ -52,9 +52,13 @@ import com.metaself.app.data.health.RoomBandRecord
 import com.metaself.app.data.health.RoomHealthRecordStatus
 import com.metaself.app.data.health.RoomMovementRecord
 import com.metaself.app.data.health.RoomHealthStore
+import com.metaself.app.data.health.RoomSessionSplits
 import com.metaself.app.data.health.RoomTypedWorkouts
+import com.metaself.app.data.health.SessionSplitDao
+import com.metaself.app.data.health.SessionSplits
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.TypedWorkouts
+import com.metaself.app.data.health.WorkoutSessions
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.movement.HealthConnectSteps
 import com.metaself.app.data.movement.StepSource
@@ -63,6 +67,7 @@ import com.metaself.app.data.day.MIGRATION_4_5
 import com.metaself.app.data.day.MIGRATION_5_6
 import com.metaself.app.data.day.MIGRATION_6_7
 import com.metaself.app.data.day.MIGRATION_7_8
+import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.trainer.RoomTrainerStore
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerReviews
@@ -152,6 +157,7 @@ object DataModule {
         MIGRATION_5_6,
         MIGRATION_6_7,
         MIGRATION_7_8,
+        MIGRATION_8_9,
     ).build()
 
     @Provides
@@ -236,6 +242,13 @@ object DataModule {
     fun provideTrainerDao(database: MetaSelfDatabase): TrainerDao = database.trainerDao()
 
     @Provides
+    fun provideSessionSplitDao(database: MetaSelfDatabase): SessionSplitDao = database.sessionSplitDao()
+
+    @Provides
+    @Singleton
+    fun provideSessionSplits(splits: RoomSessionSplits): SessionSplits = splits
+
+    @Provides
     @Singleton
     fun provideTrainerStore(store: RoomTrainerStore): TrainerStore = store
 
@@ -287,6 +300,10 @@ object DataModule {
     @Provides
     @Singleton
     fun provideMovementRecord(record: RoomMovementRecord): MovementRecord = record
+
+    /** D92: the session a stored workout is a witness of, read as the record reads it. */
+    @Provides
+    fun provideWorkoutSessions(record: RoomMovementRecord): WorkoutSessions = record
 
     /** Workouts the owner types in (D76), with the day's summary worked out again after each write. */
     @Provides

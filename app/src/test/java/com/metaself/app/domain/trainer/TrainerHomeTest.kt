@@ -53,6 +53,16 @@ class TrainerHomeTest {
         assertThat(shown.earlier.map { it.review.workoutId }).containsExactly(1L)
     }
 
+    /** D92: a session whose other witness has a review is not waiting for words. */
+    @Test
+    fun `a combined session reviewed on its other witness is not waiting`() {
+        val first = walk(1, TEST_EPOCH_DAY, hour = 7)
+        val combined = com.metaself.app.domain.movement.SessionWitnesses.combine(listOf(first, first.copy(id = 2, durationMinutes = 30)), emptySet())
+
+        assertThat(home(recent = combined).waiting?.id).isEqualTo(1L)
+        assertThat(home(recent = combined, reviews = listOf(reviewOf(2))).waiting).isNull()
+    }
+
     private fun home(
         recent: List<Workout> = emptyList(),
         reviewed: List<Workout> = emptyList(),

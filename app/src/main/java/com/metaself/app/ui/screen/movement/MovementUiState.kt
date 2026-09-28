@@ -26,6 +26,8 @@ import com.metaself.app.domain.trainer.TrainerReview
  * @property reviews the owner's review of each session that has one, by workout id — what a session's
  *   button says (D85, plan design question 7). Null when the reviews could not be read: then no
  *   session has a button, and the week is shown all the same (D8).
+ * @property canUndoSplit the last "These are two sessions" can still be undone (D92); like [canUndo],
+ *   false whenever [unreadable] is true.
  */
 data class MovementUiState(
     val week: MovementWeek? = null,
@@ -39,6 +41,7 @@ data class MovementUiState(
     val canGoLater: Boolean = false,
     val logDay: Long? = null,
     val reviews: Map<Long, TrainerReview>? = emptyMap(),
+    val canUndoSplit: Boolean = false,
 )
 
 /**

@@ -1,6 +1,8 @@
 package com.metaself.app.data.health
 
 import com.metaself.app.domain.movement.CountedWorkouts
+import com.metaself.app.domain.movement.SessionSplit
+import com.metaself.app.domain.movement.SessionWitnesses
 import com.metaself.app.domain.movement.WorkoutKind
 import kotlin.math.roundToInt
 
@@ -12,7 +14,8 @@ import kotlin.math.roundToInt
  * No data is null, never zero; a day with nothing at all has no summary.
  *
  * A workout counts toward the day unless it is hidden or is a walk from an app in
- * `uncountedWalkApps` (D81, [CountedWorkouts]); either way it stays stored.
+ * `uncountedWalkApps` (D81, [CountedWorkouts]); either way it stays stored. Overlapping copies of one
+ * session count once, for the lead's minutes, unless the owner split them (D92, [SessionWitnesses]).
  */
 object DaySummary {
 
@@ -29,6 +32,7 @@ object DaySummary {
         correction: MovementCorrectionEntity?,
         nowMillis: Long,
         uncountedWalkApps: Set<String> = emptySet(),
+        splits: Collection<SessionSplit> = emptySet(),
     ): HealthDayEntity? {
         fun mean(kind: String): Double? =
             readings.filter { it.kind == kind }.map { it.value }.takeIf { it.isNotEmpty() }?.average()
@@ -41,6 +45,8 @@ object DaySummary {
         val steps = correction?.steps ?: totals.steps
         val active = correction?.activeKcal ?: totals.activeKcal
         val visible = workouts.filter { !it.hidden && counts(it, uncountedWalkApps) }
+        // D92: overlapping copies are one session, for its lead's minutes; the owner's splits kept apart.
+        val sessions = SessionWitnesses.combine(visible.map { it.toWorkout(uncountedWalkApps) }, splits)
         val sleep = sleepOf(nights)
 
         val nothing = steps == null && totals.distanceM == null && active == null && totals.totalKcal == null &&
@@ -75,8 +81,8 @@ object DaySummary {
             remMinutes = sleep?.stage("REM"),
             awakeMinutes = sleep?.awake,
             sleepSource = sleep?.let { "COMPUTED" },
-            workoutCount = visible.size.takeIf { it > 0 },
-            workoutMinutes = visible.sumOf { it.durationMinutes }.takeIf { visible.isNotEmpty() },
+            workoutCount = sessions.size.takeIf { it > 0 },
+            workoutMinutes = sessions.sumOf { it.durationMinutes }.takeIf { sessions.isNotEmpty() },
             workoutSource = "COMPUTED".takeIf { visible.isNotEmpty() },
         )
     }

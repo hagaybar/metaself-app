@@ -357,6 +357,9 @@ fun MetaSelfNavHost(
                 onLaterWeek = movementViewModel::laterWeek,
                 onTrainer = { navController.navigate(Destination.Trainer.route) },
                 onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
+                onSplit = movementViewModel::split,
+                onUndoSplit = movementViewModel::undoSplit,
+                onPutBack = movementViewModel::putBackTogether,
             )
         }
 

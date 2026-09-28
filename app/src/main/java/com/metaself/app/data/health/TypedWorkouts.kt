@@ -17,7 +17,11 @@ import javax.inject.Inject
  */
 interface TypedWorkouts {
 
-    /** The typed workouts of [from]..[to], hidden ones included. */
+    /**
+     * The typed sessions of [from]..[to], hidden ones included: those a typed workout (or one added from
+     * a workout file) leads (D92). A typed workout that is a witness of a synced session is that
+     * session now, and is not among them — so the day's typed reading (D77) counts combined sessions.
+     */
     fun observe(from: Long, to: Long): Flow<List<Workout>>
 
     /** Stores [workout] as a new typed workout; returns its id. */
@@ -66,12 +70,11 @@ class RoomTypedWorkouts @Inject constructor(
     private val transaction: DatabaseTransaction,
     private val store: HealthStore,
     private val now: Now,
+    private val record: MovementRecord,
 ) : TypedWorkouts {
 
     override fun observe(from: Long, to: Long): Flow<List<Workout>> =
-        workouts.observeBetween(from, to).map { rows ->
-            rows.filter { it.source == TYPED }.map { it.toWorkout() }
-        }
+        record.observeWorkouts(from, to).map { sessions -> sessions.filter { it.source == WorkoutSource.TYPED } }
 
     override suspend fun log(workout: Workout): Long {
         var id = 0L

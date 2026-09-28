@@ -300,7 +300,7 @@ class HealthRecordStoreTest {
      */
     @Test
     fun `a typed workout is logged, changed and deleted by id, and the synced one beside it stays`() = runTest {
-        val typed = RoomTypedWorkouts(db.workoutDao(), RoomDatabaseTransaction(db), store, Now { STAMP })
+        val typed = RoomTypedWorkouts(db.workoutDao(), RoomDatabaseTransaction(db), store, Now { STAMP }, record())
         store.summarise(setOf(day), TotalsResult(byDay = mapOf(day to DayTotals(steps = 9_000))), STAMP)
         val syncedId = db.workoutDao().insert(
             WorkoutEntity(
@@ -524,7 +524,8 @@ class HealthRecordStoreTest {
         val files = RoomWorkoutFileStore(
             db.workoutDao(),
             RoomDatabaseTransaction(db),
-            RoomTypedWorkouts(db.workoutDao(), RoomDatabaseTransaction(db), store, Now { STAMP }),
+            RoomTypedWorkouts(db.workoutDao(), RoomDatabaseTransaction(db), store, Now { STAMP }, record()),
+            record(),
         )
         val id = db.workoutDao().all().single().id
         val file = FileWorkout(
@@ -780,7 +781,7 @@ class HealthRecordStoreTest {
     /** D86: keeping one plan unkeeps any other. Invented figures. */
     @Test
     fun `keeping a plan replaces the kept one`() = runTest {
-        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db), record())
         val first = trainer.addPlan(aTrainerPlan(createdAt = 1_000))
         val second = trainer.addPlan(aTrainerPlan(createdAt = 2_000))
 
@@ -794,7 +795,7 @@ class HealthRecordStoreTest {
     /** D88: one review per session; saving again replaces it. */
     @Test
     fun `a session has one review, and saving again replaces it`() = runTest {
-        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db), record())
         val workoutId = db.workoutDao().insert(aSyncedWalkEntity())
 
         val id = trainer.putReview(TrainerReview(workoutId = workoutId, planId = null, felt = Felt.EASY, words = null))
@@ -807,7 +808,7 @@ class HealthRecordStoreTest {
 
     @Test
     fun `the latest feedback is newest first and leaves out the session asked about`() = runTest {
-        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db), record())
         (1L..4L).forEach { n ->
             trainer.putReview(TrainerReview(workoutId = n, planId = null, felt = null, words = null,
                 feedback = aFeedback("Headline $n"), feedbackAtMillis = n * 1_000, model = "m"))
@@ -818,6 +819,9 @@ class HealthRecordStoreTest {
     }
 
     /** A suggestion made at [createdAt], not kept. Invented answers and words. */
+    /** The record over the real tables, as the app reads it (D92). */
+    private fun record() = RoomMovementRecord(db.healthDayDao(), db.workoutDao(), walks, db.sessionSplitDao())
+
     private fun aTrainerPlan(createdAt: Long) = TrainerPlan(
         id = 0, createdAtMillis = createdAt,
         answers = PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE),

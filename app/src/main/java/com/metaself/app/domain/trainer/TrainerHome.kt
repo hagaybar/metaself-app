@@ -23,7 +23,8 @@ data class TrainerHome(val waiting: Workout?, val keptPlan: TrainerPlan?, val ea
             reviews: List<TrainerReview>,
             kept: TrainerPlan?,
         ): TrainerHome {
-            val byWorkout = reviews.associateBy { it.workoutId }
+            // D92: a combined session reviewed on another of its witnesses is not waiting.
+            val byWorkout = SessionReviews.bySession(recent, reviews)
             val waiting = recent
                 .filter { !it.hidden && it.counted && it.epochDay in (today - (WAITING_DAYS - 1))..today && it.id !in byWorkout }
                 .maxByOrNull { it.startedAtMillis }

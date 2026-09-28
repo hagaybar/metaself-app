@@ -1,10 +1,12 @@
 package com.metaself.app.ui.movement
 
+import com.metaself.app.domain.movement.DistanceWitness
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.FigureSource
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.OtherDistance
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutKind
@@ -192,14 +194,33 @@ object MovementWeekWording {
         Instant.ofEpochMilli(workout.startedAtMillis).atZone(zone).format(TIME),
         workout.distanceM?.let { metres ->
             // D82: a file's distance says so, to the two decimals it was written with.
-            if (workout.distanceSource == WorkoutFigureSource.FILE) WorkoutFileWording.fileKm(metres) + " (from file)" else km(metres)
+            when {
+                workout.distanceSource == WorkoutFigureSource.FILE -> WorkoutFileWording.fileKm(metres) + " (from file)"
+                // D4, D92: typed on a session something else recorded is not a measurement.
+                workout.distanceSource == WorkoutFigureSource.TYPED && workout.source != WorkoutSource.TYPED ->
+                    km(metres) + " (you typed)"
+                else -> km(metres)
+            }
         },
+        // D92: another witness's distance, when it disagrees by more than 15 %.
+        workout.otherDistance?.let(::otherDistance),
         duration(workout.durationMinutes),
         // D78: pace for runs only.
         workout.paceSecondsPerKm?.takeIf { workout.kind == WorkoutKind.RUN }?.let(::pace),
         workout.avgHeartRate?.let { "avg $it bpm" },
         typedEnergy(workout),
     ).joinToString(SEP)
+
+    /** "another app said 3.1 km" (invented): who gave the other distance, in their own precision. */
+    private fun otherDistance(other: OtherDistance): String = when (other.saidBy) {
+        DistanceWitness.APP -> "another app said " + km(other.metres)
+        DistanceWitness.FILE -> "a file said " + WorkoutFileWording.fileKm(other.metres)
+        DistanceWitness.TYPED -> "you typed " + km(other.metres)
+    }
+
+    /** D92: "also recorded by 2 more" under a session other workouts also recorded; null when none did. */
+    fun alsoRecorded(workout: Workout): String? =
+        workout.alsoRecordedBy.takeIf { it > 0 }?.let { "also recorded by $it more" }
 
     /** A typed workout's energy with where it came from (D4). A synced one's is not shown here. */
     private fun typedEnergy(workout: Workout): String? {

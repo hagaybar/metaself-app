@@ -28,6 +28,7 @@ import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.ReadingsArchive
 import com.metaself.app.data.health.SleepDao
+import com.metaself.app.data.health.SessionSplitDao
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.domain.movement.DayMovement
 import com.metaself.app.data.movement.StepAccess
@@ -639,6 +640,7 @@ class SettingsViewModelTest {
             corrections = daos.corrections,
             bookkeeping = daos.bookkeeping,
             trainer = daos.trainer,
+            splits = daos.splits,
             profiles = profiles,
             reminders = Reminders(),
             scheduler = Scheduler(),
@@ -707,6 +709,7 @@ class SettingsViewModelTest {
         val corrections: MovementCorrectionDao = table(failing)
         val bookkeeping: HealthBookkeepingDao = table(failing)
         val trainer: TrainerDao = table(failing)
+        val splits: SessionSplitDao = table(failing)
 
         private inline fun <reified T> table(failing: Set<String>): T = Proxy.newProxyInstance(
             T::class.java.classLoader,

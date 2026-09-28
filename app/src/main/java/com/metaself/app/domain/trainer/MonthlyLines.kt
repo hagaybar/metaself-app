@@ -89,7 +89,8 @@ object MonthlyLines {
         if (earliestDay == null) return emptyList()
         val cut = TrainerRequest.firstDay(today) - 1
         val thisMonth = YearMonth.from(LocalDate.ofEpochDay(today))
-        val feltBy = reviews.associateBy({ it.workoutId }, { it.felt })
+        // D92: a combined session's review may sit on another of its witnesses.
+        val feltBy = SessionReviews.bySession(workouts, reviews).mapValues { it.value.felt }
         val byDay = days.associateBy { it.epochDay }
         val visible = workouts.filter { !it.hidden && it.counted }
         return (MONTHS downTo 1).mapNotNull { back ->

@@ -5,6 +5,7 @@ import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.FakeTypedWorkouts
 import com.metaself.app.data.health.MovementRecord
+import com.metaself.app.data.health.SessionSplits
 import com.metaself.app.data.health.WorkoutFileImporter
 import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.FakeProfileRepository
@@ -18,6 +19,9 @@ import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.SessionSplit
+import com.metaself.app.domain.movement.SessionWitnesses
+import com.metaself.app.domain.movement.aSyncedWorkout
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.Workout
@@ -855,6 +859,138 @@ class MovementViewModelTest {
         assertThat(model.state.first { !it.reviews.isNullOrEmpty() }.reviews!![2L]).isEqualTo(review)
     }
 
+    /** D92: a review on a witness that does not lead is carried under the session's id. */
+    @Test
+    fun `a review on a session's other witness is carried under the session`() = runTest {
+        val record = FakeRecord()
+        record.workouts.value = SessionWitnesses.combine(
+            listOf(aSyncedWorkout(id = 1, minutes = 60), aSyncedWorkout(id = 2, minutes = 50)),
+            emptySet(),
+        )
+        val trainer = FakeTrainerStore()
+        val review = TrainerReview(workoutId = 2, planId = null, felt = Felt.RIGHT, words = null)
+        trainer.reviews.value = listOf(review)
+
+        val state = viewModel(record = record, trainer = trainer).state.first { it.week != null && !it.reviews.isNullOrEmpty() }
+
+        assertThat(state.reviews!![1L]).isEqualTo(review)
+    }
+
+    /** D92: "These are two sessions" parts the session through the store. */
+    @Test
+    fun `splitting a session asks the store to part it`() = runTest {
+        val splits = RecordingSplits()
+        val session = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), emptySet()).single()
+        val model = viewModel(splits = splits)
+        model.state.first { it.week != null }
+
+        model.split(session)
+        advanceUntilIdle()
+
+        assertThat(splits.parted).containsExactly(session)
+    }
+
+    /** D8: a split that fails is logged, and nothing else is disturbed. */
+    @Test
+    fun `a split that fails is logged`() = runTest {
+        val problems = RecordingProblemLog()
+        val splits = RecordingSplits(failing = IllegalStateException("disk full"))
+        val session = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), emptySet()).single()
+        val model = viewModel(splits = splits, problems = problems)
+        model.state.first { it.week != null }
+
+        model.split(session)
+        advanceUntilIdle()
+
+        assertThat(problems.recorded.single().kind).isEqualTo("movement")
+        assertThat(problems.recorded.single().detail).contains("not split")
+    }
+
+    /** D92: a typed session with another typed witness opens the lead as it is stored, not the combined figures. */
+    @Test
+    fun `tapping a combined typed session opens its lead as stored`() = runTest {
+        val lead = aTypedWorkout(id = 3, minutes = 60, startedAtMillis = 0, energyKcal = null, energySource = EnergySource.NONE)
+        val other = aTypedWorkout(id = 4, minutes = 40, startedAtMillis = 0, energyKcal = 180, energySource = EnergySource.TYPED)
+        val session = SessionWitnesses.combine(listOf(lead, other), emptySet()).single()
+        val model = viewModel()
+        model.state.first { it.week != null }
+
+        model.openWorkout(session)
+
+        assertThat(model.state.first { it.sheet != null }.sheet!!.editing).isEqualTo(lead)
+    }
+
+    /** D92, decided after review: a split can be undone at once, from the line it leaves. */
+    @Test
+    fun `a split offers Undo, which puts back exactly the pairs it wrote`() = runTest {
+        val splits = RecordingSplits()
+        val session = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), emptySet()).single()
+        val model = viewModel(splits = splits)
+        model.state.first { it.week != null }
+
+        model.split(session)
+        assertThat(model.state.first { it.canUndoSplit }.canUndoSplit).isTrue()
+        model.undoSplit()
+        advanceUntilIdle()
+
+        assertThat(splits.joined).containsExactly(listOf(SessionSplit(1, 2)))
+        assertThat(model.state.first { !it.canUndoSplit }.canUndoSplit).isFalse()
+    }
+
+    @Test
+    fun `with nothing split there is nothing to undo`() = runTest {
+        val splits = RecordingSplits()
+        val model = viewModel(splits = splits)
+
+        assertThat(model.state.first { it.week != null }.canUndoSplit).isFalse()
+        model.undoSplit()
+        advanceUntilIdle()
+
+        assertThat(splits.joined).isEmpty()
+    }
+
+    /** D92, decided after review: a session split from an overlapping one can be put back together. */
+    @Test
+    fun `putting a session back together removes its splits`() = runTest {
+        val splits = RecordingSplits()
+        val parted = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), setOf(SessionSplit(1, 2)))
+        val model = viewModel(splits = splits)
+        model.state.first { it.week != null }
+
+        model.putBackTogether(parted.first())
+        advanceUntilIdle()
+
+        assertThat(splits.joined).containsExactly(listOf(SessionSplit(1, 2)))
+    }
+
+    @Test
+    fun `putting back together that fails is logged`() = runTest {
+        val problems = RecordingProblemLog()
+        val splits = RecordingSplits(failing = IllegalStateException("disk full"))
+        val parted = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), setOf(SessionSplit(1, 2)))
+        val model = viewModel(splits = splits, problems = problems)
+        model.state.first { it.week != null }
+
+        model.putBackTogether(parted.first())
+        advanceUntilIdle()
+
+        assertThat(problems.recorded.single().detail).contains("not put back together")
+    }
+
+    private class RecordingSplits(private val failing: Exception? = null) : SessionSplits {
+        val parted = mutableListOf<Workout>()
+        val joined = mutableListOf<List<SessionSplit>>()
+        override suspend fun split(session: Workout): List<SessionSplit> {
+            failing?.let { throw it }
+            parted += session
+            return SessionWitnesses.splitsOf(session)
+        }
+        override suspend fun join(splits: Collection<SessionSplit>) {
+            failing?.let { throw it }
+            joined += splits.toList()
+        }
+    }
+
     /** D8: the week does not depend on the trainer; a review read that fails only loses the buttons. */
     @Test
     fun `reviews that cannot be read leave the week shown with none, and are logged`() = runTest {
@@ -886,7 +1022,8 @@ class MovementViewModelTest {
         problems: ProblemLog = ProblemLog.NONE,
         importer: WorkoutFileImporter = WorkoutFileImporter.NONE,
         trainer: TrainerReviews = TrainerReviews.NONE,
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer)
+        splits: SessionSplits = SessionSplits.NONE,
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer, splits)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())

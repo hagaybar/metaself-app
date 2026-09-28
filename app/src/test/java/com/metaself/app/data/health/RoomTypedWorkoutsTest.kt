@@ -27,7 +27,8 @@ class RoomTypedWorkoutsTest {
     private val dao = FakeWorkoutDao()
     private val transaction = TrackedTransaction()
     private val store = SummarisingStore(transaction)
-    private val typed = RoomTypedWorkouts(dao, transaction, store, Now { STAMP })
+    private val record = RoomMovementRecord(unusedDays(), dao, FakeWalkChoices(), InMemorySplitDao())
+    private val typed = RoomTypedWorkouts(dao, transaction, store, Now { STAMP }, record)
 
     @Test
     fun `a logged workout is stored as typed, with no origin, and its day is summarised again`() = runTest {
@@ -58,11 +59,20 @@ class RoomTypedWorkoutsTest {
     @Test
     fun `only typed workouts are observed`() = runTest {
         dao.rows += syncedRow(id = 50)
-        typed.log(aTypedWorkout(id = 0))
+        typed.log(aTypedWorkout(id = 0, startedAtMillis = 3_600_000))
 
         val seen = typed.observe(TEST_EPOCH_DAY, TEST_EPOCH_DAY).first()
 
         assertThat(seen.map { it.source }).containsExactly(WorkoutSource.TYPED)
+    }
+
+    /** D92, D77: a typed workout that is a witness of a synced session is the band's session now. */
+    @Test
+    fun `a typed workout overlapping a synced session is not observed as typed`() = runTest {
+        dao.rows += syncedRow(id = 50)
+        typed.log(aTypedWorkout(id = 0, startedAtMillis = 0, minutes = 30))
+
+        assertThat(typed.observe(TEST_EPOCH_DAY, TEST_EPOCH_DAY).first()).isEmpty()
     }
 
     @Test
@@ -309,9 +319,15 @@ class RoomTypedWorkoutsTest {
         override suspend fun visibleSyncedBetween(from: Long, to: Long): List<WorkoutEntity> = error("not used")
         override suspend fun deleteSyncedRow(id: Long): Unit = error("not used")
         override suspend fun syncedWalkDays(origin: String): List<Long> = error("not used")
-        override suspend fun idsWithOwnDistance(from: Long, to: Long): List<Long> = error("not used")
+        override suspend fun idsWithOwnDistance(from: Long, to: Long): List<Long> = emptyList()
         override suspend fun missingTotalsOn(days: List<Long>): List<WorkoutEntity> = error("not used")
     }
+
+    /** The record reads no daily summary here. */
+    private fun unusedDays(): HealthDayDao =
+        java.lang.reflect.Proxy.newProxyInstance(HealthDayDao::class.java.classLoader, arrayOf(HealthDayDao::class.java)) { _, method, _ ->
+            throw UnsupportedOperationException("not in this test: ${method.name}")
+        } as HealthDayDao
 
     private companion object {
         const val STAMP = 1_000_000L

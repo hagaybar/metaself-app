@@ -68,6 +68,10 @@ import java.time.ZoneId
  * "Trainer" in the title bar opens the trainer (D85). Under each session in an open day, typed or
  * synced, one button says where its review stands — "How did it go?", "Get feedback" or "See
  * feedback" (plan design question 7) — and opens that session's review.
+ *
+ * A session other workouts also recorded (D92) is one line, with "also recorded by 2 more" under it and
+ * "These are two sessions", which parts it; Undo is then offered under the title bar, and a session
+ * parted from one it still overlaps offers "Put back together".
  */
 @Composable
 fun MovementScreen(
@@ -90,6 +94,9 @@ fun MovementScreen(
     onLaterWeek: () -> Unit = {},
     onTrainer: () -> Unit = {},
     onReview: (Long) -> Unit = {},
+    onSplit: (Workout) -> Unit = {},
+    onUndoSplit: () -> Unit = {},
+    onPutBack: (Workout) -> Unit = {},
 ) {
     val readable = state.week != null
     val canLog = state.logDay != null
@@ -98,7 +105,10 @@ fun MovementScreen(
         modifier = modifier,
         onBack = onBack,
         actions = { TextButton(onClick = onTrainer) { Text(stringResource(R.string.trainer_open)) } },
-        belowBar = { if (state.canUndo) UndoLine(failed = state.undoFailed, onUndo = onUndoDelete) },
+        belowBar = {
+            if (state.canUndo) UndoLine(failed = state.undoFailed, onUndo = onUndoDelete)
+            if (state.canUndoSplit) SplitUndoLine(onUndo = onUndoSplit)
+        },
         hasFloatingButton = readable,
         floatingActionButton = { if (readable) LogWorkoutButton(onClick = onLogWorkout, enabled = canLog) },
     ) {
@@ -140,6 +150,8 @@ fun MovementScreen(
                             onOpenWorkout = onOpenWorkout,
                             reviews = state.reviews,
                             onReview = onReview,
+                            onSplit = onSplit,
+                            onPutBack = onPutBack,
                         )
                     }
                 }
@@ -234,6 +246,23 @@ private fun WorkoutFileLines(
                 TextButton(onClick = onDismiss, enabled = idle) { Text(stringResource(R.string.movement_file_done)) }
             }
         }
+    }
+}
+
+/**
+ * The way back from "These are two sessions" (D92, decided after review): pinned where the delete's
+ * Undo is, for the same reason — the bottom edge is "Log a workout"'s, and an Undo nobody can see is a
+ * split that cannot be undone.
+ */
+@Composable
+private fun SplitUndoLine(onUndo: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.Screen, vertical = Spacing.Tight),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = stringResource(R.string.movement_split_done), style = MaterialTheme.typography.bodyMedium)
+        TextButton(onClick = onUndo) { Text(stringResource(R.string.today_undo)) }
     }
 }
 
@@ -363,6 +392,8 @@ private fun DayRow(
     onOpenWorkout: (Workout) -> Unit,
     reviews: Map<Long, TrainerReview>?,
     onReview: (Long) -> Unit,
+    onSplit: (Workout) -> Unit,
+    onPutBack: (Workout) -> Unit,
 ) {
     val said = stringResource(if (open) R.string.movement_day_open else R.string.movement_day_closed)
     val action = stringResource(if (open) R.string.movement_day_hide else R.string.movement_day_show)
@@ -417,11 +448,27 @@ private fun DayRow(
                                     .heightIn(min = 48.dp)
                             },
                         )
-                        // Where this session's review stands, and the way to it (D87, design question 7);
-                        // none while the reviews cannot be read, rather than a wrong one.
                         val session = line.workout
+                        // D92: who else recorded it, and the way to part it — only when others did.
+                        val alsoRecorded = session?.let(MovementWeekWording::alsoRecorded)
+                        if (session != null && alsoRecorded != null) {
+                            Text(
+                                text = alsoRecorded,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(onClick = { onSplit(session) }) { Text(stringResource(R.string.movement_split_session)) }
+                        }
+                        // D92, decided after review: a session parted from one it still overlaps can be put back.
+                        if (session != null && session.splits.isNotEmpty()) {
+                            TextButton(onClick = { onPutBack(session) }) { Text(stringResource(R.string.movement_put_back)) }
+                        }
+                        // Where this session's review stands, and the way to it (D87, design question 7);
+                        // none while the reviews cannot be read, rather than a wrong one. A review on
+                        // another witness of the session (D92) opens as that witness's own.
                         if (session != null && reviews != null) {
-                            TextButton(onClick = { onReview(session.id) }) { Text(TrainerWording.rowAction(reviews[session.id])) }
+                            val review = reviews[session.id]
+                            TextButton(onClick = { onReview(review?.workoutId ?: session.id) }) { Text(TrainerWording.rowAction(review)) }
                         }
                     }
                 }

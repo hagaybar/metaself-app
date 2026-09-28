@@ -6,12 +6,14 @@ import com.metaself.app.domain.movement.Effort
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.FigureSource
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.SessionWitnesses
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -24,9 +26,10 @@ interface MovementRecord {
     fun observeDays(from: Long, to: Long): Flow<List<HealthDay>>
 
     /**
-     * The workouts of [from]..[to], hidden ones and walks that do not count (D81) included, each
-     * marked; the week leaves those out. Observed together with the choice, so switching an app
-     * off shows at once.
+     * The sessions of [from]..[to] (D92: overlapping workouts combined into one), hidden ones and walks
+     * that do not count (D81) included, each marked and never combined; the week leaves those out.
+     * Observed together with the choice and the owner's splits, so switching an app off, or parting a
+     * session, shows at once.
      */
     fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>>
 
@@ -37,23 +40,52 @@ interface MovementRecord {
     fun observeEarliestDay(): Flow<Long?>
 }
 
+/** D92: the session a stored workout is a witness of. */
+interface WorkoutSessions {
+    /**
+     * The session [workoutId] is a witness of, combined as the record reads it; the workout alone when
+     * it is recorded once, hidden or not counted; null when no workout has that id.
+     */
+    suspend fun sessionOf(workoutId: Long): Workout?
+}
+
 /**
  * Over the DAOs' reads. The earliest workout is the one query of its own (D83), added without a
  * schema change; the rest already existed.
+ *
+ * **D92: the workouts are read as sessions, here and only here** — overlapping copies combined by
+ * [SessionWitnesses], the owner's splits honoured — so every screen and request that reads the record
+ * counts and shows combined sessions.
  */
 class RoomMovementRecord @Inject constructor(
     private val days: HealthDayDao,
     private val workouts: WorkoutDao,
     private val walks: WalkChoices,
-) : MovementRecord {
+    private val splits: SessionSplitDao,
+) : MovementRecord, WorkoutSessions {
 
     override fun observeDays(from: Long, to: Long): Flow<List<HealthDay>> =
         days.observeBetween(from, to).map { rows -> rows.map { it.toHealthDay() } }
 
+    /**
+     * Which workouts' own app recorded distance during them (D81) is asked only when there are two or
+     * more to combine: it decides between witnesses and nothing else.
+     */
     override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> =
-        combine(workouts.observeBetween(from, to), walks.uncounted) { rows, uncounted ->
-            rows.map { it.toWorkout(uncounted) }
+        combine(workouts.observeBetween(from, to), walks.uncounted, splits.observeAll()) { rows, uncounted, split ->
+            val own = if (rows.size < 2) emptySet() else workouts.idsWithOwnDistance(from, to).toSet()
+            SessionWitnesses.combine(
+                rows.map { it.toWorkout(uncounted).copy(ownDistance = it.id in own) },
+                split.mapNotNull { it.toSplit() },
+            )
         }
+
+    /** Read over its day and the days either side, so a witness filed on the next or last day is found. */
+    override suspend fun sessionOf(workoutId: Long): Workout? {
+        val row = workouts.byId(workoutId) ?: return null
+        return observeWorkouts(row.epochDay - 1, row.epochDay + 1).first().firstOrNull { workoutId in it.witnessIds }
+            ?: row.toWorkout(walks.uncounted.first())
+    }
 
     override fun observeEarliestDay(): Flow<Long?> =
         combine(days.observeEarliest(), workouts.observeEarliest()) { summary, workout ->

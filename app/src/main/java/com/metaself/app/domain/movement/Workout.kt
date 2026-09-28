@@ -91,14 +91,48 @@ data class Workout(
     val zoneSeconds: List<Int>? = null,
     /** What the zones were measured against, as stored: ESTIMATED (220 − age) until an observed maximum exists. */
     val zoneMaxSource: String? = null,
+    /**
+     * D92: every witness of this session as stored, lead first — this workout's own row among them —
+     * when overlapping workouts were read as one session ([SessionWitnesses]); empty for a session
+     * recorded once. Worked out as the record is read, never stored.
+     */
+    val witnesses: List<Workout> = emptyList(),
+    /** D92: another witness's distance, when it differs from [distanceM] by more than 15 %. */
+    val otherDistance: OtherDistance? = null,
+    /** D81: its own app wrote a distance reading during it. Worked out as it is read, never stored. */
+    val ownDistance: Boolean = false,
+    /**
+     * D92: the minutes [distanceM] was measured over, when another witness than the lead gave it; null
+     * when the distance is the session's own. The pace is worked over these, never the lead's.
+     */
+    val distanceMinutes: Int? = null,
+    /**
+     * D92: the owner's splits between this session and one it still overlaps — what "Put back
+     * together" removes. Empty when it was never split, or no longer overlaps what it was split from.
+     */
+    val splits: List<SessionSplit> = emptyList(),
 ) {
+    /** D92: how many other workouts recorded this session — "also recorded by 2 more". */
+    val alsoRecordedBy: Int get() = (witnesses.size - 1).coerceAtLeast(0)
+
+    /** D92: the ids of every stored workout this session is made of; its own alone when recorded once. */
+    val witnessIds: List<Long> get() = witnesses.map { it.id }.ifEmpty { listOf(id) }
+
+    /** D92: the lead as it is stored, before any other witness lent it a figure; itself when recorded once. */
+    val asStored: Workout get() = witnesses.firstOrNull() ?: this
+
     /** A file gave it any figure (D82) — how a second import of the same file finds it again. */
     val fromFile: Boolean
         get() = distanceSource == WorkoutFigureSource.FILE || stepsSource == WorkoutFigureSource.FILE ||
             energySource == EnergySource.FILE
 
-    /** Seconds per kilometre — "5:30 /km" on screen — or null without a distance. */
+    /**
+     * Seconds per kilometre — "5:30 /km" on screen — or null without a distance. Over the minutes the
+     * distance was measured in (D92: another witness's, when it lent the distance).
+     */
     val paceSecondsPerKm: Int?
-        get() = distanceM?.takeIf { it > 0 && durationMinutes > 0 }
-            ?.let { paceOf(durationMinutes, it) }
+        get() {
+            val minutes = distanceMinutes ?: durationMinutes
+            return distanceM?.takeIf { it > 0 && minutes > 0 }?.let { paceOf(minutes, it) }
+        }
 }

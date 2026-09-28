@@ -219,12 +219,14 @@ class RoomHealthStore @Inject constructor(
      * the day before is not re-summarised, as its summary counts that workout's minutes, not its
      * heart rate.
      *
-     * Which apps' walks do not count (D81) is read once for the whole call.
+     * Which apps' walks do not count (D81), and the owner's session splits (D92), are read once for the
+     * whole call.
      */
     override suspend fun summarise(days: Set<Long>, totals: TotalsResult, nowMillis: Long) {
         val maxHeartRate = profiles.profile.first()
             ?.let { HeartRateZones.estimatedMax(it.birthYear, today().year) }
         val uncounted = walks.uncounted.first()
+        val splits = database.sessionSplitDao().all().mapNotNull { it.toSplit() }
         days.sorted().forEach { epochDay ->
             transaction.run {
                 if (epochDay - 1 !in days) {
@@ -242,6 +244,7 @@ class RoomHealthStore @Inject constructor(
                     correction = correctionDao.day(epochDay),
                     nowMillis = nowMillis,
                     uncountedWalkApps = uncounted,
+                    splits = splits,
                 )
                 if (summary == null) dayDao.delete(epochDay) else dayDao.put(summary)
             }

@@ -2,6 +2,7 @@ package com.metaself.app.data.trainer
 
 import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.data.day.DatabaseTransaction
+import com.metaself.app.data.health.WorkoutSessions
 import com.metaself.app.data.health.toWorkout
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.Feedback
@@ -56,6 +57,7 @@ interface TrainerStore : TrainerReviews {
 class RoomTrainerStore @Inject constructor(
     private val dao: TrainerDao,
     private val transaction: DatabaseTransaction,
+    private val sessions: WorkoutSessions,
 ) : TrainerStore {
 
     override fun observeReviews(): Flow<List<TrainerReview>> = dao.observeReviews().map { rows -> rows.map { it.toReview() } }
@@ -65,7 +67,8 @@ class RoomTrainerStore @Inject constructor(
     /** A few hundred ids per query: an older SQLite allows 999 parameters in one statement. */
     override suspend fun plans(ids: Collection<Long>): Map<Long, TrainerPlan> =
         ids.distinct().chunked(IDS_PER_QUERY).flatMap { dao.plans(it) }.mapNotNull { it.toPlan() }.associateBy { it.id }
-    override suspend fun workout(id: Long): Workout? = dao.workout(id)?.toWorkout()
+    /** D92: the session [id] is a witness of, so a review shows and sends the combined figures. */
+    override suspend fun workout(id: Long): Workout? = sessions.sessionOf(id)
     override suspend fun addPlan(plan: TrainerPlan): Long = dao.insertPlan(plan.copy(id = 0, kept = false).toEntity())
 
     override suspend fun keep(planId: Long) = transaction.run {

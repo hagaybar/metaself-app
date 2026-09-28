@@ -47,6 +47,7 @@ import com.metaself.app.data.health.HealthDayEntity
 import com.metaself.app.data.health.MovementCorrectionEntity
 import com.metaself.app.data.health.SleepSessionEntity
 import com.metaself.app.data.health.SleepStageEntity
+import com.metaself.app.data.health.SessionSplitEntity
 import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.data.trainer.TrainerPlanEntity
@@ -731,6 +732,23 @@ class BackupRoundTripTest {
         assertThat(db.trainerDao().allPlans().single().kept).isTrue()
     }
 
+    /** D92: a split survives export and restore, under the ids its workouts come back with. */
+    @Test
+    fun `a session split comes back between the same two sessions`() = runTest {
+        db.workoutDao().insert(aWalk(startedAt = 1_000))
+        val second = db.workoutDao().insert(aWalk(startedAt = 2_000))
+        val third = db.workoutDao().insert(aWalk(startedAt = 3_000))
+        db.sessionSplitDao().insertAll(listOf(SessionSplitEntity(second, third)))
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        repository().restore(file)
+
+        val walks = db.workoutDao().all()
+        val split = db.sessionSplitDao().all().single()
+        assertThat(walks.first { it.id == split.firstWorkoutId }.startedAtMillis).isEqualTo(2_000L)
+        assertThat(walks.first { it.id == split.secondWorkoutId }.startedAtMillis).isEqualTo(3_000L)
+    }
+
     /**
      * D88: workouts with a gap in their ids (the middle one deleted by the band's app) come back as
      * 1…n, each review on its own session; the review whose session was deleted comes back too, under
@@ -822,6 +840,7 @@ class BackupRoundTripTest {
         corrections = db.movementCorrectionDao(),
         bookkeeping = db.healthBookkeepingDao(),
         trainer = db.trainerDao(),
+        splits = db.sessionSplitDao(),
         profiles = profiles,
         reminders = NoReminders(),
         scheduler = NoScheduler(),
