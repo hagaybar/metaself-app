@@ -24,6 +24,7 @@ import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.domain.weight.WeightReading
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -46,7 +47,8 @@ class TrainerPromptTest {
 
         assertThat(body.toString()).contains("session_plan")
         assertThat(user.keys).containsExactly(
-            "question", "today", "sessions", "weeks", "weight", "goal", "body", "this_week", "earlier_feedback",
+            "question", "today", "about_me", "sessions", "weeks", "months", "weight", "goal", "body", "this_week",
+            "earlier_feedback",
         )
         assertThat(user.getValue("question").jsonObject.getValue("kind").jsonPrimitive.content).isEqualTo("plan")
         assertThat(user.getValue("this_week").jsonObject.getValue("sessions_so_far").jsonPrimitive.int).isEqualTo(2)
@@ -79,19 +81,90 @@ class TrainerPromptTest {
      *
      * Each category has at least one value the fixtures below really hold: the title "Quillberry loop";
      * the day's sleep (430) and resting heart rate (58); the weigh-ins (80.4, 79.2, 78.6, none equal to
-     * the smoothed line) and the profile's weight (83.0); the target (71.5). The words ("sleep",
+     * the smoothed line) and the profile's weight (83.0); the target (71.5). [yearRequest] adds a month
+     * whose session has the same title, whose day has the same sleep and resting heart rate, and whose
+     * weigh-ins (82.0, 80.0) must stay on the phone too (D89). The words ("sleep",
      * "meal", ...) and the package name have no path into a request; they stay as a guard on the prompt.
      */
     @Test
     fun `no meal, sleep, weigh-in, target, title or app name is sent`() {
-        listOf(TrainerPrompt.planBody("a-model", planRequest()), TrainerPrompt.feedbackBody("a-model", reviewRequest()))
+        listOf(
+            TrainerPrompt.planBody("a-model", planRequest()),
+            TrainerPrompt.feedbackBody("a-model", reviewRequest()),
+            TrainerPrompt.planBody("a-model", yearRequest()),
+        )
             .map { it.lowercase() }
             .forEach { body ->
                 listOf(
                     "quillberry", "com.example", "sleep", "slept", "meal", "eaten", "breakfast",
-                    "83.0", "80.4", "79.2", "78.6", "71.5", "430", "58", "resting",
+                    "83.0", "80.4", "79.2", "78.6", "71.5", "430", "58", "resting", "82.0", "80.0",
                 ).forEach { forbidden -> assertThat(body).doesNotContain(forbidden) }
             }
+    }
+
+    /**
+     * D89: June's line, from [yearRequest]. The trend's change is worked out from 82.0 kg on 31 May and
+     * 80.0 kg on 30 June: 82 − 2 × (1 − 0.9^30) = 80.0848 kg at the end, a change of −1.92 kg.
+     */
+    @Test
+    fun `a month is sent with its days, its sessions by kind and each figure`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.planBody("a-model", yearRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+        val months = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("months").jsonArray.map { it.jsonObject }
+
+        assertThat(months.map { it.getValue("from").jsonPrimitive.content }).containsExactly("2026-06-01", "2026-07-01").inOrder()
+        val june = months.first()
+        assertThat(june.keys).containsExactly(
+            "from", "to", "whole_month", "sessions", "minutes", "by_kind", "longest_minutes", "best_week",
+            "heart_rate_average", "felt", "steps_a_day", "weight_trend_change_kg",
+        )
+        assertThat(june.getValue("to").jsonPrimitive.content).isEqualTo("2026-06-30")
+        assertThat(june.getValue("whole_month").jsonPrimitive.content).isEqualTo("true")
+        assertThat(june.getValue("sessions").jsonPrimitive.int).isEqualTo(1)
+        assertThat(june.getValue("minutes").jsonPrimitive.int).isEqualTo(50)
+        val walks = june.getValue("by_kind").jsonArray.single().jsonObject
+        assertThat(walks.getValue("kind").jsonPrimitive.content).isEqualTo("walk")
+        assertThat(walks.getValue("sessions").jsonPrimitive.int).isEqualTo(1)
+        assertThat(walks.getValue("distance_m").jsonPrimitive.int).isEqualTo(4_000)
+        assertThat(june.getValue("longest_minutes").jsonPrimitive.int).isEqualTo(50)
+        val best = june.getValue("best_week").jsonObject
+        assertThat(best.getValue("from").jsonPrimitive.content).isEqualTo("2026-06-08")
+        assertThat(best.getValue("distance_m").jsonPrimitive.int).isEqualTo(6_000)
+        assertThat(june.getValue("heart_rate_average").jsonPrimitive.int).isEqualTo(120)
+        val felt = june.getValue("felt").jsonObject
+        assertThat(listOf("easy", "right", "hard").map { felt.getValue(it).jsonPrimitive.int }).containsExactly(0, 0, 1).inOrder()
+        assertThat(june.getValue("steps_a_day").jsonPrimitive.int).isEqualTo(7_000)
+        assertThat(june.getValue("weight_trend_change_kg").jsonPrimitive.content).isEqualTo("-1.92")
+
+        val july = months.last()
+        assertThat(july.getValue("to").jsonPrimitive.content).isEqualTo("2026-07-23")
+        assertThat(july.getValue("whole_month").jsonPrimitive.content).isEqualTo("false")
+        assertThat(july.getValue("sessions").jsonPrimitive.int).isEqualTo(0)
+        assertThat(july.getValue("by_kind").jsonArray).isEmpty()
+        listOf("longest_minutes", "best_week", "heart_rate_average", "felt", "steps_a_day", "weight_trend_change_kg").forEach {
+            assertThat(july.getValue(it)).isEqualTo(JsonNull)
+        }
+    }
+
+    /** D90: the note goes exactly as stored, and the model is told what it is and what outranks it. */
+    @Test
+    fun `the note is sent unchanged, and the numbers are what happened`() {
+        val body = TrainerPrompt.planBody("a-model", yearRequest(), RequestProfile.DETERMINISTIC)
+        val user = Json.parseToJsonElement(userContent(Json.parseToJsonElement(body).jsonObject)).jsonObject
+
+        assertThat(user.getValue("about_me").jsonPrimitive.content).isEqualTo(NOTE)
+        assertThat(Json.parseToJsonElement(userContent(Json.parseToJsonElement(TrainerPrompt.planBody("a-model", planRequest())).jsonObject))
+            .jsonObject.getValue("about_me")).isEqualTo(JsonNull)
+        val system = systemContent(body)
+        assertThat(system).contains("about_me")
+        assertThat(system).contains("standing description")
+        assertThat(system).contains("the numbers are what happened")
+        assertThat(system).contains("months")
+    }
+
+    /** A standing note about an old injury is context, as words on earlier sessions are; it does not call for stopping. */
+    @Test
+    fun `the note is context, not a reason to stop`() {
+        assertThat(systemContent(TrainerPrompt.planBody("a-model", yearRequest()))).contains("about_me is context too")
     }
 
     /** The smoothed line goes, rounded; the fixture's weigh-ins are 80.4, 79.2 and 78.6 (invented). */
@@ -209,6 +282,33 @@ class TrainerPromptTest {
         currentYear = TEST_YEAR, earlierFeedback = emptyList(),
     )
 
+    /**
+     * [planRequest] with a year behind it (D89, D90): the record begins on 1 June 2026; June has one
+     * 50-minute walk of 4 km, heart 120, felt hard, under the same title as the recent walk; two days with
+     * steps and distance, one of them with the day's sleep and resting heart rate; weigh-ins at both ends
+     * of June. And the owner's note.
+     */
+    private fun yearRequest(): TrainerRequest {
+        val juneWalk = session(id = 3, day = JUNE_1 + 9, kind = WorkoutKind.WALK, minutes = 50).copy(
+            title = "Quillberry loop", distanceM = 4_000, avgHeartRate = 120,
+        )
+        return TrainerRequest.of(
+            question = TrainerQuestion.Plan(PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_30, Feeling.FRESH, Wish.PUSH)),
+            today = TEST_EPOCH_DAY, workouts = listOf(walk, strength, juneWalk),
+            reviews = listOf(review, TrainerReview(id = 2, workoutId = 3, planId = null, felt = Felt.HARD, words = "Invented.")),
+            plans = mapOf(9L to plan),
+            days = listOf(
+                HealthDay(TEST_EPOCH_DAY, distanceM = 4_000, activeKcal = 300, sleepMinutes = 430, restingHeartRate = 58),
+                HealthDay(JUNE_1 + 9, steps = 6_000, distanceM = 6_000, sleepMinutes = 430, restingHeartRate = 58),
+                HealthDay(JUNE_1 + 10, steps = 8_000),
+            ),
+            readings = listOf(WeightReading(JUNE_1 - 1, 82.0), WeightReading(JUNE_1 + 29, 80.0)),
+            profile = aProfile(weightKg = 83.0, goal = Goal.lose(0.5, targetKg = 71.5)),
+            currentYear = TEST_YEAR, earlierFeedback = emptyList(),
+            earliestDay = JUNE_1, aboutMe = NOTE,
+        )
+    }
+
     private fun session(id: Long, day: Long, kind: WorkoutKind, minutes: Int) = Workout(
         id = id, epochDay = day, startedAtMillis = day * 86_400_000L + 7 * 3_600_000L, durationMinutes = minutes,
         kind = kind, title = null, distanceM = null, energyKcal = null, energySource = EnergySource.NONE,
@@ -227,5 +327,10 @@ class TrainerPromptTest {
     private fun sentSessions(request: TrainerRequest): List<JsonObject> {
         val body = Json.parseToJsonElement(TrainerPrompt.planBody("a-model", request, RequestProfile.DETERMINISTIC)).jsonObject
         return Json.parseToJsonElement(userContent(body)).jsonObject.getValue("sessions").jsonArray.map { it.jsonObject }
+    }
+
+    private companion object {
+        val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
+        const val NOTE = "Invented note: an old knee injury, so no running downhill.\nWalks before work."
     }
 }
