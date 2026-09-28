@@ -20,8 +20,8 @@ import kotlin.coroutines.cancellation.CancellationException
  * the key, the day's ceiling, the POST, the counting, the closed set of failures, and learning what
  * the model accepts (D57).
  *
- * Shared by everything that asks the model something (D54 §6) — the meal estimator, and a food's
- * review — so the two cannot drift in how they count or how they fail. What is sent and what the
+ * Shared by everything that asks the model something (D54 §6) — the meal estimator, a food's review,
+ * and the trainer (D84) — so they cannot drift in how they count or how they fail. What is sent and what the
  * answer means stay with each caller, pure.
  *
  * The base URL is a parameter so a test can point it at a local server. **No test in this project

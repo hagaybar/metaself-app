@@ -48,6 +48,8 @@ import com.metaself.app.data.health.MovementCorrectionEntity
 import com.metaself.app.data.health.SleepSessionEntity
 import com.metaself.app.data.health.SleepStageEntity
 import com.metaself.app.data.health.WorkoutEntity
+import com.metaself.app.data.trainer.TrainerPlanEntity
+import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
@@ -708,6 +710,89 @@ class BackupRoundTripTest {
         arrival = BackupArrival(75.0, 20_700),
     )
 
+
+    /** D88: plans and reviews restored over themselves; each review on its own session, by its new id. */
+    @Test
+    fun `the trainer's plans and reviews come back on their own sessions`() = runTest {
+        db.workoutDao().insert(aWalk(startedAt = 1_000))
+        val second = db.workoutDao().insert(aWalk(startedAt = 2_000))
+        val planId = db.trainerDao().insertPlan(TrainerPlanEntity(0, 500, "RUN", 30, "FRESH", "PUSH", null, "{}", "m", true))
+        db.trainerDao().insertReview(TrainerReviewEntity(0, second, planId, "HARD", "Invented.", null, null, null))
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        assertThat(file.version).isEqualTo(Backup.CURRENT_VERSION)
+        repository().restore(file)
+
+        val walks = db.workoutDao().all()
+        val review = db.trainerDao().allReviews().single()
+        assertThat(walks.first { it.id == review.workoutId }.startedAtMillis).isEqualTo(2_000L)
+        assertThat(review.planId).isEqualTo(db.trainerDao().allPlans().single().id)
+        assertThat(db.trainerDao().allPlans().single().kept).isTrue()
+    }
+
+    /**
+     * D88: workouts with a gap in their ids (the middle one deleted by the band's app) come back as
+     * 1…n, each review on its own session; the review whose session was deleted comes back too, under
+     * a workout id no workout can have, and a session synced after the restore does not pick it up.
+     */
+    @Test
+    fun `a gap in workout ids and a review whose session is gone both survive a restore`() = runTest {
+        val first = db.workoutDao().insert(aWalk(startedAt = 1_000))
+        val middle = db.workoutDao().insert(aWalk(startedAt = 2_000))
+        val last = db.workoutDao().insert(aWalk(startedAt = 3_000))
+        db.trainerDao().insertReview(TrainerReviewEntity(0, last, null, "RIGHT", "On the last.", null, null, null))
+        db.trainerDao().insertReview(TrainerReviewEntity(0, middle, null, "HARD", "Session gone.", "{}", 900, "m"))
+        db.workoutDao().deleteSyncedRow(middle)
+        assertThat(db.workoutDao().all().map { it.id }).containsExactly(first, last).inOrder()
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        assertThat(file.trainerReviewsWithoutWorkout.map { it.words }).containsExactly("Session gone.")
+        val result = repository().restore(file)
+
+        val walks = db.workoutDao().all()
+        val reviews = db.trainerDao().allReviews()
+        assertThat(walks.map { it.id }).containsExactly(1L, 2L).inOrder()
+        val onLast = reviews.single { it.words == "On the last." }
+        assertThat(walks.single { it.id == onLast.workoutId }.startedAtMillis).isEqualTo(3_000L)
+        val gone = reviews.single { it.words == "Session gone." }
+        assertThat(gone.workoutId).isLessThan(0L)
+        assertThat(gone.feedback).isEqualTo("{}")
+        assertThat(result.trainerReviews).isEqualTo(2)
+
+        val synced = db.workoutDao().insert(aWalk(startedAt = 4_000))
+        assertThat(synced).isGreaterThan(0L)
+        assertThat(db.trainerDao().reviewOf(synced)).isNull()
+
+        // And again: a review without a workout keeps surviving the round trip.
+        repository().restore(BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 6_000)))!!)
+        assertThat(db.trainerDao().allReviews().map { it.words }).containsExactly("On the last.", "Session gone.")
+    }
+
+    /** D88: a version 1–4 file has no trainer record, and a restore replaces — so none is left. */
+    @Test
+    fun `an older file restored over reviews and plans leaves none`() = runTest {
+        val walk = db.workoutDao().insert(aWalk(startedAt = 1_000))
+        val planId = db.trainerDao().insertPlan(TrainerPlanEntity(0, 500, "RUN", 30, "FRESH", "PUSH", null, "{}", "m", true))
+        db.trainerDao().insertReview(TrainerReviewEntity(0, walk, planId, "HARD", "Invented.", null, null, null))
+        val version4 = BackupCodec.decode(
+            """{"version": 4, "exported_at": 1000, "workouts": [{"epoch_day": 20699, "started_at": 1000,
+                "duration_minutes": 30, "kind": "WALK", "energy_source": "NONE", "source": "SYNCED"}]}""",
+        )!!
+
+        repository().restore(version4)
+
+        assertThat(db.workoutDao().all()).hasSize(1)
+        assertThat(db.trainerDao().allReviews()).isEmpty()
+        assertThat(db.trainerDao().allPlans()).isEmpty()
+    }
+
+    /** A synced forty-minute walk starting at [startedAt]. Invented figures. */
+    private fun aWalk(startedAt: Long) = WorkoutEntity(
+        epochDay = 20_699, startedAtMillis = startedAt, durationMinutes = 40, kind = "WALK",
+        title = null, distanceM = 4_000, energyKcal = null, energySource = "NONE",
+        effort = null, source = "SYNCED", origin = "com.example.band", originId = "walk-$startedAt", note = null,
+    )
+
     private fun repository(
         profiles: ProfileRepository = FakeProfileRepository(null),
         savedMeals: SavedMealRepository = savedMeals(),
@@ -720,6 +805,7 @@ class BackupRoundTripTest {
         days = db.healthDayDao(),
         corrections = db.movementCorrectionDao(),
         bookkeeping = db.healthBookkeepingDao(),
+        trainer = db.trainerDao(),
         profiles = profiles,
         reminders = NoReminders(),
         scheduler = NoScheduler(),

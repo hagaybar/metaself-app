@@ -4,6 +4,7 @@ import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
+import com.metaself.app.domain.trainer.TrainerReview
 
 /**
  * @property week null until the first read has answered, and when it failed.
@@ -22,6 +23,9 @@ import com.metaself.app.domain.movement.WorkoutDraft
  * @property canGoLater the week shown is an earlier one, so › is drawn; never on this week (D83).
  * @property logDay the day "Log a workout" logs onto: the open day; today on this week when none is
  *   open (D76); null on an earlier week with none open, when the button is disabled (D83).
+ * @property reviews the owner's review of each session that has one, by workout id — what a session's
+ *   button says (D85, plan design question 7). Null when the reviews could not be read: then no
+ *   session has a button, and the week is shown all the same (D8).
  */
 data class MovementUiState(
     val week: MovementWeek? = null,
@@ -34,6 +38,7 @@ data class MovementUiState(
     val canGoEarlier: Boolean = false,
     val canGoLater: Boolean = false,
     val logDay: Long? = null,
+    val reviews: Map<Long, TrainerReview>? = emptyMap(),
 )
 
 /**

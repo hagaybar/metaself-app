@@ -17,6 +17,7 @@ class FakeTypedWorkouts(initial: List<Workout> = emptyList()) : TypedWorkouts {
     val logged = mutableListOf<Workout>()
     val changed = mutableListOf<Workout>()
     val deleted = mutableListOf<Workout>()
+    val restored = mutableListOf<Workout>()
     var failing: Exception? = null
     var beforeWrite: suspend () -> Unit = {}
     private var nextId = 100L
@@ -29,6 +30,15 @@ class FakeTypedWorkouts(initial: List<Workout> = emptyList()) : TypedWorkouts {
         failing?.let { throw it }
         val id = nextId++
         logged += workout
+        workouts.value = workouts.value + workout.copy(id = id)
+        return id
+    }
+
+    override suspend fun restore(workout: Workout): Long {
+        beforeWrite()
+        failing?.let { throw it }
+        restored += workout
+        val id = if (workouts.value.none { it.id == workout.id }) workout.id else nextId++
         workouts.value = workouts.value + workout.copy(id = id)
         return id
     }

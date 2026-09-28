@@ -85,6 +85,12 @@ data class Workout(
     /** Steps in the session: only ever a workout file's (D82). */
     val steps: Int? = null,
     val stepsSource: WorkoutFigureSource? = null,
+    /** The session's highest heart rate, worked out from its readings (D70); null with none. */
+    val maxHeartRate: Int? = null,
+    /** Seconds in heart-rate zones 1 to 5 (D70); null with no readings. */
+    val zoneSeconds: List<Int>? = null,
+    /** What the zones were measured against, as stored: ESTIMATED (220 − age) until an observed maximum exists. */
+    val zoneMaxSource: String? = null,
 ) {
     /** A file gave it any figure (D82) — how a second import of the same file finds it again. */
     val fromFile: Boolean

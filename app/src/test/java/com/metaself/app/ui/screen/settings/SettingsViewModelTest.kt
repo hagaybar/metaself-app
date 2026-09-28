@@ -39,6 +39,7 @@ import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.ai.MealEstimator
@@ -636,6 +637,7 @@ class SettingsViewModelTest {
             days = daos.days,
             corrections = daos.corrections,
             bookkeeping = daos.bookkeeping,
+            trainer = daos.trainer,
             profiles = profiles,
             reminders = Reminders(),
             scheduler = Scheduler(),
@@ -702,6 +704,7 @@ class SettingsViewModelTest {
         val days: HealthDayDao = table(failing)
         val corrections: MovementCorrectionDao = table(failing)
         val bookkeeping: HealthBookkeepingDao = table(failing)
+        val trainer: TrainerDao = table(failing)
 
         private inline fun <reified T> table(failing: Set<String>): T = Proxy.newProxyInstance(
             T::class.java.classLoader,

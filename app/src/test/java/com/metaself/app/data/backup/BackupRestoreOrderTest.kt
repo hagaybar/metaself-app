@@ -20,6 +20,7 @@ import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
+import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupAi
 import com.metaself.app.domain.backup.BackupArrival
@@ -36,6 +37,8 @@ import com.metaself.app.domain.backup.BackupRevision
 import com.metaself.app.domain.backup.BackupSavedMeal
 import com.metaself.app.domain.backup.BackupSleep
 import com.metaself.app.domain.backup.BackupSleepStage
+import com.metaself.app.domain.backup.BackupTrainerPlan
+import com.metaself.app.domain.backup.BackupTrainerReview
 import com.metaself.app.domain.backup.BackupWeight
 import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
@@ -64,6 +67,9 @@ class BackupRestoreOrderTest {
 
     private val log = mutableListOf<String>()
 
+    /** The arguments of each write (a suspending one ends with its continuation), by the name it is logged under; the last call's. */
+    private val written = mutableMapOf<String, List<Any?>>()
+
     @Test
     fun `the settings are written inside the transaction, after every database write, and the alarm after the commit`() =
         runTest {
@@ -78,6 +84,8 @@ class BackupRestoreOrderTest {
                 "sleep.deleteAll",
                 "days.deleteAll",
                 "corrections.deleteAll",
+                "trainer.deleteReviews",
+                "trainer.deletePlans",
                 "bookkeeping.clearSync",
                 "findOrCreate Yoghurt",
                 "create Breakfast",
@@ -90,6 +98,8 @@ class BackupRestoreOrderTest {
                 "sleep.insertStages",
                 "days.insertAll",
                 "corrections.insertAll",
+                "trainer.insertPlans",
+                "trainer.insertReviews",
                 "profile.save",
                 "saveRevision",
                 "saveArrival",
@@ -255,6 +265,7 @@ class BackupRestoreOrderTest {
                 days = dao(prefix = "days."),
                 corrections = dao(prefix = "corrections."),
                 bookkeeping = dao(prefix = "bookkeeping."),
+                trainer = dao(prefix = "trainer."),
                 profiles = Profiles(),
                 reminders = Reminders(),
                 scheduler = Scheduler(),
@@ -269,6 +280,42 @@ class BackupRestoreOrderTest {
         assertThat(failure.cause).hasMessageThat().isEqualTo("disk full")
         assertThat(log).containsAtLeast("sleep.insertStages", "rollback", "put back").inOrder()
         assertThat(log).doesNotContain("profile.save")
+    }
+
+    /**
+     * D88: the file's reviews without a workout are restored under -1, -2, …, which no workout can
+     * have; a review inside a workout goes to the id that workout is inserted with. Invented words.
+     */
+    @Test
+    fun `reviews without a workout are restored under ids no workout can have, and counted`() = runTest {
+        val walk = aFile().workouts.single()
+        val file = aFile().copy(
+            workouts = listOf(walk, walk.copy(startedAtMillis = 2_000, trainerReview = BackupTrainerReview(planId = 4, words = "On two."))),
+            trainerReviewsWithoutWorkout = listOf(BackupTrainerReview(words = "Gone.")),
+            trainerPlans = listOf(BackupTrainerPlan(4, 0, "RUN", 30, "FRESH", "PUSH", null, "{}", "m")),
+        )
+
+        val result = restorer().restore(file)
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = written.getValue("trainer.insertReviews").first() as List<TrainerReviewEntity>
+        assertThat(rows.map { it.workoutId to it.words }).containsExactly(2L to "On two.", -1L to "Gone.").inOrder()
+        assertThat(result.trainerReviews).isEqualTo(2)
+        assertThat(result.trainerPlans).isEqualTo(1)
+    }
+
+    /** D88: a version 1–4 file holds no trainer record, and a restore replaces — so there is none after. */
+    @Test
+    fun `an older file restored over reviews and plans leaves none`() = runTest {
+        val file = aFile().copy(version = 4)
+
+        val result = restorer().restore(file)
+
+        assertThat(log).containsAtLeast("trainer.deleteReviews", "trainer.deletePlans", "trainer.insertPlans", "trainer.insertReviews").inOrder()
+        assertThat(written.getValue("trainer.insertReviews").first() as List<*>).isEmpty()
+        assertThat(written.getValue("trainer.insertPlans").first() as List<*>).isEmpty()
+        assertThat(result.trainerReviews).isEqualTo(0)
+        assertThat(result.trainerPlans).isEqualTo(0)
     }
 
     /** What [block] threw, which must be a [T]. `assertThrows` takes no suspending block. */
@@ -362,6 +409,7 @@ class BackupRestoreOrderTest {
         days = dao(prefix = "days."),
         corrections = dao(prefix = "corrections."),
         bookkeeping = dao(prefix = "bookkeeping."),
+        trainer = dao(prefix = "trainer."),
         profiles = profiles,
         reminders = Reminders(),
         scheduler = Scheduler(),
@@ -401,7 +449,7 @@ class BackupRestoreOrderTest {
      * recorded: only writes are in question here.
      */
     private inline fun <reified T> dao(prefix: String = "", failingOn: String? = null): T =
-        Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
+        Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, args ->
             when {
                 method.name == "toString" -> T::class.java.simpleName
                 method.name == "hashCode" -> 0
@@ -409,6 +457,7 @@ class BackupRestoreOrderTest {
                 method.name.startsWith("all") -> emptyList<Any>()
                 else -> {
                     log += prefix + method.name
+                    written[prefix + method.name] = args?.toList().orEmpty()
                     if (method.name == failingOn) throw IllegalStateException("disk full")
                     when (method.name) {
                         "insertMeal", "insertSession" -> 1L

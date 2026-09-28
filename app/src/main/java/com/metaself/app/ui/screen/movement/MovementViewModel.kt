@@ -10,12 +10,14 @@ import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.movement.WorkoutFileWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -68,6 +70,8 @@ class MovementViewModel(
     private val files: WorkoutFileImporter = WorkoutFileImporter.NONE,
     /** Where [fileStep] writes the problem log (a file, D8) — a test supplies its own. */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Which sessions have a review, so each says its own button (D85, design question 7). */
+    private val trainer: TrainerReviews = TrainerReviews.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -80,7 +84,8 @@ class MovementViewModel(
         profiles: ProfileRepository,
         now: Now,
         files: WorkoutFileImporter,
-    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO)
+        trainer: TrainerReviews,
+    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer)
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
@@ -109,7 +114,7 @@ class MovementViewModel(
     private var nextSheetToken = 0L
 
     /** The week shown and the record's earliest day, which bounds how far back ‹ goes (D83). */
-    private data class Read(val week: MovementWeek, val earliest: Long?)
+    private data class Read(val week: MovementWeek, val earliest: Long?, val reviews: Map<Long, TrainerReview>?)
 
     /**
      * Null means the read failed; the failure is logged where it happened, below. The earliest day
@@ -126,8 +131,9 @@ class MovementViewModel(
                 record.observeWorkouts(monday, last),
                 mealsOn((monday..last).toList()),
                 record.observeEarliestDay(),
-            ) { days, workouts, mealsByDay, earliest ->
-                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest)
+                reviews(),
+            ) { days, workouts, mealsByDay, earliest, reviews ->
+                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest, reviews?.associateBy { it.workoutId })
             }
             built
         }
@@ -152,6 +158,7 @@ class MovementViewModel(
                 canUndo = undoNow.offered,
                 undoFailed = undoNow.failed,
                 fileImport = file,
+                reviews = read.reviews,
             )
         }
     }
@@ -330,9 +337,9 @@ class MovementViewModel(
 
     /**
      * Put back the last typed workout deleted here, on its own day, at its own start, with its own
-     * figures, effort, note and hidden flag. Through [TypedWorkouts.log], so it comes back under a new
-     * id — nothing else refers to a typed workout's id — and its day's summary is worked out again in
-     * the same transaction.
+     * figures, effort, note and hidden flag. Through [TypedWorkouts.restore], so it comes back under
+     * its own id — a trainer review refers to it by that id (D88), and is its own again — and its day's
+     * summary is worked out again in the same transaction.
      *
      * Cleared as it is used, so a second press does not put it back twice. A restore that throws puts
      * the receipt back, so Undo is still there to try again, and the screen says it failed (D8).
@@ -342,7 +349,7 @@ class MovementViewModel(
         undo.value = UndoState(offered = undoable.isNotEmpty())
         viewModelScope.launch {
             try {
-                typed.log(workout)
+                typed.restore(workout)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
@@ -395,6 +402,16 @@ class MovementViewModel(
     }
 
     private data class UndoState(val offered: Boolean = false, val failed: Boolean = false)
+
+    /**
+     * The trainer's reviews, for each session's button. The week does not depend on them: a read that
+     * fails is logged (D8) and the week is shown with no review buttons (null) rather than not at all
+     * — never with every session asking "How did it go?", which would be wrong for one already reviewed.
+     */
+    private fun reviews(): Flow<List<TrainerReview>?> = trainer.observeReviews().map<List<TrainerReview>, List<TrainerReview>?> { it }.catch { failure ->
+        problems.record(PROBLEM_KIND, "reviews not read: " + (failure.message ?: failure::class.java.simpleName))
+        emit(null)
+    }
 
     private fun mealsOn(days: List<Long>): Flow<Map<Long, List<Meal>>> =
         combine(days.map { day -> meals.observeDay(day).map { day to it } }) { pairs -> pairs.toMap() }

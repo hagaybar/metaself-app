@@ -133,8 +133,51 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 4`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(4)
+    fun `the format is version 5`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(5)
+    }
+
+    /** D88: a plan, and a review inside its workout, survive the file. Invented figures and words. */
+    @Test
+    fun `the trainer's plans and a session's review survive the file`() {
+        val plan = BackupTrainerPlan(id = 3, createdAtMillis = 1_000, activity = "RUN", minutes = 30, feeling = "FRESH",
+            wish = "PUSH", words = null, suggestion = "{\"title\":\"t\"}", model = "a-model", kept = true)
+        val workout = BackupWorkout(
+            epochDay = 20_699, startedAtMillis = 1_000, durationMinutes = 40, kind = "WALK", energySource = "NONE", source = "SYNCED",
+            trainerReview = BackupTrainerReview(planId = 3, felt = "RIGHT", words = "Invented.", feedback = null, feedbackAtMillis = null, model = null),
+        )
+
+        val text = BackupCodec.encode(Backup(exportedAtMillis = 1, workouts = listOf(workout), trainerPlans = listOf(plan)))
+        val read = BackupCodec.decode(text)!!
+
+        assertThat(text).contains("\"trainer_plans\"")
+        assertThat(text).contains("\"trainer_review\"")
+        assertThat(read.trainerPlans.single()).isEqualTo(plan)
+        assertThat(read.workouts.single()).isEqualTo(workout)
+    }
+
+    /** D88: a review whose workout is gone is written on its own, at the top level. Invented words. */
+    @Test
+    fun `a review without a workout survives the file`() {
+        val orphan = BackupTrainerReview(planId = 3, felt = "HARD", words = "Invented.", feedback = "{}", feedbackAtMillis = 2_000, model = "a-model")
+
+        val text = BackupCodec.encode(Backup(exportedAtMillis = 1, trainerReviewsWithoutWorkout = listOf(orphan)))
+        val read = BackupCodec.decode(text)!!
+
+        assertThat(text).contains("\"trainer_reviews_without_workout\"")
+        assertThat(read.trainerReviewsWithoutWorkout).containsExactly(orphan)
+    }
+
+    @Test
+    fun `a version 4 file reads with no plans and no reviews`() {
+        val version4 = """{"version": 4, "exported_at": 1000, "workouts": [{"epoch_day": 20699, "started_at": 1000,
+            "duration_minutes": 30, "kind": "WALK", "energy_source": "NONE", "source": "SYNCED"}]}"""
+
+        val read = BackupCodec.decode(version4)!!
+
+        assertThat(read.trainerPlans).isEmpty()
+        assertThat(read.workouts.single().trainerReview).isNull()
+        assertThat(read.trainerReviewsWithoutWorkout).isEmpty()
     }
 
     /** D82: what a workout file added, and its source, is in the file. Invented figures. */

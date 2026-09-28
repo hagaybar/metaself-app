@@ -13,6 +13,8 @@ Scripts carried in version control so they are not only on one machine.
   rather than closing it. Copy the pattern for the next migration.
 - `check-migration-6-7.py` — the same for version 7 (D82): three columns added to `workouts`,
   each definition checked against `7.json`, every other table declared identically, every row kept.
+- `check-migration-7-8.py` — the same for version 8 (D88): the two trainer tables and the review's
+  unique index created verbatim from `8.json`, every other table declared identically and every row kept.
 - `check-impossible-figures.py` — runs the on-open repair of issue #7 (clearing a food's number
   group that holds a figure the food form would refuse) against `sqlite3` from the latest exported
   schema, and reads the result back the way the app reads a food. CI's `RoomFoodRepositoryTest` is

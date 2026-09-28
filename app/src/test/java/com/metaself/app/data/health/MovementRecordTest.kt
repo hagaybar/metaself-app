@@ -180,4 +180,21 @@ class MovementRecordTest {
         origin = "com.example.band", originId = "session-1",
         hidden = hidden, note = null, avgHeartRate = avgHeartRate,
     )
+
+    /** D84 sends these; D70 worked them out from the readings. */
+    @Test
+    fun `a stored workout keeps its highest heart rate and its zones`() {
+        val stored = WorkoutEntity(
+            epochDay = 20_699, startedAtMillis = 0, durationMinutes = 40, kind = "WALK", title = null,
+            distanceM = 3_000, energyKcal = 200, energySource = "BAND", effort = null, source = "SYNCED",
+            origin = "com.example.band", originId = "w-1", note = null,
+            avgHeartRate = 110, maxHeartRate = 130, zoneSeconds = "600,1200,600,0,0", zoneMaxSource = "ESTIMATED",
+        )
+
+        val workout = stored.toWorkout()
+
+        assertThat(workout.maxHeartRate).isEqualTo(130)
+        assertThat(workout.zoneSeconds).containsExactly(600, 1200, 600, 0, 0).inOrder()
+        assertThat(workout.zoneMaxSource).isEqualTo("ESTIMATED")
+    }
 }

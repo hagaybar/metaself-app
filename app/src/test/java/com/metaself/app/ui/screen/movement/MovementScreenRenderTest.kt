@@ -16,6 +16,10 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutFileRefusal
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
+import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.PlanFollowed
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
 import org.junit.Test
@@ -462,6 +466,66 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("Mon 16 Jun 2025")
     }
 
+    /** D85: the trainer is reached from Movement's top bar. */
+    @Test
+    fun `the top bar has Trainer, which asks for the trainer`() {
+        var asked = false
+        val texts = draw(onTrainer = { asked = true })
+
+        assertThat(texts).contains("Trainer")
+        render.click("Trainer")
+        assertThat(asked).isTrue()
+    }
+
+    /** D87, design question 7: a session with no review asks how it went. */
+    @Test
+    fun `under the open day's session is How did it go, which asks for that session`() {
+        var asked: Long? = null
+        val texts = draw(openDay = TEST_EPOCH_DAY, onReview = { asked = it })
+
+        assertThat(texts).contains("How did it go?")
+        assertThat(render.isDrawnBefore("Running · 6.2 km", "How did it go?")).isTrue()
+        render.click("How did it go?")
+        assertThat(asked).isEqualTo(1L)
+    }
+
+    @Test
+    fun `a session reviewed without feedback offers Get feedback`() {
+        val review = TrainerReview(workoutId = 1, planId = null, felt = Felt.RIGHT, words = null)
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, reviews = mapOf(1L to review)))
+
+        assertThat(texts).contains("Get feedback")
+        assertThat(texts).doesNotContain("How did it go?")
+    }
+
+    @Test
+    fun `a session with feedback offers See feedback`() {
+        val feedback = Feedback(
+            headline = "A steady run.", againstPlan = "", numbers = "", nextTime = "", thisWeek = "",
+            followed = PlanFollowed.NO_PLAN,
+        )
+        val review = TrainerReview(workoutId = 1, planId = null, felt = Felt.RIGHT, words = null, feedback = feedback)
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, reviews = mapOf(1L to review)))
+
+        assertThat(texts).contains("See feedback")
+    }
+
+    /** D8: reviews that could not be read give no button, rather than a wrong one. */
+    @Test
+    fun `with the reviews unread, a session has no button`() {
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, reviews = null))
+
+        assertThat(texts).contains("Running · 6.2 km · 32 min · 5:10 /km")
+        assertThat(texts).doesNotContain("How did it go?")
+    }
+
+    @Test
+    fun `a closed day offers no session button`() {
+        val texts = draw(openDay = 20_698)
+
+        assertThat(texts).doesNotContain("How did it go?")
+    }
+
     private fun draw(
         openDay: Long? = TEST_EPOCH_DAY,
         // This week: with every day closed, Log a workout still logs onto today (D76).
@@ -476,6 +540,8 @@ class MovementScreenRenderTest {
         onDismissFile: () -> Unit = {},
         onEarlierWeek: () -> Unit = {},
         onLaterWeek: () -> Unit = {},
+        onTrainer: () -> Unit = {},
+        onReview: (Long) -> Unit = {},
     ): List<String> = render.texts {
         MovementScreen(
             state = state,
@@ -490,6 +556,8 @@ class MovementScreenRenderTest {
             onDismissFile = onDismissFile,
             onEarlierWeek = onEarlierWeek,
             onLaterWeek = onLaterWeek,
+            onTrainer = onTrainer,
+            onReview = onReview,
         )
     }
 }

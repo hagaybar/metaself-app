@@ -11,6 +11,8 @@ import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.FakeTrainerStore
+import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
@@ -25,6 +27,8 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -379,8 +383,8 @@ class MovementViewModelTest {
 
     /**
      * Undo puts back the workout as it was — its day, start, kind, figures, energy's source, effort,
-     * note and hidden flag — through the store's log, which gives it a new id and works its day out
-     * again. Every figure is invented.
+     * note and hidden flag — under its own id, so a trainer review of it (D88) is its own again;
+     * the store works its day out again. Every figure is invented.
      */
     @Test
     fun `Undo puts the deleted workout back as it was, and is then spent`() = runTest {
@@ -401,12 +405,12 @@ class MovementViewModelTest {
 
         model.state.first { !it.canUndo }
         advanceUntilIdle()
-        assertThat(typed.logged).containsExactly(workout)
-        assertThat(typed.workouts.value.single().copy(id = 9)).isEqualTo(workout)
+        assertThat(typed.restored).containsExactly(workout)
+        assertThat(typed.workouts.value.single()).isEqualTo(workout)
 
         model.undoDelete()
         advanceUntilIdle()
-        assertThat(typed.logged).hasSize(1)
+        assertThat(typed.restored).hasSize(1)
     }
 
     @Test
@@ -425,12 +429,12 @@ class MovementViewModelTest {
 
         model.undoDelete()
         advanceUntilIdle()
-        assertThat(typed.logged).containsExactly(second)
+        assertThat(typed.restored).containsExactly(second)
         assertThat(model.state.first { it.week != null }.canUndo).isTrue()
 
         model.undoDelete()
         advanceUntilIdle()
-        assertThat(typed.logged).containsExactly(second, first).inOrder()
+        assertThat(typed.restored).containsExactly(second, first).inOrder()
         assertThat(model.state.first { !it.canUndo }.canUndo).isFalse()
     }
 
@@ -514,7 +518,7 @@ class MovementViewModelTest {
         model.undoDelete()
         val after = model.state.first { !it.canUndo }
         assertThat(after.undoFailed).isFalse()
-        assertThat(typed.logged).containsExactly(workout)
+        assertThat(typed.restored).containsExactly(workout)
     }
 
     /** D8: said on the sheet, logged, never thrown; what was typed is kept. */
@@ -811,6 +815,47 @@ class MovementViewModelTest {
         assertThat(problems.recorded.single().kind).isEqualTo("movement")
     }
 
+    /** D85, design question 7: which sessions have a review, so each row says its own action. */
+    @Test
+    fun `a session's review is carried by its workout id`() = runTest {
+        val trainer = FakeTrainerStore()
+        val review = TrainerReview(workoutId = 1, planId = null, felt = Felt.RIGHT, words = null)
+        trainer.reviews.value = listOf(review)
+
+        val state = viewModel(trainer = trainer).state.first { it.week != null && !it.reviews.isNullOrEmpty() }
+
+        assertThat(state.reviews).containsExactly(1L, review)
+    }
+
+    @Test
+    fun `a review saved while the screen is open shows without reopening it`() = runTest {
+        val trainer = FakeTrainerStore()
+        val model = viewModel(trainer = trainer)
+        assertThat(model.state.first { it.week != null }.reviews).isEmpty()
+
+        val review = TrainerReview(workoutId = 2, planId = null, felt = null, words = "Steady.")
+        trainer.reviews.value = listOf(review)
+
+        assertThat(model.state.first { !it.reviews.isNullOrEmpty() }.reviews!![2L]).isEqualTo(review)
+    }
+
+    /** D8: the week does not depend on the trainer; a review read that fails only loses the buttons. */
+    @Test
+    fun `reviews that cannot be read leave the week shown with none, and are logged`() = runTest {
+        val problems = RecordingProblemLog()
+        val broken = object : TrainerReviews {
+            override fun observeReviews(): Flow<List<TrainerReview>> = flow { throw IllegalStateException("disk full") }
+        }
+        val record = FakeRecord().apply { days.value = listOf(HealthDay(epochDay = TEST_EPOCH_DAY, distanceM = 5_000)) }
+
+        val state = viewModel(record = record, problems = problems, trainer = broken).state.first { it.week != null || it.unreadable }
+
+        assertThat(state.unreadable).isFalse()
+        assertThat(state.week!!.distanceM).isEqualTo(5_000)
+        assertThat(state.reviews).isNull()
+        assertThat(problems.recorded.single().kind).isEqualTo("movement")
+    }
+
     private class FakeImporter(var next: ImportOutcome) : WorkoutFileImporter {
         val calls = mutableListOf<String>()
         override suspend fun import(uri: String): ImportOutcome = next.also { calls += "import $uri" }
@@ -824,7 +869,8 @@ class MovementViewModelTest {
         profiles: ProfileRepository = FakeProfileRepository(aProfile()),
         problems: ProblemLog = ProblemLog.NONE,
         importer: WorkoutFileImporter = WorkoutFileImporter.NONE,
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher)
+        trainer: TrainerReviews = TrainerReviews.NONE,
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())

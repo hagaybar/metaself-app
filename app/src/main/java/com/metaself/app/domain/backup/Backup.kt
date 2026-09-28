@@ -36,6 +36,13 @@ data class Backup(
     @SerialName("health_days") val healthDays: List<BackupHealthDay> = emptyList(),
     @SerialName("movement_corrections")
     val movementCorrections: List<BackupMovementCorrection> = emptyList(),
+    @SerialName("trainer_plans") val trainerPlans: List<BackupTrainerPlan> = emptyList(),
+    /**
+     * D88: the reviews whose workout is no longer on the phone (the band's app deleted it, or a typed
+     * one was deleted). Every other review is written inside its workout.
+     */
+    @SerialName("trainer_reviews_without_workout")
+    val trainerReviewsWithoutWorkout: List<BackupTrainerReview> = emptyList(),
 ) {
     companion object {
         /**
@@ -56,8 +63,13 @@ data class Backup(
          * Version 4 adds, on each workout, what a workout file gave it (D82): where its distance came
          * from, its steps, and where those came from. An older file has none of the three, and each
          * reads as none.
+         *
+         * Version 5 adds the trainer (D88): the stored plans, and each session's review written inside
+         * its workout, so a review needs no workout id in the file. A review whose workout is gone is
+         * written on its own, in [trainerReviewsWithoutWorkout]. Restoring a version 1–4 file leaves
+         * no plans and no reviews — a restore replaces.
          */
-        const val CURRENT_VERSION = 4
+        const val CURRENT_VERSION = 5
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -257,6 +269,37 @@ data class BackupWorkout(
     @SerialName("distance_source") val distanceSource: String? = null,
     val steps: Int? = null,
     @SerialName("steps_source") val stepsSource: String? = null,
+    /** D88: the owner's words on this session, if any. */
+    @SerialName("trainer_review") val trainerReview: BackupTrainerReview? = null,
+)
+
+/** One of the trainer's suggestions (D88). [suggestion] is the answer's own JSON, kept as text. */
+@Serializable
+data class BackupTrainerPlan(
+    val id: Long,
+    @SerialName("created_at") val createdAtMillis: Long,
+    val activity: String,
+    val minutes: Int,
+    val feeling: String,
+    val wish: String,
+    val words: String? = null,
+    val suggestion: String,
+    val model: String,
+    val kept: Boolean = false,
+)
+
+/**
+ * The owner's words on the workout it sits in, or on a workout no longer on the phone (D88). [planId]
+ * names a [BackupTrainerPlan]'s id.
+ */
+@Serializable
+data class BackupTrainerReview(
+    @SerialName("plan_id") val planId: Long? = null,
+    val felt: String? = null,
+    val words: String? = null,
+    val feedback: String? = null,
+    @SerialName("feedback_at") val feedbackAtMillis: Long? = null,
+    val model: String? = null,
 )
 
 /** One night, under the day the night ended (the waking day), with its stages inside it. */

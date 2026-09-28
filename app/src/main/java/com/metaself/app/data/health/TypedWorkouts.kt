@@ -24,6 +24,13 @@ interface TypedWorkouts {
     suspend fun log(workout: Workout): Long
 
     /**
+     * Puts back a typed workout [delete] removed, as it was, under its own id while that id is free —
+     * so a trainer review of it (D88), which names it by id, is its own again — and under a new one
+     * otherwise. Returns the id it came back under.
+     */
+    suspend fun restore(workout: Workout): Long
+
+    /**
      * Replaces the typed workout stored under [workout]'s id, keeping its day, start and hidden flag.
      * Found by id alone, so a [workout] carrying a different day still reaches its row. False when
      * nothing was changed: no row has that id, or the row is synced.
@@ -41,6 +48,7 @@ interface TypedWorkouts {
         val NONE: TypedWorkouts = object : TypedWorkouts {
             override fun observe(from: Long, to: Long): Flow<List<Workout>> = flowOf(emptyList())
             override suspend fun log(workout: Workout): Long = error("no store")
+            override suspend fun restore(workout: Workout): Long = error("no store")
             override suspend fun change(workout: Workout): Boolean = error("no store")
             override suspend fun delete(workout: Workout): Boolean = error("no store")
         }
@@ -69,6 +77,21 @@ class RoomTypedWorkouts @Inject constructor(
         var id = 0L
         transaction.run {
             id = workouts.insert(workout.toTypedEntity().copy(id = 0))
+            summariseAgain(workout.epochDay)
+        }
+        return id
+    }
+
+    /**
+     * In one transaction with the id check, so nothing can take the id between the two. The workouts
+     * table's ids are AUTOINCREMENT, so a deleted row's id is never handed to another; only a backup
+     * restored since the delete (which renumbers every workout) can have filled it.
+     */
+    override suspend fun restore(workout: Workout): Long {
+        var id = 0L
+        transaction.run {
+            val free = workout.id > 0 && workouts.byId(workout.id) == null
+            id = workouts.insert(workout.toTypedEntity().copy(id = if (free) workout.id else 0))
             summariseAgain(workout.epochDay)
         }
         return id

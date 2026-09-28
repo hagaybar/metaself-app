@@ -10,11 +10,24 @@ import com.metaself.app.data.day.RoomDatabaseTransaction
 import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.RoomTrainerStore
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.health.HealthKind
 import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.Feeling
+import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.PlanAnswers
+import com.metaself.app.domain.trainer.PlanFollowed
+import com.metaself.app.domain.trainer.PlanStep
+import com.metaself.app.domain.trainer.SessionPlan
+import com.metaself.app.domain.trainer.TimeAvailable
+import com.metaself.app.domain.trainer.TrainerPlan
+import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.Wish
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -317,6 +330,12 @@ class HealthRecordStoreTest {
         assertThat(db.healthDayDao().day(day)!!.workoutCount).isEqualTo(1)
         assertThat(db.healthDayDao().day(day)!!.steps).isEqualTo(9_000)
         assertThat(typed.delete(aTypedWorkout(id = id, epochDay = day))).isFalse()
+
+        // Undo (D76): back under its own id, which AUTOINCREMENT never handed to anything else.
+        assertThat(typed.restore(aTypedWorkout(id = id, epochDay = day, minutes = 60))).isEqualTo(id)
+        assertThat(db.workoutDao().byId(id)!!.durationMinutes).isEqualTo(60)
+        assertThat(db.healthDayDao().day(day)!!.workoutCount).isEqualTo(2)
+        assertThat(typed.delete(aTypedWorkout(id = id, epochDay = day))).isTrue()
 
         val again = typed.log(aTypedWorkout(id = syncedId, epochDay = day, minutes = 45))
         assertThat(again).isNotEqualTo(syncedId)
@@ -757,6 +776,68 @@ class HealthRecordStoreTest {
         distanceM = distanceM,
         energyKcal = null,
     )
+
+    /** D86: keeping one plan unkeeps any other. Invented figures. */
+    @Test
+    fun `keeping a plan replaces the kept one`() = runTest {
+        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val first = trainer.addPlan(aTrainerPlan(createdAt = 1_000))
+        val second = trainer.addPlan(aTrainerPlan(createdAt = 2_000))
+
+        trainer.keep(first)
+        trainer.keep(second)
+
+        assertThat(trainer.keptPlan()!!.id).isEqualTo(second)
+        assertThat(db.trainerDao().allPlans().count { it.kept }).isEqualTo(1)
+    }
+
+    /** D88: one review per session; saving again replaces it. */
+    @Test
+    fun `a session has one review, and saving again replaces it`() = runTest {
+        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val workoutId = db.workoutDao().insert(aSyncedWalkEntity())
+
+        val id = trainer.putReview(TrainerReview(workoutId = workoutId, planId = null, felt = Felt.EASY, words = null))
+        val again = trainer.putReview(TrainerReview(workoutId = workoutId, planId = null, felt = Felt.HARD, words = "Invented."))
+
+        assertThat(again).isEqualTo(id)
+        assertThat(trainer.reviewOf(workoutId)!!.felt).isEqualTo(Felt.HARD)
+        assertThat(trainer.observeReviewedWorkouts().first().map { it.id }).containsExactly(workoutId)
+    }
+
+    @Test
+    fun `the latest feedback is newest first and leaves out the session asked about`() = runTest {
+        val trainer = RoomTrainerStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        (1L..4L).forEach { n ->
+            trainer.putReview(TrainerReview(workoutId = n, planId = null, felt = null, words = null,
+                feedback = aFeedback("Headline $n"), feedbackAtMillis = n * 1_000, model = "m"))
+        }
+
+        assertThat(trainer.latestFeedback(3, exceptWorkoutId = 4).map { it.headline })
+            .containsExactly("Headline 3", "Headline 2", "Headline 1").inOrder()
+    }
+
+    /** A suggestion made at [createdAt], not kept. Invented answers and words. */
+    private fun aTrainerPlan(createdAt: Long) = TrainerPlan(
+        id = 0, createdAtMillis = createdAt,
+        answers = PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE),
+        plan = SessionPlan(
+            "Steady walk",
+            listOf(PlanStep(0, 10, "Warm up", ""), PlanStep(10, 35, "Walk", "zone 2"), PlanStep(35, 45, "Cool down", "")),
+            "Invented.",
+        ),
+        model = "a-model", kept = false,
+    )
+
+    /** A synced forty-minute walk at the start of [day]. Invented. */
+    private fun aSyncedWalkEntity() = WorkoutEntity(
+        epochDay = day, startedAtMillis = day * DAY, durationMinutes = 40, kind = "WALK",
+        title = null, distanceM = 4_000, energyKcal = null, energySource = "NONE",
+        effort = null, source = "SYNCED", origin = ORIGIN, originId = "w-1", note = null,
+    )
+
+    private fun aFeedback(headline: String) =
+        Feedback(headline, "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.NO_PLAN)
 
     private companion object {
         const val ORIGIN = "com.example.band"

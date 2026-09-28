@@ -62,6 +62,11 @@ import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.day.MIGRATION_4_5
 import com.metaself.app.data.day.MIGRATION_5_6
 import com.metaself.app.data.day.MIGRATION_6_7
+import com.metaself.app.data.day.MIGRATION_7_8
+import com.metaself.app.data.trainer.RoomTrainerStore
+import com.metaself.app.data.trainer.TrainerDao
+import com.metaself.app.data.trainer.TrainerReviews
+import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomMealRepository
 import com.metaself.app.data.weight.RoomWeightRepository
@@ -146,6 +151,7 @@ object DataModule {
         MIGRATION_4_5,
         MIGRATION_5_6,
         MIGRATION_6_7,
+        MIGRATION_7_8,
     ).build()
 
     @Provides
@@ -225,6 +231,16 @@ object DataModule {
     @Provides
     fun provideHealthBookkeepingDao(database: MetaSelfDatabase): HealthBookkeepingDao =
         database.healthBookkeepingDao()
+
+    @Provides
+    fun provideTrainerDao(database: MetaSelfDatabase): TrainerDao = database.trainerDao()
+
+    @Provides
+    @Singleton
+    fun provideTrainerStore(store: RoomTrainerStore): TrainerStore = store
+
+    @Provides
+    fun provideTrainerReviews(store: TrainerStore): TrainerReviews = store
 
     /** The zone the health record files rows under (D68). A lambda, so a travelling phone uses the
      * zone it is in now, never the one it was installed in. */

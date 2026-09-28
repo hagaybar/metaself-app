@@ -65,6 +65,12 @@ import com.metaself.app.ui.screen.weight.WeightViewModel
 import com.metaself.app.ui.screen.movement.MovementScreen
 import com.metaself.app.ui.screen.movement.MovementViewModel
 import com.metaself.app.ui.screen.movement.TakeSharedWorkoutFile
+import com.metaself.app.ui.screen.trainer.PlanSessionScreen
+import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
+import com.metaself.app.ui.screen.trainer.ReviewSessionScreen
+import com.metaself.app.ui.screen.trainer.ReviewSessionViewModel
+import com.metaself.app.ui.screen.trainer.TrainerScreen
+import com.metaself.app.ui.screen.trainer.TrainerViewModel
 
 /**
  * The places this host can be.
@@ -84,6 +90,21 @@ sealed class Destination(val route: String) {
 
     /** This week's movement (D73–D75). */
     data object Movement : Destination("movement")
+
+    /** The trainer (D85). */
+    data object Trainer : Destination("trainer")
+
+    /** Plan my next session (D86); `show=kept` opens the kept plan. */
+    data object PlanSession : Destination("trainer/plan?show={show}") {
+        fun form(): String = "trainer/plan?show=" + PlanSessionViewModel.FORM
+        fun kept(): String = "trainer/plan?show=" + PlanSessionViewModel.KEPT
+    }
+
+    /** How did it go (D87), for one session. */
+    data object ReviewSession : Destination("trainer/review/{workoutId}") {
+        fun of(workoutId: Long): String = "trainer/review/$workoutId"
+    }
+
     /**
      * Settings is a nested graph (D79): [route] is the graph's, and opens its [index]; each of the
      * six pages has its own route under it.
@@ -329,6 +350,69 @@ fun MetaSelfNavHost(
                 onDismissFile = movementViewModel::dismissFile,
                 onEarlierWeek = movementViewModel::earlierWeek,
                 onLaterWeek = movementViewModel::laterWeek,
+                onTrainer = { navController.navigate(Destination.Trainer.route) },
+                onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
+            )
+        }
+
+        composable(Destination.Trainer.route) {
+            val trainerViewModel: TrainerViewModel = hiltViewModel()
+            val trainerState by trainerViewModel.state.collectAsStateWithLifecycle()
+            // Left open past midnight, its last three days move to the new day on return.
+            LifecycleResumeEffect(trainerViewModel) {
+                trainerViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
+            TrainerScreen(
+                state = trainerState,
+                onBack = { navController.popBackStack() },
+                onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
+                onPlan = { navController.navigate(Destination.PlanSession.form()) },
+                onOpenKept = { navController.navigate(Destination.PlanSession.kept()) },
+            )
+        }
+
+        composable(
+            route = Destination.PlanSession.route,
+            arguments = listOf(
+                navArgument(PlanSessionViewModel.SHOW) {
+                    type = NavType.StringType
+                    defaultValue = PlanSessionViewModel.FORM
+                },
+            ),
+        ) {
+            val planViewModel: PlanSessionViewModel = hiltViewModel()
+            val planState by planViewModel.state.collectAsStateWithLifecycle()
+            PlanSessionScreen(
+                state = planState,
+                onBack = { navController.popBackStack() },
+                onChange = planViewModel::change,
+                onAsk = planViewModel::ask,
+                onKeep = planViewModel::keep,
+                onAskAgain = planViewModel::askAgain,
+            )
+        }
+
+        composable(
+            route = Destination.ReviewSession.route,
+            arguments = listOf(navArgument(ReviewSessionViewModel.WORKOUT_ID) { type = NavType.LongType }),
+        ) {
+            val reviewViewModel: ReviewSessionViewModel = hiltViewModel()
+            val reviewState by reviewViewModel.state.collectAsStateWithLifecycle()
+            ReviewSessionScreen(
+                state = reviewState,
+                onBack = { navController.popBackStack() },
+                onFeel = reviewViewModel::feel,
+                onWords = reviewViewModel::words,
+                onNotThisPlan = reviewViewModel::notThisPlan,
+                onSaveAndAsk = reviewViewModel::saveAndAsk,
+                onJustSave = reviewViewModel::justSave,
+                onPlanNext = {
+                    navController.navigate(Destination.PlanSession.form()) {
+                        popUpTo(Destination.ReviewSession.route) { inclusive = true }
+                    }
+                },
+                onDone = { navController.popBackStack() },
             )
         }
 
