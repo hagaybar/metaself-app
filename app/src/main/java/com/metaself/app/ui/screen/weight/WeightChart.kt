@@ -8,6 +8,7 @@ import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -331,12 +332,16 @@ fun WeightChartBlock(
 /** The five ranges, as chips: the whole of choosing how much history to look at. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun ChartRanges(selected: ChartRange, onRange: (ChartRange) -> Unit) {
+internal fun ChartRanges(
+    selected: ChartRange,
+    onRange: (ChartRange) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
+) {
     // Wrapping, not a fixed row. At a larger system font the fifth chip fell off the end of the
     // screen — and the fifth is All, the one the chart opens on, so the reader who most needs a
     // bigger font was the one who could not see which range was selected.
     FlowRow(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
         verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
     ) {
@@ -385,6 +390,8 @@ fun WeightChart(
     targetKg: Double? = null,
     onOpen: (() -> Unit)? = null,
     fillsHeight: Boolean = false,
+    /** Drawn at the end of the readout's line; sideways, the range chips live there. */
+    readoutEnd: (@Composable () -> Unit)? = null,
 ) {
     // The day a finger is holding, or null. Forgotten whenever what is drawn changes, so a range
     // chosen mid-hold cannot leave a readout for a day that is no longer on the chart.
@@ -409,20 +416,24 @@ fun WeightChart(
         // Always one line tall, whether it is the hint or a reading, so the chart does not jump
         // down when a finger lands on it.
         val held = heldDay
-        Text(
-            text = if (held == null) {
-                stringResource(R.string.weight_chart_hold)
-            } else {
-                ChartLayout.readout(geometry.dayOn(held), geometry.spanDays)
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = if (held == null) {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
-            maxLines = 1,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (held == null) {
+                    stringResource(R.string.weight_chart_hold)
+                } else {
+                    ChartLayout.readout(geometry.dayOn(held), geometry.spanDays)
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = if (held == null) {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                } else {
+                    MaterialTheme.colorScheme.onSurface
+                },
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
+            )
+            readoutEnd?.invoke()
+        }
 
         Plot(
             trend = trend,
