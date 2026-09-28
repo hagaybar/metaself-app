@@ -133,8 +133,27 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 6`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(6)
+    fun `the format is version 7`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(7)
+    }
+
+    /** D92: the owner's splits go in the file under their own name, and come back as written. */
+    @Test
+    fun `session splits survive the file`() {
+        val withSplits = full.copy(sessionSplits = listOf(BackupSessionSplit(1, 2)))
+
+        val text = BackupCodec.encode(withSplits)
+
+        assertThat(text).contains("\"session_splits\"")
+        assertThat(BackupCodec.decode(text)!!.sessionSplits).containsExactly(BackupSessionSplit(1, 2))
+    }
+
+    /** D92: every file written before splits existed stays restorable, and has none. */
+    @Test
+    fun `a version 6 file still reads, with no splits`() {
+        val version6 = """{"version": 6, "exported_at": 1000, "meals": [], "weights": []}"""
+
+        assertThat(BackupCodec.decode(version6)!!.sessionSplits).isEmpty()
     }
 
     /** D90: the owner's note about himself goes in the file, under its own name, and comes back as written. */

@@ -49,6 +49,11 @@ data class Backup(
      * settings leaves those.
      */
     @SerialName("about_me") val aboutMe: String? = null,
+    /**
+     * D92: the pairs the owner said are two sessions, each by its two workouts' positions in
+     * [workouts], counted from 1. Empty in a file from before version 7.
+     */
+    @SerialName("session_splits") val sessionSplits: List<BackupSessionSplit> = emptyList(),
 ) {
     companion object {
         /**
@@ -78,8 +83,12 @@ data class Backup(
          * Version 6 adds the owner's note about himself for the trainer (D90), [aboutMe]. A version 1–5
          * file has none, and restoring one leaves the phone's note as it is: the note is a setting,
          * restored as the AI settings are, not part of the replaced record.
+         *
+         * Version 7 adds the owner's session splits (D92), [sessionSplits], each naming its two workouts
+         * by their positions in the file, as a review is placed inside its workout. A version 1–6 file
+         * has none, and restoring one leaves none — a restore replaces.
          */
-        const val CURRENT_VERSION = 6
+        const val CURRENT_VERSION = 7
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -282,6 +291,13 @@ data class BackupWorkout(
     /** D88: the owner's words on this session, if any. */
     @SerialName("trainer_review") val trainerReview: BackupTrainerReview? = null,
 )
+
+/**
+ * Two workouts the owner said are two sessions (D92): [first] and [second] are their positions in the
+ * file's `workouts`, counted from 1, as a person reading the file would count them.
+ */
+@Serializable
+data class BackupSessionSplit(val first: Int, val second: Int)
 
 /** One of the trainer's suggestions (D88). [suggestion] is the answer's own JSON, kept as text. */
 @Serializable

@@ -14,6 +14,8 @@ import com.metaself.app.data.health.MovementCorrectionEntity
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.SleepSessionEntity
 import com.metaself.app.data.health.SleepStageEntity
+import com.metaself.app.data.health.SessionSplitDao
+import com.metaself.app.data.health.SessionSplitEntity
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.profile.ProfileRepository
@@ -144,6 +146,7 @@ class BackupRepository @Inject constructor(
     private val corrections: MovementCorrectionDao,
     private val bookkeeping: HealthBookkeepingDao,
     private val trainer: TrainerDao,
+    private val splits: SessionSplitDao,
     private val profiles: ProfileRepository,
     private val reminders: ReminderStore,
     private val scheduler: ReminderScheduler,
@@ -208,6 +211,7 @@ class BackupRepository @Inject constructor(
             trainerPlans = trainer.allPlans().map { it.toBackup() },
             trainerReviewsWithoutWorkout = reviews.withoutWorkout,
             aboutMe = aboutMe.note.first(),
+            sessionSplits = BackupSplits.toFile(everyWorkout.map { it.id }, splits.all()),
         )
     }
 
@@ -270,6 +274,7 @@ class BackupRepository @Inject constructor(
                 corrections.deleteAll()
                 trainer.deleteReviews()
                 trainer.deletePlans()
+                splits.deleteAll()
                 // The copying starts again from scratch: a record read again replaces its rows, so
                 // nothing is doubled, and nothing recorded after this file was made is missed.
                 // Accepted: a copy running at the same moment may still write a bookmark back after
@@ -282,6 +287,7 @@ class BackupRepository @Inject constructor(
                 restoreMeals(prepared, restoredFoods, savedMealIdByName)
                 prepared.weights.forEach { weights.upsert(it) }
                 workouts.insertAll(prepared.workouts)
+                splits.insertAll(prepared.splits)
                 prepared.nights.forEach { (night, stages) ->
                     val id = sleep.insertSession(night)
                     sleep.insertStages(stages.map { it.copy(sessionId = id) })
@@ -412,7 +418,8 @@ class BackupRepository @Inject constructor(
             )
         }
 
-        val keptWorkouts = backup.workouts.dedupBySyncedOrigin()
+        val keptAt = backup.workouts.keptBySyncedOrigin()
+        val keptWorkouts = keptAt.map { backup.workouts[it] }
         // The table is emptied first, so the file's workouts take ids 1…n in order, and each review is
         // attached to the id its own workout receives; one without a workout gets -1, -2, … (D88).
         val workoutRows = keptWorkouts.mapIndexed { at, workout -> workout.toEntity().copy(id = at + 1L) }
@@ -450,6 +457,8 @@ class BackupRepository @Inject constructor(
             },
             plans = planRows,
             reviews = reviewRows,
+            // D92: by file position, which the kept workouts' new ids 1…n replace.
+            splits = BackupSplits.rows(backup.sessionSplits, keptAt.map { it + 1 }),
         )
     }
 
@@ -606,6 +615,8 @@ class BackupRepository @Inject constructor(
         val plans: List<TrainerPlanEntity>,
         /** Each names the id its workout is inserted with, or a negative one if it has none ([BackupReviews]). */
         val reviews: List<TrainerReviewEntity>,
+        /** D92: each under the ids its two workouts are inserted with ([BackupSplits]). */
+        val splits: List<SessionSplitEntity>,
     )
 
     /** How much a restore would destroy, so the question asked is a real one. */
@@ -639,15 +650,15 @@ class BackupRepository @Inject constructor(
 }
 
 /**
- * Keeps the first of any two workouts sharing a non-null (origin, originId) — the pair the table's
- * own unique index enforces. A workout with no origin, or no id, is never a duplicate of another: the
+ * The positions (from 0) of the workouts kept: the first of any two sharing a non-null (origin,
+ * originId) — the pair the table's own unique index enforces. A workout with no origin, or no id, is never a duplicate of another: the
  * index lets any number of rows share a null, and so does this.
  */
-private fun List<BackupWorkout>.dedupBySyncedOrigin(): List<BackupWorkout> {
+private fun List<BackupWorkout>.keptBySyncedOrigin(): List<Int> {
     val seen = mutableSetOf<Pair<String, String>>()
-    return filter { workout ->
-        val origin = workout.origin
-        val originId = workout.originId
+    return indices.filter { at ->
+        val origin = this[at].origin
+        val originId = this[at].originId
         if (origin == null || originId == null) true else seen.add(origin to originId)
     }
 }
