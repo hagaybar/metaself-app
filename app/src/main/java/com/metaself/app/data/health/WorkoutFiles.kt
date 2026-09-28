@@ -122,11 +122,15 @@ class ImportWorkoutFile(
                     is TcxRead.Read -> read.workout
                 }
             }
-            matchAndFill(file) ?: ImportOutcome.NoMatch(file)
+            // One read of the file's days serves both the match and, failing one, D91's same-kind offer:
+            // the wall clock's own day is always among them.
+            val zone = zone()
+            val stored = store.on(WorkoutFileMatch.days(file, zone))
+            matchAndFill(file, stored, zone) ?: ImportOutcome.NoMatch(file, WorkoutFileMatch.sameKind(file, stored))
         }
     }
 
-    /** One of [ImportOutcome.Several]'s workouts, chosen. */
+    /** One of [ImportOutcome.Several]'s workouts, or of [ImportOutcome.NoMatch.sameKind] (D91), chosen. */
     override suspend fun choose(file: FileWorkout, id: Long): ImportOutcome = guarded { fillOne(file, id) }
 
     /**
@@ -134,16 +138,16 @@ class ImportWorkoutFile(
      * press, is filled rather than doubled.
      */
     override suspend fun add(file: FileWorkout): ImportOutcome = guarded {
-        matchAndFill(file) ?: run {
-            val workout = WorkoutFileMatch.asWorkout(file, zone())
+        val zone = zone()
+        matchAndFill(file, store.on(WorkoutFileMatch.days(file, zone)), zone) ?: run {
+            val workout = WorkoutFileMatch.asWorkout(file, zone)
             ImportOutcome.AddedWorkout(workout.copy(id = store.add(workout)))
         }
     }
 
-    /** Null when nothing matches. */
-    private suspend fun matchAndFill(file: FileWorkout): ImportOutcome? {
-        val zone = zone()
-        val matches = WorkoutFileMatch.matches(file, store.on(WorkoutFileMatch.days(file, zone)), zone)
+    /** Null when nothing of [stored] matches. */
+    private suspend fun matchAndFill(file: FileWorkout, stored: List<Workout>, zone: ZoneId): ImportOutcome? {
+        val matches = WorkoutFileMatch.matches(file, stored, zone)
         return when (matches.size) {
             0 -> null
             1 -> fillOne(file, matches.single().id)

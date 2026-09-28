@@ -38,6 +38,17 @@ object WorkoutFileMatch {
     fun candidates(stored: List<Workout>): List<Workout> =
         stored.filter { !it.hidden && (it.source == WorkoutSource.SYNCED || it.fromFile) }
 
+    /**
+     * D91: when [file] matches nothing, the sessions it might still be — those it may fill
+     * ([candidates]) of its kind ([kindOf] its sport, as "Add it as a workout" reads it) on the day its
+     * wall clock falls on — by start. Only [stored] on that day are looked at.
+     */
+    fun sameKind(file: FileWorkout, stored: List<Workout>): List<Workout> {
+        val day = file.writtenAt.toLocalDate().toEpochDay()
+        val kind = kindOf(file.sport)
+        return candidates(stored).filter { it.kind == kind && it.epochDay == day }.sortedBy { it.startedAtMillis }
+    }
+
     fun matches(file: FileWorkout, stored: List<Workout>, zone: ZoneId): List<Workout> {
         val starts = starts(file, zone)
         return candidates(stored).filter { workout ->
@@ -96,7 +107,7 @@ object WorkoutFileMatch {
     }
 
     /** TCX names Running, Biking and Other; a band's app may write others. */
-    private fun kindOf(sport: String?): WorkoutKind = when (sport?.trim()?.lowercase()) {
+    fun kindOf(sport: String?): WorkoutKind = when (sport?.trim()?.lowercase()) {
         "running", "run" -> WorkoutKind.RUN
         "biking", "cycling", "bike" -> WorkoutKind.CYCLE
         "walking", "walk" -> WorkoutKind.WALK

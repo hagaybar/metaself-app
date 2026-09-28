@@ -301,6 +301,29 @@ class MovementScreenRenderTest {
         assertThat(added).isEqualTo(1)
     }
 
+    /** D91: no exact match, but the day holds a walk: it is offered first, then adding it, under its own line. */
+    @Test
+    fun `a file that matched nothing exactly offers the day's session of its kind, then adding it`() {
+        var chosen: Long? = null
+        var added = 0
+        val half = aFile.copy(writtenAt = LocalDateTime.of(2026, 9, 3, 10, 30))
+        val offered = aTypedWorkout(id = 6, kind = WorkoutKind.WALK, minutes = 40)
+        val texts = draw(
+            state = MovementUiState(week = week, openDay = null, fileImport = FileImportState(ImportOutcome.NoMatch(half, listOf(offered)))),
+            onChooseForFile = { chosen = it },
+            onAddFromFile = { added++ },
+        )
+
+        assertThat(texts).contains("No session matches this file exactly (Thu 3 Sep 10:30). Is it one of these?")
+        assertThat(texts).contains("Or, if it is a session the record does not have:")
+        assertThat(render.isDrawnBefore("Walking ·", "Or, if it is a session")).isTrue()
+        assertThat(render.isDrawnBefore("Or, if it is a session", "Add it as a workout")).isTrue()
+        render.click("Walking ·")
+        assertThat(chosen).isEqualTo(6L)
+        render.click("Add it as a workout")
+        assertThat(added).isEqualTo(1)
+    }
+
     @Test
     fun `several matches are listed, and choosing one calls back with it`() {
         var chosen: Long? = null
@@ -360,6 +383,17 @@ class MovementScreenRenderTest {
         val texts = render.textsAgain()
         assertThat(texts).contains("Add it as a workout")
         assertThat(texts).doesNotContain("Reading the file…")
+
+        state.value = state.value.copy(fileImport = FileImportState(outcome = null, working = true))
+        Snapshot.sendApplyNotifications()
+        assertThat(render.textsAgain()).contains("Reading the file…")
+
+        // D91: into the same-kind choice and out of it again, in the same composition.
+        state.value = state.value.copy(
+            fileImport = FileImportState(ImportOutcome.NoMatch(aFile, listOf(aTypedWorkout(id = 6, kind = WorkoutKind.WALK)))),
+        )
+        Snapshot.sendApplyNotifications()
+        assertThat(render.textsAgain()).contains("Or, if it is a session the record does not have:")
 
         state.value = state.value.copy(fileImport = FileImportState(outcome = null, working = true))
         Snapshot.sendApplyNotifications()

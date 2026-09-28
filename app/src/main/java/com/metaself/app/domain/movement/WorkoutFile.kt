@@ -74,8 +74,11 @@ sealed interface ImportOutcome {
     /** The matched workout already had everything the file could give. */
     data class Unchanged(val workout: Workout, val fileDistanceM: Int?) : ImportOutcome
 
-    /** Nothing matches; the screen offers "Add it as a workout". */
-    data class NoMatch(val file: FileWorkout) : ImportOutcome
+    /**
+     * Nothing matches; the screen offers "Add it as a workout". [sameKind] are the sessions of the file's
+     * kind on its day that it may fill (D91), offered first, by start; empty when there are none.
+     */
+    data class NoMatch(val file: FileWorkout, val sameKind: List<Workout> = emptyList()) : ImportOutcome
 
     /** More than one workout matches; the screen lists them to choose from. */
     data class Several(val file: FileWorkout, val choices: List<Workout>) : ImportOutcome

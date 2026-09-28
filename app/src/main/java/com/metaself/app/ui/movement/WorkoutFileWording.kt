@@ -33,7 +33,11 @@ object WorkoutFileWording {
         is ImportOutcome.Unchanged -> outcome.workout.distanceM
             ?.let { "This session already had ${distance(outcome.workout)}; nothing changed." }
             ?: "This session already had everything in the file; nothing changed."
-        is ImportOutcome.NoMatch -> "No workout matches this file (${outcome.file.writtenAt.format(WHEN)})."
+        is ImportOutcome.NoMatch -> if (outcome.sameKind.isEmpty()) {
+            "No workout matches this file (${outcome.file.writtenAt.format(WHEN)})."
+        } else {
+            "No session matches this file exactly (${outcome.file.writtenAt.format(WHEN)}). Is it one of these?"
+        }
         is ImportOutcome.Several -> "Several workouts match this file; choose one."
         is ImportOutcome.AddedWorkout ->
             "Added ${MovementWeekWording.name(outcome.workout)}, ${start(outcome.workout, zone)}, from the file."
@@ -87,6 +91,9 @@ object WorkoutFileWording {
 
     private fun andList(list: List<String>): String =
         if (list.size <= 1) list.joinToString() else list.dropLast(1).joinToString(", ") + " and " + list.last()
+
+    /** D91: above "Add it as a workout", when sessions of the file's kind were offered first. */
+    const val OR_ADD = "Or, if it is a session the record does not have:"
 
     /** "Walking · 10:00 · 40 min". */
     fun choice(workout: Workout, zone: ZoneId): String =

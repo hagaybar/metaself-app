@@ -61,6 +61,17 @@ class WorkoutFileWordingTest {
             .isEqualTo("This session already had everything in the file; nothing changed.")
     }
 
+    /** D91: with the day's sessions of its kind to offer, the line asks; the time is the file's. */
+    @Test
+    fun `no exact match with sessions of its kind asks which`() {
+        val half = file.copy(writtenAt = LocalDateTime.of(2026, 9, 3, 10, 30))
+
+        assertThat(line(ImportOutcome.NoMatch(half, listOf(walk))))
+            .isEqualTo("No session matches this file exactly (Thu 3 Sep 10:30). Is it one of these?")
+        assertThat(WorkoutFileWording.OR_ADD).isEqualTo("Or, if it is a session the record does not have:")
+        assertThat(WorkoutFileWording.choice(walk, zone)).isEqualTo("Walking · 10:00 · 40 min")
+    }
+
     @Test
     fun `no match, several, an added workout and a failed write each have their line`() {
         assertThat(line(ImportOutcome.NoMatch(file))).isEqualTo("No workout matches this file (Thu 3 Sep 10:00).")

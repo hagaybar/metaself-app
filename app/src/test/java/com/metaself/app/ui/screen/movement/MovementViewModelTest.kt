@@ -573,6 +573,22 @@ class MovementViewModelTest {
         job.cancel()
     }
 
+    /** D91: a session of the file's kind offered after no exact match can be chosen, as one of several is. */
+    @Test
+    fun `a session offered after no exact match can be chosen for the file`() = runTest {
+        val importer = FakeImporter(ImportOutcome.NoMatch(aFile, listOf(aTypedWorkout(id = 7, kind = WorkoutKind.WALK))))
+        val model = viewModel(importer = importer)
+        val job = launch { model.state.collect {} }
+
+        model.importFile("content://example/b.tcx")
+        advanceUntilIdle()
+        model.chooseForFile(7)
+        advanceUntilIdle()
+
+        assertThat(importer.calls).containsExactly("import content://example/b.tcx", "choose 7").inOrder()
+        job.cancel()
+    }
+
     /** D82 amended: every outcome also goes to the problem log, as kind "import". */
     @Test
     fun `every file outcome is written to the problem log as an import`() = runTest {
