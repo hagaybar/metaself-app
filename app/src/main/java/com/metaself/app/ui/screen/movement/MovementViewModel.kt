@@ -114,7 +114,7 @@ class MovementViewModel(
     private var nextSheetToken = 0L
 
     /** The week shown and the record's earliest day, which bounds how far back ‹ goes (D83). */
-    private data class Read(val week: MovementWeek, val earliest: Long?, val reviews: Map<Long, TrainerReview>)
+    private data class Read(val week: MovementWeek, val earliest: Long?, val reviews: Map<Long, TrainerReview>?)
 
     /**
      * Null means the read failed; the failure is logged where it happened, below. The earliest day
@@ -131,9 +131,9 @@ class MovementViewModel(
                 record.observeWorkouts(monday, last),
                 mealsOn((monday..last).toList()),
                 record.observeEarliestDay(),
-                trainer.observeReviews(),
+                reviews(),
             ) { days, workouts, mealsByDay, earliest, reviews ->
-                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest, reviews.associateBy { it.workoutId })
+                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest, reviews?.associateBy { it.workoutId })
             }
             built
         }
@@ -402,6 +402,16 @@ class MovementViewModel(
     }
 
     private data class UndoState(val offered: Boolean = false, val failed: Boolean = false)
+
+    /**
+     * The trainer's reviews, for each session's button. The week does not depend on them: a read that
+     * fails is logged (D8) and the week is shown with no review buttons (null) rather than not at all
+     * — never with every session asking "How did it go?", which would be wrong for one already reviewed.
+     */
+    private fun reviews(): Flow<List<TrainerReview>?> = trainer.observeReviews().map<List<TrainerReview>, List<TrainerReview>?> { it }.catch { failure ->
+        problems.record(PROBLEM_KIND, "reviews not read: " + (failure.message ?: failure::class.java.simpleName))
+        emit(null)
+    }
 
     private fun mealsOn(days: List<Long>): Flow<Map<Long, List<Meal>>> =
         combine(days.map { day -> meals.observeDay(day).map { day to it } }) { pairs -> pairs.toMap() }

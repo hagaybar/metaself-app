@@ -822,7 +822,7 @@ class MovementViewModelTest {
         val review = TrainerReview(workoutId = 1, planId = null, felt = Felt.RIGHT, words = null)
         trainer.reviews.value = listOf(review)
 
-        val state = viewModel(trainer = trainer).state.first { it.week != null && it.reviews.isNotEmpty() }
+        val state = viewModel(trainer = trainer).state.first { it.week != null && !it.reviews.isNullOrEmpty() }
 
         assertThat(state.reviews).containsExactly(1L, review)
     }
@@ -836,7 +836,24 @@ class MovementViewModelTest {
         val review = TrainerReview(workoutId = 2, planId = null, felt = null, words = "Steady.")
         trainer.reviews.value = listOf(review)
 
-        assertThat(model.state.first { it.reviews.isNotEmpty() }.reviews[2L]).isEqualTo(review)
+        assertThat(model.state.first { !it.reviews.isNullOrEmpty() }.reviews!![2L]).isEqualTo(review)
+    }
+
+    /** D8: the week does not depend on the trainer; a review read that fails only loses the buttons. */
+    @Test
+    fun `reviews that cannot be read leave the week shown with none, and are logged`() = runTest {
+        val problems = RecordingProblemLog()
+        val broken = object : TrainerReviews {
+            override fun observeReviews(): Flow<List<TrainerReview>> = flow { throw IllegalStateException("disk full") }
+        }
+        val record = FakeRecord().apply { days.value = listOf(HealthDay(epochDay = TEST_EPOCH_DAY, distanceM = 5_000)) }
+
+        val state = viewModel(record = record, problems = problems, trainer = broken).state.first { it.week != null || it.unreadable }
+
+        assertThat(state.unreadable).isFalse()
+        assertThat(state.week!!.distanceM).isEqualTo(5_000)
+        assertThat(state.reviews).isNull()
+        assertThat(problems.recorded.single().kind).isEqualTo("movement")
     }
 
     private class FakeImporter(var next: ImportOutcome) : WorkoutFileImporter {

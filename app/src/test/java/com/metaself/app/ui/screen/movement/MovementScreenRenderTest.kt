@@ -510,6 +510,15 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("See feedback")
     }
 
+    /** D8: reviews that could not be read give no button, rather than a wrong one. */
+    @Test
+    fun `with the reviews unread, a session has no button`() {
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, reviews = null))
+
+        assertThat(texts).contains("Running · 6.2 km · 32 min · 5:10 /km")
+        assertThat(texts).doesNotContain("How did it go?")
+    }
+
     @Test
     fun `a closed day offers no session button`() {
         val texts = draw(openDay = 20_698)

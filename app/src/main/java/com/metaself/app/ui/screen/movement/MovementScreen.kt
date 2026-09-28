@@ -350,7 +350,7 @@ private fun DayRow(
     open: Boolean,
     onToggle: () -> Unit,
     onOpenWorkout: (Workout) -> Unit,
-    reviews: Map<Long, TrainerReview>,
+    reviews: Map<Long, TrainerReview>?,
     onReview: (Long) -> Unit,
 ) {
     val said = stringResource(if (open) R.string.movement_day_open else R.string.movement_day_closed)
@@ -406,8 +406,10 @@ private fun DayRow(
                                     .heightIn(min = 48.dp)
                             },
                         )
-                        // Where this session's review stands, and the way to it (D87, design question 7).
-                        line.workout?.let { session ->
+                        // Where this session's review stands, and the way to it (D87, design question 7);
+                        // none while the reviews cannot be read, rather than a wrong one.
+                        val session = line.workout
+                        if (session != null && reviews != null) {
                             TextButton(onClick = { onReview(session.id) }) { Text(TrainerWording.rowAction(reviews[session.id])) }
                         }
                     }
