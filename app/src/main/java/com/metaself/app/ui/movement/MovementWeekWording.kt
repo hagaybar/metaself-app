@@ -194,7 +194,13 @@ object MovementWeekWording {
         Instant.ofEpochMilli(workout.startedAtMillis).atZone(zone).format(TIME),
         workout.distanceM?.let { metres ->
             // D82: a file's distance says so, to the two decimals it was written with.
-            if (workout.distanceSource == WorkoutFigureSource.FILE) WorkoutFileWording.fileKm(metres) + " (from file)" else km(metres)
+            when {
+                workout.distanceSource == WorkoutFigureSource.FILE -> WorkoutFileWording.fileKm(metres) + " (from file)"
+                // D4, D92: typed on a session something else recorded is not a measurement.
+                workout.distanceSource == WorkoutFigureSource.TYPED && workout.source != WorkoutSource.TYPED ->
+                    km(metres) + " (you typed)"
+                else -> km(metres)
+            }
         },
         // D92: another witness's distance, when it disagrees by more than 15 %.
         workout.otherDistance?.let(::otherDistance),

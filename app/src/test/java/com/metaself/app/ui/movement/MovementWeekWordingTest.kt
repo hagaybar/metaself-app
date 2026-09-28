@@ -384,6 +384,19 @@ class MovementWeekWordingTest {
         assertThat(line(DistanceWitness.TYPED)).contains("6.2 km · you typed 5.0 km · ")
     }
 
+    /** D4, D92: a distance the owner typed, on a session a band recorded, says it was typed, not measured. */
+    @Test
+    fun `a typed distance on a recorded session says so, also beside a disagreeing one`() {
+        fun line(workout: Workout) = MovementWeekWording.detailLines(fullDay.copy(health = null, eatenKcal = null, workouts = listOf(workout)), zone).single()
+        val typedOnBand = running.copy(distanceSource = WorkoutFigureSource.TYPED)
+
+        assertThat(line(typedOnBand)).contains(" · 6.2 km (you typed) · 32 min")
+        assertThat(line(typedOnBand.copy(otherDistance = OtherDistance(5_000, DistanceWitness.APP))))
+            .contains(" · 6.2 km (you typed) · another app said 5.0 km · ")
+        assertThat(line(aTypedWorkout(distanceM = 6_000, kind = WorkoutKind.RUN, startedAtMillis = SEVEN).copy(distanceSource = WorkoutFigureSource.TYPED)))
+            .contains(" · 6.0 km · ")
+    }
+
     private fun workout(
         title: String?,
         minutes: Int,
