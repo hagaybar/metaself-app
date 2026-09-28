@@ -2,7 +2,7 @@ package com.metaself.app
 
 import android.app.Application
 import com.metaself.app.data.diagnostics.ProblemLog
-import com.metaself.app.ui.problemDetail
+import com.metaself.app.ui.crashDetail
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -39,7 +39,7 @@ class MetaSelfApp : Application() {
             runCatching {
                 problems.record(
                     kind = "crash",
-                    detail = problemDetail(error),
+                    detail = crashDetail(error),
                 )
             }
             previous?.uncaughtException(thread, error)

@@ -185,6 +185,18 @@ class HealthRecordDaoTest {
         assertThat(week.runs).isEqualTo(1)
     }
 
+    /** D83: how far back the Movement screen can step. A hidden workout still holds its day. */
+    @Test
+    fun `the earliest workout day counts a hidden one, and is null with none`() = runTest {
+        val dao = db.workoutDao()
+        assertThat(dao.observeEarliest().first()).isNull()
+
+        dao.insert(typed(day = TEST_EPOCH_DAY, startedAt = 1_000))
+        dao.insert(run(day = TEST_EPOCH_DAY - 10, metres = 5_000).copy(hidden = true))
+
+        assertThat(dao.observeEarliest().first()).isEqualTo(TEST_EPOCH_DAY - 10)
+    }
+
     // --- Readings ----------------------------------------------------------------------------------
 
     /** A heart-rate record is one record of many samples: one row each, under one record id. */

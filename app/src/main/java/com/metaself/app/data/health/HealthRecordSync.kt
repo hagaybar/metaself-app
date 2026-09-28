@@ -1,10 +1,15 @@
 package com.metaself.app.data.health
 
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.lifecycle.AppForeground
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import java.io.IOException
@@ -39,6 +44,11 @@ import javax.inject.Singleton
  * Before both, once, the first open on which older history may be read re-opens the catch-ups (D72);
  * see [reopenForHistory].
  *
+ * **Only in the foreground** ([AppForeground]): Health Connect refuses reads from the background, so a
+ * copy asked for there does nothing, and one under way is cancelled when the app leaves. A read refused
+ * for the background ([BackgroundReadRefused]) stops the pass without a log line, and the next
+ * foreground copy rechecks the recent record ([recheckRecent]).
+ *
  * **Nothing here throws upwards (D8).** A failure — an exception or an error from the client — is a
  * problem-log entry, and the next open carries on from the last bookmark saved. Log dates are in the
  * phone's own zone.
@@ -50,35 +60,94 @@ class HealthRecordSync(
     private val problems: ProblemLog,
     private val now: Now,
     private val zone: () -> ZoneId,
+    private val foreground: AppForeground = AppForeground.ALWAYS,
 ) : HealthRecordCopier {
 
     @Inject
-    constructor(source: HealthSource, store: HealthStore, problems: ProblemLog, now: Now) :
-        this(source, store, problems, now, { ZoneId.systemDefault() })
+    constructor(source: HealthSource, store: HealthStore, problems: ProblemLog, now: Now, foreground: AppForeground) :
+        this(source, store, problems, now, { ZoneId.systemDefault() }, foreground)
 
     private val running = Mutex()
 
+    /**
+     * The days touched so far by the pass under way, kept here (rather than a local in [copy]) so a
+     * pass stopped by a background refusal, or by the app leaving mid-copy, still leaves them readable:
+     * [oweRecheck] reads its earliest day for the marker. An outside cancellation of [copyNow] itself
+     * (not taken for either of those) is never read this way — it propagates before [oweRecheck] would
+     * run. Reset at the start of every [copy]; only [running]'s owner ever touches it.
+     */
+    private var touchedThisPass = mutableSetOf<Long>()
+
+    /**
+     * Only in the foreground: Health Connect refuses a read from the background. The pass runs as a
+     * child that is cancelled the moment the app leaves the foreground; the bookmarks it already saved
+     * stand, since each is saved only after its own slice or page is stored. A pass stopped that way,
+     * or by a [BackgroundReadRefused], is not a failure and logs nothing; it leaves the next foreground
+     * copy a recheck of the recent record ([recheckRecent]). A cancellation from anywhere else is
+     * passed on, as before.
+     */
     override suspend fun copyNow() {
+        if (!foreground.isForeground.value) return
         if (!running.tryLock()) return
         try {
-            copy()
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (failure: Throwable) {
-            note("copying stopped: ${failure::class.java.simpleName} ${failure.message}")
+            var left = false
+            val refused = coroutineScope {
+                val pass = async { pass() }
+                val watch = launch {
+                    foreground.isForeground.first { !it }
+                    left = true
+                    pass.cancel()
+                }
+                pass.join()
+                watch.cancel()
+                // A pass cancelled from elsewhere rethrows its cancellation from await.
+                if (left) true else pass.await()
+            }
+            if (refused) oweRecheck()
         } finally {
             running.unlock()
         }
     }
 
+    /** One pass; true when Health Connect refused it for being in the background. Never throws else. */
+    private suspend fun pass(): Boolean = try {
+        copy()
+        false
+    } catch (refused: BackgroundReadRefused) {
+        true
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Throwable) {
+        note("copying stopped: ${failure::class.java.simpleName} ${failure.message}")
+        false
+    }
+
+    /**
+     * The marker is set owed, together with the earliest day this pass left touched but not yet
+     * summarised ([touchedThisPass]), if any — so [recheckRecent] re-totals from there rather than only
+     * the last few days.
+     */
+    private suspend fun oweRecheck() {
+        try {
+            store.setRecentRecheckDue(true, touchedThisPass.minOrNull())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            note("recheck not recorded: ${failure::class.java.simpleName} ${failure.message}")
+        }
+    }
+
     private suspend fun copy() {
+        touchedThisPass = mutableSetOf()
         val nowMillis = now()
         val granted = source.grantedKinds()
         if (granted.isEmpty()) return
         reopenForHistory(nowMillis)
+        val recheck = recheckDue()
+        val recheckFrom = if (recheck) recheckFromDayOrNull() else null
 
         val budget = Budget(READS_PER_OPEN)
-        val touched = mutableSetOf<Long>()
+        val touched = touchedThisPass
         val arrived = mutableMapOf<HealthKind, MutableSet<Long>>()
         val catching = mutableListOf<CatchUp>()
 
@@ -89,11 +158,17 @@ class HealthRecordSync(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
+                passOnRefusal(failure)
                 note("$kind: ${failure::class.java.simpleName} ${failure.message}")
             }
         }
-        fillSessionGaps(arrived, granted)
+        val asked = fillSessionGaps(arrived, granted)
+        var capLimited = false
+        if (recheck) {
+            capLimited = recheckRecent(granted, asked, nowMillis, touched, recheckFrom)
+        }
         summarise(touched, nowMillis)
+        if (recheck && !capLimited) doneRechecking()
 
         while (catching.isNotEmpty() && !budget.spent) {
             for (turn in catching.toList()) {
@@ -103,6 +178,7 @@ class HealthRecordSync(
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (failure: Exception) {
+                    passOnRefusal(failure)
                     note("${turn.kind}: ${failure::class.java.simpleName} ${failure.message}")
                     turn.finished = true
                 }
@@ -147,6 +223,7 @@ class HealthRecordSync(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
+            passOnRefusal(failure)
             note("older history: ${failure::class.java.simpleName} ${failure.message}")
         }
     }
@@ -169,13 +246,15 @@ class HealthRecordSync(
      *   not asked; each is asked on a later open only if its day receives that figure's readings again.
      *
      * A figure that comes back is stored; a failure is logged and the next workout is still asked (D8).
-     * A cancellation is not a failure and is passed on.
+     * A cancellation is not a failure and is passed on; nor is a [BackgroundReadRefused].
+     *
+     * Returns the ids of the workouts asked, which [recheckRecent] counts against the same cap.
      */
-    private suspend fun fillSessionGaps(arrived: Map<HealthKind, Set<Long>>, granted: Set<HealthKind>) {
-        if (HealthKind.EXERCISE !in granted) return
+    private suspend fun fillSessionGaps(arrived: Map<HealthKind, Set<Long>>, granted: Set<HealthKind>): Set<Long> {
+        if (HealthKind.EXERCISE !in granted) return emptySet()
         val distanceDays = if (HealthKind.DISTANCE in granted) arrived[HealthKind.DISTANCE].orEmpty() else emptySet()
         val energyDays = if (HealthKind.ACTIVE_KCAL in granted) arrived[HealthKind.ACTIVE_KCAL].orEmpty() else emptySet()
-        if (distanceDays.isEmpty() && energyDays.isEmpty()) return
+        if (distanceDays.isEmpty() && energyDays.isEmpty()) return emptySet()
         fun near(days: Set<Long>, day: Long) = day in days || day + 1 in days
         val lookIn = (distanceDays + energyDays).flatMapTo(mutableSetOf()) { listOf(it - 1, it) }
         val gaps = try {
@@ -183,26 +262,119 @@ class HealthRecordSync(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
+            passOnRefusal(failure)
             note("workout totals: ${failure::class.java.simpleName} ${failure.message}")
-            return
+            return emptySet()
         }
         val asks = gaps.sortedByDescending { it.startMillis }.mapNotNull { gap ->
             val distance = gap.needsDistance && near(distanceDays, gap.epochDay)
             val energy = gap.needsEnergy && near(energyDays, gap.epochDay)
             if (distance || energy) Triple(gap, distance, energy) else null
         }
-        for ((gap, askDistance, askEnergy) in asks.take(SESSION_ASKS_PER_OPEN)) {
-            try {
-                val totals = source.sessionTotals(gap.startMillis, gap.endMillis, askDistance, askEnergy)
-                if (totals.distanceM != null || totals.energyKcal != null) store.fillSessionTotals(gap.id, totals)
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (failure: Exception) {
-                note("workout totals: ${failure::class.java.simpleName} ${failure.message}")
-            }
-        }
+        val taken = asks.take(SESSION_ASKS_PER_OPEN)
+        for ((gap, askDistance, askEnergy) in taken) askAgain(gap, askDistance, askEnergy)
         if (asks.size > SESSION_ASKS_PER_OPEN) {
             note("workout totals: ${asks.size - SESSION_ASKS_PER_OPEN} more not asked this open")
+        }
+        return taken.mapTo(mutableSetOf()) { it.first.id }
+    }
+
+    /** One workout asked again; a figure that comes back is stored, a failure logged (D8). */
+    private suspend fun askAgain(gap: SessionGap, distance: Boolean, energy: Boolean) {
+        try {
+            val totals = source.sessionTotals(gap.startMillis, gap.endMillis, distance, energy)
+            if (totals.distanceM != null || totals.energyKcal != null) store.fillSessionTotals(gap.id, totals)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            passOnRefusal(failure)
+            note("workout totals: ${failure::class.java.simpleName} ${failure.message}")
+        }
+    }
+
+    /** Whether a pass stopped by the background left a recheck owed; a store that cannot say owes none. */
+    private suspend fun recheckDue(): Boolean = try {
+        store.recentRecheckDue()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        passOnRefusal(failure)
+        note("recheck: ${failure::class.java.simpleName} ${failure.message}")
+        false
+    }
+
+    /** [HealthStore.recheckFromDay], read only when a recheck is due; a store that cannot say owes none extra. */
+    private suspend fun recheckFromDayOrNull(): Long? = try {
+        store.recheckFromDay()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        passOnRefusal(failure)
+        note("recheck: ${failure::class.java.simpleName} ${failure.message}")
+        null
+    }
+
+    /**
+     * The second look a pass stopped by the background leaves owed (see [HealthStore.recentRecheckDue]).
+     * Before this fix a refused aggregate was logged and stored as "no figure", so a workout could keep
+     * a missing distance or calories and a day stale totals; now a refusal stops the pass before either
+     * is stored, but a pass cut short still leaves days unsummarised.
+     *
+     * - **Gaps:** every visible synced workout of the last [WINDOW_DAYS] days still missing a figure
+     *   whose readings are allowed is asked again, newest first — within [SESSION_ASKS_PER_OPEN], which
+     *   the ordinary asks of this open ([asked]) have already drawn on. Those not reached are not logged.
+     * - **Totals:** every day from [fromDay] through today joins the days to summarise ([summarise]
+     *   then splits that run into calls of at most [TOTALS_DAYS] days) — [fromDay] is the earliest day
+     *   the marker named ([HealthStore.recheckFromDay]), or, with none, the last [RECHECK_DAYS] days.
+     *
+     * The marker is cleared once the summarise after it has run ([doneRechecking]) — but only when
+     * [SESSION_ASKS_PER_OPEN] was not the reason some gaps went unasked: this return value tells [copy]
+     * to keep the marker owed instead, so a later open reaches the rest.
+     *
+     * @return whether the per-open cap, not a lack of gaps, was why some were not asked again.
+     */
+    private suspend fun recheckRecent(
+        granted: Set<HealthKind>,
+        asked: Set<Long>,
+        nowMillis: Long,
+        touched: MutableSet<Long>,
+        fromDay: Long?,
+    ): Boolean {
+        val today = Instant.ofEpochMilli(nowMillis).atZone(zone()).toLocalDate().toEpochDay()
+        val from = fromDay?.coerceAtMost(today) ?: (today - RECHECK_DAYS + 1)
+        touched += from..today
+        if (HealthKind.EXERCISE !in granted) return false
+        val distance = HealthKind.DISTANCE in granted
+        val energy = HealthKind.ACTIVE_KCAL in granted
+        if (!distance && !energy) return false
+        val gaps = try {
+            store.sessionGaps(((today - WINDOW_DAYS)..today).toSet())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            passOnRefusal(failure)
+            note("workout totals: ${failure::class.java.simpleName} ${failure.message}")
+            return false
+        }
+        val toAsk = gaps.asSequence()
+            .filter { it.id !in asked }
+            .sortedByDescending { it.startMillis }
+            .map { gap -> Triple(gap, gap.needsDistance && distance, gap.needsEnergy && energy) }
+            .filter { (_, d, e) -> d || e }
+            .toList()
+        val remaining = (SESSION_ASKS_PER_OPEN - asked.size).coerceAtLeast(0)
+        toAsk.take(remaining).forEach { (gap, d, e) -> askAgain(gap, d, e) }
+        return toAsk.size > remaining
+    }
+
+    private suspend fun doneRechecking() {
+        try {
+            store.setRecentRecheckDue(false)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            passOnRefusal(failure)
+            note("recheck: ${failure::class.java.simpleName} ${failure.message}")
         }
     }
 
@@ -286,6 +458,8 @@ class HealthRecordSync(
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (refused: Exception) {
+            // The background is neither the history limit nor a failure: stop the pass, save nothing.
+            passOnRefusal(refused)
             val reason = "${refused::class.java.simpleName} ${refused.message}"
             if (to <= nowMillis - WINDOW_DAYS * DAY && !transient(refused)) {
                 note("$kind: reading before ${dateOf(to)} was refused ($reason); taken as the history limit")
@@ -315,21 +489,26 @@ class HealthRecordSync(
      * touched day and reaching at most [TOTALS_DAYS] days on, and each run gets its own totals call, so
      * a scattered set of days is never one call over months. A run whose call throws is summarised with
      * every metric failed, which keeps its stored totals; the other runs are not affected.
+     *
+     * A run is removed from [touched] only once it is actually summarised — never upfront — so a
+     * [BackgroundReadRefused] partway through (which stops the pass, see [pass]) leaves the runs not yet
+     * reached still in [touched] (kept as [touchedThisPass]), for [oweRecheck] to read.
      */
     private suspend fun summarise(touched: MutableSet<Long>, nowMillis: Long) {
         if (touched.isEmpty()) return
         val days = touched.sorted()
-        touched.clear()
         for (run in runsOf(days)) {
             val totals = try {
                 source.dayTotals(run.first(), run.last())
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
+                passOnRefusal(failure)
                 note("totals: ${failure::class.java.simpleName} ${failure.message}")
                 TotalsResult.ALL_FAILED
             }
             store.summarise(run.toSet(), totals, nowMillis)
+            touched -= run.toSet()
         }
     }
 
@@ -359,6 +538,11 @@ class HealthRecordSync(
                 message != null && RATE_LIMITED.any { message.contains(it, ignoreCase = true) }
             })
 
+    /** A [BackgroundReadRefused] is not a failure to log: it stops the pass, from wherever it came. */
+    private fun passOnRefusal(failure: Exception) {
+        if (failure is BackgroundReadRefused) throw failure
+    }
+
     /**
      * The problem log writes a file (D8); `copyNow` is called from the caller's own dispatcher — Main,
      * in the app — so the write is moved off it here rather than left to block the UI thread.
@@ -387,6 +571,12 @@ class HealthRecordSync(
          * figure in one open (each ask is one or two aggregation calls, outside [READS_PER_OPEN]).
          */
         const val SESSION_ASKS_PER_OPEN = 10
+
+        /**
+         * A choice, not a measurement: after a pass stopped by the background, this many days back
+         * from today (today included) have their totals asked again ([recheckRecent]).
+         */
+        const val RECHECK_DAYS = 3L
 
         /** A choice: a totals call covers at most this many consecutive days. */
         const val TOTALS_DAYS = 30L

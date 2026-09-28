@@ -34,14 +34,26 @@ object MovementWeekWording {
      * abbreviates September as "Sept" for en-GB, and the design writes "Sep".
      */
     private val SHORT_DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
+    private val DATE_WITH_YEAR = DateTimeFormatter.ofPattern("EEE d MMM yyyy", Locale.US)
 
     private const val SEP = " · "
 
     const val NOTHING = "nothing recorded"
 
-    /** "THIS WEEK · FROM MON 31 AUG". Set in capitals here: these are the app's words, not the owner's. */
-    fun kicker(monday: Long): String =
-        "THIS WEEK · FROM " + LocalDate.ofEpochDay(monday).format(SHORT_DATE).uppercase(Locale.US)
+    /**
+     * The week shown, by its Monday (D83): "THIS WEEK · FROM MON 31 AUG", "LAST WEEK · FROM MON 24 AUG",
+     * then "WEEK OF MON 17 AUG" further back. [thisMonday] is the calendar week's Monday. A Monday
+     * outside [today]'s year says its year: "WEEK OF MON 16 JUN 2025". Set in capitals here: these are
+     * the app's words, not the owner's.
+     */
+    fun kicker(monday: Long, thisMonday: Long, today: Long): String {
+        val date = date(monday, today).uppercase(Locale.US)
+        return when (monday) {
+            thisMonday -> "THIS WEEK · FROM $date"
+            thisMonday - 7 -> "LAST WEEK · FROM $date"
+            else -> "WEEK OF $date"
+        }
+    }
 
     /** The one large figure (D74): "42.6 km". */
     fun distance(week: MovementWeek): String? = week.distanceM?.let(::km)
@@ -59,8 +71,16 @@ object MovementWeekWording {
         return (parts + duration(week.workoutMinutes)).joinToString(SEP)
     }
 
-    /** "Thu 3 Sep". No year: the screen only ever shows this week. */
-    fun dayHeading(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).format(SHORT_DATE)
+    /**
+     * "Thu 3 Sep"; "Sun 22 Jun 2025" for a day outside [today]'s year (D83, amended), judged day by
+     * day, so a week across New Year gives the year only to last year's days.
+     */
+    fun dayHeading(epochDay: Long, today: Long): String = date(epochDay, today)
+
+    private fun date(epochDay: Long, today: Long): String {
+        val date = LocalDate.ofEpochDay(epochDay)
+        return date.format(if (date.year == LocalDate.ofEpochDay(today).year) SHORT_DATE else DATE_WITH_YEAR)
+    }
 
     /**
      * A day's one-line summary (D73), shown whether the day is open or closed: up to three parts —

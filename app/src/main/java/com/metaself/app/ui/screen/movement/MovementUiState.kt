@@ -18,6 +18,10 @@ import com.metaself.app.domain.movement.WorkoutDraft
  * @property undoFailed the last Undo did not put the workout back; the screen says so, and Undo is
  *   still offered (D8).
  * @property fileImport the last workout file's import (D82), until dismissed; null when there is none.
+ * @property canGoEarlier the record holds something before the week shown, so ‹ is drawn (D83).
+ * @property canGoLater the week shown is an earlier one, so › is drawn; never on this week (D83).
+ * @property logDay the day "Log a workout" logs onto: the open day; today on this week when none is
+ *   open (D76); null on an earlier week with none open, when the button is disabled (D83).
  */
 data class MovementUiState(
     val week: MovementWeek? = null,
@@ -27,6 +31,9 @@ data class MovementUiState(
     val canUndo: Boolean = false,
     val undoFailed: Boolean = false,
     val fileImport: FileImportState? = null,
+    val canGoEarlier: Boolean = false,
+    val canGoLater: Boolean = false,
+    val logDay: Long? = null,
 )
 
 /**

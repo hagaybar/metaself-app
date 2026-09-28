@@ -16,8 +16,11 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.ui.movement.WorkoutFileWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,11 +34,17 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.ZoneId
 import javax.inject.Inject
 
 /**
- * This week from the stored health record and the meal log (D73–D75), and which day is open.
+ * A week from the stored health record and the meal log (D73–D75) — this one, or an earlier one
+ * stepped back to (D83) — and which day is open.
+ *
+ * The week shown lives here, so leaving the screen by Back discards it and the next visit starts on
+ * this week. Coming back from the file picker or another app on the same day keeps it; coming back on
+ * a new day returns to this week, with today open.
  *
  * Everything is observed, so a copy of the health record, or a meal logged, while the screen is open
  * shows at once. Eaten is read through [MealRepository.observeDay] — the day screen's own read — and
@@ -48,7 +57,7 @@ import javax.inject.Inject
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
-class MovementViewModel @Inject constructor(
+class MovementViewModel(
     private val record: MovementRecord,
     private val meals: MealRepository,
     private val today: Today,
@@ -57,12 +66,29 @@ class MovementViewModel @Inject constructor(
     private val profiles: ProfileRepository,
     private val now: Now,
     private val files: WorkoutFileImporter = WorkoutFileImporter.NONE,
+    /** Where [fileStep] writes the problem log (a file, D8) — a test supplies its own. */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
+
+    @Inject
+    constructor(
+        record: MovementRecord,
+        meals: MealRepository,
+        today: Today,
+        problems: ProblemLog,
+        typed: TypedWorkouts,
+        profiles: ProfileRepository,
+        now: Now,
+        files: WorkoutFileImporter,
+    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO)
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
     /** Today starts open (D73). */
     private val openDay = MutableStateFlow<Long?>(calendarToday.value)
+
+    /** The Monday of the week shown; null is this week, whichever week that is by now (D83). */
+    private val shownMonday = MutableStateFlow<Long?>(null)
 
     /** The log-a-workout sheet, when it is open (D76). */
     private val sheet = MutableStateFlow<WorkoutSheetState?>(null)
@@ -82,28 +108,45 @@ class MovementViewModel @Inject constructor(
     /** Every sheet this screen has opened gets the next one of these (see [WorkoutSheetState.token]). */
     private var nextSheetToken = 0L
 
-    /** Null means the read failed; the failure is logged where it happened, below. */
-    private val week: Flow<MovementWeek?> = calendarToday.flatMapLatest { day ->
-        val monday = MovementWeek.mondayOf(day)
-        val built: Flow<MovementWeek?> = combine(
-            // Five weeks: this one, and the four the foot of the screen sums (D74).
-            record.observeDays(monday - 7L * MovementWeek.PREVIOUS_WEEKS, day),
-            record.observeWorkouts(monday, day),
-            mealsOn((monday..day).toList()),
-        ) { days, workouts, mealsByDay -> MovementWeek.of(day, days, workouts, mealsByDay) }
-        built
-    }
+    /** The week shown and the record's earliest day, which bounds how far back ‹ goes (D83). */
+    private data class Read(val week: MovementWeek, val earliest: Long?)
+
+    /**
+     * Null means the read failed; the failure is logged where it happened, below. The earliest day
+     * is part of the same read, so it fails the way the rest does (D8).
+     */
+    private val week: Flow<Read?> = combine(calendarToday, shownMonday) { day, chosen -> day to chosen }
+        .flatMapLatest { (day, chosen) ->
+            val monday = chosen ?: MovementWeek.mondayOf(day)
+            // This week stops at today; an earlier one is all seven days.
+            val last = if (chosen == null) day else monday + 6
+            val built: Flow<Read?> = combine(
+                // Five weeks: the one shown, and the four the foot of the screen sums (D74).
+                record.observeDays(monday - 7L * MovementWeek.PREVIOUS_WEEKS, last),
+                record.observeWorkouts(monday, last),
+                mealsOn((monday..last).toList()),
+                record.observeEarliestDay(),
+            ) { days, workouts, mealsByDay, earliest ->
+                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest)
+            }
+            built
+        }
         .catch { failure ->
             problems.record(PROBLEM_KIND, failure.message ?: failure::class.java.simpleName)
             emit(null)
         }
 
-    val state: StateFlow<MovementUiState> = combine(week, openDay, sheet, undo, fileImport) { built, open, sheetNow, undoNow, file ->
-        if (built == null) {
+    val state: StateFlow<MovementUiState> = combine(week, openDay, sheet, undo, fileImport) { read, open, sheetNow, undoNow, file ->
+        if (read == null) {
             MovementUiState(unreadable = true, openDay = open, sheet = sheetNow, fileImport = file)
         } else {
+            val built = read.week
             MovementUiState(
                 week = built,
+                canGoEarlier = read.earliest != null && MovementWeek.mondayOf(read.earliest) < built.monday,
+                canGoLater = !built.isCurrent,
+                // D76 on this week; on an earlier one only an open day will do (D83).
+                logDay = open ?: built.days.firstOrNull()?.epochDay?.takeIf { built.isCurrent },
                 openDay = open,
                 sheet = sheetNow,
                 canUndo = undoNow.offered,
@@ -138,12 +181,20 @@ class MovementViewModel @Inject constructor(
         fileImport.value = null
     }
 
-    /** One step at a time; the importer never throws (D8), so the step always lands. */
+    /**
+     * One step at a time; the importer never throws (D8), so the step always lands. Every outcome is
+     * also written to the problem log as kind [IMPORT_KIND] (D82, amended), so an import can be
+     * confirmed after the line on screen has been dismissed. The write is moved off the caller's own
+     * dispatcher (Main) the same way `HealthRecordSync.note` does, since the log writes a file (D8).
+     */
     private fun fileStep(step: suspend () -> ImportOutcome) {
         if (fileImport.value?.working == true) return
         fileImport.value = FileImportState(outcome = fileImport.value?.outcome, working = true)
         viewModelScope.launch {
-            fileImport.value = FileImportState(outcome = step())
+            val outcome = step()
+            val logged = WorkoutFileWording.logLine(outcome, today().toEpochDay())
+            withContext(ioDispatcher) { problems.record(IMPORT_KIND, logged) }
+            fileImport.value = FileImportState(outcome = outcome)
         }
     }
 
@@ -153,19 +204,51 @@ class MovementViewModel @Inject constructor(
     }
 
     /**
-     * The screen came to the front. A screen left open past midnight moves to the new day, and opens
-     * it, as the day pager does; on the same day nothing changes.
+     * ‹ (D83): the week before, with no day open — only while the record goes back that far, as the
+     * last state read it; the arrow is drawn from that same state.
+     */
+    fun earlierWeek() {
+        val now = state.value
+        val week = now.week ?: return
+        if (!now.canGoEarlier) return
+        shownMonday.value = week.monday - 7
+        openDay.value = null
+    }
+
+    /** › (D83): the week after, with no day open; into this week, today opens. Never past this week. */
+    fun laterWeek() {
+        val shown = shownMonday.value ?: return
+        val next = shown + 7
+        if (next >= MovementWeek.mondayOf(calendarToday.value)) {
+            shownMonday.value = null
+            openDay.value = calendarToday.value
+        } else {
+            shownMonday.value = next
+            openDay.value = null
+        }
+    }
+
+    /**
+     * The screen came to the front. A screen left open past midnight moves to the new day — back to
+     * this week if an earlier one was shown (D83) — and opens it, as the day pager does; on the same
+     * day nothing changes, so a trip to the file picker keeps the week shown.
      */
     fun lookedAt() {
         val now = today().toEpochDay()
         if (now == calendarToday.value) return
         openDay.value = now
+        shownMonday.value = null
         calendarToday.value = now
     }
 
-    /** "Log a workout" (D76): an empty sheet, for the open day — today when none is open. */
+    /**
+     * "Log a workout" (D76): an empty sheet, for the open day — today on this week when none is open.
+     * On an earlier week with no day open there is no day to log onto, and nothing happens (D83).
+     */
     fun logWorkout() {
-        val day = openDay.value ?: calendarToday.value
+        // The same rule as the state's logDay, read from its sources so a tap is never judged on a
+        // state that has not caught up with the last toggle.
+        val day = openDay.value ?: calendarToday.value.takeIf { shownMonday.value == null } ?: return
         val token = nextSheetToken++
         viewModelScope.launch {
             sheet.value = WorkoutSheetState(draft = WorkoutDraft(), epochDay = day, weightKg = weight(), token = token)
@@ -319,5 +402,8 @@ class MovementViewModel @Inject constructor(
     companion object {
         const val STOP_TIMEOUT_MS = 5_000L
         const val PROBLEM_KIND = "movement"
+
+        /** A workout file's outcome, success or not (D82, amended). */
+        const val IMPORT_KIND = "import"
     }
 }

@@ -49,3 +49,18 @@ twice changes nothing the second time.
 bump per the backup's own rule). Nothing else changes.
 
 **Not built:** reading images; trackpoint detail (per-km pace, cadence, stride); GPX/FIT formats.
+
+## Amended during build
+
+- **Every import outcome is also written to the problem log**, kind `import`, as one plain line in
+  the words of what happened — a success as a success ("added distance and steps to Walking on Thu 3
+  Sep"): which figures, never their values; a stored workout by name and day; a refusal with its
+  reason. The line on the Movement screen still stays until Done, across a trip to the file picker.
+- **Copying the health record runs only in the foreground.** Health Connect refuses reads from an app
+  in the background, and those refusals were logged as problems and, for a workout's aggregate,
+  stored as a missing figure. The copy now does nothing in the background and is cancelled when the
+  app leaves it, keeping the bookmarks already saved; a refusal for the background stops the pass
+  without a log line and saves nothing for that read. The next foreground copy after a pass stopped
+  that way asks again for the missing figures of the last 30 days' workouts (within the per-open cap)
+  and re-totals the last three days (a choice), then owes nothing more. Kept as a marker row in
+  `health_sync`; no schema change.

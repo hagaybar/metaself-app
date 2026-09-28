@@ -21,7 +21,7 @@ android {
         applicationId = "com.metaself.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 118
+        versionCode = 119
 
         // The barcode reader ships a native model for every processor Android runs on. Only one of
         // them is a phone: arm64 is every Android handset of the last decade, and the x86 pair
@@ -32,7 +32,7 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-        versionName = "0.62.1"
+        versionName = "0.63.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -195,6 +195,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.process)
 
     val composeBom = platform(libs.compose.bom)
     implementation(composeBom)

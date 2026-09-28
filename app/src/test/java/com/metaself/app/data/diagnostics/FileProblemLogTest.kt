@@ -55,6 +55,31 @@ class FileProblemLogTest {
     }
 
     @Test
+    fun `a crash may be long, anything else is cut shorter`(@TempDir dir: File) {
+        val log = logIn(dir)
+
+        log.record("crash", "c".repeat(5_000))
+        log.record("refused", "r".repeat(5_000))
+
+        assertThat(log.recent().first { it.kind == "refused" }.detail).hasLength(400)
+        assertThat(log.recent().first { it.kind == "crash" }.detail).hasLength(4_000)
+    }
+
+    @Test
+    fun `the last ten crashes are kept however much else is recorded after them`(@TempDir dir: File) {
+        val log = logIn(dir)
+
+        repeat(12) { log.record("crash", "crash $it") }
+        repeat(80) { log.record("noise", "entry $it") }
+
+        val recent = log.recent()
+        assertThat(recent.filter { it.kind == "crash" }.map { it.detail })
+            .containsExactlyElementsIn((11 downTo 2).map { "crash $it" }).inOrder()
+        assertThat(recent.filter { it.kind == "noise" }).hasSize(50)
+        assertThat(recent.first().detail).isEqualTo("entry 79")
+    }
+
+    @Test
     fun `it survives a file it cannot make sense of`(@TempDir dir: File) {
         File(dir, "problems.log").writeText("this is not a log entry\nnor is this")
 

@@ -6,6 +6,7 @@ import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 /**
  * The Movement screen's week (D73, D74), as numbers. Every figure here is invented, and round so the
@@ -193,6 +194,67 @@ class MovementWeekTest {
 
         assertThat(MovementWeek.of(today, days, emptyList(), emptyMap()).previousWeeksM)
             .containsExactly(10_000, null, 10_000, 2_000).inOrder()
+    }
+
+    /** D83: a past week is all seven days, newest first — Sunday down to Monday. */
+    @Test
+    fun `a past week is its seven days, Sunday first`() {
+        val week = MovementWeek.of(today, emptyList(), emptyList(), emptyMap(), monday = 20_689)
+
+        assertThat(week.monday).isEqualTo(20_689L)
+        assertThat(week.thisMonday).isEqualTo(monday)
+        assertThat(week.isCurrent).isFalse()
+        assertThat(week.days.map { it.epochDay }).containsExactly(
+            20_695L, 20_694L, 20_693L, 20_692L, 20_691L, 20_690L, 20_689L,
+        ).inOrder()
+    }
+
+    @Test
+    fun `this week is current, and is the default`() {
+        val week = MovementWeek.of(today, emptyList(), emptyList(), emptyMap())
+
+        assertThat(week.isCurrent).isTrue()
+        assertThat(week.thisMonday).isEqualTo(monday)
+    }
+
+    /** D83: the headline is the week shown — its Sunday counts, the Monday after does not. */
+    @Test
+    fun `a past week's headline is that week's`() {
+        val days = listOf(
+            day(20_688, distanceM = 9_000, activeKcal = 900), // Sunday 23 August: the week before
+            day(20_689, distanceM = 3_000, activeKcal = 200),
+            day(20_695, distanceM = 2_000, activeKcal = 400),
+            day(20_696, distanceM = 9_000, activeKcal = 900), // Monday 31 August: this week
+        )
+        val workouts = listOf(workout(20_695, minutes = 40), workout(20_696, minutes = 60))
+
+        val week = MovementWeek.of(today, days, workouts, emptyMap(), monday = 20_689)
+
+        assertThat(week.distanceM).isEqualTo(5_000)
+        assertThat(week.averageActiveKcal).isEqualTo(300)
+        assertThat(week.workoutCount).isEqualTo(1)
+        assertThat(week.workoutMinutes).isEqualTo(40)
+        assertThat(week.days.first().workouts.map { it.durationMinutes }).containsExactly(40)
+    }
+
+    /** D83: "the last four weeks" is relative to the week shown. */
+    @Test
+    fun `a past week's last four weeks are the four before it`() {
+        val days = listOf(
+            day(20_689, distanceM = 1_000), // the week shown: the headline, not the line
+            day(20_682, distanceM = 4_000), // 17 August
+            day(20_661, distanceM = 2_000), // 27 July, four back
+            day(20_654, distanceM = 99_000), // 20 July, five back: not on the line
+        )
+
+        assertThat(MovementWeek.of(today, days, emptyList(), emptyMap(), monday = 20_689).previousWeeksM)
+            .containsExactly(4_000, null, null, 2_000).inOrder()
+    }
+
+    @Test
+    fun `a week after this one, or a day that is not a Monday, is refused`() {
+        assertThrows<IllegalArgumentException> { MovementWeek.of(today, emptyList(), emptyList(), emptyMap(), monday = 20_703) }
+        assertThrows<IllegalArgumentException> { MovementWeek.of(today, emptyList(), emptyList(), emptyMap(), monday = 20_690) }
     }
 
     @Test

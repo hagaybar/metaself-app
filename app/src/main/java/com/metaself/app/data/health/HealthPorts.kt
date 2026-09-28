@@ -57,6 +57,31 @@ data class SessionGap(
     val needsEnergy: Boolean,
 )
 
+/**
+ * Health Connect refused a read because the app is not in the foreground (it holds no permission to
+ * read in the background). Not a failure (D8): the reader lets it through without logging it, and the
+ * copying stops its pass quietly, saving nothing for the read that was refused.
+ */
+class BackgroundReadRefused(cause: SecurityException) : Exception(cause.message, cause) {
+    companion object {
+        private const val BACKGROUND_PERMISSION = "READ_HEALTH_DATA_IN_BACKGROUND"
+
+        /**
+         * [failure] as a [BackgroundReadRefused] when it is one: a [SecurityException] whose message
+         * mentions the foreground or the background-read permission (in any case). Null otherwise —
+         * any other SecurityException stays what it was.
+         */
+        fun from(failure: Throwable): BackgroundReadRefused? {
+            if (failure is BackgroundReadRefused) return failure
+            if (failure !is SecurityException) return null
+            val message = failure.message ?: return null
+            val background = message.contains("foreground", ignoreCase = true) ||
+                message.contains(BACKGROUND_PERMISSION, ignoreCase = true)
+            return if (background) BackgroundReadRefused(failure) else null
+        }
+    }
+}
+
 /** One page of changes since a token. */
 data class ChangesPage(
     val upserts: List<ReadRecord>,
@@ -133,6 +158,26 @@ interface HealthStore {
      * replaced, and a typed workout is never touched. Calories filled here are the band's (BAND).
      */
     suspend fun fillSessionTotals(id: Long, totals: SessionTotals)
+    /**
+     * Whether a pass was stopped by the app leaving the foreground (a refusal, or the pass cancelled)
+     * and the next foreground copy owes the recent record a second look: totals from [recheckFromDay]
+     * (or the last few days, with none), and the gaps of the last month's workouts. Kept as a
+     * `health_sync` marker row like [HISTORY_MARKER], so no schema change; a store that has never said
+     * "nothing owed" owes it.
+     */
+    suspend fun recentRecheckDue(): Boolean = false
+
+    /**
+     * The earliest day the marker names, when [recentRecheckDue]: the earliest day a cut-short pass
+     * left touched but not yet summarised. Null when nothing is owed, or when it is owed with no day
+     * recorded — a fresh install, the first open after the upgrade that added the marker, or a
+     * restore — and `recheckRecent` then falls back to the last few days.
+     */
+    suspend fun recheckFromDay(): Long? = null
+
+    /** Records whether [recentRecheckDue], and from which day ([recheckFromDay]) when [due] and known. */
+    suspend fun setRecentRecheckDue(due: Boolean, fromDay: Long? = null) = Unit
+
     /** Whether the catch-ups have already been re-opened for older history (D72). */
     suspend fun historyActedOn(): Boolean
     /** Records that they have. */
@@ -146,6 +191,15 @@ interface HealthStore {
          * so the re-open that follows on the next open finds nothing finished to re-open.
          */
         const val HISTORY_MARKER = "_HISTORY"
+
+        /**
+         * The `health_sync` row behind [recentRecheckDue]: `catchUpDone` true means nothing is owed.
+         * Absent — a fresh install, the first open after the upgrade that added it, or after a restore
+         * — means one recheck is owed. `catchUpCursorMillis` holds [recheckFromDay] — an epoch DAY on
+         * this row, not millis; the field is reused rather than adding a column. Not a [HealthKind], so
+         * every reader of the table skips it.
+         */
+        const val RECHECK_MARKER = "_RECHECK"
     }
 }
 

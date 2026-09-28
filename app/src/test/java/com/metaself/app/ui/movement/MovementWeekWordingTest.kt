@@ -13,6 +13,7 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 
 /**
  * Every sentence the Movement screen says (D73, D74). Every figure here is invented — they are the
@@ -36,20 +37,43 @@ class MovementWeekWordingTest {
     private val fullDay = MovementDay(TEST_EPOCH_DAY, fullHealth, listOf(running), eatenKcal = 1_840)
 
     private val week = MovementWeek(
-        monday = 20_696, distanceM = 42_600, averageActiveKcal = 355,
+        monday = 20_696, thisMonday = 20_696, today = TEST_EPOCH_DAY, distanceM = 42_600, averageActiveKcal = 355,
         workoutCount = 4, walkCount = 0, workoutMinutes = 141,
         days = emptyList(), previousWeeksM = listOf(38_100, 45_000, null, 44_700),
     )
 
+    /** D83: this week, last week, and further back — each by its Monday, in capitals. */
     @Test
-    fun `the kicker names the Monday, in capitals`() {
-        assertThat(MovementWeekWording.kicker(20_696)).isEqualTo("THIS WEEK · FROM MON 31 AUG")
+    fun `the kicker names the week and its Monday, in capitals`() {
+        assertThat(MovementWeekWording.kicker(20_696, thisMonday = 20_696, today = TEST_EPOCH_DAY)).isEqualTo("THIS WEEK · FROM MON 31 AUG")
+        assertThat(MovementWeekWording.kicker(20_689, thisMonday = 20_696, today = TEST_EPOCH_DAY)).isEqualTo("LAST WEEK · FROM MON 24 AUG")
+        assertThat(MovementWeekWording.kicker(20_682, thisMonday = 20_696, today = TEST_EPOCH_DAY)).isEqualTo("WEEK OF MON 17 AUG")
+    }
+
+    /** D83, amended: a date outside today's year says its year. The dates are invented. */
+    @Test
+    fun `a week in an earlier year names its year`() {
+        val monday = LocalDate.of(2025, 6, 16).toEpochDay()
+
+        assertThat(MovementWeekWording.kicker(monday, thisMonday = 20_696, today = TEST_EPOCH_DAY)).isEqualTo("WEEK OF MON 16 JUN 2025")
+        assertThat(MovementWeekWording.dayHeading(monday + 6, today = TEST_EPOCH_DAY)).isEqualTo("Sun 22 Jun 2025")
+    }
+
+    /** Across New Year each date is judged on its own: last year's days say their year, this year's do not. */
+    @Test
+    fun `a week across the new year gives the year only to last year's dates`() {
+        val today = LocalDate.of(2027, 1, 1).toEpochDay()
+        val monday = LocalDate.of(2026, 12, 28).toEpochDay()
+
+        assertThat(MovementWeekWording.kicker(monday, thisMonday = monday, today = today)).isEqualTo("THIS WEEK · FROM MON 28 DEC 2026")
+        assertThat(MovementWeekWording.dayHeading(today, today = today)).isEqualTo("Fri 1 Jan")
+        assertThat(MovementWeekWording.dayHeading(today - 1, today = today)).isEqualTo("Thu 31 Dec 2026")
     }
 
     /** Locale.UK would say "Sept" (Java 17's CLDR data); the design says "Sep". */
     @Test
     fun `a day is its weekday and date`() {
-        assertThat(MovementWeekWording.dayHeading(TEST_EPOCH_DAY)).isEqualTo("Thu 3 Sep")
+        assertThat(MovementWeekWording.dayHeading(TEST_EPOCH_DAY, today = TEST_EPOCH_DAY)).isEqualTo("Thu 3 Sep")
     }
 
     @Test

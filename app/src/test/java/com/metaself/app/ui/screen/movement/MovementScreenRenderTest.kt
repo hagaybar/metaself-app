@@ -1,5 +1,7 @@
 package com.metaself.app.ui.screen.movement
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.semantics.Role
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
@@ -326,9 +328,144 @@ class MovementScreenRenderTest {
         assertThat(dismissed).isEqualTo(1)
     }
 
+    /**
+     * The import line changes in place as a file is read: nothing, then "Reading the file…", then what
+     * it came to. An early return out of the file lines' column once left the composer's groups
+     * unbalanced (Compose compiler 1.5.9), so the SECOND change crashed on every import — a single
+     * render with any one state never showed it. Drawn here as the phone does: one composition, its
+     * state changed twice.
+     */
+    @Test
+    fun `the import line changes in place from nothing to reading to its outcome`() {
+        val state = mutableStateOf(MovementUiState(week = week, openDay = TEST_EPOCH_DAY, logDay = TEST_EPOCH_DAY))
+        render.texts {
+            MovementScreen(
+                state = state.value,
+                onToggleDay = {}, onBack = {}, onLogWorkout = {}, onOpenWorkout = {}, onUndoDelete = {},
+                onChooseFile = {}, onAddFromFile = {}, onChooseForFile = {}, onDismissFile = {},
+                onEarlierWeek = {}, onLaterWeek = {},
+            )
+        }
+
+        state.value = state.value.copy(fileImport = FileImportState(outcome = null, working = true))
+        Snapshot.sendApplyNotifications()
+        assertThat(render.textsAgain()).contains("Reading the file…")
+
+        state.value = state.value.copy(fileImport = FileImportState(ImportOutcome.NoMatch(aFile)))
+        Snapshot.sendApplyNotifications()
+        val texts = render.textsAgain()
+        assertThat(texts).contains("Add it as a workout")
+        assertThat(texts).doesNotContain("Reading the file…")
+
+        state.value = state.value.copy(fileImport = FileImportState(outcome = null, working = true))
+        Snapshot.sendApplyNotifications()
+        assertThat(render.textsAgain()).contains("Reading the file…")
+
+        state.value = state.value.copy(fileImport = null)
+        Snapshot.sendApplyNotifications()
+        assertThat(render.textsAgain()).doesNotContain("Reading the file…")
+    }
+
+    // --- Earlier weeks (D83). What this proves: which arrows are in the tree and what a screen reader
+    // calls them, that each asks for its week, the kicker's words, an earlier week's rows and their
+    // order, and that Log a workout declares itself disabled with its line above the rows. What it
+    // cannot (CLAUDE.md): the arrows' 48 dp, the kicker holding still when an arrow is absent, or the
+    // disabled button's grey — phone checks. ---
+
+    /** The week of 24 August (20,689): only its Sunday, 30 August, holds anything. Invented. */
+    private val pastWeek = MovementWeek.of(
+        today = TEST_EPOCH_DAY,
+        days = listOf(HealthDay(epochDay = 20_695, distanceM = 3_000, activeKcal = 250, activeKcalSource = FigureSource.TOTAL)),
+        workouts = emptyList(),
+        mealsByDay = emptyMap(),
+        monday = 20_689,
+    )
+
+    @Test
+    fun `this week has Previous week when there is one, and never Next week`() {
+        var earlier = 0
+        draw(
+            state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, canGoEarlier = true, logDay = TEST_EPOCH_DAY),
+            onEarlierWeek = { earlier++ },
+        )
+
+        assertThat(render.describedCount("Previous week")).isEqualTo(1)
+        assertThat(render.describedCount("Next week")).isEqualTo(0)
+        render.clickDescribed("Previous week")
+        assertThat(earlier).isEqualTo(1)
+    }
+
+    @Test
+    fun `with nothing earlier there is no Previous week`() {
+        draw()
+
+        assertThat(render.describedCount("Previous week")).isEqualTo(0)
+        assertThat(render.describedCount("Next week")).isEqualTo(0)
+    }
+
+    @Test
+    fun `at the earliest week there is no Previous week, and there is Next week`() {
+        draw(state = MovementUiState(week = pastWeek, canGoEarlier = false, canGoLater = true))
+
+        assertThat(render.describedCount("Previous week")).isEqualTo(0)
+        assertThat(render.describedCount("Next week")).isEqualTo(1)
+    }
+
+    @Test
+    fun `an earlier week names itself, lists its seven days Sunday first, and steps forward`() {
+        var later = 0
+        val texts = draw(state = MovementUiState(week = pastWeek, canGoEarlier = true, canGoLater = true), onLaterWeek = { later++ })
+
+        assertThat(texts).contains("LAST WEEK · FROM MON 24 AUG")
+        assertThat(texts).contains("3.0 km")
+        assertThat(texts).contains("250 kcal of movement a day, on average")
+        assertThat(render.isDrawnBefore("Sun 30 Aug", "Sat 29 Aug")).isTrue()
+        assertThat(render.isDrawnBefore("Tue 25 Aug", "Mon 24 Aug")).isTrue()
+        assertThat(texts.count { it == "nothing recorded" }).isEqualTo(6)
+        // No day is open: Sunday's summary is there, its detail is not.
+        assertThat(texts).contains("250 kcal")
+        assertThat(texts).doesNotContain("250 kcal of movement · phone and band")
+        render.clickDescribed("Next week")
+        assertThat(later).isEqualTo(1)
+    }
+
+    @Test
+    fun `an earlier week with no day open disables Log a workout and says why`() {
+        var asked = 0
+        val texts = draw(state = MovementUiState(week = pastWeek, logDay = null), onLogWorkout = { asked++ })
+
+        assertThat(texts).contains("Open a day to log onto it")
+        assertThat(render.isDrawnBefore("Open a day to log onto it", "Sun 30 Aug")).isTrue()
+        assertThat(render.isEnabledDescribed("Log a workout")).isFalse()
+        render.clickDescribed("Log a workout")
+        assertThat(asked).isEqualTo(0)
+    }
+
+    @Test
+    fun `with a day to log onto, Log a workout is enabled and there is no line`() {
+        val texts = draw(state = MovementUiState(week = pastWeek, openDay = 20_692, logDay = 20_692))
+
+        assertThat(texts).doesNotContain("Open a day to log onto it")
+        assertThat(render.isEnabledDescribed("Log a workout")).isTrue()
+    }
+
+    /** D83, amended: a week of an earlier year says the year. Invented: the week of Monday 16 June 2025. */
+    @Test
+    fun `a week in an earlier year says its year in the kicker and on its days`() {
+        val monday = java.time.LocalDate.of(2025, 6, 16).toEpochDay()
+        val old = MovementWeek.of(today = TEST_EPOCH_DAY, days = emptyList(), workouts = emptyList(), mealsByDay = emptyMap(), monday = monday)
+
+        val texts = draw(state = MovementUiState(week = old, canGoLater = true))
+
+        assertThat(texts).contains("WEEK OF MON 16 JUN 2025")
+        assertThat(texts).contains("Sun 22 Jun 2025")
+        assertThat(texts).contains("Mon 16 Jun 2025")
+    }
+
     private fun draw(
         openDay: Long? = TEST_EPOCH_DAY,
-        state: MovementUiState = MovementUiState(week = week, openDay = openDay),
+        // This week: with every day closed, Log a workout still logs onto today (D76).
+        state: MovementUiState = MovementUiState(week = week, openDay = openDay, logDay = openDay ?: TEST_EPOCH_DAY),
         onToggleDay: (Long) -> Unit = {},
         onLogWorkout: () -> Unit = {},
         onOpenWorkout: (Workout) -> Unit = {},
@@ -337,6 +474,8 @@ class MovementScreenRenderTest {
         onAddFromFile: () -> Unit = {},
         onChooseForFile: (Long) -> Unit = {},
         onDismissFile: () -> Unit = {},
+        onEarlierWeek: () -> Unit = {},
+        onLaterWeek: () -> Unit = {},
     ): List<String> = render.texts {
         MovementScreen(
             state = state,
@@ -349,6 +488,8 @@ class MovementScreenRenderTest {
             onAddFromFile = onAddFromFile,
             onChooseForFile = onChooseForFile,
             onDismissFile = onDismissFile,
+            onEarlierWeek = onEarlierWeek,
+            onLaterWeek = onLaterWeek,
         )
     }
 }

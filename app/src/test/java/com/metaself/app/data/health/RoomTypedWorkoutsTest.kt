@@ -268,6 +268,7 @@ class RoomTypedWorkoutsTest {
         override suspend fun onDay(epochDay: Long): List<WorkoutEntity> = error("not used")
 
         override fun observeWeeklyRunning(weeks: Int): Flow<List<WeekOfRunning>> = error("not used")
+        override fun observeEarliest(): Flow<Long?> = error("not used")
         override suspend fun synced(origin: String, originId: String): WorkoutEntity? = error("not used")
         override suspend fun syncedIdsBetween(from: Long, to: Long): List<String> = error("not used")
         override suspend fun dropSyncedNotIn(from: Long, to: Long, keep: List<String>): Unit = error("not used")

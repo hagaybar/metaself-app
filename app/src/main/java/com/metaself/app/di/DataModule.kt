@@ -17,6 +17,8 @@ import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.drive.DriveArchiveDrive
+import com.metaself.app.data.lifecycle.AppForeground
+import com.metaself.app.data.lifecycle.ProcessAppForeground
 import com.metaself.app.data.health.ArchiveDrive
 import com.metaself.app.data.health.ArchiveRecord
 import com.metaself.app.data.health.HealthArchive
@@ -255,6 +257,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideHealthRecordCopier(sync: HealthRecordSync): HealthRecordCopier = sync
+
+    /** Whether the app is in the foreground, which Health Connect requires of a read. */
+    @Provides
+    @Singleton
+    fun provideAppForeground(foreground: ProcessAppForeground): AppForeground = foreground
 
     @Provides
     @Singleton

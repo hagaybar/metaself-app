@@ -66,6 +66,17 @@ class HealthConnectReader @Inject constructor(
     private fun connect(): HealthConnectClient =
         client ?: throw IllegalStateException("Health Connect is not available")
 
+    /**
+     * One call to Health Connect, with its refusal of a read from the background turned into a
+     * [BackgroundReadRefused]: not a failure, so no caller here logs it, and `HealthRecordSync` stops
+     * its pass on it. Every other exception is left as it was.
+     */
+    private inline fun <T> refusable(call: () -> T): T = try {
+        call()
+    } catch (refused: SecurityException) {
+        throw BackgroundReadRefused.from(refused) ?: refused
+    }
+
     override suspend fun grantedKinds(): Set<HealthKind> = withContext(Dispatchers.IO) {
         val granted = runCatching { client?.permissionController?.getGrantedPermissions() }
             .getOrNull() ?: return@withContext emptySet()
@@ -96,11 +107,11 @@ class HealthConnectReader @Inject constructor(
     }
 
     override suspend fun changesToken(kind: HealthKind): String = withContext(Dispatchers.IO) {
-        connect().getChangesToken(ChangesTokenRequest(setOf(HealthPermissions.recordType(kind))))
+        refusable { connect().getChangesToken(ChangesTokenRequest(setOf(HealthPermissions.recordType(kind)))) }
     }
 
     override suspend fun changes(kind: HealthKind, token: String): ChangesPage = withContext(Dispatchers.IO) {
-        val response = connect().getChanges(token)
+        val response = refusable { connect().getChanges(token) }
         val upserted = response.changes.filterIsInstance<UpsertionChange>().map { it.record }
         ChangesPage(
             upserts = translate(upserted),
@@ -122,9 +133,9 @@ class HealthConnectReader @Inject constructor(
         val out = mutableListOf<T>()
         var page: String? = null
         do {
-            val response = connect().readRecords(
-                ReadRecordsRequest(recordType = type, timeRangeFilter = range, pageToken = page),
-            )
+            val response = refusable {
+                connect().readRecords(ReadRecordsRequest(recordType = type, timeRangeFilter = range, pageToken = page))
+            }
             out += response.records
             page = response.pageToken
         } while (page != null)
@@ -173,7 +184,11 @@ class HealthConnectReader @Inject constructor(
         )
     }
 
-    /** One metric's daily figures; empty when there was no data, null when the call failed (logged). */
+    /**
+     * One metric's daily figures; empty when there was no data, null when the call failed (logged). A
+     * refusal for the background is thrown, unlogged, so the copying stops rather than summarising a
+     * day as if the metric had failed.
+     */
     private suspend fun <T : Any> daily(
         metric: AggregateMetric<T>,
         name: String,
@@ -181,17 +196,21 @@ class HealthConnectReader @Inject constructor(
         to: LocalDate,
         asInt: (T) -> Int,
     ): Map<Long, Int>? = try {
-        connect().aggregateGroupByPeriod(
-            AggregateGroupByPeriodRequest(
-                metrics = setOf(metric),
-                timeRangeFilter = TimeRangeFilter.between(from.atStartOfDay(), to.plusDays(1).atStartOfDay()),
-                timeRangeSlicer = Period.ofDays(1),
-            ),
-        ).mapNotNull { bucket ->
+        refusable {
+            connect().aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(metric),
+                    timeRangeFilter = TimeRangeFilter.between(from.atStartOfDay(), to.plusDays(1).atStartOfDay()),
+                    timeRangeSlicer = Period.ofDays(1),
+                ),
+            )
+        }.mapNotNull { bucket ->
             bucket.result[metric]?.let { bucket.startTime.toLocalDate().toEpochDay() to asInt(it) }
         }.toMap()
     } catch (cancelled: CancellationException) {
         throw cancelled
+    } catch (refused: BackgroundReadRefused) {
+        throw refused
     } catch (failure: Exception) {
         problems.record("health", "totals of $name: ${failure::class.java.simpleName} ${failure.message}")
         null
@@ -242,7 +261,8 @@ class HealthConnectReader @Inject constructor(
     /**
      * Distance and energy over the session's own time, each its own call (D4: null when none), skipped
      * entirely — no call, no log — when that reading is not granted (D8). A failed call leaves its
-     * figure null and is logged.
+     * figure null and is logged; a call refused for the background throws [BackgroundReadRefused], so the
+ * session is not stored at all on that read rather than stored without the figure.
      *
      * An `ExerciseSessionRecord` carries no distance of its own in connect-client 1.1.0 (checked on the
      * pinned jar: only segments, laps with an optional length, and a route behind its own permission),
@@ -300,11 +320,14 @@ class HealthConnectReader @Inject constructor(
             } else null,
         )
 
+    /** One figure over a workout's time; null when the call failed (logged). A background refusal is thrown, unlogged. */
     private suspend fun <T : Any> sessionTotal(metric: AggregateMetric<T>, name: String, range: TimeRangeFilter): T? =
         try {
-            connect().aggregate(AggregateRequest(setOf(metric), range))[metric]
+            refusable { connect().aggregate(AggregateRequest(setOf(metric), range)) }[metric]
         } catch (cancelled: CancellationException) {
             throw cancelled
+        } catch (refused: BackgroundReadRefused) {
+            throw refused
         } catch (failure: Exception) {
             problems.record("health", "workout $name: ${failure::class.java.simpleName} ${failure.message}")
             null

@@ -244,6 +244,19 @@ class ComposeRender {
         !nodeStartingWith(prefix).config.contains(SemanticsProperties.Disabled)
 
     /**
+     * [isEnabled] for a control known only by its spoken name — a floating button whose drawn words
+     * never reach the tree, as the Movement screen's "Log a workout". Exact, as [clickDescribed] is.
+     *
+     * Reads the LAST render, so call [texts] first.
+     */
+    fun isEnabledDescribed(description: String): Boolean {
+        val node = lastNodes.firstOrNull { node ->
+            description in node.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty()
+        } ?: error("no node whose spoken name is \"$description\"")
+        return !node.config.contains(SemanticsProperties.Disabled)
+    }
+
+    /**
      * How far down the node matching [prefix] starts, in dp.
      *
      * Two controls with the same top are on the same line; different tops mean one of them wrapped.

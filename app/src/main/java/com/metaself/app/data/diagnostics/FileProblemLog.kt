@@ -10,7 +10,9 @@ import java.io.File
  * that matters most.
  *
  * Capped at [LIMIT] entries. A log that grows for ever eventually costs something, and nothing here
- * is worth keeping for months.
+ * is worth keeping for months. A crash is the exception on both counts: its detail may run to
+ * [MAX_CRASH_DETAIL] characters (a cause chain with frames), and the last [KEPT_CRASHES] crashes are
+ * kept however many other entries came after them, so a crash is never pushed out by routine lines.
  */
 class FileProblemLog(private val file: File) : ProblemLog {
 
@@ -32,16 +34,24 @@ class FileProblemLog(private val file: File) : ProblemLog {
     override fun record(kind: String, detail: String) {
         runCatching {
             file.parentFile?.mkdirs()
+            val cap = if (kind == CRASH) MAX_CRASH_DETAIL else MAX_DETAIL
             val entry = listOf(
                 System.currentTimeMillis().toString(),
                 kind.oneLine(),
-                detail.oneLine().take(MAX_DETAIL),
+                detail.oneLine().take(cap),
             ).joinToString(SEPARATOR)
 
-            val kept = (file.takeIf { it.exists() }?.readLines() ?: emptyList()) + entry
-            file.writeText(kept.takeLast(LIMIT).joinToString("\n"))
+            val lines = (file.takeIf { it.exists() }?.readLines() ?: emptyList()) + entry
+            file.writeText(kept(lines).joinToString("\n"))
         }
         // A failure to record a failure is not worth a failure. Swallowed deliberately.
+    }
+
+    /** The last [LIMIT] entries, and, from before them, whichever of the last [KEPT_CRASHES] crashes they lack; in order. */
+    private fun kept(lines: List<String>): List<String> {
+        val recentFrom = (lines.size - LIMIT).coerceAtLeast(0)
+        val crashes = lines.indices.filter { lines[it].split(SEPARATOR, limit = 3).getOrNull(1) == CRASH }.takeLast(KEPT_CRASHES).toSet()
+        return lines.filterIndexed { index, _ -> index >= recentFrom || index in crashes }
     }
 
     override fun clear() {
@@ -57,5 +67,8 @@ class FileProblemLog(private val file: File) : ProblemLog {
         const val SEPARATOR = "\u001F"
         const val LIMIT = 50
         const val MAX_DETAIL = 400
+        const val CRASH = "crash"
+        const val MAX_CRASH_DETAIL = 4_000
+        const val KEPT_CRASHES = 10
     }
 }
