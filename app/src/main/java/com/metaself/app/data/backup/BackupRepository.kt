@@ -19,6 +19,9 @@ import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
+import com.metaself.app.data.trainer.TrainerDao
+import com.metaself.app.data.trainer.TrainerPlanEntity
+import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.backup.Backup
@@ -34,6 +37,8 @@ import com.metaself.app.domain.backup.BackupRevision
 import com.metaself.app.domain.backup.BackupSavedMeal
 import com.metaself.app.domain.backup.BackupSleep
 import com.metaself.app.domain.backup.BackupSleepStage
+import com.metaself.app.domain.backup.BackupTrainerPlan
+import com.metaself.app.domain.backup.BackupTrainerReview
 import com.metaself.app.domain.backup.BackupWeight
 import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.Confidence
@@ -117,6 +122,7 @@ class BackupRepository @Inject constructor(
     private val days: HealthDayDao,
     private val corrections: MovementCorrectionDao,
     private val bookkeeping: HealthBookkeepingDao,
+    private val trainer: TrainerDao,
     private val profiles: ProfileRepository,
     private val reminders: ReminderStore,
     private val scheduler: ReminderScheduler,
@@ -138,6 +144,7 @@ class BackupRepository @Inject constructor(
         val milestones = profiles.milestones.first()
         val reminder = reminders.reminder.first()
         val aiSettings = ai.settings.first()
+        val reviewByWorkout = trainer.allReviews().associateBy { it.workoutId }
 
         return Backup(
             version = Backup.CURRENT_VERSION,
@@ -165,7 +172,7 @@ class BackupRepository @Inject constructor(
             ai = BackupAi(aiSettings.model, aiSettings.dailyCeiling),
             foods = everyFood.map(BackupFoods::toBackup),
             savedMeals = builtMeals.map(BackupFoods::toBackup),
-            workouts = workouts.all().map { it.toBackup() },
+            workouts = workouts.all().map { it.toBackup(reviewByWorkout[it.id]) },
             // A night's stages come back from the @Relation fetch in no promised order; sorted here so
             // the file is written the same way regardless.
             sleep = sleep.allNights().map { night ->
@@ -175,6 +182,7 @@ class BackupRepository @Inject constructor(
             movementCorrections = corrections.all().map {
                 BackupMovementCorrection(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
             },
+            trainerPlans = trainer.allPlans().map { it.toBackup() },
         )
     }
 
@@ -235,6 +243,8 @@ class BackupRepository @Inject constructor(
                 sleep.deleteAll()
                 days.deleteAll()
                 corrections.deleteAll()
+                trainer.deleteReviews()
+                trainer.deletePlans()
                 // The copying starts again from scratch: a record read again replaces its rows, so
                 // nothing is doubled, and nothing recorded after this file was made is missed.
                 // Accepted: a copy running at the same moment may still write a bookmark back after
@@ -253,6 +263,8 @@ class BackupRepository @Inject constructor(
                 }
                 days.insertAll(prepared.days)
                 corrections.insertAll(prepared.corrections)
+                trainer.insertPlans(prepared.plans)
+                trainer.insertReviews(prepared.reviews)
                 // Last, and inside: a throw here is still a throw out of the transaction.
                 restoreSettings(prepared)
             }
@@ -373,6 +385,20 @@ class BackupRepository @Inject constructor(
             )
         }
 
+        val keptWorkouts = backup.workouts.dedupBySyncedOrigin()
+        // The table is emptied first, so the file's workouts take ids 1…n in order, and each review is
+        // attached to the id its own workout receives (D88).
+        val workoutRows = keptWorkouts.mapIndexed { at, workout -> workout.toEntity().copy(id = at + 1L) }
+        val planRows = backup.trainerPlans.distinctBy { it.id }.map {
+            TrainerPlanEntity(it.id, it.createdAtMillis, it.activity, it.minutes, it.feeling, it.wish, it.words, it.suggestion, it.model, it.kept)
+        }
+        val planIds = planRows.map { it.id }.toSet()
+        val reviewRows = keptWorkouts.mapIndexedNotNull { at, workout ->
+            workout.trainerReview?.let {
+                TrainerReviewEntity(0, at + 1L, it.planId?.takeIf(planIds::contains), it.felt, it.words, it.feedback, it.feedbackAtMillis, it.model)
+            }
+        }
+
         return Prepared(
             fileFoods = fileFoods,
             derivedFoods = derived,
@@ -388,7 +414,7 @@ class BackupRepository @Inject constructor(
             milestones = backup.milestones.mapKeys { Milestone(it.key) },
             ai = backup.ai,
             reminder = backup.reminder?.let { Reminder(it.enabled, it.hour, it.minute) },
-            workouts = backup.workouts.dedupBySyncedOrigin().map { it.toEntity() },
+            workouts = workoutRows,
             nights = backup.sleep.dedupByRecord().map { night ->
                 night.toEntity() to night.stages.map {
                     SleepStageEntity(sessionId = 0, stage = it.stage, startMillis = it.startMillis, endMillis = it.endMillis)
@@ -398,6 +424,8 @@ class BackupRepository @Inject constructor(
             corrections = backup.movementCorrections.dedupCorrectionsKeepingLast().map {
                 MovementCorrectionEntity(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
             },
+            plans = planRows,
+            reviews = reviewRows,
         )
     }
 
@@ -548,6 +576,9 @@ class BackupRepository @Inject constructor(
         val nights: List<Pair<SleepSessionEntity, List<SleepStageEntity>>>,
         val days: List<HealthDayEntity>,
         val corrections: List<MovementCorrectionEntity>,
+        val plans: List<TrainerPlanEntity>,
+        /** Each names the id its workout is inserted with. */
+        val reviews: List<TrainerReviewEntity>,
     )
 
     /** How much a restore would destroy, so the question asked is a real one. */
@@ -670,8 +701,11 @@ private fun BackupItem.toDomainOrNull(): FoodItem? = runCatching {
     )
 }.getOrNull()
 
-/** Verbatim: the file keeps what the table holds, including names this version cannot read. */
-private fun WorkoutEntity.toBackup() = BackupWorkout(
+/**
+ * Verbatim: the file keeps what the table holds, including names this version cannot read. [review]
+ * is written inside the workout (D88).
+ */
+private fun WorkoutEntity.toBackup(review: TrainerReviewEntity?) = BackupWorkout(
     epochDay = epochDay,
     startedAtMillis = startedAtMillis,
     durationMinutes = durationMinutes,
@@ -693,9 +727,16 @@ private fun WorkoutEntity.toBackup() = BackupWorkout(
     distanceSource = distanceSource,
     steps = steps,
     stepsSource = stepsSource,
+    trainerReview = review?.let {
+        BackupTrainerReview(it.planId, it.felt, it.words, it.feedback, it.feedbackAtMillis, it.model)
+    },
 )
 
-/** Id 0, so the table numbers the rows afresh, as a restored meal's are. */
+private fun TrainerPlanEntity.toBackup() = BackupTrainerPlan(
+    id, createdAtMillis, activity, minutes, feeling, wish, words, suggestion, model, kept,
+)
+
+/** Id 0 here; [BackupRepository]'s prepare numbers the rows 1…n, so a review can name its workout (D88). */
 private fun BackupWorkout.toEntity() = WorkoutEntity(
     epochDay = epochDay,
     startedAtMillis = startedAtMillis,

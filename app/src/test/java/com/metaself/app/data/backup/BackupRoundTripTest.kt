@@ -48,6 +48,8 @@ import com.metaself.app.data.health.MovementCorrectionEntity
 import com.metaself.app.data.health.SleepSessionEntity
 import com.metaself.app.data.health.SleepStageEntity
 import com.metaself.app.data.health.WorkoutEntity
+import com.metaself.app.data.trainer.TrainerPlanEntity
+import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
@@ -708,6 +710,33 @@ class BackupRoundTripTest {
         arrival = BackupArrival(75.0, 20_700),
     )
 
+
+    /** D88: plans and reviews restored over themselves; each review on its own session, by its new id. */
+    @Test
+    fun `the trainer's plans and reviews come back on their own sessions`() = runTest {
+        db.workoutDao().insert(aWalk(startedAt = 1_000))
+        val second = db.workoutDao().insert(aWalk(startedAt = 2_000))
+        val planId = db.trainerDao().insertPlan(TrainerPlanEntity(0, 500, "RUN", 30, "FRESH", "PUSH", null, "{}", "m", true))
+        db.trainerDao().insertReview(TrainerReviewEntity(0, second, planId, "HARD", "Invented.", null, null, null))
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        assertThat(file.version).isEqualTo(Backup.CURRENT_VERSION)
+        repository().restore(file)
+
+        val walks = db.workoutDao().all()
+        val review = db.trainerDao().allReviews().single()
+        assertThat(walks.first { it.id == review.workoutId }.startedAtMillis).isEqualTo(2_000L)
+        assertThat(review.planId).isEqualTo(db.trainerDao().allPlans().single().id)
+        assertThat(db.trainerDao().allPlans().single().kept).isTrue()
+    }
+
+    /** A synced forty-minute walk starting at [startedAt]. Invented figures. */
+    private fun aWalk(startedAt: Long) = WorkoutEntity(
+        epochDay = 20_699, startedAtMillis = startedAt, durationMinutes = 40, kind = "WALK",
+        title = null, distanceM = 4_000, energyKcal = null, energySource = "NONE",
+        effort = null, source = "SYNCED", origin = "com.example.band", originId = "walk-$startedAt", note = null,
+    )
+
     private fun repository(
         profiles: ProfileRepository = FakeProfileRepository(null),
         savedMeals: SavedMealRepository = savedMeals(),
@@ -720,6 +749,7 @@ class BackupRoundTripTest {
         days = db.healthDayDao(),
         corrections = db.movementCorrectionDao(),
         bookkeeping = db.healthBookkeepingDao(),
+        trainer = db.trainerDao(),
         profiles = profiles,
         reminders = NoReminders(),
         scheduler = NoScheduler(),
