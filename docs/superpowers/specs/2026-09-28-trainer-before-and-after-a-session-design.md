@@ -1,6 +1,6 @@
 # The trainer, before and after a session — D84 to D88
 
-> Written 2026-09-28. **DRAFT — awaiting the owner's approval; nothing here is built.** This is the
+> Written 2026-09-28 and approved the same day. This is the
 > first part of project 3 of the health record's vision (D65): a trainer that reasons over the stored
 > record. It serves two aims: **the profile's weight goal**, and **a steady rhythm of sessions**. Of
 > four uses planned for it, this spec builds the first two — feedback after a session and a
