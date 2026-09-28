@@ -16,13 +16,17 @@ import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanMatch
 import com.metaself.app.domain.trainer.TrainerPlan
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.outlived
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
@@ -75,7 +79,21 @@ class ReviewSessionViewModel @Inject constructor(
     private val workoutId: Long = requireNotNull(savedState.get<Long>(WORKOUT_ID)) { "a review needs its session" }
     private val local = MutableStateFlow(State(today = today().toEpochDay()))
 
-    val state: StateFlow<State> = combine(local, settings.settings) { s, ai -> s.copy(ceiling = ai.dailyCeiling) }
+    /**
+     * This session's review as stored, followed: feedback asked for on an earlier visit and stored after
+     * it was left (it runs in [outliving]) shows when it lands. A read that fails is logged and shows
+     * nothing more than the form already holds (D8).
+     */
+    private val stored: Flow<TrainerReview?> = store.observeReviews()
+        .map<List<TrainerReview>, TrainerReview?> { all -> all.firstOrNull { it.workoutId == workoutId } }
+        .catch { failure ->
+            problems.record(TrainerViewModel.PROBLEM_KIND, "review not followed: " + (failure.message ?: failure::class.java.simpleName))
+            emit(null)
+        }
+
+    val state: StateFlow<State> = combine(local, settings.settings, stored) { s, ai, review ->
+        s.copy(ceiling = ai.dailyCeiling, feedback = s.feedback ?: review?.feedback)
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
     init {
@@ -118,7 +136,8 @@ class ReviewSessionViewModel @Inject constructor(
 
     private fun save(withFeedback: Boolean) {
         val now = local.value
-        if (!now.canSave) return
+        // Feedback already stored — perhaps landed from an earlier visit — is never paid for twice.
+        if (!now.canSave || state.value.feedback != null) return
         local.update { it.copy(working = true, askingTrainer = withFeedback, failure = null, refused = null) }
         outlived(
             outliving,

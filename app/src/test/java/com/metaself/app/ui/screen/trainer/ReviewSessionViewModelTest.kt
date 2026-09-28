@@ -338,6 +338,25 @@ class ReviewSessionViewModelTest {
         assertThat(store.reviewOf(1)!!.feedback!!.headline).isEqualTo(FEEDBACK.headline)
     }
 
+    /**
+     * Feedback asked for on an earlier visit can land after that screen was left. Reopened, the review
+     * screen follows the store, so the feedback shows when it lands, and nothing is asked twice.
+     */
+    @Test
+    fun `feedback stored after the screen opened shows, and is not asked for again`() = runTest {
+        store.putReview(TrainerReview(workoutId = 1, planId = null, felt = Felt.RIGHT, words = "Invented words."))
+        val viewModel = opened()
+        assertThat(viewModel.state.value.feedback).isNull()
+
+        store.putReview(store.reviewOf(1)!!.copy(feedback = FEEDBACK, feedbackAtMillis = TrainerScreens.NOW, model = "a-model"))
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.feedback).isEqualTo(FEEDBACK)
+        viewModel.saveAndAsk()
+        advanceUntilIdle()
+        assertThat(trainer.asked).isEmpty()
+    }
+
     /** [trainer], waiting for [gate] before it gives feedback. */
     private fun gated(gate: CompletableDeferred<Unit>): Trainer = object : Trainer by trainer {
         override suspend fun feedback(request: TrainerRequest): TrainerReply<Feedback> {

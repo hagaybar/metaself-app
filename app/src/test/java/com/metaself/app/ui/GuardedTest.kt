@@ -5,6 +5,9 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.Problem
 import com.metaself.app.data.diagnostics.ProblemLog
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.awaitCancellation
@@ -102,6 +105,37 @@ class GuardedTest {
         advanceUntilIdle()
 
         assertThat(refused).hasSize(1)
+    }
+
+    /**
+     * `outlived`'s work runs apart from the screen, so even an [Error] out of it is written down and
+     * handed over as a refusal: nothing from there may take down the screen's scope.
+     */
+    @Test
+    fun `outlived work that throws anything, an Error included, is written down and refused`() = runTest {
+        val outliving = CoroutineScope(SupervisorJob() + dispatcher)
+        val fatal = Fatal()
+
+        model.outlived(outliving, problems, onRefused = { refused += it }, work = { throw fatal }) { }
+        advanceUntilIdle()
+
+        assertThat(refused).containsExactly(fatal)
+        assertThat(problems.recorded.single().kind).isEqualTo("refused")
+        outliving.cancel()
+    }
+
+    @Test
+    fun `outlived work that finishes hands its result over and records nothing`() = runTest {
+        val outliving = CoroutineScope(SupervisorJob() + dispatcher)
+        var got: Int? = null
+
+        model.outlived(outliving, problems, onRefused = { refused += it }, work = { 7 }) { got = it }
+        advanceUntilIdle()
+
+        assertThat(got).isEqualTo(7)
+        assertThat(refused).isEmpty()
+        assertThat(problems.recorded).isEmpty()
+        outliving.cancel()
     }
 
     private class Fatal : Error()

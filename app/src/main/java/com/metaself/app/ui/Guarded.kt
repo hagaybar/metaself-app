@@ -55,6 +55,9 @@ fun ViewModel.guarded(
  * its answer. [work] runs in [outliving], a scope that outlives the view model; [then] and [onRefused]
  * run on the screen only while it is still there. A failure is written to [problems] as `"refused"`
  * from inside [outliving], so it is logged once, whether or not anyone is left to be told.
+ *
+ * Unlike [guarded], any [Throwable] but cancellation is caught — an [Error] included: the work is
+ * awaited from the screen's scope, and nothing thrown apart from the screen may take that scope down.
  */
 fun <T> ViewModel.outlived(
     outliving: CoroutineScope,
@@ -68,7 +71,7 @@ fun <T> ViewModel.outlived(
             Result.success(work())
         } catch (cancelled: CancellationException) {
             throw cancelled
-        } catch (failure: Exception) {
+        } catch (failure: Throwable) {
             runCatching { problems.record(kind = "refused", detail = problemDetail(failure)) }
             Result.failure(failure)
         }
