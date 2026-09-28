@@ -254,6 +254,19 @@ class MonthlyLinesTest {
         assertThat(june(readings = listOf(WeightReading(JUNE_1 + 1, 80.0), WeightReading(JUNE_30, 79.0))).weightChangeKg).isNull()
     }
 
+    /** D92: a combined session is one session of the month, and its other witness's review is its felt. */
+    @Test
+    fun `a combined session counts once, with the felt of its other witness's review`() {
+        val first = session(id = 1, day = JUNE_1 + 2, kind = WorkoutKind.WALK, minutes = 40)
+        val second = first.copy(id = 2, durationMinutes = 30)
+        val combined = com.metaself.app.domain.movement.SessionWitnesses.combine(listOf(first, second), emptySet())
+
+        val june = june(workouts = combined, reviews = listOf(review(2, Felt.HARD)))
+
+        assertThat(june.sessions).isEqualTo(1)
+        assertThat(june.felt).isEqualTo(FeltCounts(easy = 0, right = 0, hard = 1))
+    }
+
     private fun session(id: Long, day: Long, kind: WorkoutKind, minutes: Int) = Workout(
         id = id, epochDay = day, startedAtMillis = day * 86_400_000L + 7 * 3_600_000L, durationMinutes = minutes,
         kind = kind, title = null, distanceM = null, energyKcal = null, energySource = EnergySource.NONE,

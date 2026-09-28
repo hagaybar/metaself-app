@@ -234,6 +234,19 @@ class TrainerRequestTest {
         assertThat(fieldsOf(BodyFacts::class.java)).containsExactly("ageYears", "sex", "heightCm")
     }
 
+    /** D92: a review on a witness that does not lead is the combined session's; the session is sent once. */
+    @Test
+    fun `a combined session is sent once, with the review on its other witness`() {
+        val lead = walk.copy(id = 10, durationMinutes = 50)
+        val combined = com.metaself.app.domain.movement.SessionWitnesses.combine(listOf(walk, lead), emptySet())
+
+        val sessions = request(workouts = combined).sessions
+
+        assertThat(sessions).hasSize(1)
+        assertThat(sessions.single().minutes).isEqualTo(50)
+        assertThat(sessions.single().felt).isEqualTo(Felt.RIGHT)
+    }
+
     private fun fieldsOf(type: Class<*>): List<String> =
         type.declaredFields.filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }.map { it.name }
 

@@ -131,7 +131,8 @@ data class TrainerRequest(
             aboutMe: String? = null,
         ): TrainerRequest {
             val first = firstDay(today)
-            val byWorkout = reviews.associateBy { it.workoutId }
+            // D92: a combined session's review may sit on another of its witnesses.
+            val byWorkout = SessionReviews.bySession(workouts, reviews)
             val sessions = workouts
                 .filter { !it.hidden && it.counted && it.epochDay in first..today }
                 .sortedBy { it.startedAtMillis }
