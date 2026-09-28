@@ -21,6 +21,16 @@ interface AboutMeStore {
 
     companion object {
         const val MAX = 1_000
+
+        /**
+         * [text] cut to at most [MAX] chars without splitting a character outside the basic plane (an
+         * emoji is two chars): one whose second half would fall past the limit is left out whole.
+         */
+        fun cut(text: String): String {
+            if (text.length <= MAX) return text
+            val end = if (Character.isHighSurrogate(text[MAX - 1])) MAX - 1 else MAX
+            return text.substring(0, end)
+        }
     }
 }
 
@@ -33,7 +43,7 @@ class DataStoreAboutMeStore(private val store: DataStore<Preferences>) : AboutMe
     override val note: Flow<String> = store.data.map { it[KEY].orEmpty() }
 
     override suspend fun save(note: String) {
-        val kept = note.trim().take(AboutMeStore.MAX)
+        val kept = AboutMeStore.cut(note.trim())
         store.edit { preferences ->
             if (kept.isEmpty()) preferences.remove(KEY) else preferences[KEY] = kept
         }

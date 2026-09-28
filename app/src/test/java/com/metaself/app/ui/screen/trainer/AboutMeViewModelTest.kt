@@ -49,6 +49,16 @@ class AboutMeViewModelTest {
     }
 
     @Test
+    fun `the field's limit never splits a character in two`() = runTest {
+        val viewModel = AboutMeViewModel(store, problems)
+        advanceUntilIdle()
+
+        viewModel.edit("b".repeat(999) + "\uD83D\uDE00")
+
+        assertThat(viewModel.state.value.text).isEqualTo("b".repeat(999))
+    }
+
+    @Test
     fun `save stores the note and says it is saved`() = runTest {
         val viewModel = AboutMeViewModel(store, problems)
         advanceUntilIdle()

@@ -50,7 +50,7 @@ class AboutMeViewModel @Inject constructor(
 
     /** The field changed; at most [AboutMeStore.MAX] characters are kept. */
     fun edit(text: String) = local.update { now ->
-        if (now.saving) now else now.copy(text = text.take(AboutMeStore.MAX), saved = false, refused = null)
+        if (now.saving) now else now.copy(text = AboutMeStore.cut(text), saved = false, refused = null)
     }
 
     fun save() {

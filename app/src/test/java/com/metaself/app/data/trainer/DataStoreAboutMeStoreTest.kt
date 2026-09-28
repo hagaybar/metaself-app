@@ -40,6 +40,16 @@ class DataStoreAboutMeStoreTest {
         assertThat(store.note.first()).hasLength(1_000)
     }
 
+    /** A character outside the basic plane is two chars: cut at the limit, it is left out whole, never halved. */
+    @Test
+    fun `the limit never splits a character in two`(@TempDir dir: File) = runTest {
+        val store = DataStoreAboutMeStore(preferencesIn(dir))
+
+        store.save("a".repeat(999) + "\uD83D\uDE00")
+
+        assertThat(store.note.first()).isEqualTo("a".repeat(999))
+    }
+
     @Test
     fun `saving an empty note clears it`(@TempDir dir: File) = runTest {
         val store = DataStoreAboutMeStore(preferencesIn(dir))
