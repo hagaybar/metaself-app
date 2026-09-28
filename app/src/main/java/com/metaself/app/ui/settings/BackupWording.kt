@@ -54,7 +54,8 @@ object BackupWording {
 
     /**
      * "400 meals and 50 weights", or with the health record, "…, 12 workouts and 30 days of health
-     * data", and with the trainer's record, "…, 3 trainer plans and 2 session reviews".
+     * data", and with the trainer's record, "…, 3 trainer plans and 2 session reviews" (every count
+     * invented).
      */
     private fun record(
         result: RestoreResult,

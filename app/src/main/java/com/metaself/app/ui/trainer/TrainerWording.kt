@@ -63,7 +63,7 @@ object TrainerWording {
         Felt.HARD -> "Hard"
     }
 
-    /** "Walking, today 07:40"; "…, yesterday 18:10"; "…, Tue 1 Sep 07:00". */
+    /** "Walking, today 07:40"; "…, yesterday 18:10"; "…, Tue 1 Sep 07:00" (times invented). */
     fun sessionTitle(workout: Workout, today: Long, zone: ZoneId): String {
         val at = Instant.ofEpochMilli(workout.startedAtMillis).atZone(zone)
         val day = when (workout.epochDay) {
@@ -75,8 +75,8 @@ object TrainerWording {
     }
 
     /**
-     * The waiting card's line (D85): "40 min · 3.0 km · 200 kcal · heart 110 average". Short, so the
-     * sources wait for the review screen; but an estimated energy still says "about" (D4).
+     * The waiting card's line (D85): "40 min · 3.0 km · 200 kcal · heart 110 average" (invented).
+     * Short, so the sources wait for the review screen; but an estimated energy still says "about" (D4).
      */
     fun sessionLine(workout: Workout): String = listOfNotNull(
         MovementWeekWording.duration(workout.durationMinutes),
@@ -157,13 +157,16 @@ object TrainerWording {
         "THIS WEEK" to feedback.thisWeek,
     ).filter { it.second.isNotBlank() }
 
-    fun privacyPlan(ceiling: Int): String =
-        "Sends these answers, your last six weeks of sessions and your weight trend to OpenAI with your key. " +
-            "One of today's $ceiling AI requests."
+    /** Design question 20: everything one request holds (D84), under the plan form's ask button. */
+    fun privacyPlan(ceiling: Int): String = privacy("these answers", ceiling)
 
-    fun privacyReview(ceiling: Int): String =
-        "Sends this session, your words, your last six weeks of sessions and your weight trend to OpenAI with your key. " +
-            "One of today's $ceiling AI requests."
+    /** Design question 20: everything one request holds (D84), under the review's save-and-ask button. */
+    fun privacyReview(ceiling: Int): String = privacy("this session and your words", ceiling)
+
+    private fun privacy(first: String, ceiling: Int): String =
+        "Sends to OpenAI, with your key: $first; your sessions of the last six weeks, with your words on them; " +
+            "weekly totals; your weight trend and goal rate; your age, sex and height; " +
+            "and the trainer's last three feedbacks. One of today's $ceiling AI requests."
 
     /** Design question 16. */
     fun failure(result: EstimateResult): String = when (result) {

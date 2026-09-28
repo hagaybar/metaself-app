@@ -60,7 +60,9 @@ class PlanSessionScreenRenderTest {
 
         assertThat(render.isEnabled("Ask the trainer")).isFalse()
         assertThat(render.textsAgain()).contains(
-            "Sends these answers, your last six weeks of sessions and your weight trend to OpenAI with your key. " +
+            "Sends to OpenAI, with your key: these answers; " +
+                "your sessions of the last six weeks, with your words on them; weekly totals; " +
+                "your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
                 "One of today's 20 AI requests.",
         )
 

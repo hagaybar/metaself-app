@@ -94,6 +94,8 @@ Room tests. No new dependency.
 6. **No foreign key from `trainer_reviews` to `workouts`.** A sync that drops a session deleted in the
    writing app must not silently delete the owner's words. A review whose session is gone is shown
    nowhere, sent nowhere, and not written to the backup (it rides inside its workout there — item 8).
+   (Superseded during build: such a review IS written to the backup, on its own, so a restore does not
+   lose the words; it is restored under workout id -1, -2, … in file order — `BackupReviews`.)
 7. **The review's row on Movement says one of three things**: no review → "How did it go?"; saved
    without feedback → "Get feedback" (D87's later offer); with feedback → "See feedback". All open the
    review screen; a review with feedback opens on the feedback. Changing words after feedback is not
@@ -139,6 +141,8 @@ Room tests. No new dependency.
 20. **Privacy line under each ask button** (the design's wording): "Sends these answers, your last six
     weeks of sessions and your weight trend to OpenAI with your key. One of today's 30 AI requests." —
     the number is the daily ceiling from settings. (The settings page already names OpenAI.)
+    (Superseded during build: the line lists everything D84 sends — `TrainerWording.privacyPlan` /
+    `privacyReview` hold the shipped wording.)
 
 ## The shared box — read before any build
 
