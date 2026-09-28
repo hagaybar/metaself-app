@@ -1,5 +1,6 @@
 package com.metaself.app.domain.movement
 
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -107,11 +108,92 @@ object SessionWitnesses {
         else -> 3
     }
 
+    /** The pairs "These are two sessions" stores for [session]: its lead against each other witness. */
+    fun splitsOf(session: Workout): List<SessionSplit> =
+        session.witnesses.drop(1).map { SessionSplit.of(session.id, it.id) }
+
+    /**
+     * What Hide on [session] hides: every synced witness. A typed witness is never hidden — it is
+     * deleted, on its own line after a split. (No Hide button exists yet; this is the rule for it.)
+     */
+    fun toHide(session: Workout): List<Long> =
+        session.witnesses.ifEmpty { listOf(session) }.filter { it.source == WorkoutSource.SYNCED }.map { it.id }
+
+    /**
+     * One session from [group]: the lead's identity — id, day, start, minutes, source — and each figure
+     * from the witness that knows it best, with its source (D4, D69). Every witness is kept, as stored,
+     * in [Workout.witnesses], lead first.
+     */
     private fun session(group: List<Workout>): Workout {
         val ordered = group.sortedWith(LEAD_ORDER)
         val lead = ordered.first()
-        return lead.copy(witnesses = ordered)
+        val kindFrom = ordered.firstOrNull { it.kind.isSpecific } ?: lead
+        val distanceFrom = ordered.firstOrNull(::typedDistance)
+            ?: ordered.firstOrNull { it.distanceM != null && it.distanceSource == WorkoutFigureSource.FILE }
+            ?: ordered.firstOrNull { it.distanceM != null && it.source == WorkoutSource.SYNCED && it.ownDistance }
+            ?: ordered.firstOrNull { it.distanceM != null }
+        val stepsFrom = ordered.firstOrNull { it.steps != null && it.stepsSource == WorkoutFigureSource.FILE }
+            ?: ordered.firstOrNull { it.steps != null }
+        val heartFrom = ordered.firstOrNull { it.avgHeartRate != null } ?: lead
+        val energyFrom = ordered.filter { it.energyKcal != null && it.energySource in ENERGY_ORDER }
+            .minByOrNull { ENERGY_ORDER.indexOf(it.energySource) }
+
+        return lead.copy(
+            kind = kindFrom.kind,
+            title = kindFrom.title,
+            distanceM = distanceFrom?.distanceM,
+            distanceSource = distanceFrom?.let { if (typedDistance(it)) WorkoutFigureSource.TYPED else it.distanceSource },
+            steps = stepsFrom?.steps,
+            stepsSource = stepsFrom?.stepsSource,
+            energyKcal = energyFrom?.energyKcal,
+            energySource = energyFrom?.energySource ?: EnergySource.NONE,
+            avgHeartRate = heartFrom.avgHeartRate,
+            maxHeartRate = heartFrom.maxHeartRate,
+            zoneSeconds = heartFrom.zoneSeconds,
+            zoneMaxSource = heartFrom.zoneMaxSource,
+            effort = ordered.firstNotNullOfOrNull { it.effort },
+            note = ordered.firstNotNullOfOrNull { it.note },
+            hidden = false,
+            counted = true,
+            witnesses = ordered,
+            otherDistance = distanceFrom?.let { chosen -> otherDistance(chosen, ordered) },
+        )
     }
+
+    /**
+     * The widest-apart other distance, when it is more than [DISAGREEMENT] of the larger of the two;
+     * the first in lead order on a tie.
+     */
+    private fun otherDistance(chosen: Workout, ordered: List<Workout>): OtherDistance? {
+        val metres = chosen.distanceM ?: return null
+        return ordered.asSequence()
+            .filter { it !== chosen }
+            .mapNotNull { witness -> witness.distanceM?.let { witness to it } }
+            .filter { (_, other) -> disagree(metres, other) }
+            .maxByOrNull { (_, other) -> abs(other - metres) }
+            ?.let { (witness, other) -> OtherDistance(other, saidBy(witness)) }
+    }
+
+    /** More than 15 % of the larger apart, in whole numbers: 20 × gap > 3 × larger. */
+    private fun disagree(a: Int, b: Int): Boolean = abs(a - b).toLong() * 20 > max(a, b).toLong() * 3
+
+    private fun saidBy(witness: Workout): DistanceWitness = when {
+        typedDistance(witness) -> DistanceWitness.TYPED
+        witness.distanceSource == WorkoutFigureSource.FILE -> DistanceWitness.FILE
+        else -> DistanceWitness.APP
+    }
+
+    /** A distance the owner typed: marked TYPED over a file's, or a typed workout's own (stored with no source). */
+    private fun typedDistance(workout: Workout): Boolean = workout.distanceM != null &&
+        (workout.distanceSource == WorkoutFigureSource.TYPED ||
+            (workout.source == WorkoutSource.TYPED && workout.distanceSource == null))
+
+    /** Band, file, typed, an estimate — the first available wins. */
+    private val ENERGY_ORDER = listOf(EnergySource.BAND, EnergySource.FILE, EnergySource.TYPED, EnergySource.MET_ESTIMATE)
+
+    /** Says what was done: neither "other" nor a kind this version does not know does. */
+    private val WorkoutKind.isSpecific: Boolean
+        get() = this != WorkoutKind.OTHER && this != WorkoutKind.UNRECOGNISED
 
     /** Whole minutes, as stored: there is no end column. */
     private fun lengthOf(workout: Workout): Long = workout.durationMinutes * MINUTE
