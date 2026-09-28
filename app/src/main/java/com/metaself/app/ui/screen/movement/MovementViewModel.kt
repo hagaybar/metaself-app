@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.MovementRecord
+import com.metaself.app.data.health.SessionSplits
 import com.metaself.app.data.health.WorkoutFileImporter
 import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.ProfileRepository
@@ -17,6 +18,7 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.trainer.SessionReviews
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.movement.WorkoutFileWording
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -72,6 +74,8 @@ class MovementViewModel(
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Which sessions have a review, so each says its own button (D85, design question 7). */
     private val trainer: TrainerReviews = TrainerReviews.NONE,
+    /** "These are two sessions" (D92). */
+    private val splits: SessionSplits = SessionSplits.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -85,7 +89,8 @@ class MovementViewModel(
         now: Now,
         files: WorkoutFileImporter,
         trainer: TrainerReviews,
-    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer)
+        splits: SessionSplits,
+    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer, splits)
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
@@ -133,7 +138,8 @@ class MovementViewModel(
                 record.observeEarliestDay(),
                 reviews(),
             ) { days, workouts, mealsByDay, earliest, reviews ->
-                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest, reviews?.associateBy { it.workoutId })
+                // D92: a combined session's review may sit on another of its witnesses.
+                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest, reviews?.let { SessionReviews.bySession(workouts, it) })
             }
             built
         }
@@ -266,9 +272,14 @@ class MovementViewModel(
         }
     }
 
-    /** A typed workout's line was tapped: the sheet, filled. A synced workout is not editable here (D76). */
-    fun openWorkout(workout: Workout) {
-        if (workout.source != WorkoutSource.TYPED) return
+    /**
+     * A typed workout's line was tapped: the sheet, filled. A synced workout is not editable here (D76).
+     * A typed session other workouts also recorded (D92) opens its lead as stored, never the figures
+     * the others lent it: those are not the owner's to save over his own.
+     */
+    fun openWorkout(session: Workout) {
+        if (session.source != WorkoutSource.TYPED) return
+        val workout = session.asStored
         val token = nextSheetToken++
         viewModelScope.launch {
             sheet.value = WorkoutSheetState(
@@ -360,6 +371,23 @@ class MovementViewModel(
                 problems.record(PROBLEM_KIND, "workout not put back: " + (failure.message ?: failure::class.java.simpleName))
                 undoable.addLast(workout)
                 undo.value = UndoState(offered = true, failed = true)
+            }
+        }
+    }
+
+    /**
+     * "These are two sessions" (D92): the session's lead is parted from each other witness, for good.
+     * The week is observed, so the parted sessions show as soon as the split is stored. A split that
+     * fails is logged (D8) and the session stays as it was.
+     */
+    fun split(session: Workout) {
+        viewModelScope.launch {
+            try {
+                splits.split(session)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                problems.record(PROBLEM_KIND, "session not split: " + (failure.message ?: failure::class.java.simpleName))
             }
         }
     }

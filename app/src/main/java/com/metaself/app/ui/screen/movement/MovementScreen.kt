@@ -68,6 +68,9 @@ import java.time.ZoneId
  * "Trainer" in the title bar opens the trainer (D85). Under each session in an open day, typed or
  * synced, one button says where its review stands — "How did it go?", "Get feedback" or "See
  * feedback" (plan design question 7) — and opens that session's review.
+ *
+ * A session other workouts also recorded (D92) is one line, with "also recorded by 2 more" under it and
+ * "These are two sessions", which parts it for good.
  */
 @Composable
 fun MovementScreen(
@@ -90,6 +93,7 @@ fun MovementScreen(
     onLaterWeek: () -> Unit = {},
     onTrainer: () -> Unit = {},
     onReview: (Long) -> Unit = {},
+    onSplit: (Workout) -> Unit = {},
 ) {
     val readable = state.week != null
     val canLog = state.logDay != null
@@ -140,6 +144,7 @@ fun MovementScreen(
                             onOpenWorkout = onOpenWorkout,
                             reviews = state.reviews,
                             onReview = onReview,
+                            onSplit = onSplit,
                         )
                     }
                 }
@@ -363,6 +368,7 @@ private fun DayRow(
     onOpenWorkout: (Workout) -> Unit,
     reviews: Map<Long, TrainerReview>?,
     onReview: (Long) -> Unit,
+    onSplit: (Workout) -> Unit,
 ) {
     val said = stringResource(if (open) R.string.movement_day_open else R.string.movement_day_closed)
     val action = stringResource(if (open) R.string.movement_day_hide else R.string.movement_day_show)
@@ -417,11 +423,23 @@ private fun DayRow(
                                     .heightIn(min = 48.dp)
                             },
                         )
-                        // Where this session's review stands, and the way to it (D87, design question 7);
-                        // none while the reviews cannot be read, rather than a wrong one.
                         val session = line.workout
+                        // D92: who else recorded it, and the way to part it — only when others did.
+                        val alsoRecorded = session?.let(MovementWeekWording::alsoRecorded)
+                        if (session != null && alsoRecorded != null) {
+                            Text(
+                                text = alsoRecorded,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            TextButton(onClick = { onSplit(session) }) { Text(stringResource(R.string.movement_split_session)) }
+                        }
+                        // Where this session's review stands, and the way to it (D87, design question 7);
+                        // none while the reviews cannot be read, rather than a wrong one. A review on
+                        // another witness of the session (D92) opens as that witness's own.
                         if (session != null && reviews != null) {
-                            TextButton(onClick = { onReview(session.id) }) { Text(TrainerWording.rowAction(reviews[session.id])) }
+                            val review = reviews[session.id]
+                            TextButton(onClick = { onReview(review?.workoutId ?: session.id) }) { Text(TrainerWording.rowAction(review)) }
                         }
                     }
                 }

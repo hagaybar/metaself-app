@@ -11,6 +11,7 @@ import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.SessionWitnesses
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutFileRefusal
@@ -544,6 +545,41 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("See feedback")
     }
 
+    /** D92: a combined session says who else recorded it, and offers to part it. */
+    @Test
+    fun `a combined session says how many more recorded it and offers These are two sessions`() {
+        val run = week.days.first().workouts.single()
+        val session = SessionWitnesses.combine(listOf(run, run.copy(id = 2, durationMinutes = 30)), emptySet()).single()
+        val combined = MovementWeek.of(today = TEST_EPOCH_DAY, days = emptyList(), workouts = listOf(session), mealsByDay = emptyMap())
+        var parted: Workout? = null
+
+        val texts = draw(state = MovementUiState(week = combined, openDay = TEST_EPOCH_DAY), onSplit = { parted = it })
+
+        assertThat(texts).contains("also recorded by 1 more")
+        assertThat(render.isDrawnBefore("Running · ", "also recorded by 1 more")).isTrue()
+        render.click("These are two sessions")
+        assertThat(parted).isEqualTo(session)
+    }
+
+    @Test
+    fun `a session recorded once offers no split`() {
+        val texts = draw(openDay = TEST_EPOCH_DAY)
+
+        assertThat(texts).doesNotContain("These are two sessions")
+    }
+
+    /** D92: a review that sits on the session's other witness opens as that witness's own. */
+    @Test
+    fun `a review on the other witness opens that witness's review`() {
+        var asked: Long? = null
+        val review = TrainerReview(workoutId = 2, planId = null, felt = Felt.RIGHT, words = null)
+        draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, reviews = mapOf(1L to review)), onReview = { asked = it })
+
+        render.click("Get feedback")
+
+        assertThat(asked).isEqualTo(2L)
+    }
+
     /** D8: reviews that could not be read give no button, rather than a wrong one. */
     @Test
     fun `with the reviews unread, a session has no button`() {
@@ -576,6 +612,7 @@ class MovementScreenRenderTest {
         onLaterWeek: () -> Unit = {},
         onTrainer: () -> Unit = {},
         onReview: (Long) -> Unit = {},
+        onSplit: (Workout) -> Unit = {},
     ): List<String> = render.texts {
         MovementScreen(
             state = state,
@@ -592,6 +629,7 @@ class MovementScreenRenderTest {
             onLaterWeek = onLaterWeek,
             onTrainer = onTrainer,
             onReview = onReview,
+            onSplit = onSplit,
         )
     }
 

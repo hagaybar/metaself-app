@@ -7,6 +7,9 @@ import com.metaself.app.domain.movement.FigureSource
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.DistanceWitness
+import com.metaself.app.domain.movement.OtherDistance
+import com.metaself.app.domain.movement.SessionWitnesses
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutKind
@@ -356,6 +359,29 @@ class MovementWeekWordingTest {
 
         assertThat(filledRow).isEqualTo("Walking · 07:00 · 3.25 km (from file) · 40 min")
         assertThat(addedRow).isEqualTo("Walking · 07:00 · 40 min · 250 kcal, from the file")
+    }
+
+    /** D92: a session other workouts also recorded says how many. */
+    @Test
+    fun `a combined session says how many more recorded it`() {
+        val first = running.copy(id = 1)
+        val combined = SessionWitnesses.combine(listOf(first, first.copy(id = 2), first.copy(id = 3, durationMinutes = 30)), emptySet()).single()
+
+        assertThat(MovementWeekWording.alsoRecorded(combined)).isEqualTo("also recorded by 2 more")
+        assertThat(MovementWeekWording.alsoRecorded(running)).isNull()
+    }
+
+    /** D92: a distance another witness disagrees with is shown beside the session's own. */
+    @Test
+    fun `a disagreeing distance is said beside the session's own, with who said it`() {
+        fun line(saidBy: DistanceWitness) = MovementWeekWording.detailLines(
+            fullDay.copy(health = null, eatenKcal = null, workouts = listOf(running.copy(otherDistance = OtherDistance(5_000, saidBy)))),
+            zone,
+        ).single()
+
+        assertThat(line(DistanceWitness.APP)).isEqualTo("Running · 07:00 · 6.2 km · another app said 5.0 km · 32 min · 5:10 /km · avg 142 bpm")
+        assertThat(line(DistanceWitness.FILE)).contains("6.2 km · a file said 5.00 km · ")
+        assertThat(line(DistanceWitness.TYPED)).contains("6.2 km · you typed 5.0 km · ")
     }
 
     private fun workout(
