@@ -48,9 +48,6 @@ interface TrainerDao {
     @Query("SELECT w.* FROM workouts w JOIN trainer_reviews r ON r.workoutId = w.id ORDER BY w.startedAtMillis DESC")
     fun observeReviewedWorkouts(): Flow<List<WorkoutEntity>>
 
-    @Query("SELECT * FROM workouts WHERE id = :id")
-    suspend fun workout(id: Long): WorkoutEntity?
-
     /** Newest first, leaving out [exceptWorkoutId]'s own. */
     @Query(
         "SELECT feedback FROM trainer_reviews WHERE feedback IS NOT NULL AND workoutId != :exceptWorkoutId " +

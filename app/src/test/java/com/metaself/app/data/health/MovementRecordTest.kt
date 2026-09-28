@@ -84,7 +84,7 @@ class MovementRecordTest {
     fun `the workouts are read again when the choice changes`() = runTest {
         val choices = FakeWalkChoices()
         val rows = MutableStateFlow(listOf(aWorkout(kind = "WALK")))
-        val record = RoomMovementRecord(only<HealthDayDao>(), workoutDaoOver(rows), choices)
+        val record = RoomMovementRecord(only<HealthDayDao>(), workoutDaoOver(rows), choices, InMemorySplitDao())
         val seen = mutableListOf<Boolean>()
 
         val job = launch { record.observeWorkouts(20_699, 20_699).collect { seen += it.single().counted } }
@@ -105,6 +105,7 @@ class MovementRecordTest {
             only<HealthDayDao> { if (it == "observeEarliest") healthEarliest else null },
             only<WorkoutDao> { if (it == "observeEarliest") workoutEarliest else null },
             FakeWalkChoices(),
+            InMemorySplitDao(),
         )
 
         assertThat(record.observeEarliestDay().first()).isEqualTo(20_682L)
@@ -112,6 +113,57 @@ class MovementRecordTest {
         assertThat(record.observeEarliestDay().first()).isEqualTo(20_689L)
         healthEarliest.value = null
         assertThat(record.observeEarliestDay().first()).isNull()
+    }
+
+    /**
+     * D92: two stored copies of one session are read as one, and read again as two once split; a
+     * witness whose own app recorded distance gives the session its distance. Invented figures.
+     */
+    @Test
+    fun `overlapping workouts are read as one session, and as two once split`() = runTest {
+        val rows = MutableStateFlow(listOf(aWorkout().copy(id = 1), aWorkout().copy(id = 2, originId = "session-2", durationMinutes = 30, distanceM = 7_000)))
+        val splits = InMemorySplitDao()
+        val dao = only<WorkoutDao> { method ->
+            when (method) {
+                "observeBetween" -> rows
+                "idsWithOwnDistance" -> listOf(2L)
+                else -> null
+            }
+        }
+        val record = RoomMovementRecord(only<HealthDayDao>(), dao, FakeWalkChoices(), splits)
+        val seen = mutableListOf<List<List<Long>>>()
+
+        val job = launch { record.observeWorkouts(20_699, 20_699).collect { sessions -> seen += sessions.map { it.witnessIds } } }
+        runCurrent()
+        val combined = record.observeWorkouts(20_699, 20_699).first().single()
+        splits.insertAll(listOf(SessionSplitEntity(1, 2)))
+        runCurrent()
+        job.cancel()
+
+        assertThat(combined.id).isEqualTo(1L)
+        assertThat(combined.distanceM).isEqualTo(7_000)
+        assertThat(seen).containsExactly(listOf(listOf(1L, 2L)), listOf(listOf(1L), listOf(2L))).inOrder()
+    }
+
+    /** D92: the review screen's session is the one its workout is a witness of. */
+    @Test
+    fun `the session of a workout that does not lead is the combined session`() = runTest {
+        val second = aWorkout().copy(id = 2, originId = "session-2", durationMinutes = 30)
+        val rows = MutableStateFlow(listOf(aWorkout().copy(id = 1), second))
+        val dao = only<WorkoutDao> { method ->
+            when (method) {
+                "observeBetween" -> rows
+                "idsWithOwnDistance" -> emptyList<Long>()
+                "byId" -> second
+                else -> null
+            }
+        }
+        val record = RoomMovementRecord(only<HealthDayDao>(), dao, FakeWalkChoices(), InMemorySplitDao())
+
+        val session = record.sessionOf(2)!!
+
+        assertThat(session.id).isEqualTo(1L)
+        assertThat(session.witnessIds).containsExactly(1L, 2L).inOrder()
     }
 
     private fun workoutDaoOver(rows: Flow<List<WorkoutEntity>>): WorkoutDao = only { method ->
