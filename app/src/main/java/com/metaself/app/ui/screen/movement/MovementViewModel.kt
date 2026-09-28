@@ -15,6 +15,7 @@ import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.SessionSplit
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
@@ -163,6 +164,7 @@ class MovementViewModel(
                 sheet = sheetNow,
                 canUndo = undoNow.offered,
                 undoFailed = undoNow.failed,
+                canUndoSplit = undoNow.split.isNotEmpty(),
                 fileImport = file,
                 reviews = read.reviews,
             )
@@ -346,7 +348,7 @@ class MovementViewModel(
         write(open, WriteFailure.DELETE) {
             check(typed.delete(editing)) { "no typed workout ${editing.id} to delete" }
             undoable.addLast(editing)
-            undo.value = UndoState(offered = true)
+            undo.update { it.copy(offered = true, failed = false) }
         }
     }
 
@@ -361,7 +363,7 @@ class MovementViewModel(
      */
     fun undoDelete() {
         val workout = undoable.removeLastOrNull() ?: return
-        undo.value = UndoState(offered = undoable.isNotEmpty())
+        undo.update { it.copy(offered = undoable.isNotEmpty(), failed = false) }
         viewModelScope.launch {
             try {
                 typed.restore(workout)
@@ -370,7 +372,7 @@ class MovementViewModel(
             } catch (failure: Exception) {
                 problems.record(PROBLEM_KIND, "workout not put back: " + (failure.message ?: failure::class.java.simpleName))
                 undoable.addLast(workout)
-                undo.value = UndoState(offered = true, failed = true)
+                undo.update { it.copy(offered = true, failed = true) }
             }
         }
     }
@@ -383,11 +385,43 @@ class MovementViewModel(
     fun split(session: Workout) {
         viewModelScope.launch {
             try {
-                splits.split(session)
+                val written = splits.split(session)
+                undo.update { it.copy(split = written) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (failure: Exception) {
                 problems.record(PROBLEM_KIND, "session not split: " + (failure.message ?: failure::class.java.simpleName))
+            }
+        }
+    }
+
+    /**
+     * Undo, after "These are two sessions" (D92, decided after review): removes exactly the pairs that
+     * split wrote. Cleared as it is used, so a second press does nothing.
+     */
+    fun undoSplit() {
+        val written = undo.value.split
+        if (written.isEmpty()) return
+        undo.update { it.copy(split = emptyList()) }
+        join(written, "split not undone: ")
+    }
+
+    /** "Put back together" (D92, decided after review): removes [session]'s splits from what it overlaps. */
+    fun putBackTogether(session: Workout) {
+        if (session.splits.isEmpty()) return
+        undo.update { it.copy(split = emptyList()) }
+        join(session.splits, "session not put back together: ")
+    }
+
+    /** A join that fails is logged (D8); the sessions stay as they were. */
+    private fun join(pairs: List<SessionSplit>, said: String) {
+        viewModelScope.launch {
+            try {
+                splits.join(pairs)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                problems.record(PROBLEM_KIND, said + (failure.message ?: failure::class.java.simpleName))
             }
         }
     }
@@ -433,7 +467,8 @@ class MovementViewModel(
         null
     }
 
-    private data class UndoState(val offered: Boolean = false, val failed: Boolean = false)
+    /** [split] is what the last split wrote, while its Undo is offered (D92). */
+    private data class UndoState(val offered: Boolean = false, val failed: Boolean = false, val split: List<SessionSplit> = emptyList())
 
     /**
      * The trainer's reviews, for each session's button. The week does not depend on them: a read that

@@ -11,6 +11,7 @@ import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.SessionSplit
 import com.metaself.app.domain.movement.SessionWitnesses
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
@@ -568,6 +569,38 @@ class MovementScreenRenderTest {
         assertThat(texts).doesNotContain("These are two sessions")
     }
 
+    /** D92, decided after review: a split is undone from the line pinned under the title bar. */
+    @Test
+    fun `after a split, Undo is offered and asks to undo it`() {
+        var asked = false
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, canUndoSplit = true), onUndoSplit = { asked = true })
+
+        assertThat(texts).contains("Split into separate sessions")
+        render.click("Undo")
+        assertThat(asked).isTrue()
+    }
+
+    @Test
+    fun `with no split to undo there is no such line`() {
+        assertThat(draw()).doesNotContain("Split into separate sessions")
+    }
+
+    /** D92, decided after review: a session parted from an overlapping one offers to be put back. */
+    @Test
+    fun `a session split from an overlapping one offers Put back together`() {
+        val run = week.days.first().workouts.single()
+        val parted = SessionWitnesses.combine(listOf(run, run.copy(id = 2, durationMinutes = 30)), setOf(SessionSplit(1, 2)))
+        val shown = MovementWeek.of(today = TEST_EPOCH_DAY, days = emptyList(), workouts = parted, mealsByDay = emptyMap())
+        var asked: Workout? = null
+
+        val texts = draw(state = MovementUiState(week = shown, openDay = TEST_EPOCH_DAY), onPutBack = { asked = it })
+
+        assertThat(texts.count { it == "Put back together" }).isEqualTo(2)
+        assertThat(texts).doesNotContain("These are two sessions")
+        render.click("Put back together")
+        assertThat(asked!!.splits).containsExactly(SessionSplit(1, 2))
+    }
+
     /** D92: a review that sits on the session's other witness opens as that witness's own. */
     @Test
     fun `a review on the other witness opens that witness's review`() {
@@ -613,6 +646,8 @@ class MovementScreenRenderTest {
         onTrainer: () -> Unit = {},
         onReview: (Long) -> Unit = {},
         onSplit: (Workout) -> Unit = {},
+        onUndoSplit: () -> Unit = {},
+        onPutBack: (Workout) -> Unit = {},
     ): List<String> = render.texts {
         MovementScreen(
             state = state,
@@ -630,6 +665,8 @@ class MovementScreenRenderTest {
             onTrainer = onTrainer,
             onReview = onReview,
             onSplit = onSplit,
+            onUndoSplit = onUndoSplit,
+            onPutBack = onPutBack,
         )
     }
 

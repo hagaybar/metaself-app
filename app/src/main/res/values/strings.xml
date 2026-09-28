@@ -187,6 +187,9 @@
     <string name="movement_workout_change">change this workout</string>
     <!-- D92: parts a session that other workouts also recorded. -->
     <string name="movement_split_session">These are two sessions</string>
+    <string name="movement_split_done">Split into separate sessions</string>
+    <!-- D92: removes the split between a session and one it still overlaps. -->
+    <string name="movement_put_back">Put back together</string>
     <string name="movement_undo_failed">Not put back; Recent problems says why.</string>
     <string name="movement_week_earlier">Previous week</string>
     <string name="movement_week_later">Next week</string>

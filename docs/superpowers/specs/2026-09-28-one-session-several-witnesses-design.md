@@ -54,6 +54,9 @@ another app said 3.1 km" (invented figures).
 - **These are two sessions**, on an open combined session, splits the lead from each other witness
   (one split per pair) and they are shown separately from then on. The split is stored, survives the
   next sync, and goes into the backup.
+- Right after a split, **Undo** is offered and removes exactly the split just made.
+- A session that was split from one it still overlaps shows **Put back together**, which removes that
+  split and shows them as one session again.
 - **Hide** on a combined session hides every synced witness in it; a typed witness is deleted as
   today, on its own line after a split.
 

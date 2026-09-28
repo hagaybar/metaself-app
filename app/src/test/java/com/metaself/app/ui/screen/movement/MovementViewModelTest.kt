@@ -19,6 +19,7 @@ import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.SessionSplit
 import com.metaself.app.domain.movement.SessionWitnesses
 import com.metaself.app.domain.movement.aSyncedWorkout
 import com.metaself.app.domain.movement.ImportOutcome
@@ -919,11 +920,74 @@ class MovementViewModelTest {
         assertThat(model.state.first { it.sheet != null }.sheet!!.editing).isEqualTo(lead)
     }
 
+    /** D92, decided after review: a split can be undone at once, from the line it leaves. */
+    @Test
+    fun `a split offers Undo, which puts back exactly the pairs it wrote`() = runTest {
+        val splits = RecordingSplits()
+        val session = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), emptySet()).single()
+        val model = viewModel(splits = splits)
+        model.state.first { it.week != null }
+
+        model.split(session)
+        assertThat(model.state.first { it.canUndoSplit }.canUndoSplit).isTrue()
+        model.undoSplit()
+        advanceUntilIdle()
+
+        assertThat(splits.joined).containsExactly(listOf(SessionSplit(1, 2)))
+        assertThat(model.state.first { !it.canUndoSplit }.canUndoSplit).isFalse()
+    }
+
+    @Test
+    fun `with nothing split there is nothing to undo`() = runTest {
+        val splits = RecordingSplits()
+        val model = viewModel(splits = splits)
+
+        assertThat(model.state.first { it.week != null }.canUndoSplit).isFalse()
+        model.undoSplit()
+        advanceUntilIdle()
+
+        assertThat(splits.joined).isEmpty()
+    }
+
+    /** D92, decided after review: a session split from an overlapping one can be put back together. */
+    @Test
+    fun `putting a session back together removes its splits`() = runTest {
+        val splits = RecordingSplits()
+        val parted = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), setOf(SessionSplit(1, 2)))
+        val model = viewModel(splits = splits)
+        model.state.first { it.week != null }
+
+        model.putBackTogether(parted.first())
+        advanceUntilIdle()
+
+        assertThat(splits.joined).containsExactly(listOf(SessionSplit(1, 2)))
+    }
+
+    @Test
+    fun `putting back together that fails is logged`() = runTest {
+        val problems = RecordingProblemLog()
+        val splits = RecordingSplits(failing = IllegalStateException("disk full"))
+        val parted = SessionWitnesses.combine(listOf(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50)), setOf(SessionSplit(1, 2)))
+        val model = viewModel(splits = splits, problems = problems)
+        model.state.first { it.week != null }
+
+        model.putBackTogether(parted.first())
+        advanceUntilIdle()
+
+        assertThat(problems.recorded.single().detail).contains("not put back together")
+    }
+
     private class RecordingSplits(private val failing: Exception? = null) : SessionSplits {
         val parted = mutableListOf<Workout>()
-        override suspend fun split(session: Workout) {
+        val joined = mutableListOf<List<SessionSplit>>()
+        override suspend fun split(session: Workout): List<SessionSplit> {
             failing?.let { throw it }
             parted += session
+            return SessionWitnesses.splitsOf(session)
+        }
+        override suspend fun join(splits: Collection<SessionSplit>) {
+            failing?.let { throw it }
+            joined += splits.toList()
         }
     }
 
