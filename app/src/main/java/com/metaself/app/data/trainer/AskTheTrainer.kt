@@ -20,8 +20,9 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /**
- * The trainer's two uses (D86, D87): every request is built here, fresh, from the stored record, and
- * only when a screen asks — never in the background (D84). Writes throw; the screens catch them
+ * The trainer's two uses (D86, D87): every request is built here, fresh, from the stored record (a
+ * year of it, for the monthly lines, D89) and the owner's note (D90), and only when a screen asks —
+ * never in the background (D84). Writes throw; the screens catch them
  * (`guarded`) and say so.
  */
 class AskTheTrainer @Inject constructor(
@@ -30,6 +31,7 @@ class AskTheTrainer @Inject constructor(
     private val weights: WeightRepository,
     private val profiles: ProfileRepository,
     private val trainer: Trainer,
+    private val aboutMe: AboutMeStore,
     private val today: Today,
     private val now: Now,
     private val year: CurrentYear,
@@ -96,17 +98,21 @@ class AskTheTrainer @Inject constructor(
     private suspend fun request(question: TrainerQuestion, exceptWorkoutId: Long): TrainerRequest {
         val day = today().toEpochDay()
         val reviews = store.observeReviews().first()
+        // A year back for the monthly lines (D89); the 42 days and six weeks are within it.
+        val first = TrainerRequest.firstRecordDay(day)
         return TrainerRequest.of(
             question = question,
             today = day,
-            workouts = record.observeWorkouts(TrainerRequest.firstDay(day), day).first(),
+            workouts = record.observeWorkouts(first, day).first(),
             reviews = reviews,
             plans = store.plans(reviews.mapNotNull { it.planId }),
-            days = record.observeDays(TrainerRequest.firstSummaryDay(day), day).first(),
+            days = record.observeDays(minOf(first, TrainerRequest.firstSummaryDay(day)), day).first(),
             readings = weights.readings.first(),
             profile = profiles.profile.first(),
             currentYear = year(),
             earlierFeedback = store.latestFeedback(TrainerRequest.FEEDBACK_COUNT, exceptWorkoutId),
+            earliestDay = record.observeEarliestDay().first(),
+            aboutMe = aboutMe.note.first(),
         )
     }
 
