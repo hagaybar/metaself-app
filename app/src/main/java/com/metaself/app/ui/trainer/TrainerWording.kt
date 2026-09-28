@@ -1,5 +1,6 @@
 package com.metaself.app.ui.trainer
 
+import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.Workout
@@ -119,6 +120,15 @@ object TrainerWording {
         val parts = listOfNotNull(workout.avgHeartRate?.let { "$it avg" }, workout.maxHeartRate?.let { "$it max" })
         return if (parts.isEmpty()) null else "Heart " + parts.joinToString(SEP) + " (from the readings)"
     }
+
+    /** D90: the Trainer screen's About me card when no note is written yet. */
+    const val ABOUT_ME_EMPTY = "Tell the trainer about yourself — injuries, likes, what you're aiming for"
+
+    /** D90: the card's text — the note (the screen shows its first two lines), or [ABOUT_ME_EMPTY]. */
+    fun aboutMePreview(note: String): String = note.trim().ifEmpty { ABOUT_ME_EMPTY }
+
+    /** D90: "14 / 1,000" — the characters used, of the most the note holds. */
+    fun aboutMeCount(text: String): String = "${number(text.length)} / ${number(AboutMeStore.MAX)}"
 
     fun planned(title: String): String = "Planned: $title"
 

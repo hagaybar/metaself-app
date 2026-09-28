@@ -6,6 +6,7 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.domain.trainer.TrainerHome
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,12 +32,19 @@ import javax.inject.Inject
 class TrainerViewModel @Inject constructor(
     record: MovementRecord,
     store: TrainerStore,
+    aboutMe: AboutMeStore,
     private val today: Today,
     now: Now,
     problems: ProblemLog,
 ) : ViewModel() {
 
-    data class State(val home: TrainerHome? = null, val today: Long = 0, val unreadable: Boolean = false)
+    /** [aboutMe] is the owner's note (D90), "" when none. */
+    data class State(
+        val home: TrainerHome? = null,
+        val today: Long = 0,
+        val unreadable: Boolean = false,
+        val aboutMe: String = "",
+    )
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
@@ -55,6 +63,12 @@ class TrainerViewModel @Inject constructor(
                     emit(State(today = day, unreadable = true))
                 }
         }
+        .combine(
+            aboutMe.note.catch { failure ->
+                problems.record(PROBLEM_KIND, "note not read: " + (failure.message ?: failure::class.java.simpleName))
+                emit("")
+            },
+        ) { state, note -> state.copy(aboutMe = note) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), State(today = calendarToday.value))
 
     /** The screen came to the front: on a new day, the last three days are read again from it. */

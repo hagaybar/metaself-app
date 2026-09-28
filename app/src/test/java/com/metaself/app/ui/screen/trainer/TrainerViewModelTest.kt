@@ -6,6 +6,7 @@ import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.FakeTrainerStore
+import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
@@ -39,6 +40,7 @@ class TrainerViewModelTest {
     private val record = FakeMovementRecord()
     private val store = FakeTrainerStore()
     private val problems = RecordingProblemLog()
+    private val aboutMe = InMemoryAboutMeStore()
 
     @BeforeEach
     fun setUp() = Dispatchers.setMain(dispatcher)
@@ -64,6 +66,20 @@ class TrainerViewModelTest {
 
         assertThat(viewModel.state.value.home!!.waiting).isNull()
         assertThat(viewModel.state.value.home!!.earlier.single().workout).isEqualTo(walk)
+    }
+
+    /** D90: the card shows the note as stored, and follows a save made on its own page. */
+    @Test
+    fun `the note is followed`() = runTest {
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.aboutMe).isEmpty()
+
+        aboutMe.save("Invented note.")
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.aboutMe).isEqualTo("Invented note.")
     }
 
     @Test
@@ -115,7 +131,7 @@ class TrainerViewModelTest {
     private var date: LocalDate = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
 
     private fun viewModel(movement: MovementRecord = record) = TrainerViewModel(
-        movement, store, Today { date }, Now { NOW }, problems,
+        movement, store, aboutMe, Today { date }, Now { NOW }, problems,
     )
 
     /** A synced forty-minute walk at 07:00 on [day]. Invented. */
