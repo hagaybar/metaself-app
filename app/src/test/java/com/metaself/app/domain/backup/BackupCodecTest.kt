@@ -156,6 +156,18 @@ class BackupCodecTest {
         assertThat(read.workouts.single()).isEqualTo(workout)
     }
 
+    /** D88: a review whose workout is gone is written on its own, at the top level. Invented words. */
+    @Test
+    fun `a review without a workout survives the file`() {
+        val orphan = BackupTrainerReview(planId = 3, felt = "HARD", words = "Invented.", feedback = "{}", feedbackAtMillis = 2_000, model = "a-model")
+
+        val text = BackupCodec.encode(Backup(exportedAtMillis = 1, trainerReviewsWithoutWorkout = listOf(orphan)))
+        val read = BackupCodec.decode(text)!!
+
+        assertThat(text).contains("\"trainer_reviews_without_workout\"")
+        assertThat(read.trainerReviewsWithoutWorkout).containsExactly(orphan)
+    }
+
     @Test
     fun `a version 4 file reads with no plans and no reviews`() {
         val version4 = """{"version": 4, "exported_at": 1000, "workouts": [{"epoch_day": 20699, "started_at": 1000,
@@ -165,6 +177,7 @@ class BackupCodecTest {
 
         assertThat(read.trainerPlans).isEmpty()
         assertThat(read.workouts.single().trainerReview).isNull()
+        assertThat(read.trainerReviewsWithoutWorkout).isEmpty()
     }
 
     /** D82: what a workout file added, and its source, is in the file. Invented figures. */

@@ -48,6 +48,13 @@ class AskTheTrainer @Inject constructor(
 
         /** The words were saved; the call for feedback failed (D87). */
         data class NoFeedback(override val review: TrainerReview, val failure: EstimateResult) : Reviewed
+
+        /**
+         * The session left the record while the form was open (the band's app deleted it). The words
+         * were saved anyway, as a review without a workout, which the backup keeps (D88); nothing was
+         * asked, because there is no session to ask about.
+         */
+        data class SessionGone(override val review: TrainerReview) : Reviewed
     }
 
     suspend fun suggest(answers: PlanAnswers): Suggested =
@@ -62,11 +69,12 @@ class AskTheTrainer @Inject constructor(
     suspend fun keep(planId: Long) = store.keep(planId)
 
     suspend fun save(workoutId: Long, felt: Felt?, words: String, planId: Long?, withFeedback: Boolean): Reviewed {
-        val workout = store.workout(workoutId) ?: error("no session $workoutId")
+        val workout = store.workout(workoutId)
         val before = store.reviewOf(workoutId)
         val review = (before ?: TrainerReview(workoutId = workoutId, planId = null, felt = null, words = null))
             .copy(planId = planId, felt = felt, words = words.trim().ifEmpty { null })
         val saved = review.copy(id = store.putReview(review))
+        if (workout == null) return Reviewed.SessionGone(saved)
         if (!withFeedback) return Reviewed.Saved(saved)
 
         val plan = planId?.let { store.plans(listOf(it))[it] }
@@ -103,6 +111,10 @@ class AskTheTrainer @Inject constructor(
     }
 
     private companion object {
-        const val NO_WORKOUT = -1L
+        /**
+         * No workout's id, and no review's either: workouts are numbered from 1, and a review without
+         * a workout is restored under -1, -2, … (D88), whose feedback must still count as earlier.
+         */
+        const val NO_WORKOUT = Long.MIN_VALUE
     }
 }

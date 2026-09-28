@@ -38,7 +38,6 @@ import com.metaself.app.domain.backup.BackupSavedMeal
 import com.metaself.app.domain.backup.BackupSleep
 import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupTrainerPlan
-import com.metaself.app.domain.backup.BackupTrainerReview
 import com.metaself.app.domain.backup.BackupWeight
 import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.Confidence
@@ -85,7 +84,28 @@ data class RestoreResult(
     val hasProfile: Boolean,
     val workouts: Int = 0,
     val healthDays: Int = 0,
-)
+    /** D88. */
+    val trainerPlans: Int = 0,
+    /** D88: every review, inside a workout or without one. */
+    val trainerReviews: Int = 0,
+) {
+    companion object {
+        /** What [backup] holds, counted as a restore would report it: the file saved, or the file offered. */
+        fun inFile(backup: Backup) = RestoreResult(
+            meals = backup.meals.size,
+            weights = backup.weights.size,
+            hasProfile = backup.profile != null,
+            workouts = backup.workouts.size,
+            healthDays = Backup.healthDayCount(
+                healthDayEpochDays = backup.healthDays.map { it.epochDay },
+                sleepEpochDays = backup.sleep.map { it.epochDay },
+                correctionEpochDays = backup.movementCorrections.map { it.epochDay },
+            ),
+            trainerPlans = backup.trainerPlans.size,
+            trainerReviews = backup.workouts.count { it.trainerReview != null } + backup.trainerReviewsWithoutWorkout.size,
+        )
+    }
+}
 
 /**
  * A restore that failed and left the phone exactly as it was: nothing had been written yet, or the
@@ -144,7 +164,8 @@ class BackupRepository @Inject constructor(
         val milestones = profiles.milestones.first()
         val reminder = reminders.reminder.first()
         val aiSettings = ai.settings.first()
-        val reviewByWorkout = trainer.allReviews().associateBy { it.workoutId }
+        val everyWorkout = workouts.all()
+        val reviews = BackupReviews.split(everyWorkout.map { it.id }.toSet(), trainer.allReviews())
 
         return Backup(
             version = Backup.CURRENT_VERSION,
@@ -172,7 +193,7 @@ class BackupRepository @Inject constructor(
             ai = BackupAi(aiSettings.model, aiSettings.dailyCeiling),
             foods = everyFood.map(BackupFoods::toBackup),
             savedMeals = builtMeals.map(BackupFoods::toBackup),
-            workouts = workouts.all().map { it.toBackup(reviewByWorkout[it.id]) },
+            workouts = everyWorkout.map { it.toBackup(reviews.byWorkout[it.id]) },
             // A night's stages come back from the @Relation fetch in no promised order; sorted here so
             // the file is written the same way regardless.
             sleep = sleep.allNights().map { night ->
@@ -183,6 +204,7 @@ class BackupRepository @Inject constructor(
                 BackupMovementCorrection(it.epochDay, it.steps, it.activeKcal, it.setAtMillis, it.note)
             },
             trainerPlans = trainer.allPlans().map { it.toBackup() },
+            trainerReviewsWithoutWorkout = reviews.withoutWorkout,
         )
     }
 
@@ -298,6 +320,8 @@ class BackupRepository @Inject constructor(
                 sleepEpochDays = prepared.nights.map { it.first.epochDay },
                 correctionEpochDays = prepared.corrections.map { it.epochDay },
             ),
+            trainerPlans = prepared.plans.size,
+            trainerReviews = prepared.reviews.size,
         )
     }
 
@@ -387,17 +411,13 @@ class BackupRepository @Inject constructor(
 
         val keptWorkouts = backup.workouts.dedupBySyncedOrigin()
         // The table is emptied first, so the file's workouts take ids 1…n in order, and each review is
-        // attached to the id its own workout receives (D88).
+        // attached to the id its own workout receives; one without a workout gets -1, -2, … (D88).
         val workoutRows = keptWorkouts.mapIndexed { at, workout -> workout.toEntity().copy(id = at + 1L) }
         val planRows = backup.trainerPlans.distinctBy { it.id }.map {
             TrainerPlanEntity(it.id, it.createdAtMillis, it.activity, it.minutes, it.feeling, it.wish, it.words, it.suggestion, it.model, it.kept)
         }
         val planIds = planRows.map { it.id }.toSet()
-        val reviewRows = keptWorkouts.mapIndexedNotNull { at, workout ->
-            workout.trainerReview?.let {
-                TrainerReviewEntity(0, at + 1L, it.planId?.takeIf(planIds::contains), it.felt, it.words, it.feedback, it.feedbackAtMillis, it.model)
-            }
-        }
+        val reviewRows = BackupReviews.rows(keptWorkouts, backup.trainerReviewsWithoutWorkout, planIds)
 
         return Prepared(
             fileFoods = fileFoods,
@@ -577,7 +597,7 @@ class BackupRepository @Inject constructor(
         val days: List<HealthDayEntity>,
         val corrections: List<MovementCorrectionEntity>,
         val plans: List<TrainerPlanEntity>,
-        /** Each names the id its workout is inserted with. */
+        /** Each names the id its workout is inserted with, or a negative one if it has none ([BackupReviews]). */
         val reviews: List<TrainerReviewEntity>,
     )
 
@@ -596,6 +616,8 @@ class BackupRepository @Inject constructor(
                 sleepEpochDays = allNights.map { it.epochDay },
                 correctionEpochDays = allCorrections.map { it.epochDay },
             ),
+            trainerPlans = trainer.allPlans().size,
+            trainerReviews = trainer.allReviews().size,
         )
     }
 
@@ -727,9 +749,7 @@ private fun WorkoutEntity.toBackup(review: TrainerReviewEntity?) = BackupWorkout
     distanceSource = distanceSource,
     steps = steps,
     stepsSource = stepsSource,
-    trainerReview = review?.let {
-        BackupTrainerReview(it.planId, it.felt, it.words, it.feedback, it.feedbackAtMillis, it.model)
-    },
+    trainerReview = review?.let { with(BackupReviews) { it.toBackup() } },
 )
 
 private fun TrainerPlanEntity.toBackup() = BackupTrainerPlan(

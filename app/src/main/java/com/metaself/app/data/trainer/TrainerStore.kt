@@ -62,8 +62,9 @@ class RoomTrainerStore @Inject constructor(
     override fun observeKeptPlan(): Flow<TrainerPlan?> = dao.observeKept().map { it?.toPlan() }
     override fun observeReviewedWorkouts(): Flow<List<Workout>> = dao.observeReviewedWorkouts().map { rows -> rows.map { it.toWorkout() } }
     override suspend fun keptPlan(): TrainerPlan? = dao.kept()?.toPlan()
+    /** A few hundred ids per query: an older SQLite allows 999 parameters in one statement. */
     override suspend fun plans(ids: Collection<Long>): Map<Long, TrainerPlan> =
-        if (ids.isEmpty()) emptyMap() else dao.plans(ids.distinct()).mapNotNull { it.toPlan() }.associateBy { it.id }
+        ids.distinct().chunked(IDS_PER_QUERY).flatMap { dao.plans(it) }.mapNotNull { it.toPlan() }.associateBy { it.id }
     override suspend fun workout(id: Long): Workout? = dao.workout(id)?.toWorkout()
     override suspend fun addPlan(plan: TrainerPlan): Long = dao.insertPlan(plan.copy(id = 0, kept = false).toEntity())
 
@@ -75,18 +76,27 @@ class RoomTrainerStore @Inject constructor(
     override suspend fun unkeep(planId: Long) = dao.setKept(planId, false)
     override suspend fun reviewOf(workoutId: Long): TrainerReview? = dao.reviewOf(workoutId)?.toReview()
 
+    /** Read and written in one transaction, so no other write of the same workout's review falls between. */
     override suspend fun putReview(review: TrainerReview): Long {
-        val existing = dao.reviewOf(review.workoutId)
-        return if (existing == null) {
-            dao.insertReview(review.copy(id = 0).toEntity())
-        } else {
-            dao.updateReview(review.copy(id = existing.id).toEntity())
-            existing.id
+        var id = 0L
+        transaction.run {
+            val existing = dao.reviewOf(review.workoutId)
+            id = if (existing == null) {
+                dao.insertReview(review.copy(id = 0).toEntity())
+            } else {
+                dao.updateReview(review.copy(id = existing.id).toEntity())
+                existing.id
+            }
         }
+        return id
     }
 
     override suspend fun latestFeedback(count: Int, exceptWorkoutId: Long): List<Feedback> =
         dao.latestFeedback(count, exceptWorkoutId).mapNotNull(TrainerResponse::readFeedback)
+
+    private companion object {
+        const val IDS_PER_QUERY = 500
+    }
 }
 
 /** Null when this version cannot read the answers or the suggestion: such a plan is offered nowhere. */

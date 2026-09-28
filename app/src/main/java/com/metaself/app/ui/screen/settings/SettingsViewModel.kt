@@ -628,19 +628,7 @@ class SettingsViewModel internal constructor(
             val backup = backups.export(now())
             val written = files.write(uri, BackupCodec.encode(backup))
             backupMessage.value = if (written) {
-                BackupWording.saved(
-                    RestoreResult(
-                        backup.meals.size,
-                        backup.weights.size,
-                        backup.profile != null,
-                        workouts = backup.workouts.size,
-                        healthDays = Backup.healthDayCount(
-                            healthDayEpochDays = backup.healthDays.map { it.epochDay },
-                            sleepEpochDays = backup.sleep.map { it.epochDay },
-                            correctionEpochDays = backup.movementCorrections.map { it.epochDay },
-                        ),
-                    ),
-                ) + " " + BackupWording.KEY_NOT_INCLUDED
+                BackupWording.saved(RestoreResult.inFile(backup)) + " " + BackupWording.KEY_NOT_INCLUDED
             } else {
                 BackupWording.COULD_NOT_WRITE
             }
@@ -674,17 +662,7 @@ class SettingsViewModel internal constructor(
                 backup = backup,
                 question = BackupWording.confirmReplacing(
                     here = here,
-                    incoming = RestoreResult(
-                        backup.meals.size,
-                        backup.weights.size,
-                        backup.profile != null,
-                        workouts = backup.workouts.size,
-                        healthDays = Backup.healthDayCount(
-                            healthDayEpochDays = backup.healthDays.map { it.epochDay },
-                            sleepEpochDays = backup.sleep.map { it.epochDay },
-                            correctionEpochDays = backup.movementCorrections.map { it.epochDay },
-                        ),
-                    ),
+                    incoming = RestoreResult.inFile(backup),
                 ),
             )
             busy.value = false

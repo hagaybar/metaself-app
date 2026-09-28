@@ -102,6 +102,17 @@ copies. Earlier backup formats still read.
 - `trainer_reviews`: id, workoutId (unique; a review belongs to one session), planId (nullable), felt,
   words, feedback (nullable JSON text), feedbackAtMillis, model.
 
+In the backup a review is written inside its workout, so the file needs no workout ids. A review
+whose workout is no longer on the phone — the band's app deleted it, or a typed workout was deleted;
+there is no foreign key, so the words stay — is written on its own, in `trainer_reviews_without_workout`,
+and restored unchanged except for its workout id: the restore renumbers the workouts 1…n, so the old
+id could name a different session, and such reviews are given -1, -2, … in file order instead. The
+workouts' id is autoincrement and never 0 or less, so no session, restored or synced later, can pick
+one up. If a session leaves the record while its review form is open, the words are still saved, as
+such a review, and no feedback is asked for. A version 1–4 file holds no plans and no reviews, and
+restoring one leaves none (a restore replaces); the confirmation before a restore counts the plans and
+reviews on both sides.
+
 A future target (the fourth use) will be a third table that plans and reviews can point to; nothing
 here needs changing for it.
 

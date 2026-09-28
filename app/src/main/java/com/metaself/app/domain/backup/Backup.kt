@@ -37,6 +37,12 @@ data class Backup(
     @SerialName("movement_corrections")
     val movementCorrections: List<BackupMovementCorrection> = emptyList(),
     @SerialName("trainer_plans") val trainerPlans: List<BackupTrainerPlan> = emptyList(),
+    /**
+     * D88: the reviews whose workout is no longer on the phone (the band's app deleted it, or a typed
+     * one was deleted). Every other review is written inside its workout.
+     */
+    @SerialName("trainer_reviews_without_workout")
+    val trainerReviewsWithoutWorkout: List<BackupTrainerReview> = emptyList(),
 ) {
     companion object {
         /**
@@ -59,7 +65,8 @@ data class Backup(
          * reads as none.
          *
          * Version 5 adds the trainer (D88): the stored plans, and each session's review written inside
-         * its workout, so a review needs no workout id in the file. Restoring a version 1–4 file leaves
+         * its workout, so a review needs no workout id in the file. A review whose workout is gone is
+         * written on its own, in [trainerReviewsWithoutWorkout]. Restoring a version 1–4 file leaves
          * no plans and no reviews — a restore replaces.
          */
         const val CURRENT_VERSION = 5
@@ -281,7 +288,10 @@ data class BackupTrainerPlan(
     val kept: Boolean = false,
 )
 
-/** The owner's words on the workout it sits in (D88). [planId] names a [BackupTrainerPlan]'s id. */
+/**
+ * The owner's words on the workout it sits in, or on a workout no longer on the phone (D88). [planId]
+ * names a [BackupTrainerPlan]'s id.
+ */
 @Serializable
 data class BackupTrainerReview(
     @SerialName("plan_id") val planId: Long? = null,

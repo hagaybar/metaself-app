@@ -27,12 +27,12 @@ import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.domain.weight.WeightReading
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.assertThrows
 import java.time.LocalDate
 
 /**
@@ -158,11 +158,49 @@ class AskTheTrainerTest {
         assertThat(request.body!!.ageYears).isEqualTo(46)
     }
 
+    /**
+     * The session vanished while the form was open (the band's app deleted it): the words are kept,
+     * as a review without a workout (the backup keeps those too, D88), and nothing is asked.
+     */
     @Test
-    fun `a session no longer in the record cannot be asked about`() = runTest {
+    fun `a session no longer in the record keeps the words and asks nothing`() = runTest {
         store.workouts.value = emptyList()
 
-        assertThrows<IllegalStateException> { ask().save(9, Felt.EASY, "", null, withFeedback = true) }
+        val outcome = ask().save(9, Felt.EASY, " Invented words. ", null, withFeedback = true)
+
+        assertThat(outcome).isInstanceOf(AskTheTrainer.Reviewed.SessionGone::class.java)
+        assertThat(outcome.review.words).isEqualTo("Invented words.")
+        assertThat(store.reviewOf(9)!!.words).isEqualTo("Invented words.")
+        assertThat(store.reviewOf(9)!!.felt).isEqualTo(Felt.EASY)
+        assertThat(trainer.asked).isEmpty()
+    }
+
+    /** "Just save" after feedback changes the words and keeps the feedback already given. */
+    @Test
+    fun `just save after feedback keeps the feedback`() = runTest {
+        trainer.feedback += TrainerReply.Answered(FEEDBACK, "a-model")
+        ask().save(1, Felt.HARD, "First words.", null, withFeedback = true)
+
+        val outcome = ask().save(1, Felt.RIGHT, "Second words.", null, withFeedback = false)
+
+        assertThat(outcome).isInstanceOf(AskTheTrainer.Reviewed.Saved::class.java)
+        val stored = store.reviewOf(1)!!
+        assertThat(stored.words).isEqualTo("Second words.")
+        assertThat(stored.felt).isEqualTo(Felt.RIGHT)
+        assertThat(stored.feedback).isEqualTo(FEEDBACK.copy(followed = PlanFollowed.NO_PLAN))
+        assertThat(stored.feedbackAtMillis).isEqualTo(NOW)
+        assertThat(trainer.asked).hasSize(1)
+    }
+
+    /** A restored review without a workout sits under a negative workout id (D88); its feedback still counts as earlier feedback. */
+    @Test
+    fun `feedback on a review without a workout is still sent as earlier feedback`() = runTest {
+        store.putReview(TrainerReview(workoutId = -1, planId = null, felt = null, words = null, feedback = FEEDBACK, feedbackAtMillis = NOW - HOUR))
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+
+        ask().suggest(ANSWERS)
+
+        assertThat(trainer.asked.single().earlierFeedback).containsExactly(FEEDBACK)
     }
 
     private fun ask() = AskTheTrainer(

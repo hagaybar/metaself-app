@@ -18,17 +18,19 @@ object BackupWording {
      * Asked before anything is destroyed, and it names what will go.
      *
      * "Are you sure?" is not information. A restore replaces, and the owner is entitled to know
-     * what he is replacing before he agrees to it. The health record is named when either side holds
-     * any, so a phone with none reads exactly as it did before the record existed.
+     * what he is replacing before he agrees to it. The health record, and the trainer's plans and the
+     * session reviews (D88), are each named when either side holds any, so a phone with none reads
+     * exactly as it did before they existed.
      */
     fun confirmReplacing(here: RestoreResult, incoming: RestoreResult): String = buildString {
         val withHealth = hasHealth(here) || hasHealth(incoming)
+        val withTrainer = hasTrainer(here) || hasTrainer(incoming)
         append("This will delete ")
-        append(record(here, withHealth))
+        append(record(here, withHealth, withTrainer))
         append(" already on this phone, and put back ")
-        append(record(incoming, withHealth))
+        append(record(incoming, withHealth, withTrainer))
         append(" from the file.")
-        if (here.meals == 0 && here.weights == 0 && !hasHealth(here)) {
+        if (here.meals == 0 && here.weights == 0 && !hasHealth(here) && !hasTrainer(here)) {
             append(" There is nothing here to lose.")
         }
     }
@@ -47,12 +49,27 @@ object BackupWording {
     private fun hasHealth(result: RestoreResult): Boolean =
         result.workouts > 0 || result.healthDays > 0
 
-    /** "400 meals and 50 weights", or with the health record, "…, 12 workouts and 30 days of health data". */
-    private fun record(result: RestoreResult, withHealth: Boolean = hasHealth(result)): String {
+    private fun hasTrainer(result: RestoreResult): Boolean =
+        result.trainerPlans > 0 || result.trainerReviews > 0
+
+    /**
+     * "400 meals and 50 weights", or with the health record, "…, 12 workouts and 30 days of health
+     * data", and with the trainer's record, "…, 3 trainer plans and 2 session reviews".
+     */
+    private fun record(
+        result: RestoreResult,
+        withHealth: Boolean = hasHealth(result),
+        withTrainer: Boolean = hasTrainer(result),
+    ): String {
         val parts = listOf(meals(result.meals), weights(result.weights)) +
-            if (withHealth) listOf(workouts(result.workouts), healthDays(result.healthDays)) else emptyList()
+            (if (withHealth) listOf(workouts(result.workouts), healthDays(result.healthDays)) else emptyList()) +
+            if (withTrainer) listOf(trainerPlans(result.trainerPlans), sessionReviews(result.trainerReviews)) else emptyList()
         return parts.dropLast(1).joinToString(", ") + " and " + parts.last()
     }
+
+    private fun trainerPlans(count: Int): String = if (count == 1) "1 trainer plan" else "$count trainer plans"
+
+    private fun sessionReviews(count: Int): String = if (count == 1) "1 session review" else "$count session reviews"
 
     private fun workouts(count: Int): String = if (count == 1) "1 workout" else "$count workouts"
 
