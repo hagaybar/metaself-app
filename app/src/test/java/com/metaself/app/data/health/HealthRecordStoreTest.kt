@@ -78,6 +78,33 @@ class HealthRecordStoreTest {
             .containsExactly("STEPS", HealthStore.HISTORY_MARKER)
     }
 
+    /** Absent means one recheck is owed (a fresh install, the upgrade that added it, a restore). */
+    @Test
+    fun `the recheck marker is owed until said otherwise, and is not a kind`() = runTest {
+        assertThat(store.recentRecheckDue()).isTrue()
+        assertThat(store.recheckFromDay()).isNull()
+
+        store.setRecentRecheckDue(false)
+        assertThat(store.recentRecheckDue()).isFalse()
+
+        store.setRecentRecheckDue(true)
+        assertThat(store.recentRecheckDue()).isTrue()
+        assertThat(store.bookmark(HealthKind.STEPS)).isNull()
+        assertThat(db.healthBookkeepingDao().observeSync().first().map { it.kind }).containsExactly(HealthStore.RECHECK_MARKER)
+    }
+
+    /** [HealthStore.recheckFromDay]: the earliest unsummarised day a cut-short pass left, reused on the
+     * same marker row ([HealthStore.RECHECK_MARKER]'s `catchUpCursorMillis`, an epoch day here). */
+    @Test
+    fun `the recheck marker remembers which day to re-total from`() = runTest {
+        store.setRecentRecheckDue(true, fromDay = day - 5)
+        assertThat(store.recheckFromDay()).isEqualTo(day - 5)
+
+        store.setRecentRecheckDue(false)
+        assertThat(store.recentRecheckDue()).isFalse()
+        assertThat(store.recheckFromDay()).isNull()
+    }
+
     @Test
     fun `a record read twice is stored once, as its latest version`() = runTest {
         store.apply(listOf(heart("hr-1", listOf(60.0, 62.0))), emptyList())

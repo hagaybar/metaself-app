@@ -10,6 +10,7 @@ import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -93,6 +94,24 @@ class MovementRecordTest {
         job.cancel()
 
         assertThat(seen).containsExactly(true, false).inOrder()
+    }
+
+    /** D83: as far back as the record holds days — the earlier of the two tables; none with neither. */
+    @Test
+    fun `the earliest day is the earlier of the first summary and the first workout`() = runTest {
+        val healthEarliest = MutableStateFlow<Long?>(20_689)
+        val workoutEarliest = MutableStateFlow<Long?>(20_682)
+        val record = RoomMovementRecord(
+            only<HealthDayDao> { if (it == "observeEarliest") healthEarliest else null },
+            only<WorkoutDao> { if (it == "observeEarliest") workoutEarliest else null },
+            FakeWalkChoices(),
+        )
+
+        assertThat(record.observeEarliestDay().first()).isEqualTo(20_682L)
+        workoutEarliest.value = null
+        assertThat(record.observeEarliestDay().first()).isEqualTo(20_689L)
+        healthEarliest.value = null
+        assertThat(record.observeEarliestDay().first()).isNull()
     }
 
     private fun workoutDaoOver(rows: Flow<List<WorkoutEntity>>): WorkoutDao = only { method ->

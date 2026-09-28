@@ -55,6 +55,19 @@ class RoomHealthStore @Inject constructor(
 
     override suspend fun markHistoryActedOn() = bookkeepingDao.putSync(HealthSyncEntity(kind = HealthStore.HISTORY_MARKER))
 
+    override suspend fun recentRecheckDue(): Boolean = bookkeepingDao.sync(HealthStore.RECHECK_MARKER)?.catchUpDone != true
+
+    override suspend fun recheckFromDay(): Long? =
+        bookkeepingDao.sync(HealthStore.RECHECK_MARKER)?.takeUnless { it.catchUpDone }?.catchUpCursorMillis
+
+    override suspend fun setRecentRecheckDue(due: Boolean, fromDay: Long?) = bookkeepingDao.putSync(
+        HealthSyncEntity(
+            kind = HealthStore.RECHECK_MARKER,
+            catchUpCursorMillis = fromDay.takeIf { due },
+            catchUpDone = !due,
+        ),
+    )
+
     override suspend fun apply(records: List<ReadRecord>, deletedIds: List<String>): Set<Long> {
         val touched = mutableSetOf<Long>()
         transaction.run {

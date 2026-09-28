@@ -28,9 +28,18 @@ interface MovementRecord {
      * off shows at once.
      */
     fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>>
+
+    /**
+     * The first day the record holds anything for — a daily summary or a workout, hidden or not —
+     * or null when it holds nothing. How far back the screen can step (D83).
+     */
+    fun observeEarliestDay(): Flow<Long?>
 }
 
-/** Over the two DAO reads that already exist; no new query (the plan's red line). */
+/**
+ * Over the DAOs' reads. The earliest workout is the one query of its own (D83), added without a
+ * schema change; the rest already existed.
+ */
 class RoomMovementRecord @Inject constructor(
     private val days: HealthDayDao,
     private val workouts: WorkoutDao,
@@ -43,6 +52,11 @@ class RoomMovementRecord @Inject constructor(
     override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> =
         combine(workouts.observeBetween(from, to), walks.uncounted) { rows, uncounted ->
             rows.map { it.toWorkout(uncounted) }
+        }
+
+    override fun observeEarliestDay(): Flow<Long?> =
+        combine(days.observeEarliest(), workouts.observeEarliest()) { summary, workout ->
+            listOfNotNull(summary, workout).minOrNull()
         }
 }
 

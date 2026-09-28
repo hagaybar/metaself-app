@@ -20,6 +20,7 @@ import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
+import com.metaself.app.domain.movement.WorkoutFileRefusal
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
@@ -36,6 +37,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -161,6 +163,8 @@ class MovementViewModelTest {
                 flow { throw IllegalStateException("disk full") }
 
             override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> = flowOf(emptyList())
+
+            override fun observeEarliestDay(): Flow<Long?> = flowOf(null)
         }
         val model = MovementViewModel(broken, InMemoryMealRepository(), today, problems, FakeTypedWorkouts(), FakeProfileRepository(aProfile()), now)
 
@@ -176,6 +180,8 @@ class MovementViewModelTest {
                 flow { throw IllegalStateException("disk full") }
 
             override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> = flowOf(emptyList())
+
+            override fun observeEarliestDay(): Flow<Long?> = flowOf(null)
         }
         val model = MovementViewModel(broken, InMemoryMealRepository(), today, RecordingProblemLog(), FakeTypedWorkouts(), FakeProfileRepository(aProfile()), now)
         val job = launch { model.state.collect {} }
@@ -563,6 +569,51 @@ class MovementViewModelTest {
         job.cancel()
     }
 
+    /** D82 amended: every outcome also goes to the problem log, as kind "import". */
+    @Test
+    fun `every file outcome is written to the problem log as an import`() = runTest {
+        val problems = RecordingProblemLog()
+        val importer = FakeImporter(ImportOutcome.NoMatch(aFile))
+        val model = viewModel(importer = importer, problems = problems)
+        val job = launch { model.state.collect {} }
+
+        model.importFile("content://example/b.tcx")
+        advanceUntilIdle()
+        importer.next = ImportOutcome.AddedWorkout(aTypedWorkout(id = 9, kind = WorkoutKind.WALK))
+        model.addFromFile()
+        advanceUntilIdle()
+        importer.next = ImportOutcome.Refused(WorkoutFileRefusal.NOTHING_TO_ADD)
+        model.importFile("content://example/c.tcx")
+        advanceUntilIdle()
+
+        assertThat(problems.recorded.map { it.kind }).containsExactly("import", "import", "import")
+        assertThat(problems.recorded.map { it.detail }).containsExactly(
+            "no workout matches a file from Thu 3 Sep 10:00",
+            "added Walking on Thu 3 Sep from a file",
+            "refused: the file has no distance, steps or calories to add",
+        ).inOrder()
+        job.cancel()
+    }
+
+    /** The line stays until Done: leaving for the picker and coming back the same day keeps it. */
+    @Test
+    fun `a file's outcome stays until it is dismissed, across the screen going away and back`() = runTest {
+        val importer = FakeImporter(ImportOutcome.NoMatch(aFile))
+        val model = viewModel(importer = importer)
+        val job = launch { model.state.collect {} }
+        model.importFile("content://example/b.tcx")
+        advanceUntilIdle()
+        job.cancel()
+        advanceTimeBy(MovementViewModel.STOP_TIMEOUT_MS * 2)
+
+        model.lookedAt()
+        val again = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(model.state.value.fileImport?.outcome).isEqualTo(ImportOutcome.NoMatch(aFile))
+        again.cancel()
+    }
+
     @Test
     fun `Add without a file that matched nothing does nothing`() = runTest {
         val importer = FakeImporter(ImportOutcome.Failed)
@@ -573,6 +624,191 @@ class MovementViewModelTest {
         advanceUntilIdle()
 
         assertThat(importer.calls).isEmpty()
+    }
+
+    // --- Earlier weeks (D83). The week of 17 August (20,682) is two back from this one; 24 August
+    // (20,689) is last week, ending on Sunday 30 August (20,695). ---
+
+    /** D83: the week before is offered only while the record goes back that far; never a later one. */
+    @Test
+    fun `this week offers the week before only when the record goes back that far`() = runTest {
+        val record = FakeRecord()
+        val model = viewModel(record)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(model.state.value.canGoEarlier).isFalse()
+        assertThat(model.state.value.canGoLater).isFalse()
+
+        record.earliest.value = 20_698 // this week: nothing earlier
+        advanceUntilIdle()
+        assertThat(model.state.value.canGoEarlier).isFalse()
+
+        record.earliest.value = 20_695 // Sunday 30 August: last week
+        advanceUntilIdle()
+        assertThat(model.state.value.canGoEarlier).isTrue()
+        job.cancel()
+    }
+
+    @Test
+    fun `stepping back shows the week before with no day open, and reads that week`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_682 }
+        val model = viewModel(record)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        model.earlierWeek()
+        advanceUntilIdle()
+
+        val state = model.state.value
+        assertThat(state.week!!.monday).isEqualTo(20_689L)
+        assertThat(state.week!!.days.first().epochDay).isEqualTo(20_695L)
+        assertThat(state.openDay).isNull()
+        assertThat(state.canGoEarlier).isTrue()
+        assertThat(state.canGoLater).isTrue()
+        assertThat(record.daysAsked.last()).isEqualTo(20_661L to 20_695L)
+        assertThat(record.workoutsAsked.last()).isEqualTo(20_689L to 20_695L)
+        job.cancel()
+    }
+
+    @Test
+    fun `at the earliest week there is no stepping further back`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_682 }
+        val model = viewModel(record)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        model.earlierWeek()
+        advanceUntilIdle()
+        model.earlierWeek()
+        advanceUntilIdle()
+        assertThat(model.state.value.week!!.monday).isEqualTo(20_682L)
+        assertThat(model.state.value.canGoEarlier).isFalse()
+
+        model.earlierWeek()
+        advanceUntilIdle()
+        assertThat(model.state.value.week!!.monday).isEqualTo(20_682L)
+        job.cancel()
+    }
+
+    @Test
+    fun `stepping forward into this week opens today, and there is no week after it`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_682 }
+        val model = viewModel(record)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        model.earlierWeek()
+        advanceUntilIdle()
+        model.earlierWeek()
+        advanceUntilIdle()
+        model.laterWeek()
+        advanceUntilIdle()
+        assertThat(model.state.value.week!!.monday).isEqualTo(20_689L)
+        assertThat(model.state.value.openDay).isNull()
+
+        model.laterWeek()
+        advanceUntilIdle()
+        assertThat(model.state.value.week!!.isCurrent).isTrue()
+        assertThat(model.state.value.openDay).isEqualTo(TEST_EPOCH_DAY)
+        assertThat(model.state.value.canGoLater).isFalse()
+
+        model.laterWeek()
+        advanceUntilIdle()
+        assertThat(model.state.value.week!!.monday).isEqualTo(20_696L)
+        job.cancel()
+    }
+
+    /** D83: coming back on a new day is the current week again, with today open. */
+    @Test
+    fun `back on the screen on a new day, a past week gives way to this week`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_682 }
+        val model = viewModel(record)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+        model.earlierWeek()
+        advanceUntilIdle()
+
+        date = LocalDate.ofEpochDay(TEST_EPOCH_DAY + 1)
+        model.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(model.state.value.week!!.isCurrent).isTrue()
+        assertThat(model.state.value.openDay).isEqualTo(TEST_EPOCH_DAY + 1)
+        job.cancel()
+    }
+
+    /** Plan design question 2: back from the file picker on the same day, the week shown stays. */
+    @Test
+    fun `back on the screen the same day, a past week stays`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_682 }
+        val model = viewModel(record)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+        model.earlierWeek()
+        advanceUntilIdle()
+
+        model.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(model.state.value.week!!.monday).isEqualTo(20_689L)
+        job.cancel()
+    }
+
+    /** D83: a past week with nothing open has nowhere to log onto; opening a day gives it one. */
+    @Test
+    fun `on a past week Log a workout needs an open day, and then logs onto it`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_682 }
+        val model = viewModel(record)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+        model.earlierWeek()
+        advanceUntilIdle()
+
+        assertThat(model.state.value.logDay).isNull()
+        model.logWorkout()
+        advanceUntilIdle()
+        assertThat(model.state.value.sheet).isNull()
+
+        model.toggle(20_692)
+        advanceUntilIdle()
+        assertThat(model.state.value.logDay).isEqualTo(20_692L)
+        model.logWorkout()
+        advanceUntilIdle()
+        assertThat(model.state.value.sheet!!.epochDay).isEqualTo(20_692L)
+        job.cancel()
+    }
+
+    /** Plan design question 4: on this week, every day closed still logs onto today (D76). */
+    @Test
+    fun `on this week with every day closed, the log day is today`() = runTest {
+        val model = viewModel()
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        model.toggle(TEST_EPOCH_DAY)
+        advanceUntilIdle()
+
+        assertThat(model.state.value.openDay).isNull()
+        assertThat(model.state.value.logDay).isEqualTo(TEST_EPOCH_DAY)
+        job.cancel()
+    }
+
+    /** D8: the earliest day is part of the read; its failure is said and logged like any other. */
+    @Test
+    fun `an earliest day that cannot be read is said and logged`() = runTest {
+        val problems = RecordingProblemLog()
+        val broken = object : MovementRecord {
+            override fun observeDays(from: Long, to: Long): Flow<List<HealthDay>> = flowOf(emptyList())
+
+            override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> = flowOf(emptyList())
+
+            override fun observeEarliestDay(): Flow<Long?> = flow { throw IllegalStateException("disk full") }
+        }
+        val model = viewModel(record = broken, problems = problems)
+
+        assertThat(model.state.first { it.unreadable }.canGoEarlier).isFalse()
+        assertThat(problems.recorded.single().kind).isEqualTo("movement")
     }
 
     private class FakeImporter(var next: ImportOutcome) : WorkoutFileImporter {
@@ -588,13 +824,16 @@ class MovementViewModelTest {
         profiles: ProfileRepository = FakeProfileRepository(aProfile()),
         problems: ProblemLog = ProblemLog.NONE,
         importer: WorkoutFileImporter = WorkoutFileImporter.NONE,
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer)
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())
         val workouts = MutableStateFlow<List<Workout>>(emptyList())
         val daysAsked = mutableListOf<Pair<Long, Long>>()
         val workoutsAsked = mutableListOf<Pair<Long, Long>>()
+        val earliest = MutableStateFlow<Long?>(null)
+
+        override fun observeEarliestDay(): Flow<Long?> = earliest
 
         override fun observeDays(from: Long, to: Long): Flow<List<HealthDay>> {
             daysAsked += from to to

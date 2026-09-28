@@ -19,6 +19,13 @@ interface WorkoutDao {
     fun observeBetween(from: Long, to: Long): Flow<List<WorkoutEntity>>
 
     /**
+     * The first day holding any workout, hidden ones and uncounted walks included; null with none.
+     * How far back the Movement screen can step (D83). A read, not a schema change.
+     */
+    @Query("SELECT MIN(epochDay) FROM workouts")
+    fun observeEarliest(): Flow<Long?>
+
+    /**
      * Running distance per week, Monday-based, newest first. A hidden session is left out; a run with
      * no distance adds nothing rather than zeroing the week. A week with no runs has no row.
      */

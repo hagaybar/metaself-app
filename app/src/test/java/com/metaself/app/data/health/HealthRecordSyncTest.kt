@@ -3,9 +3,12 @@ package com.metaself.app.data.health
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.Problem
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.lifecycle.FakeAppForeground
 import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -24,7 +27,8 @@ class HealthRecordSyncTest {
     private val source = FakeSource()
     private val store = FakeStore()
     private val problems = RecordingProblems()
-    private val sync = HealthRecordSync(source, store, problems, now = { now }, zone = { ZoneOffset.UTC })
+    private val foreground = FakeAppForeground()
+    private val sync = HealthRecordSync(source, store, problems, now = { now }, zone = { ZoneOffset.UTC }, foreground = foreground)
 
     @Test
     fun `nothing granted, nothing read`() = runTest {
@@ -656,6 +660,195 @@ class HealthRecordSyncTest {
         assertThat(sessionCalls()).isEmpty()
     }
 
+    // --- The app in the background. Health Connect refuses reads from an app that is not in the
+    // foreground (without READ_HEALTH_DATA_IN_BACKGROUND): that is not a failure, so nothing is logged,
+    // the pass stops, and what the refusal may have left behind is looked at again next time. ---
+
+    @Test
+    fun `a copy asked for in the background reads nothing`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        foreground.isForeground.value = false
+
+        sync.copyNow()
+
+        assertThat(source.grantedAsked).isEqualTo(0)
+        assertThat(source.calls).isEmpty()
+    }
+
+    @Test
+    fun `a background refusal stops the pass quietly and keeps the last saved bookmark`() = runTest {
+        grantedAllDone(HealthKind.STEPS, HealthKind.HEART_RATE)
+        source.pages = mutableListOf(
+            ChangesPage(listOf(steps("st-1", 99 * DAY)), emptyList(), "t-2", hasMore = true, expired = false),
+        )
+        source.refuseInBackground = { it == "changes STEPS t-2" }
+
+        sync.copyNow()
+
+        assertThat(problems.logged).isEmpty()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).changesToken).isEqualTo("t-2")
+        assertThat(source.calls).containsExactly("changes STEPS t-STEPS", "changes STEPS t-2").inOrder()
+        assertThat(store.recheckDue).isTrue()
+    }
+
+    @Test
+    fun `a catch-up week refused in the background saves no cursor and is not the history limit`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.refuseInBackground = { it == "window STEPS ${86 * DAY}..${93 * DAY}" }
+
+        sync.copyNow()
+
+        assertThat(problems.logged).isEmpty()
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis).isEqualTo(93 * DAY)
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
+    }
+
+    @Test
+    fun `totals refused in the background are not logged and summarise nothing`() = runTest {
+        grantedAllDone(HealthKind.STEPS)
+        source.pages = mutableListOf(page(steps("st-1", 99 * DAY)))
+        source.refuseInBackground = { it.startsWith("totals") }
+
+        sync.copyNow()
+
+        assertThat(problems.logged).isEmpty()
+        assertThat(store.summarised).isEmpty()
+        assertThat(store.recheckDue).isTrue()
+    }
+
+    @Test
+    fun `leaving the foreground mid-copy cancels the pass, and bookmarks stand at the last finished week`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.onWindow = { from ->
+            if (from == 79 * DAY) {
+                foreground.isForeground.value = false
+                awaitCancellation()
+            }
+        }
+
+        sync.copyNow()
+
+        assertThat(source.calls.last()).isEqualTo("window STEPS ${79 * DAY}..${86 * DAY}")
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpCursorMillis).isEqualTo(86 * DAY)
+        assertThat(store.bookmarks.getValue(HealthKind.STEPS).catchUpDone).isFalse()
+        assertThat(problems.logged).isEmpty()
+        assertThat(store.recheckDue).isTrue()
+    }
+
+    /**
+     * What a refusal may have left: workouts stored without a figure whose ask was refused, and days
+     * whose totals were. The next foreground copy re-asks the gaps of the last [HealthRecordSync.WINDOW_DAYS]
+     * days, within the per-open cap, and re-totals the last [HealthRecordSync.RECHECK_DAYS] days; then
+     * nothing is owed.
+     */
+    @Test
+    fun `after a refusal the next copy re-asks the month's gaps and re-totals the last days, once`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.ACTIVE_KCAL, HealthKind.EXERCISE)
+        store.recheckDue = true
+        store.gaps = listOf(gap(7, 80, needsDistance = true, needsEnergy = true))
+        source.sessionTotals = { _, _ -> SessionTotals(distanceM = 4_000, energyKcal = 200) }
+
+        sync.copyNow()
+
+        assertThat(store.gapsAsked.single()).containsExactlyElementsIn((70L..100L).toList())
+        assertThat(sessionCalls()).containsExactly("session ${80 * DAY}..${80 * DAY + 30 * MINUTE} distance=true energy=true")
+        assertThat(store.filled).containsExactly(7L to SessionTotals(distanceM = 4_000, energyKcal = 200))
+        assertThat(store.summarised).containsExactly(setOf(98L, 99L, 100L))
+        assertThat(store.recheckDue).isFalse()
+
+        source.calls.clear()
+        store.gapsAsked.clear()
+        sync.copyNow()
+
+        assertThat(sessionCalls()).isEmpty()
+        assertThat(store.gapsAsked).isEmpty()
+    }
+
+    @Test
+    fun `the re-ask shares the per-open cap with the ordinary asks`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        store.recheckDue = true
+        val cap = HealthRecordSync.SESSION_ASKS_PER_OPEN
+        store.gaps = (0 until cap + 3).map { n -> gap(n.toLong(), 90, startMinute = n * 40L, needsDistance = true) }
+
+        sync.copyNow()
+
+        assertThat(sessionCalls()).hasSize(cap)
+    }
+
+    /** The marker would otherwise be cleared with gaps still unasked, and never reached again. */
+    @Test
+    fun `the recheck marker stays owed when the per-open cap left gaps unasked`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        store.recheckDue = true
+        val cap = HealthRecordSync.SESSION_ASKS_PER_OPEN
+        store.gaps = (0 until cap + 1).map { n -> gap(n.toLong(), 90, startMinute = n * 40L, needsDistance = true) }
+
+        sync.copyNow()
+
+        assertThat(sessionCalls()).hasSize(cap)
+        assertThat(store.recheckDue).isTrue()
+    }
+
+    /** The cap being exactly enough is not "limited by the cap": nothing is left unasked. */
+    @Test
+    fun `the recheck marker clears when the cap was not the limiting factor`() = runTest {
+        grantedAllDone(HealthKind.DISTANCE, HealthKind.EXERCISE)
+        store.recheckDue = true
+        val cap = HealthRecordSync.SESSION_ASKS_PER_OPEN
+        store.gaps = (0 until cap).map { n -> gap(n.toLong(), 90, startMinute = n * 40L, needsDistance = true) }
+
+        sync.copyNow()
+
+        assertThat(sessionCalls()).hasSize(cap)
+        assertThat(store.recheckDue).isFalse()
+    }
+
+    /**
+     * Before this fix, a [BackgroundReadRefused] from the totals call discarded the days touched so far
+     * (a local variable, lost with the pass); only the last [HealthRecordSync.RECHECK_DAYS] days were
+     * re-tried next open, never a catch-up slice's own day if it lay further back. Now the earliest such
+     * day is kept in the marker, and the next copy re-totals from there through today.
+     */
+    @Test
+    fun `totals refused after a catch-up slice leaves that slice's day owed, and the next copy summarises it`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.windowRecords = { from, _ -> if (from == 93 * DAY) listOf(steps("st-1", 95 * DAY)) else emptyList() }
+        source.refuseInBackground = { it.startsWith("totals") }
+
+        sync.copyNow()
+
+        assertThat(problems.logged).isEmpty()
+        assertThat(store.summarised).isEmpty()
+        assertThat(store.recheckDue).isTrue()
+        assertThat(store.recheckDay).isEqualTo(95L)
+
+        source.refuseInBackground = { false }
+        sync.copyNow()
+
+        assertThat(store.summarised).containsExactly(setOf(95L, 96L, 97L, 98L, 99L, 100L))
+    }
+
+    /**
+     * The watch coroutine only cancels the pass when the app leaves the foreground; an unrelated outside
+     * cancellation (the caller's own scope torn down) must still reach the caller as a cancellation, not
+     * be swallowed as a refusal that owes a recheck.
+     */
+    @Test
+    fun `an outside cancellation of copyNow propagates, and is not taken for the app leaving`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        val started = CompletableDeferred<Unit>()
+        source.onWindow = { started.complete(Unit); awaitCancellation() }
+
+        val job = launch { sync.copyNow() }
+        started.await()
+        job.cancelAndJoin()
+
+        assertThat(job.isCancelled).isTrue()
+        assertThat(problems.logged).isEmpty()
+        assertThat(store.recheckDue).isFalse()
+    }
+
     private fun sessionCalls() = source.calls.filter { it.startsWith("session") }
 
     private fun page(vararg records: ReadRecord) = ChangesPage(records.toList(), emptyList(), "next", hasMore = false, expired = false)
@@ -704,6 +897,17 @@ class HealthRecordSyncTest {
         var totalsThrowFrom: Long? = null
         var history = false
         var historyAsked = 0
+
+        /** Which calls Health Connect refuses as made from the background (matched on the call's line). */
+        var refuseInBackground: (String) -> Boolean = { false }
+
+        /** Runs inside each window read, after it is recorded: a place to suspend or flip foreground. */
+        var onWindow: suspend (Long) -> Unit = {}
+
+        private fun call(line: String) {
+            calls += line
+            if (refuseInBackground(line)) throw BackgroundReadRefused(SecurityException("Must be in foreground to read data"))
+        }
         private var tokens = 0
 
         override suspend fun historyAvailable(): Boolean = true
@@ -719,26 +923,27 @@ class HealthRecordSyncTest {
             return granted
         }
         override suspend fun changesToken(kind: HealthKind): String {
-            calls += "token $kind"
+            call("token $kind")
             return "t-$kind-${++tokens}"
         }
         override suspend fun changes(kind: HealthKind, token: String): ChangesPage {
-            calls += "changes $kind $token"
+            call("changes $kind $token")
             if (changesThrow) throw IllegalStateException("unavailable")
             return pages.removeFirstOrNull() ?: ChangesPage(emptyList(), emptyList(), token, hasMore = false, expired = false)
         }
         override suspend fun readWindow(kind: HealthKind, fromMillis: Long, toMillis: Long): List<ReadRecord> {
-            calls += "window $kind $fromMillis..$toMillis"
+            call("window $kind $fromMillis..$toMillis")
+            onWindow(fromMillis)
             refuseBefore?.let { if (toMillis <= it) throw refusal() }
             return windowRecords(fromMillis, toMillis)
         }
         var sessionTotals: (Long, Long) -> SessionTotals = { _, _ -> SessionTotals() }
         override suspend fun sessionTotals(startMillis: Long, endMillis: Long, distance: Boolean, energy: Boolean): SessionTotals {
-            calls += "session $startMillis..$endMillis distance=$distance energy=$energy"
+            call("session $startMillis..$endMillis distance=$distance energy=$energy")
             return sessionTotals(startMillis, endMillis)
         }
         override suspend fun dayTotals(fromDay: Long, toDay: Long): TotalsResult {
-            calls += "totals $fromDay..$toDay"
+            call("totals $fromDay..$toDay")
             totalsThrowFrom?.let { if (fromDay >= it) throw IllegalStateException("unavailable") }
             return TotalsResult()
         }
@@ -785,6 +990,14 @@ class HealthRecordSyncTest {
         }
         override suspend fun fillSessionTotals(id: Long, totals: SessionTotals) {
             filled += id to totals
+        }
+        var recheckDue = false
+        var recheckDay: Long? = null
+        override suspend fun recentRecheckDue() = recheckDue
+        override suspend fun recheckFromDay() = recheckDay
+        override suspend fun setRecentRecheckDue(due: Boolean, fromDay: Long?) {
+            recheckDue = due
+            recheckDay = if (due) fromDay else null
         }
     }
 

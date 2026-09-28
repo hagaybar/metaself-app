@@ -327,6 +327,8 @@ fun MetaSelfNavHost(
                 onAddFromFile = movementViewModel::addFromFile,
                 onChooseForFile = movementViewModel::chooseForFile,
                 onDismissFile = movementViewModel::dismissFile,
+                onEarlierWeek = movementViewModel::earlierWeek,
+                onLaterWeek = movementViewModel::laterWeek,
             )
         }
 

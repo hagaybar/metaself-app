@@ -58,23 +58,31 @@ data class MovementDay(
 )
 
 /**
- * This week, Monday to today, as the Movement screen shows it (D73, D74).
+ * One week as the Movement screen shows it (D73, D74): this week, Monday to today, or an earlier
+ * one, Monday to Sunday (D83).
  *
+ * @property monday the Monday of the week shown.
+ * @property thisMonday the Monday of the calendar's week, so the week knows whether it is the current
+ *   one ([isCurrent]) and the kicker can name it.
  * @property distanceM the week's distance so far: the sum of the days' de-duplicated totals (D69);
  *   null when no day this week has one.
  * @property averageActiveKcal the mean movement calories over the days that have a figure, rounded;
  *   days without are not counted as zero. Null when none has one.
  * "Visible" below means neither hidden nor a walk that does not count (D81).
  *
+ * @property today the calendar's today, whose year a date is said against (D83, amended).
  * @property workoutCount visible sessions this week that are not walks (D78).
  * @property walkCount visible walks this week, counted apart from workouts (D78).
  * @property workoutMinutes every visible session's time, walks included (D78).
- * @property days today first, back to Monday.
- * @property previousWeeksM the four weeks before this one, newest first; null for a week with no
+ * @property days newest first: today back to Monday on this week; Sunday back to Monday on an
+ *   earlier one, all seven (D83).
+ * @property previousWeeksM the four weeks before the one shown, newest first; null for a week with no
  *   distance on any day.
  */
 data class MovementWeek(
     val monday: Long,
+    val thisMonday: Long,
+    val today: Long,
     val distanceM: Int?,
     val averageActiveKcal: Int?,
     val workoutCount: Int,
@@ -83,6 +91,9 @@ data class MovementWeek(
     val days: List<MovementDay>,
     val previousWeeksM: List<Int?>,
 ) {
+    /** The calendar's own week, rather than an earlier one stepped back to (D83). */
+    val isCurrent: Boolean get() = monday == thisMonday
+
     companion object {
 
         const val PREVIOUS_WEEKS = 4
@@ -96,36 +107,45 @@ data class MovementWeek(
         fun mondayOf(epochDay: Long): Long = weekOf(epochDay) * 7 - 3
 
         /**
-         * @param days the health record's days from four weeks before this Monday to [today]; any
-         *   others are ignored.
-         * @param workouts this week's workouts, hidden ones and uncounted walks (D81) included — both
+         * @param days the health record's days from four weeks before [monday] to the week's last day
+         *   shown; any others are ignored.
+         * @param workouts the week's workouts, hidden ones and uncounted walks (D81) included — both
          *   are left out here.
-         * @param mealsByDay this week's meals, by day.
+         * @param mealsByDay the week's meals, by day.
+         * @param monday the week to show: this week's Monday unless an earlier one is asked for (D83).
+         *   Never a later week — nothing after this week is shown — and always a Monday.
          */
         fun of(
             today: Long,
             days: List<HealthDay>,
             workouts: List<Workout>,
             mealsByDay: Map<Long, List<Meal>>,
+            monday: Long = mondayOf(today),
         ): MovementWeek {
-            val monday = mondayOf(today)
+            val thisMonday = mondayOf(today)
+            require(mondayOf(monday) == monday) { "not a Monday: $monday" }
+            require(monday <= thisMonday) { "a week after this one: $monday" }
+            // This week stops at today; an earlier week is all seven days.
+            val last = if (monday == thisMonday) today else monday + 6
             val byDay = days.associateBy { it.epochDay }
-            val thisWeek = (monday..today).mapNotNull { byDay[it] }
+            val thisWeek = (monday..last).mapNotNull { byDay[it] }
             val visible = workouts
-                .filter { !it.hidden && it.counted && it.epochDay in monday..today }
+                .filter { !it.hidden && it.counted && it.epochDay in monday..last }
                 .sortedBy { it.startedAtMillis }
             val distances = thisWeek.mapNotNull { it.distanceM }
             val active = thisWeek.mapNotNull { it.activeKcal }
-            val week = weekOf(today)
+            val week = weekOf(monday)
 
             return MovementWeek(
                 monday = monday,
+                thisMonday = thisMonday,
+                today = today,
                 distanceM = distances.takeIf { it.isNotEmpty() }?.sum(),
                 averageActiveKcal = active.takeIf { it.isNotEmpty() }?.average()?.roundToInt(),
                 workoutCount = visible.count { it.kind != WorkoutKind.WALK },
                 walkCount = visible.count { it.kind == WorkoutKind.WALK },
                 workoutMinutes = visible.sumOf { it.durationMinutes },
-                days = (today downTo monday).map { day ->
+                days = (last downTo monday).map { day ->
                     MovementDay(
                         epochDay = day,
                         health = byDay[day],

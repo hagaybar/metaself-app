@@ -13,6 +13,7 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import org.junit.jupiter.api.Test
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 
@@ -84,6 +85,63 @@ class WorkoutFileWordingTest {
     fun `a workout to choose is its name, time and length`() {
         assertThat(WorkoutFileWording.choice(walk, zone)).isEqualTo("Walking · 10:00 · 40 min")
     }
+
+    // --- The problem log's line for each outcome (kind "import"): which figures, never their values
+    // beyond what the screen's own line says; the day, never the time of a stored workout. ---
+
+    @Test
+    fun `the log says which figures a fill added, to which workout, on which day`() {
+        val filled = walk.copy(distanceM = 3_250, distanceSource = WorkoutFigureSource.FILE, steps = 4_000)
+
+        assertThat(logLine(ImportOutcome.Filled(filled, AddedFigures(distanceM = 3_250, steps = 4_000), 3_250)))
+            .isEqualTo("added distance and steps to Walking on Thu 3 Sep")
+        assertThat(logLine(ImportOutcome.Filled(filled, AddedFigures(distanceM = 3_250, steps = 4_000, kcal = 250), 3_250)))
+            .isEqualTo("added distance, steps and calories to Walking on Thu 3 Sep")
+    }
+
+    @Test
+    fun `the log says every other outcome in one plain line`() {
+        assertThat(logLine(ImportOutcome.Unchanged(walk, null)))
+            .isEqualTo("nothing new for Walking on Thu 3 Sep")
+        assertThat(logLine(ImportOutcome.NoMatch(file)))
+            .isEqualTo("no workout matches a file from Thu 3 Sep 10:00")
+        assertThat(logLine(ImportOutcome.Several(file, listOf(walk, walk.copy(id = 2)))))
+            .isEqualTo("2 workouts match a file from Thu 3 Sep 10:00")
+        assertThat(logLine(ImportOutcome.AddedWorkout(walk)))
+            .isEqualTo("added Walking on Thu 3 Sep from a file")
+        assertThat(logLine(ImportOutcome.Refused(WorkoutFileRefusal.NO_START)))
+            .isEqualTo("refused: the file does not say when the workout started")
+        assertThat(logLine(ImportOutcome.Failed))
+            .isEqualTo("not added: a write failed")
+    }
+
+    /** UNREADABLE's own log line is self-contained: it IS the Recent problems entry, so pointing at
+     * "Recent problems" from inside it would say nothing; the technical detail is a separate line. */
+    @Test
+    fun `an unreadable file's log line does not point back at itself`() {
+        assertThat(logLine(ImportOutcome.Refused(WorkoutFileRefusal.UNREADABLE)))
+            .isEqualTo("refused: the file could not be opened")
+    }
+
+    @Test
+    fun `every refusal has a log line`() {
+        WorkoutFileRefusal.entries.forEach { reason ->
+            assertThat(logLine(ImportOutcome.Refused(reason))).startsWith("refused: ")
+        }
+    }
+
+    /** The log outlives the screen, so a date from a past year says so — MovementWeekWording's rule. */
+    @Test
+    fun `an older file's log line says the year, a recent one does not`() {
+        val oldFile = FileWorkout(writtenAt = LocalDateTime.of(2025, 6, 22, 10, 0), instant = null, seconds = 2_400, distanceM = 3_250.0)
+        val oldWalk = walk.copy(epochDay = LocalDate.of(2025, 6, 22).toEpochDay())
+
+        assertThat(logLine(ImportOutcome.NoMatch(oldFile))).isEqualTo("no workout matches a file from Sun 22 Jun 2025 10:00")
+        assertThat(logLine(ImportOutcome.AddedWorkout(oldWalk))).isEqualTo("added Walking on Sun 22 Jun 2025 from a file")
+        assertThat(logLine(ImportOutcome.NoMatch(file))).isEqualTo("no workout matches a file from Thu 3 Sep 10:00")
+    }
+
+    private fun logLine(outcome: ImportOutcome) = WorkoutFileWording.logLine(outcome, TEST_EPOCH_DAY)
 
     private fun line(outcome: ImportOutcome) = WorkoutFileWording.line(outcome, zone)
 }
