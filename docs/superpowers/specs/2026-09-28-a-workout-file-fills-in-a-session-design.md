@@ -10,8 +10,9 @@
 
 **Two ways in:**
 1. **MetaSelf appears in Android's share list** for workout files (TCX; accept the MIME types a TCX
-   share arrives as — `application/vnd.garmin.tcx+xml`, `application/xml`, `text/xml`,
-   `application/octet-stream` with a `.tcx` name — checked by content, not trusted by type).
+   share arrives as — the TCX types, `application/xml`, `text/xml`, `application/octet-stream` with a
+   `.tcx` name, and `text/plain` — checked by content, not trusted by type). A share with no attached
+   file but text instead (`EXTRA_TEXT`) is read the same way, capped at the same size.
 2. **"Import a workout file"** on the Movement screen opens the system file picker (for a file already
    saved, e.g. in Downloads).
 

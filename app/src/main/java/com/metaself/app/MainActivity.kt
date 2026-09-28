@@ -12,6 +12,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
 import com.metaself.app.data.health.SharedWorkoutFiles
+import com.metaself.app.data.health.inlineWorkoutText
 import com.metaself.app.ui.root.MetaSelfRoot
 import com.metaself.app.ui.theme.MetaSelfTheme
 import com.metaself.app.ui.theme.ProvideSystemMotion
@@ -56,8 +57,12 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * The file a launch shares to MetaSelf (D82), as a content Uri string: a share (ACTION_SEND) carrying
- * a stream; one with no stream is not a workout file and is ignored.
+ * The file or text a launch shares to MetaSelf (D82), as a string the rest of the pipeline reads
+ * unchanged: a share (ACTION_SEND) carrying a stream is that stream's content Uri; one with no stream
+ * but text ([Intent.EXTRA_TEXT] — a sender with no file to attach puts the TCX there instead) is that
+ * text, wrapped by [inlineWorkoutText] so [com.metaself.app.data.health.ContentWorkoutFileSource] reads
+ * it back as text rather than opening it as a Uri. A share with neither is not a workout file and is
+ * ignored; whether the text is actually a workout is for the reader to say, not this extraction.
  *
  * The activity keeps the default launch mode, so every share starts a new activity (in the sharing
  * app's task) and `onNewIntent` is never called; the activity has none, and reads this in `onCreate`.
@@ -68,5 +73,6 @@ class MainActivity : ComponentActivity() {
 internal fun sharedWorkoutFile(intent: Intent?): String? {
     if (intent?.action != Intent.ACTION_SEND) return null
     if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
-    return IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.toString()
+    IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let { return it.toString() }
+    return intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.let(::inlineWorkoutText)
 }
