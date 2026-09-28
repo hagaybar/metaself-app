@@ -19,6 +19,8 @@ import com.metaself.app.data.health.HealthReadingEntity
 import com.metaself.app.data.health.HealthSyncEntity
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.MovementCorrectionEntity
+import com.metaself.app.data.health.SessionSplitDao
+import com.metaself.app.data.health.SessionSplitEntity
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.SleepSessionEntity
 import com.metaself.app.data.health.SleepStageEntity
@@ -63,8 +65,9 @@ import com.metaself.app.domain.portion.Portions
         ArchiveMonthEntity::class,
         TrainerPlanEntity::class,
         TrainerReviewEntity::class,
+        SessionSplitEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {
@@ -92,6 +95,8 @@ abstract class MetaSelfDatabase : RoomDatabase() {
     abstract fun healthBookkeepingDao(): HealthBookkeepingDao
 
     abstract fun trainerDao(): TrainerDao
+
+    abstract fun sessionSplitDao(): SessionSplitDao
 
     companion object {
 

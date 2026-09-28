@@ -8,6 +8,7 @@ import com.metaself.app.data.day.MIGRATION_4_5
 import com.metaself.app.data.day.MIGRATION_5_6
 import com.metaself.app.data.day.MIGRATION_6_7
 import com.metaself.app.data.day.MIGRATION_7_8
+import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -645,6 +646,36 @@ class MigrationTest {
                 assertThat(cursor.moveToFirst()).isTrue()
                 assertThat(cursor.getInt(0)).isEqualTo(rows)
             }
+        }
+        migrated.close()
+    }
+
+    /** D92: one new table, empty; every workout and review kept. Invented figures. */
+    @Test
+    fun `a version 8 database migrates to version 9 with an empty splits table, keeping its workouts`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 8).use { db ->
+            db.execSQL(
+                "INSERT INTO workouts (id, epochDay, startedAtMillis, durationMinutes, kind, energySource, source, hidden) " +
+                    "VALUES (1, 20699, 1000, 40, 'WALK', 'NONE', 'SYNCED', 0)",
+            )
+            db.execSQL("INSERT INTO trainer_reviews (id, workoutId, felt) VALUES (1, 1, 'RIGHT')")
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 9, true, MIGRATION_8_9)
+
+        listOf("session_splits" to 0, "workouts" to 1, "trainer_reviews" to 1).forEach { (table, rows) ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(rows)
+            }
+        }
+        migrated.execSQL("INSERT INTO session_splits (firstWorkoutId, secondWorkoutId) VALUES (1, 2)")
+        migrated.execSQL("INSERT OR IGNORE INTO session_splits (firstWorkoutId, secondWorkoutId) VALUES (1, 2)")
+        migrated.query("SELECT COUNT(*) FROM session_splits").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(1)
         }
         migrated.close()
     }
