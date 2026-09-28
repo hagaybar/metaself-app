@@ -42,6 +42,8 @@ object TrainerPrompt {
         sessions by kind with their distance, total and longest minutes, the week (from its Monday) with
         the most distance, average heart rate weighted by minutes, how the reviewed sessions felt, steps a
         day, and the smoothed weight trend's change across it. A figure that is null was not recorded.
+        best_week's distance is the whole days' distance (all movement),
+        while by_kind's distance is the sessions' only.
 
         about_me is their own standing description of themselves, written once and kept: injuries,
         preferences, equipment, what the training is for. Weigh it with the record. Where it conflicts

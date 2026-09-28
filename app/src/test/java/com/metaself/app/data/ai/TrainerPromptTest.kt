@@ -161,6 +161,15 @@ class TrainerPromptTest {
         assertThat(system).contains("months")
     }
 
+    /** D89: the two distances in a month are different things, and the model is told which is which. */
+    @Test
+    fun `a month's best week is all movement, its kinds' distance sessions only`() {
+        val system = systemContent(TrainerPrompt.planBody("a-model", yearRequest()))
+
+        assertThat(system).contains("best_week's distance is the whole days' distance")
+        assertThat(system).contains("by_kind's distance is the sessions' only")
+    }
+
     /** A standing note about an old injury is context, as words on earlier sessions are; it does not call for stopping. */
     @Test
     fun `the note is context, not a reason to stop`() {
