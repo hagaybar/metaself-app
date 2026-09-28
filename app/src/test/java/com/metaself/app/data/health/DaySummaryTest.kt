@@ -2,6 +2,7 @@ package com.metaself.app.data.health
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
+import com.metaself.app.domain.movement.SessionSplit
 import org.junit.jupiter.api.Test
 
 /** Every figure is invented and round. */
@@ -167,6 +168,23 @@ class DaySummaryTest {
         assertThat(summary.workoutMinutes).isEqualTo(75)
     }
 
+    /** D92: two copies of one session are one of the day's workouts, for the lead's minutes. */
+    @Test
+    fun `overlapping copies count as one workout, and a split keeps them two`() {
+        val band = workout(60)
+        val other = band.copy(id = 99, originId = "other", origin = PHONE, durationMinutes = 50)
+
+        val combined = DaySummary.of(day, DayTotals(), emptyList(), emptyList(), listOf(band, other), null, 1_000)!!
+        val split = DaySummary.of(
+            day, DayTotals(), emptyList(), emptyList(), listOf(band, other), null, 1_000, splits = setOf(SessionSplit(60, 99)),
+        )!!
+
+        assertThat(combined.workoutCount).isEqualTo(1)
+        assertThat(combined.workoutMinutes).isEqualTo(60)
+        assertThat(split.workoutCount).isEqualTo(2)
+        assertThat(split.workoutMinutes).isEqualTo(110)
+    }
+
     /** D77: a workout the owner typed is one of the day's workouts. */
     @Test
     fun `a typed workout counts among the day's workouts`() {
@@ -243,9 +261,10 @@ class DaySummaryTest {
     private fun stage(name: String, fromMinute: Int, toMinute: Int, sessionId: Long = 1) =
         SleepStageEntity(sessionId = sessionId, stage = name, startMillis = fromMinute * MINUTE, endMillis = toMinute * MINUTE)
 
+    /** Each length its own id and its own start, [minutes] hours apart, so no two overlap (D92). */
     private fun workout(minutes: Int) = WorkoutEntity(
-        epochDay = day, startedAtMillis = 0, durationMinutes = minutes, kind = "RUN", title = null,
-        distanceM = null, energyKcal = null, energySource = "NONE", effort = null, source = "SYNCED",
+        id = minutes.toLong(), epochDay = day, startedAtMillis = minutes * 60 * MINUTE, durationMinutes = minutes, kind = "RUN",
+        title = null, distanceM = null, energyKcal = null, energySource = "NONE", effort = null, source = "SYNCED",
         origin = ORIGIN, originId = "w-$minutes", note = null,
     )
 
