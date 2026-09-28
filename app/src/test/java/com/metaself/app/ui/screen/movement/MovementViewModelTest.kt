@@ -11,6 +11,8 @@ import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.FakeTrainerStore
+import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
@@ -25,6 +27,8 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -811,6 +815,30 @@ class MovementViewModelTest {
         assertThat(problems.recorded.single().kind).isEqualTo("movement")
     }
 
+    /** D85, design question 7: which sessions have a review, so each row says its own action. */
+    @Test
+    fun `a session's review is carried by its workout id`() = runTest {
+        val trainer = FakeTrainerStore()
+        val review = TrainerReview(workoutId = 1, planId = null, felt = Felt.RIGHT, words = null)
+        trainer.reviews.value = listOf(review)
+
+        val state = viewModel(trainer = trainer).state.first { it.week != null && it.reviews.isNotEmpty() }
+
+        assertThat(state.reviews).containsExactly(1L, review)
+    }
+
+    @Test
+    fun `a review saved while the screen is open shows without reopening it`() = runTest {
+        val trainer = FakeTrainerStore()
+        val model = viewModel(trainer = trainer)
+        assertThat(model.state.first { it.week != null }.reviews).isEmpty()
+
+        val review = TrainerReview(workoutId = 2, planId = null, felt = null, words = "Steady.")
+        trainer.reviews.value = listOf(review)
+
+        assertThat(model.state.first { it.reviews.isNotEmpty() }.reviews[2L]).isEqualTo(review)
+    }
+
     private class FakeImporter(var next: ImportOutcome) : WorkoutFileImporter {
         val calls = mutableListOf<String>()
         override suspend fun import(uri: String): ImportOutcome = next.also { calls += "import $uri" }
@@ -824,7 +852,8 @@ class MovementViewModelTest {
         profiles: ProfileRepository = FakeProfileRepository(aProfile()),
         problems: ProblemLog = ProblemLog.NONE,
         importer: WorkoutFileImporter = WorkoutFileImporter.NONE,
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher)
+        trainer: TrainerReviews = TrainerReviews.NONE,
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())

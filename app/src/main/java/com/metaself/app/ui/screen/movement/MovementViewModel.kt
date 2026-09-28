@@ -10,12 +10,14 @@ import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.movement.WorkoutFileWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -68,6 +70,8 @@ class MovementViewModel(
     private val files: WorkoutFileImporter = WorkoutFileImporter.NONE,
     /** Where [fileStep] writes the problem log (a file, D8) — a test supplies its own. */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Which sessions have a review, so each says its own button (D85, design question 7). */
+    private val trainer: TrainerReviews = TrainerReviews.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -80,7 +84,8 @@ class MovementViewModel(
         profiles: ProfileRepository,
         now: Now,
         files: WorkoutFileImporter,
-    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO)
+        trainer: TrainerReviews,
+    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer)
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
@@ -109,7 +114,7 @@ class MovementViewModel(
     private var nextSheetToken = 0L
 
     /** The week shown and the record's earliest day, which bounds how far back ‹ goes (D83). */
-    private data class Read(val week: MovementWeek, val earliest: Long?)
+    private data class Read(val week: MovementWeek, val earliest: Long?, val reviews: Map<Long, TrainerReview>)
 
     /**
      * Null means the read failed; the failure is logged where it happened, below. The earliest day
@@ -126,8 +131,9 @@ class MovementViewModel(
                 record.observeWorkouts(monday, last),
                 mealsOn((monday..last).toList()),
                 record.observeEarliestDay(),
-            ) { days, workouts, mealsByDay, earliest ->
-                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest)
+                trainer.observeReviews(),
+            ) { days, workouts, mealsByDay, earliest, reviews ->
+                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest, reviews.associateBy { it.workoutId })
             }
             built
         }
@@ -152,6 +158,7 @@ class MovementViewModel(
                 canUndo = undoNow.offered,
                 undoFailed = undoNow.failed,
                 fileImport = file,
+                reviews = read.reviews,
             )
         }
     }

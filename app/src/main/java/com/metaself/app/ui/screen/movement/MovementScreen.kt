@@ -39,10 +39,12 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.movement.MovementWeekWording
 import com.metaself.app.ui.movement.WorkoutFileWording
 import com.metaself.app.ui.screen.day.UndoRow
+import com.metaself.app.ui.trainer.TrainerWording
 import com.metaself.app.ui.theme.Spacing
 import java.time.ZoneId
 
@@ -62,6 +64,10 @@ import java.time.ZoneId
  * ‹ and › beside the kicker step a week back and forward (D83): ‹ only while the record holds
  * something earlier, › only on an earlier week. An earlier week lists all seven days, Sunday first,
  * none open; there "Log a workout" needs a day opened to log onto, and says so above the rows.
+ *
+ * "Trainer" in the title bar opens the trainer (D85). Under each session in an open day, typed or
+ * synced, one button says where its review stands — "How did it go?", "Get feedback" or "See
+ * feedback" (plan design question 7) — and opens that session's review.
  */
 @Composable
 fun MovementScreen(
@@ -82,6 +88,8 @@ fun MovementScreen(
     onDismissFile: () -> Unit = {},
     onEarlierWeek: () -> Unit = {},
     onLaterWeek: () -> Unit = {},
+    onTrainer: () -> Unit = {},
+    onReview: (Long) -> Unit = {},
 ) {
     val readable = state.week != null
     val canLog = state.logDay != null
@@ -89,6 +97,7 @@ fun MovementScreen(
         title = stringResource(R.string.movement_title),
         modifier = modifier,
         onBack = onBack,
+        actions = { TextButton(onClick = onTrainer) { Text(stringResource(R.string.trainer_open)) } },
         belowBar = { if (state.canUndo) UndoLine(failed = state.undoFailed, onUndo = onUndoDelete) },
         hasFloatingButton = readable,
         floatingActionButton = { if (readable) LogWorkoutButton(onClick = onLogWorkout, enabled = canLog) },
@@ -129,6 +138,8 @@ fun MovementScreen(
                             open = day.epochDay == state.openDay,
                             onToggle = { onToggleDay(day.epochDay) },
                             onOpenWorkout = onOpenWorkout,
+                            reviews = state.reviews,
+                            onReview = onReview,
                         )
                     }
                 }
@@ -333,7 +344,15 @@ internal fun LogWorkoutButton(onClick: () -> Unit, enabled: Boolean = true) {
  * outside the button, so a screen reader reads them one at a time.
  */
 @Composable
-private fun DayRow(day: MovementDay, today: Long, open: Boolean, onToggle: () -> Unit, onOpenWorkout: (Workout) -> Unit) {
+private fun DayRow(
+    day: MovementDay,
+    today: Long,
+    open: Boolean,
+    onToggle: () -> Unit,
+    onOpenWorkout: (Workout) -> Unit,
+    reviews: Map<Long, TrainerReview>,
+    onReview: (Long) -> Unit,
+) {
     val said = stringResource(if (open) R.string.movement_day_open else R.string.movement_day_closed)
     val action = stringResource(if (open) R.string.movement_day_hide else R.string.movement_day_show)
     val change = stringResource(R.string.movement_workout_change)
@@ -387,6 +406,10 @@ private fun DayRow(day: MovementDay, today: Long, open: Boolean, onToggle: () ->
                                     .heightIn(min = 48.dp)
                             },
                         )
+                        // Where this session's review stands, and the way to it (D87, design question 7).
+                        line.workout?.let { session ->
+                            TextButton(onClick = { onReview(session.id) }) { Text(TrainerWording.rowAction(reviews[session.id])) }
+                        }
                     }
                 }
             }
