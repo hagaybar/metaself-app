@@ -1,0 +1,183 @@
+package com.metaself.app.domain.trainer
+
+import com.metaself.app.domain.movement.EnergySource
+import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.movement.WorkoutFigureSource
+import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.profile.GoalDirection
+import com.metaself.app.domain.profile.Profile
+import com.metaself.app.domain.profile.Sex
+import com.metaself.app.domain.weight.MeasuredRate
+import com.metaself.app.domain.weight.WeightReading
+import com.metaself.app.domain.weight.WeightTrend
+
+/** Where a distance or steps figure came from, as the model is told it (no app or device name, D84). */
+enum class Origin { SYNCED, FILE, TYPED }
+
+/** What is being asked (D84's "the question"). */
+sealed interface TrainerQuestion {
+    data class Plan(val answers: PlanAnswers) : TrainerQuestion
+
+    /** [session] carries the felt effort, the words and the matched plan being asked about. */
+    data class Review(val session: SessionFacts) : TrainerQuestion
+}
+
+/** One session as D84 sends it. [title] and [origin] of the workout are deliberately absent. */
+data class SessionFacts(
+    val epochDay: Long,
+    val kind: WorkoutKind,
+    val minutes: Int,
+    val distanceM: Int?,
+    val distanceFrom: Origin?,
+    val energyKcal: Int?,
+    val energyFrom: EnergySource?,
+    val avgHeartRate: Int?,
+    val maxHeartRate: Int?,
+    val zoneMinutes: List<Int>?,
+    val zoneMaxEstimated: Boolean,
+    val steps: Int?,
+    val stepsFrom: Origin?,
+    val felt: Felt?,
+    val words: String?,
+    val plan: SessionPlan?,
+)
+
+/** One Monday-based week's D74 figures. [current] is this week, so far. */
+data class WeekFacts(
+    val monday: Long,
+    val distanceM: Int?,
+    val averageActiveKcal: Int?,
+    val sessions: Int,
+    val current: Boolean,
+)
+
+/** The weight screen's figures: the smoothed line's last point and its measured weekly change. */
+data class WeightFacts(val trendKg: Double, val asOfEpochDay: Long, val kgPerWeek: Double?, val overDays: Int?)
+
+/** The profile's goal: direction and weekly rate. No target (D84 does not list one). */
+data class GoalFacts(val direction: GoalDirection, val kgPerWeek: Double)
+
+data class BodyFacts(val ageYears: Int, val sex: Sex, val heightCm: Int)
+
+/** This week's rhythm, counted on the phone and handed to the model (D87). */
+data class Rhythm(val sessionsSoFar: Int, val daysLeft: Int)
+
+/**
+ * Everything one trainer request holds (D84) — built fresh from the stored record every time; no
+ * conversation is kept or replayed. There is deliberately no field for a meal, sleep, a raw reading,
+ * a single weigh-in, a target weight, a name, or an app or device name; `TrainerRequestTest` fails if
+ * one is added.
+ */
+data class TrainerRequest(
+    val question: TrainerQuestion,
+    val today: Long,
+    val sessions: List<SessionFacts>,
+    val weeks: List<WeekFacts>,
+    val weight: WeightFacts?,
+    val goal: GoalFacts?,
+    val body: BodyFacts?,
+    val thisWeek: Rhythm,
+    val earlierFeedback: List<Feedback>,
+) {
+    companion object {
+        const val SESSION_DAYS = 42
+        const val WEEKS = 6
+        const val FEEDBACK_COUNT = 3
+
+        /** The first day whose sessions go (42 days ending today). */
+        fun firstDay(today: Long): Long = today - (SESSION_DAYS - 1)
+
+        /** The first day whose summaries the six weeks need: the Monday five weeks before this one. */
+        fun firstSummaryDay(today: Long): Long = MovementWeek.mondayOf(today) - 7L * (WEEKS - 1)
+
+        /**
+         * @param workouts any workouts; only the visible, counted ones of the 42 days are sent.
+         * @param reviews any reviews; each is attached to its session.
+         * @param plans the stored plans the reviews name, by id.
+         * @param days the daily summaries from [firstSummaryDay] to [today]; meals are never read.
+         * @param earlierFeedback newest first; the first [FEEDBACK_COUNT] are sent.
+         */
+        fun of(
+            question: TrainerQuestion,
+            today: Long,
+            workouts: List<Workout>,
+            reviews: List<TrainerReview>,
+            plans: Map<Long, TrainerPlan>,
+            days: List<HealthDay>,
+            readings: List<WeightReading>,
+            profile: Profile?,
+            currentYear: Int,
+            earlierFeedback: List<Feedback>,
+        ): TrainerRequest {
+            val first = firstDay(today)
+            val byWorkout = reviews.associateBy { it.workoutId }
+            val sessions = workouts
+                .filter { !it.hidden && it.counted && it.epochDay in first..today }
+                .sortedBy { it.startedAtMillis }
+                .map { workout ->
+                    val review = byWorkout[workout.id]
+                    session(workout, review, review?.planId?.let(plans::get)?.plan)
+                }
+            val thisMonday = MovementWeek.mondayOf(today)
+            val weeks = (0 until WEEKS).map { back ->
+                val week = MovementWeek.of(today, days, workouts, emptyMap(), thisMonday - 7L * back)
+                WeekFacts(week.monday, week.distanceM, week.averageActiveKcal, week.workoutCount + week.walkCount, back == 0)
+            }
+            val trend = WeightTrend.of(readings)
+            val rate = MeasuredRate.of(trend, today)
+            return TrainerRequest(
+                question = question,
+                today = today,
+                sessions = sessions,
+                weeks = weeks,
+                weight = trend.lastOrNull()?.let { WeightFacts(it.trendKg, it.reading.epochDay, rate?.kgPerWeek, rate?.spanDays) },
+                goal = profile?.let { GoalFacts(it.goal.direction, it.goal.kgPerWeek) },
+                body = profile?.let { BodyFacts(currentYear - it.birthYear, it.sex, it.heightCm) },
+                thisWeek = Rhythm(weeks.first().sessions, (thisMonday + 6 - today).toInt()),
+                earlierFeedback = earlierFeedback.take(FEEDBACK_COUNT),
+            )
+        }
+
+        /** The question for D87: [workout] with the review and plan being asked about. */
+        fun reviewQuestion(workout: Workout, review: TrainerReview, plan: TrainerPlan?): TrainerQuestion.Review =
+            TrainerQuestion.Review(session(workout, review, plan?.plan))
+
+        private fun session(workout: Workout, review: TrainerReview?, plan: SessionPlan?): SessionFacts = SessionFacts(
+            epochDay = workout.epochDay,
+            kind = workout.kind,
+            minutes = workout.durationMinutes,
+            distanceM = workout.distanceM,
+            distanceFrom = workout.distanceM?.let {
+                when (workout.distanceSource) {
+                    WorkoutFigureSource.FILE -> Origin.FILE
+                    WorkoutFigureSource.TYPED -> Origin.TYPED
+                    null -> if (workout.source == WorkoutSource.TYPED) Origin.TYPED else Origin.SYNCED
+                }
+            },
+            energyKcal = workout.energyKcal,
+            energyFrom = workout.energyKcal?.let { workout.energySource },
+            avgHeartRate = workout.avgHeartRate,
+            maxHeartRate = workout.maxHeartRate,
+            // Rounded to the nearest minute; a zone under half a minute reads 0.
+            zoneMinutes = workout.zoneSeconds?.map { (it + 30) / 60 },
+            zoneMaxEstimated = workout.zoneMaxSource != "OBSERVED",
+            steps = workout.steps,
+            stepsFrom = workout.steps?.let { if (workout.stepsSource == WorkoutFigureSource.TYPED) Origin.TYPED else Origin.FILE },
+            felt = review?.felt,
+            words = review?.words?.takeIf { it.isNotBlank() },
+            plan = plan,
+        )
+    }
+}
+
+/** Asking the model (D84): one call each, no retry, nothing in its vocabulary that names a vendor. */
+interface Trainer {
+    /** [request]'s question must be [TrainerQuestion.Plan]. */
+    suspend fun suggest(request: TrainerRequest): TrainerReply<SessionPlan>
+
+    /** [request]'s question must be [TrainerQuestion.Review]. */
+    suspend fun feedback(request: TrainerRequest): TrainerReply<Feedback>
+}
