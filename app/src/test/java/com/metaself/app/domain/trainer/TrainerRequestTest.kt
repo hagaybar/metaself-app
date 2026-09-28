@@ -48,12 +48,16 @@ class TrainerRequestTest {
         readings: List<WeightReading> = listOf(WeightReading(20_671, 80.0), WeightReading(20_685, 80.0), WeightReading(20_699, 80.0)),
         profile: com.metaself.app.domain.profile.Profile? = aProfile(),
         feedback: List<Feedback> = emptyList(),
+        workouts: List<Workout> = all,
+        earliest: Long? = null,
+        aboutMe: String? = null,
     ) = TrainerRequest.of(
-        question = question, today = TEST_EPOCH_DAY, workouts = all, reviews = listOf(review),
+        question = question, today = TEST_EPOCH_DAY, workouts = workouts, reviews = listOf(review),
         plans = mapOf(9L to plan),
         days = listOf(HealthDay(20_699, distanceM = 4_000, activeKcal = 300), HealthDay(20_698, distanceM = 2_000, activeKcal = 100),
             HealthDay(20_690, distanceM = 5_000)),
         readings = readings, profile = profile, currentYear = TEST_YEAR, earlierFeedback = feedback,
+        earliestDay = earliest, aboutMe = aboutMe,
     )
 
     @Test
@@ -168,14 +172,50 @@ class TrainerRequestTest {
         assertThat(question.session.plan).isEqualTo(plan.plan)
     }
 
+    /** D89: June 2026's walk goes in June's line; the record begins on 1 June, so May and before have none. */
+    @Test
+    fun `the months come from the record, oldest first`() {
+        val june = session(id = 7, day = JUNE_1 + 9, kind = WorkoutKind.WALK, minutes = 50).copy(distanceM = 4_000)
+
+        val months = request(workouts = all + june, earliest = JUNE_1).months
+
+        assertThat(months.map { it.firstDay }).containsExactly(JUNE_1, JUNE_1 + 30).inOrder()
+        assertThat(months.first().kinds).containsExactly(KindFacts(WorkoutKind.WALK, 1, 4_000))
+        assertThat(months.first().minutes).isEqualTo(50)
+        assertThat(request(earliest = null).months).isEmpty()
+    }
+
+    /** D90: the note goes as written, trimmed; a blank one is no note. */
+    @Test
+    fun `the note is sent as written, and a blank one is none`() {
+        assertThat(request(aboutMe = "  Invented note.\nSecond line. ").aboutMe).isEqualTo("Invented note.\nSecond line.")
+        assertThat(request(aboutMe = "   ").aboutMe).isNull()
+        assertThat(request().aboutMe).isNull()
+    }
+
+    /** D89: a month's weight is the trend's change; no weigh-in of the month is in its line. Invented kg. */
+    @Test
+    fun `a month's line holds no weigh-in`() {
+        val readings = listOf(
+            WeightReading(JUNE_1 - 1, 81.4), WeightReading(JUNE_1 + 14, 80.6), WeightReading(JUNE_1 + 29, 80.2),
+            WeightReading(20_699, 79.8),
+        )
+
+        val months = request(readings = readings, earliest = JUNE_1).months
+
+        assertThat(months.first().weightChangeKg).isNotNull()
+        readings.forEach { assertThat(months.toString()).doesNotContain(it.kg.toString()) }
+    }
+
     /**
      * D84's "never sent", as a shape: there is no field for a meal, sleep, a raw reading, a weigh-in, a
-     * target, a name, a title or an origin. A new field fails here before it can leave the phone.
+     * target, a name, a title or an origin. D89 adds the monthly lines and D90 the owner's note. A new field fails here before it can leave the phone.
      */
     @Test
     fun `the request has room for exactly what D84 lists`() {
         assertThat(fieldsOf(TrainerRequest::class.java)).containsExactly(
-            "question", "today", "sessions", "weeks", "weight", "goal", "body", "thisWeek", "earlierFeedback",
+            "question", "today", "aboutMe", "sessions", "weeks", "months", "weight", "goal", "body", "thisWeek",
+            "earlierFeedback",
         )
         assertThat(fieldsOf(SessionFacts::class.java)).containsExactly(
             "epochDay", "kind", "minutes", "distanceM", "distanceFrom", "energyKcal", "energyFrom",
@@ -184,6 +224,12 @@ class TrainerRequestTest {
         )
         assertThat(fieldsOf(WeekFacts::class.java)).containsExactly("monday", "distanceM", "averageActiveKcal", "sessions", "current")
         assertThat(fieldsOf(WeightFacts::class.java)).containsExactly("trendKg", "asOfEpochDay", "kgPerWeek", "overDays")
+        assertThat(fieldsOf(MonthFacts::class.java)).containsExactly(
+            "firstDay", "lastDay", "part", "kinds", "minutes", "longestMinutes", "bestWeekMonday", "bestWeekM",
+            "avgHeartRate", "felt", "stepsADay", "weightChangeKg",
+        )
+        assertThat(fieldsOf(KindFacts::class.java)).containsExactly("kind", "sessions", "distanceM")
+        assertThat(fieldsOf(FeltCounts::class.java)).containsExactly("easy", "right", "hard")
         assertThat(fieldsOf(GoalFacts::class.java)).containsExactly("direction", "kgPerWeek")
         assertThat(fieldsOf(BodyFacts::class.java)).containsExactly("ageYears", "sex", "heightCm")
     }
@@ -196,4 +242,8 @@ class TrainerRequestTest {
         kind = kind, title = "Invented title", distanceM = null, energyKcal = null, energySource = EnergySource.NONE,
         effort = null, source = WorkoutSource.SYNCED, hidden = false, note = null,
     )
+
+    private companion object {
+        val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
+    }
 }

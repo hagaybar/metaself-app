@@ -177,7 +177,9 @@ class OpenAiTrainerTest {
         private fun request(question: TrainerQuestion) = TrainerRequest(
             question = question,
             today = TEST_EPOCH_DAY,
+            aboutMe = null,
             sessions = emptyList(),
+            months = emptyList(),
             weeks = (0 until 6).map { back ->
                 WeekFacts(monday = TEST_EPOCH_DAY - 3 - 7L * back, distanceM = null, averageActiveKcal = null, sessions = 0, current = back == 0)
             },
