@@ -118,6 +118,8 @@ data class WorkoutDraft(
 
     companion object {
 
+        private val OWN_ENERGY = setOf(EnergySource.TYPED, EnergySource.FILE)
+
         /** The kinds the sheet offers, in its order (D76). */
         val KINDS = listOf(
             WorkoutKind.RUN, WorkoutKind.WALK, WorkoutKind.CYCLE,
@@ -150,9 +152,10 @@ data class WorkoutDraft(
                 ?.let { BigDecimal(it).movePointLeft(3).stripTrailingZeros().toPlainString() }
                 .orEmpty(),
             effort = workout.effort ?: Effort.MODERATE,
-            ownEnergy = workout.energySource == EnergySource.TYPED,
+            // A file's calories (D82) are a figure of the workout's own, as typed ones are.
+            ownEnergy = workout.energySource in OWN_ENERGY,
             energyKcal = workout.energyKcal
-                ?.takeIf { workout.energySource == EnergySource.TYPED }
+                ?.takeIf { workout.energySource in OWN_ENERGY }
                 ?.toString()
                 .orEmpty(),
             note = workout.note.orEmpty(),

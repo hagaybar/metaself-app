@@ -4,6 +4,7 @@ import com.metaself.app.domain.health.BandReport
 import com.metaself.app.domain.health.DayFigure
 import com.metaself.app.domain.health.HealthKind
 import com.metaself.app.domain.health.KindArrivals
+import com.metaself.app.domain.health.WorkoutApp
 import com.metaself.app.domain.health.WorkoutArrivals
 import com.metaself.app.ui.movement.MovementWeekWording
 import java.time.LocalDate
@@ -26,6 +27,13 @@ object BandReportWording {
      */
     const val NOT_SHARED = "Stress, training load and recovery time are not shared through Health Connect; " +
         "they stay in the band's app. VO₂ max has a Health Connect record, but this app does not copy it."
+
+    /**
+     * D81: said of an app when it wrote no distance reading of its own during any of its workouts in
+     * the window — the reason a workout of its has none, as far as the record can tell. A workout's
+     * own distance is Health Connect's total over its time from every app, so it can still have one.
+     */
+    const val DISTANCE_NOT_SHARED = "distance not shared for workouts by this app"
 
     /** [Locale.US]: Java 17's UK data writes "Sept" (see [MovementWeekWording]). */
     private val DAY = DateTimeFormatter.ofPattern("d MMM", Locale.US)
@@ -62,6 +70,7 @@ object BandReportWording {
             add(count(w.total, "workout", "workouts"))
             add(byName.entries.joinToString(SEP) { (name, n) -> "$name $n" })
             add("copied ${w.copied}" + SEP + "typed ${w.typed}")
+            if (w.notCounted > 0) add(count(w.notCounted, "walk", "walks") + " not counted")
             if (w.copied > 0) {
                 add(
                     listOf(
@@ -72,6 +81,27 @@ object BandReportWording {
                     ).joinToString(SEP) { (detail, n) -> "$detail $n of ${w.copied}" },
                 )
             }
+        }
+    }
+
+    /**
+     * One app's workouts (D81), e.g. "6 workouts · 4 walks" (", not counted" when its walks are
+     * switched off) and "distance on 2 of 6" (both invented), then [DISTANCE_NOT_SHARED] when it wrote
+     * no distance during any of them. That line is left out when distance is not allowed
+     * ([distanceAllowed] false: no readings are stored, so the record cannot tell), and when every one
+     * of its workouts carries a distance (it would contradict the line above it). [windowDays] is the
+     * report's own window.
+     */
+    fun appLines(app: WorkoutApp, windowDays: Int, distanceAllowed: Boolean): List<String> {
+        if (app.workouts == 0) {
+            return listOf("no workouts in these $windowDays days" + if (app.walksCounted) "" else SEP + "walks not counted")
+        }
+        val walks = if (app.walks == 0) "no walks" else count(app.walks, "walk", "walks")
+        val off = if (!app.walksCounted && app.walks > 0) ", not counted" else ""
+        return buildList {
+            add(count(app.workouts, "workout", "workouts") + SEP + walks + off)
+            add("distance on ${app.withDistance} of ${app.workouts}")
+            if (distanceAllowed && app.withOwnDistance == 0 && app.withDistance < app.workouts) add(DISTANCE_NOT_SHARED)
         }
     }
 
@@ -95,6 +125,10 @@ object BandReportWording {
             val workouts = workoutLines(report.workouts)
             add("Workouts: " + workouts.first())
             addAll(workouts.drop(1))
+            report.workouts.apps.forEach { app ->
+                val lines = appLines(app, report.windowDays, distanceAllowed = HealthKind.DISTANCE !in notAllowed)
+                add("${labels[app.origin] ?: app.origin}: " + lines.joinToString(SEP))
+            }
             add("")
             add("Daily summary")
             addAll(dayLines(report))

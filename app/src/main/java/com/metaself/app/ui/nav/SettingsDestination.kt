@@ -253,6 +253,7 @@ internal fun BandReportDestination(
                 clipboard.setText(AnnotatedString(BandReportWording.asText(report, notAllowed, state.labels, state.today)))
             }
         },
+        onWalksCounted = bandViewModel::setWalksCounted,
         onBack = { navController.popFrom(here) },
     )
 }

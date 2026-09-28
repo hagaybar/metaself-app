@@ -70,7 +70,7 @@ data class WorkoutEntity(
     val title: String?,
     val distanceM: Int?,
     val energyKcal: Int?,
-    /** BAND, MET_ESTIMATE, TYPED, NONE. */
+    /** BAND, MET_ESTIMATE, TYPED, NONE, FILE (D82). */
     val energySource: String,
     /** EASY, MODERATE, HARD. A typed workout always has one; a synced one never. */
     val effort: String?,
@@ -85,6 +85,16 @@ data class WorkoutEntity(
     val maxHeartRate: Int? = null,
     val zoneSeconds: String? = null,
     val zoneMaxSource: String? = null,
+    /**
+     * D82: FILE when a workout file gave the distance; TYPED when the owner typed one over a file's.
+     * Null means what it meant before version 7: on a synced session, Health Connect's total over the
+     * session; on a typed workout, the distance typed on the sheet.
+     */
+    val distanceSource: String? = null,
+    /** D82: steps in the session, only ever from a workout file. */
+    val steps: Int? = null,
+    /** D82: FILE. */
+    val stepsSource: String? = null,
 )
 
 /** One night (D68): it belongs to [epochDay], the day the night ended (the waking day). */

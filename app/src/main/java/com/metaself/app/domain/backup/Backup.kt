@@ -52,8 +52,12 @@ data class Backup(
          * stages, daily summaries and the owner's corrections (D71). The raw readings are not here:
          * they go to Drive by month. A version 1 or 2 file has none of it, and restoring one leaves
          * the phone with none — a restore replaces, and the confirmation says what it will delete.
+         *
+         * Version 4 adds, on each workout, what a workout file gave it (D82): where its distance came
+         * from, its steps, and where those came from. An older file has none of the three, and each
+         * reads as none.
          */
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -249,6 +253,10 @@ data class BackupWorkout(
     @SerialName("max_heart_rate") val maxHeartRate: Int? = null,
     @SerialName("zone_seconds") val zoneSeconds: String? = null,
     @SerialName("zone_max_source") val zoneMaxSource: String? = null,
+    /** D82: FILE or TYPED; absent is Health Connect's total. */
+    @SerialName("distance_source") val distanceSource: String? = null,
+    val steps: Int? = null,
+    @SerialName("steps_source") val stepsSource: String? = null,
 )
 
 /** One night, under the day the night ended (the waking day), with its stages inside it. */

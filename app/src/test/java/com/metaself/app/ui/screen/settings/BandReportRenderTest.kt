@@ -31,7 +31,7 @@ class BandReportRenderTest {
     private val report = BandReport.of(
         BandReport.fromDayFor(today), today,
         arrivals = listOf(Arrival(HealthKind.STEPS, BAND, today, 300)),
-        workouts = listOf(ArrivedWorkout(today, WorkoutKind.WALK, typed = false, origin = BAND, true, false, true, false)),
+        workouts = listOf(ArrivedWorkout(today, WorkoutKind.WALK, typed = false, origin = BAND, false, false, true, false)),
         days = emptyList(),
     )
 
@@ -58,11 +58,58 @@ class BandReportRenderTest {
         ).inOrder()
     }
 
+    /** D81: each app that wrote workouts has its lines and a switch, under Workouts, before the daily summary. */
+    @Test
+    fun `each app has its lines and its switch, between the workouts and the daily summary`() {
+        val texts = page(BandReportUiState(report = report, labels = mapOf(BAND to "Example Band"), today = today))
+
+        assertThat(texts).containsAtLeast(
+            "copied 1 · typed 0", "Example Band", "1 workout · 1 walk", "distance on 0 of 1",
+            "distance not shared for workouts by this app", "Count its walks as workouts", "Daily summary",
+        ).inOrder()
+    }
+
+    @Test
+    fun `the switch calls back with the app and the new choice`() {
+        val calls = mutableListOf<Pair<String, Boolean>>()
+        render.texts(heightPx = TALL) {
+            BandReportPage(
+                state = BandReportUiState(report = report, today = today),
+                notAllowed = emptySet(),
+                onCopy = {},
+                onWalksCounted = { origin, counted -> calls += origin to counted },
+                onBack = {},
+            )
+        }
+
+        render.click("Count its walks as workouts")
+
+        assertThat(calls).containsExactly(BAND to false)
+    }
+
+    @Test
+    fun `an app switched off shows its switch off, and a failed switch is said`() {
+        val calls = mutableListOf<Pair<String, Boolean>>()
+        val texts = render.texts(heightPx = TALL) {
+            BandReportPage(
+                state = BandReportUiState(report = report, today = today, uncounted = setOf(BAND), switchFailed = true),
+                notAllowed = emptySet(),
+                onCopy = {},
+                onWalksCounted = { origin, counted -> calls += origin to counted },
+                onBack = {},
+            )
+        }
+
+        assertThat(texts).contains("The choice could not be saved; Recent problems says why.")
+        render.click("Count its walks as workouts")
+        assertThat(calls).containsExactly(BAND to true)
+    }
+
     @Test
     fun `Copy as text calls back`() {
         var copied = 0
         render.texts(heightPx = TALL) {
-            BandReportPage(state = BandReportUiState(report = report, today = today), notAllowed = emptySet(), onCopy = { copied++ }, onBack = {})
+            BandReportPage(state = BandReportUiState(report = report, today = today), notAllowed = emptySet(), onCopy = { copied++ }, onWalksCounted = { _, _ -> }, onBack = {})
         }
 
         render.click("Copy as text")
@@ -89,7 +136,7 @@ class BandReportRenderTest {
 
     private fun page(state: BandReportUiState, notAllowed: Set<HealthKind> = emptySet()): List<String> =
         render.texts(heightPx = TALL) {
-            BandReportPage(state = state, notAllowed = notAllowed, onCopy = {}, onBack = {})
+            BandReportPage(state = state, notAllowed = notAllowed, onCopy = {}, onWalksCounted = { _, _ -> }, onBack = {})
         }
 
     private companion object {

@@ -4,10 +4,17 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.FigureSource
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
+import java.lang.reflect.Proxy
 
 /** The stored rows, as the Movement screen reads them. Every figure is invented. */
 class MovementRecordTest {
@@ -54,6 +61,65 @@ class MovementRecordTest {
         assertThat(workout.distanceM).isEqualTo(6_200)
         assertThat(workout.hidden).isTrue()
         assertThat(workout.avgHeartRate).isEqualTo(142)
+    }
+
+    /** D81: whether it counts is worked out as it is read; hidden stays its own flag. */
+    @Test
+    fun `a walk from an app switched off reads as not counted, its run as counted`() {
+        val out = setOf("com.example.band")
+
+        assertThat(aWorkout(kind = "WALK").toWorkout(out).counted).isFalse()
+        assertThat(aWorkout(kind = "WALK").toWorkout(out).hidden).isFalse()
+        assertThat(aWorkout(kind = "RUN").toWorkout(out).counted).isTrue()
+        assertThat(aWorkout(kind = "WALK").toWorkout().counted).isTrue()
+    }
+
+    /**
+     * D81: switching an app off while the Movement screen is open shows at once — the workouts are
+     * read again with the new choice, without a change to the table. Only the one DAO read the record
+     * uses is answered; any other call fails the test.
+     */
+    @Test
+    fun `the workouts are read again when the choice changes`() = runTest {
+        val choices = FakeWalkChoices()
+        val rows = MutableStateFlow(listOf(aWorkout(kind = "WALK")))
+        val record = RoomMovementRecord(only<HealthDayDao>(), workoutDaoOver(rows), choices)
+        val seen = mutableListOf<Boolean>()
+
+        val job = launch { record.observeWorkouts(20_699, 20_699).collect { seen += it.single().counted } }
+        runCurrent()
+        choices.setCounted("com.example.band", counted = false)
+        runCurrent()
+        job.cancel()
+
+        assertThat(seen).containsExactly(true, false).inOrder()
+    }
+
+    private fun workoutDaoOver(rows: Flow<List<WorkoutEntity>>): WorkoutDao = only { method ->
+        if (method == "observeBetween") rows else null
+    }
+
+    /** An [T] that answers only what [answer] returns non-null for, and fails loudly on anything else. */
+    private inline fun <reified T> only(crossinline answer: (String) -> Any? = { null }): T =
+        Proxy.newProxyInstance(T::class.java.classLoader, arrayOf(T::class.java)) { _, method, _ ->
+            answer(method.name) ?: throw UnsupportedOperationException("not in this test: ${method.name}")
+        } as T
+
+    /** D82: what a file added, and where it came from, is read and written back as stored. */
+    @Test
+    fun `a file's figures and their sources survive the mapping both ways`() {
+        val stored = aWorkout(kind = "WALK", energySource = "FILE", source = "TYPED")
+            .copy(origin = null, originId = null, energyKcal = 150, distanceSource = "FILE", steps = 4_000, stepsSource = "FILE")
+
+        val workout = stored.toWorkout()
+
+        assertThat(workout.energySource).isEqualTo(EnergySource.FILE)
+        assertThat(workout.distanceSource).isEqualTo(WorkoutFigureSource.FILE)
+        assertThat(workout.steps).isEqualTo(4_000)
+        assertThat(workout.stepsSource).isEqualTo(WorkoutFigureSource.FILE)
+        assertThat(workout.fromFile).isTrue()
+        assertThat(workout.toTypedEntity()).isEqualTo(stored)
+        assertThat(aWorkout().copy(distanceSource = "SOMETHING_NEW").toWorkout().distanceSource).isNull()
     }
 
     @Test

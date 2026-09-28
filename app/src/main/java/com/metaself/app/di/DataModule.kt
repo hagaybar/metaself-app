@@ -28,6 +28,16 @@ import com.metaself.app.data.health.HealthReadingDao
 import com.metaself.app.data.health.HealthRecordCopier
 import com.metaself.app.data.health.AppLabels
 import com.metaself.app.data.health.BandRecord
+import com.metaself.app.data.health.ContentWorkoutFileSource
+import com.metaself.app.data.health.DataStoreWalkChoices
+import com.metaself.app.data.health.ImportWorkoutFile
+import com.metaself.app.data.health.RoomWorkoutFileStore
+import com.metaself.app.data.health.WorkoutFileImporter
+import com.metaself.app.data.health.WorkoutFileSource
+import com.metaself.app.data.health.WorkoutFileStore
+import com.metaself.app.data.health.RecountingWalkSwitch
+import com.metaself.app.data.health.WalkChoices
+import com.metaself.app.data.health.WalkSwitch
 import com.metaself.app.data.health.HealthRecordStatus
 import com.metaself.app.data.health.HealthRecordSync
 import com.metaself.app.data.health.HealthRows
@@ -49,6 +59,7 @@ import com.metaself.app.data.movement.StepSource
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.day.MIGRATION_4_5
 import com.metaself.app.data.day.MIGRATION_5_6
+import com.metaself.app.data.day.MIGRATION_6_7
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomMealRepository
 import com.metaself.app.data.weight.RoomWeightRepository
@@ -132,6 +143,7 @@ object DataModule {
         MetaSelfDatabase.MIGRATION_3_4,
         MIGRATION_4_5,
         MIGRATION_5_6,
+        MIGRATION_6_7,
     ).build()
 
     @Provides
@@ -262,6 +274,28 @@ object DataModule {
     @Provides
     @Singleton
     fun provideBandRecord(record: RoomBandRecord): BandRecord = record
+
+    /** Which writing apps' walks do not count as workouts (D81), in the profile's DataStore. */
+    @Provides
+    @Singleton
+    fun provideWalkChoices(choices: DataStoreWalkChoices): WalkChoices = choices
+
+    /** Where a workout file's text comes from (D82). */
+    @Provides
+    fun provideWorkoutFileSource(source: ContentWorkoutFileSource): WorkoutFileSource = source
+
+    /** Importing a workout file from the Movement screen (D82). */
+    @Provides
+    fun provideWorkoutFileImporter(importer: ImportWorkoutFile): WorkoutFileImporter = importer
+
+    /** What importing a workout file reads and writes (D82). */
+    @Provides
+    fun provideWorkoutFileStore(store: RoomWorkoutFileStore): WorkoutFileStore = store
+
+    /** Switching an app's walks on or off, and summarising the days that changes (D81). */
+    @Provides
+    @Singleton
+    fun provideWalkSwitch(switch: RecountingWalkSwitch): WalkSwitch = switch
 
     /** A writing app's name on "What the band sends" (D80), else its package name. */
     @Provides

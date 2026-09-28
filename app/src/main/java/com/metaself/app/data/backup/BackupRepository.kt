@@ -690,6 +690,9 @@ private fun WorkoutEntity.toBackup() = BackupWorkout(
     maxHeartRate = maxHeartRate,
     zoneSeconds = zoneSeconds,
     zoneMaxSource = zoneMaxSource,
+    distanceSource = distanceSource,
+    steps = steps,
+    stepsSource = stepsSource,
 )
 
 /** Id 0, so the table numbers the rows afresh, as a restored meal's are. */
@@ -712,6 +715,9 @@ private fun BackupWorkout.toEntity() = WorkoutEntity(
     maxHeartRate = maxHeartRate,
     zoneSeconds = zoneSeconds,
     zoneMaxSource = zoneMaxSource,
+    distanceSource = distanceSource,
+    steps = steps,
+    stepsSource = stepsSource,
 )
 
 private fun SleepSessionEntity.toBackup(stages: List<SleepStageEntity>) = BackupSleep(

@@ -13,6 +13,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -22,6 +23,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
@@ -29,8 +31,10 @@ import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.movement.MovementWeekWording
+import com.metaself.app.ui.movement.WorkoutFileWording
 import com.metaself.app.ui.screen.day.UndoRow
 import com.metaself.app.ui.theme.Spacing
+import java.time.ZoneId
 
 /**
  * This week's movement (D73–D75): the week's distance as the one large figure, the average movement
@@ -58,6 +62,10 @@ fun MovementScreen(
     onDeleteWorkout: () -> Unit = {},
     onCloseSheet: () -> Unit = {},
     onUndoDelete: () -> Unit = {},
+    onChooseFile: () -> Unit = {},
+    onAddFromFile: () -> Unit = {},
+    onChooseForFile: (Long) -> Unit = {},
+    onDismissFile: () -> Unit = {},
 ) {
     val readable = state.week != null
     MetaSelfScreen(
@@ -101,6 +109,15 @@ fun MovementScreen(
                 }
             }
         }
+        if (readable || state.unreadable) {
+            WorkoutFileLines(
+                file = state.fileImport,
+                onChooseFile = onChooseFile,
+                onAdd = onAddFromFile,
+                onChoose = onChooseForFile,
+                onDismiss = onDismissFile,
+            )
+        }
     }
 
     state.sheet?.let { sheet ->
@@ -111,6 +128,53 @@ fun MovementScreen(
             onDelete = onDeleteWorkout,
             onCancel = onCloseSheet,
         )
+    }
+}
+
+/**
+ * A workout file (D82): the way to pick one, and what the last one came to — its line, then "Add it as
+ * a workout" when nothing matched, or one button per matching workout, and Done. A step under way
+ * leaves the buttons waiting.
+ */
+@Composable
+private fun WorkoutFileLines(
+    file: FileImportState?,
+    onChooseFile: () -> Unit,
+    onAdd: () -> Unit,
+    onChoose: (Long) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val zone = ZoneId.systemDefault()
+    val idle = file?.working != true
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        TextButton(onClick = onChooseFile, enabled = idle) { Text(stringResource(R.string.movement_import_file)) }
+        if (file == null) return@Column
+        val outcome = file.outcome
+        if (outcome == null) {
+            Text(stringResource(R.string.movement_file_reading), style = MaterialTheme.typography.bodyMedium)
+            return@Column
+        }
+        Text(
+            text = WorkoutFileWording.line(outcome, zone),
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (outcome is ImportOutcome.Failed || outcome is ImportOutcome.Refused) {
+                MaterialTheme.colorScheme.error
+            } else {
+                MaterialTheme.colorScheme.onBackground
+            },
+        )
+        when (outcome) {
+            is ImportOutcome.NoMatch -> TextButton(onClick = onAdd, enabled = idle) {
+                Text(stringResource(R.string.movement_file_add))
+            }
+            is ImportOutcome.Several -> outcome.choices.forEach { workout ->
+                TextButton(onClick = { onChoose(workout.id) }, enabled = idle) {
+                    Text(WorkoutFileWording.choice(workout, zone))
+                }
+            }
+            else -> Unit
+        }
+        TextButton(onClick = onDismiss, enabled = idle) { Text(stringResource(R.string.movement_file_done)) }
     }
 }
 

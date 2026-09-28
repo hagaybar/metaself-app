@@ -24,6 +24,10 @@ import javax.inject.Singleton
  * - **B.** Kinds still catching up take one week each in turn, newest first, until all are done or
  *   the budget is spent, so no kind waits behind another's history.
  *
+ * After phase A, a synced workout that still lacks its distance or calories, on a day whose distance
+ * or calorie readings phase A's changes just brought, is asked for that figure again
+ * ([fillSessionGaps]), at most [SESSION_ASKS_PER_OPEN] workouts per open.
+ *
  * Days touched are summarised after phase A and after each turn of phase B, with totals asked over
  * runs of at most [TOTALS_DAYS] days that cover them, one call per run (uncounted). **Accepted:** a
  * crash between a saved bookmark and its summarise leaves that day's summary stale until the day
@@ -75,11 +79,12 @@ class HealthRecordSync(
 
         val budget = Budget(READS_PER_OPEN)
         val touched = mutableSetOf<Long>()
+        val arrived = mutableMapOf<HealthKind, MutableSet<Long>>()
         val catching = mutableListOf<CatchUp>()
 
         for (kind in HealthKind.entries.filter { it in granted }) {
             try {
-                val mark = bringUp(kind, nowMillis, budget, touched)
+                val mark = bringUp(kind, nowMillis, budget, touched, arrived)
                 if (!mark.catchUpDone) catching += CatchUp(kind, mark)
             } catch (cancelled: CancellationException) {
                 throw cancelled
@@ -87,6 +92,7 @@ class HealthRecordSync(
                 note("$kind: ${failure::class.java.simpleName} ${failure.message}")
             }
         }
+        fillSessionGaps(arrived, granted)
         summarise(touched, nowMillis)
 
         while (catching.isNotEmpty() && !budget.spent) {
@@ -145,15 +151,75 @@ class HealthRecordSync(
         }
     }
 
-    /** Phase A for one kind: a token if it has none (uncounted), otherwise its changes (counted). */
+    /**
+     * A workout's distance and calories are Health Connect's totals over its time AT THE MOMENT IT IS
+     * READ, and a session is read again only when it changes. A writing app that stores a session
+     * before the distance or calories of that stretch (interval data synced in a later batch) left the
+     * session without them for good (D81's investigation). So after phase A, a visible, counted synced
+     * workout that still lacks a figure is asked for it again — bounded three ways:
+     *
+     * - **Only where that figure's readings just arrived.** Distance is asked only of a workout on a
+     *   day ([arrived]) whose DISTANCE readings phase A's changes just brought, or on the day before
+     *   (a workout running past midnight has its later readings filed on the next day); calories
+     *   likewise with ACTIVE_KCAL. A day touched only by other kinds, by an expired token's re-read of
+     *   the window, or by a catch-up week (read just now, sessions and all) is not a reason to ask.
+     * - **Only a figure that is missing AND allowed**, one aggregation call each. A walk that does not
+     *   count (D81) is not a gap at all ([HealthStore.sessionGaps]).
+     * - **At most [SESSION_ASKS_PER_OPEN] workouts per open**, newest first. The rest are logged as
+     *   not asked; each is asked on a later open only if its day receives that figure's readings again.
+     *
+     * A figure that comes back is stored; a failure is logged and the next workout is still asked (D8).
+     * A cancellation is not a failure and is passed on.
+     */
+    private suspend fun fillSessionGaps(arrived: Map<HealthKind, Set<Long>>, granted: Set<HealthKind>) {
+        if (HealthKind.EXERCISE !in granted) return
+        val distanceDays = if (HealthKind.DISTANCE in granted) arrived[HealthKind.DISTANCE].orEmpty() else emptySet()
+        val energyDays = if (HealthKind.ACTIVE_KCAL in granted) arrived[HealthKind.ACTIVE_KCAL].orEmpty() else emptySet()
+        if (distanceDays.isEmpty() && energyDays.isEmpty()) return
+        fun near(days: Set<Long>, day: Long) = day in days || day + 1 in days
+        val lookIn = (distanceDays + energyDays).flatMapTo(mutableSetOf()) { listOf(it - 1, it) }
+        val gaps = try {
+            store.sessionGaps(lookIn)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            note("workout totals: ${failure::class.java.simpleName} ${failure.message}")
+            return
+        }
+        val asks = gaps.sortedByDescending { it.startMillis }.mapNotNull { gap ->
+            val distance = gap.needsDistance && near(distanceDays, gap.epochDay)
+            val energy = gap.needsEnergy && near(energyDays, gap.epochDay)
+            if (distance || energy) Triple(gap, distance, energy) else null
+        }
+        for ((gap, askDistance, askEnergy) in asks.take(SESSION_ASKS_PER_OPEN)) {
+            try {
+                val totals = source.sessionTotals(gap.startMillis, gap.endMillis, askDistance, askEnergy)
+                if (totals.distanceM != null || totals.energyKcal != null) store.fillSessionTotals(gap.id, totals)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                note("workout totals: ${failure::class.java.simpleName} ${failure.message}")
+            }
+        }
+        if (asks.size > SESSION_ASKS_PER_OPEN) {
+            note("workout totals: ${asks.size - SESSION_ASKS_PER_OPEN} more not asked this open")
+        }
+    }
+
+    /**
+     * Phase A for one kind: a token if it has none (uncounted), otherwise its changes (counted). The
+     * days a page of changes brought are added to [touched], and, for the kinds a workout's missing
+     * figures come from, to [arrived] under the kind.
+     */
     private suspend fun bringUp(
         kind: HealthKind,
         nowMillis: Long,
         budget: Budget,
         touched: MutableSet<Long>,
+        arrived: MutableMap<HealthKind, MutableSet<Long>>,
     ): HealthSyncEntity {
         val mark = store.bookmark(kind)
-        if (mark?.changesToken != null) return drainChanges(kind, mark, nowMillis, budget, touched)
+        if (mark?.changesToken != null) return drainChanges(kind, mark, nowMillis, budget, touched, arrived)
 
         val fresh = HealthSyncEntity(
             kind = kind.name,
@@ -176,6 +242,7 @@ class HealthRecordSync(
         nowMillis: Long,
         budget: Budget,
         touched: MutableSet<Long>,
+        arrived: MutableMap<HealthKind, MutableSet<Long>>,
     ): HealthSyncEntity {
         var mark = start
         while (budget.take()) {
@@ -188,7 +255,9 @@ class HealthRecordSync(
                 store.saveBookmark(mark)
                 return mark
             }
-            touched += store.apply(page.upserts, page.deletedIds)
+            val days = store.apply(page.upserts, page.deletedIds)
+            touched += days
+            if (kind in GAP_KINDS) arrived.getOrPut(kind) { mutableSetOf() } += days
             mark = mark.copy(changesToken = page.nextToken, tokenAtMillis = nowMillis)
             store.saveBookmark(mark)
             if (!page.hasMore) break
@@ -310,6 +379,15 @@ class HealthRecordSync(
         private const val REMOTE_EXCEPTION = "android.os.RemoteException"
         private val RATE_LIMITED = listOf("rate limit", "rate-limit", "ratelimit", "quota")
 
+        /** The kinds whose arrival may fill a workout's missing figure: its distance, its calories. */
+        private val GAP_KINDS = setOf(HealthKind.DISTANCE, HealthKind.ACTIVE_KCAL)
+
+        /**
+         * A choice, not a measured quota: at most this many workouts are asked again for a missing
+         * figure in one open (each ask is one or two aggregation calls, outside [READS_PER_OPEN]).
+         */
+        const val SESSION_ASKS_PER_OPEN = 10
+
         /** A choice: a totals call covers at most this many consecutive days. */
         const val TOTALS_DAYS = 30L
 
@@ -329,8 +407,11 @@ class HealthRecordSync(
          * A choice that keeps one open cheap. Health Connect's real quota is not measured here.
          *
          * Counted: each page of changes and each catch-up week. **Not counted:** taking a token, the
-         * totals calls (one per run of up to [TOTALS_DAYS] touched days), the re-read of the window after an expired token, and each workout's two
-         * aggregate calls made while it is read.
+         * totals calls (one per run of up to [TOTALS_DAYS] touched days), the re-read of the window
+         * after an expired token, each workout's two aggregate calls made while it is read, and the
+         * calls asking again for a workout's missing figures after phase A — those have their own
+         * bound, at most [SESSION_ASKS_PER_OPEN] workouts of one or two calls each, and only on days
+         * whose distance or calorie readings phase A just brought ([fillSessionGaps]).
          */
         const val READS_PER_OPEN = 60
     }

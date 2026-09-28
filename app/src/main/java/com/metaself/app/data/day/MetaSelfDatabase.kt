@@ -59,7 +59,7 @@ import com.metaself.app.domain.portion.Portions
         HealthSyncEntity::class,
         ArchiveMonthEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {

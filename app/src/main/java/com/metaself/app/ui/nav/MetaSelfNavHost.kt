@@ -64,6 +64,7 @@ import com.metaself.app.ui.screen.weight.WeightScreen
 import com.metaself.app.ui.screen.weight.WeightViewModel
 import com.metaself.app.ui.screen.movement.MovementScreen
 import com.metaself.app.ui.screen.movement.MovementViewModel
+import com.metaself.app.ui.screen.movement.TakeSharedWorkoutFile
 
 /**
  * The places this host can be.
@@ -193,6 +194,12 @@ sealed class Destination(val route: String) {
  * screen is still the one on top when the naming sheet says it has finished. The second only works
  * against the pattern the stack holds, which is this whole string and not the bare route.
  */
+/**
+ * The types a workout file (D82) arrives as — the spec's list. `application/octet-stream` is how a
+ * `.tcx` often arrives; the file's content, not its type, decides whether it is read.
+ */
+val WORKOUT_FILE_TYPES = arrayOf("application/vnd.garmin.tcx+xml", "application/xml", "text/xml", "application/octet-stream")
+
 private val describeRoute = Destination.Describe.route + "?text={text}&from={from}"
 
 /**
@@ -209,8 +216,17 @@ fun MetaSelfNavHost(
     onEditGoal: () -> Unit,
     dayViewModel: DayViewModel = hiltViewModel(),
     weightViewModel: WeightViewModel = hiltViewModel(),
+    sharedFileViewModel: SharedFileViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
+
+    // A workout file shared to MetaSelf (D82) opens Movement, which takes and imports it once on screen.
+    val sharedFile by sharedFileViewModel.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(sharedFile) {
+        if (sharedFile != null && navController.currentDestination?.route != Destination.Movement.route) {
+            navController.navigate(Destination.Movement.route) { launchSingleTop = true }
+        }
+    }
 
     NavHost(navController = navController, startDestination = Destination.start.route) {
 
@@ -280,11 +296,22 @@ fun MetaSelfNavHost(
         composable(Destination.Movement.route) {
             val movementViewModel: MovementViewModel = hiltViewModel()
             val movementState by movementViewModel.state.collectAsStateWithLifecycle()
+            // D82: the system's file picker, for a workout file already saved. The type is only a
+            // filter for the picker; the content decides.
+            val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+                if (uri != null) movementViewModel.importFile(uri.toString())
+            }
             // Left open past midnight, it moves to the new day on return, as the day pager does.
             LifecycleResumeEffect(movementViewModel) {
                 movementViewModel.lookedAt()
                 onPauseOrDispose { }
             }
+            // D82: a shared file is taken here, and only while this entry is the screen showing.
+            TakeSharedWorkoutFile(
+                pending = sharedFileViewModel.pending,
+                take = sharedFileViewModel::take,
+                onFile = movementViewModel::importFile,
+            )
             MovementScreen(
                 state = movementState,
                 onToggleDay = movementViewModel::toggle,
@@ -296,6 +323,10 @@ fun MetaSelfNavHost(
                 onDeleteWorkout = movementViewModel::deleteWorkout,
                 onCloseSheet = movementViewModel::closeSheet,
                 onUndoDelete = movementViewModel::undoDelete,
+                onChooseFile = { pickFile.launch(WORKOUT_FILE_TYPES) },
+                onAddFromFile = movementViewModel::addFromFile,
+                onChooseForFile = movementViewModel::chooseForFile,
+                onDismissFile = movementViewModel::dismissFile,
             )
         }
 

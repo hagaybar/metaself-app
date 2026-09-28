@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.MovementRecord
+import com.metaself.app.data.health.WorkoutFileImporter
 import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.day.Meal
+import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
@@ -54,6 +56,7 @@ class MovementViewModel @Inject constructor(
     private val typed: TypedWorkouts,
     private val profiles: ProfileRepository,
     private val now: Now,
+    private val files: WorkoutFileImporter = WorkoutFileImporter.NONE,
 ) : ViewModel() {
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
@@ -72,6 +75,9 @@ class MovementViewModel @Inject constructor(
 
     /** Whether Undo is offered, and whether the last one failed. */
     private val undo = MutableStateFlow(UndoState())
+
+    /** The last workout file's import (D82). */
+    private val fileImport = MutableStateFlow<FileImportState?>(null)
 
     /** Every sheet this screen has opened gets the next one of these (see [WorkoutSheetState.token]). */
     private var nextSheetToken = 0L
@@ -92,9 +98,9 @@ class MovementViewModel @Inject constructor(
             emit(null)
         }
 
-    val state: StateFlow<MovementUiState> = combine(week, openDay, sheet, undo) { built, open, sheetNow, undoNow ->
+    val state: StateFlow<MovementUiState> = combine(week, openDay, sheet, undo, fileImport) { built, open, sheetNow, undoNow, file ->
         if (built == null) {
-            MovementUiState(unreadable = true, openDay = open, sheet = sheetNow)
+            MovementUiState(unreadable = true, openDay = open, sheet = sheetNow, fileImport = file)
         } else {
             MovementUiState(
                 week = built,
@@ -102,6 +108,7 @@ class MovementViewModel @Inject constructor(
                 sheet = sheetNow,
                 canUndo = undoNow.offered,
                 undoFailed = undoNow.failed,
+                fileImport = file,
             )
         }
     }
@@ -110,6 +117,35 @@ class MovementViewModel @Inject constructor(
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             initialValue = MovementUiState(),
         )
+
+    /** A workout file was picked or shared (D82): read it and fill in, or say why not. */
+    fun importFile(uri: String) = fileStep { files.import(uri) }
+
+    /** "Add it as a workout", for the file that matched nothing. */
+    fun addFromFile() {
+        val file = (fileImport.value?.outcome as? ImportOutcome.NoMatch)?.file ?: return
+        fileStep { files.add(file) }
+    }
+
+    /** One of several matching workouts was chosen for the file. */
+    fun chooseForFile(id: Long) {
+        val file = (fileImport.value?.outcome as? ImportOutcome.Several)?.file ?: return
+        fileStep { files.choose(file, id) }
+    }
+
+    /** The file's line was dismissed. */
+    fun dismissFile() {
+        fileImport.value = null
+    }
+
+    /** One step at a time; the importer never throws (D8), so the step always lands. */
+    private fun fileStep(step: suspend () -> ImportOutcome) {
+        if (fileImport.value?.working == true) return
+        fileImport.value = FileImportState(outcome = fileImport.value?.outcome, working = true)
+        viewModelScope.launch {
+            fileImport.value = FileImportState(outcome = step())
+        }
+    }
 
     /** A day's row was tapped: open it, closing any other — or close it, if it was the open one. */
     fun toggle(epochDay: Long) {

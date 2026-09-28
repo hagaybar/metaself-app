@@ -6,6 +6,7 @@ import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.movement.WorkoutFigureSource
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import java.time.LocalDate
@@ -162,7 +163,10 @@ object MovementWeekWording {
 
     private fun workoutLine(workout: Workout): String = listOfNotNull(
         name(workout),
-        workout.distanceM?.let(::km),
+        workout.distanceM?.let { metres ->
+            // D82: a file's distance says so, to the two decimals it was written with.
+            if (workout.distanceSource == WorkoutFigureSource.FILE) WorkoutFileWording.fileKm(metres) + " (from file)" else km(metres)
+        },
         duration(workout.durationMinutes),
         // D78: pace for runs only.
         workout.paceSecondsPerKm?.takeIf { workout.kind == WorkoutKind.RUN }?.let(::pace),
@@ -177,6 +181,7 @@ object MovementWeekWording {
         return when (workout.energySource) {
             EnergySource.MET_ESTIMATE -> "about ${number(kcal)} kcal, estimated"
             EnergySource.TYPED -> "${number(kcal)} kcal, you set this"
+            EnergySource.FILE -> "${number(kcal)} kcal, from the file"
             EnergySource.BAND, EnergySource.NONE -> null
         }
     }

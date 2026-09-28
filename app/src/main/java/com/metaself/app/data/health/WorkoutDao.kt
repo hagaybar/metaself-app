@@ -29,6 +29,37 @@ interface WorkoutDao {
     )
     fun observeWeeklyRunning(weeks: Int): Flow<List<WeekOfRunning>>
 
+    /**
+     * Every day holding a synced WALK written by [origin], hidden ones included — the days whose
+     * summaries change when that app's walks are switched on or off (D81).
+     */
+    @Query("SELECT DISTINCT epochDay FROM workouts WHERE source = 'SYNCED' AND kind = 'WALK' AND origin = :origin")
+    suspend fun syncedWalkDays(origin: String): List<Long>
+
+    /**
+     * The synced workouts of [from]..[to] during which their own writing app stored a distance reading
+     * (D81's investigation): a reading of that origin overlapping the workout's start plus its whole
+     * minutes, looked for a day either side, as the readings are filed by their own start.
+     */
+    @Query(
+        "SELECT w.id FROM workouts w WHERE w.source = 'SYNCED' AND w.epochDay BETWEEN :from AND :to " +
+            "AND EXISTS (SELECT 1 FROM health_readings r WHERE r.kind = 'DISTANCE' AND r.origin = w.origin " +
+            "AND r.epochDay BETWEEN w.epochDay - 1 AND w.epochDay + 1 " +
+            "AND r.startMillis < w.startedAtMillis + w.durationMinutes * 60000 " +
+            "AND COALESCE(r.endMillis, r.startMillis) > w.startedAtMillis)",
+    )
+    suspend fun idsWithOwnDistance(from: Long, to: Long): List<Long>
+
+    /**
+     * Visible synced workouts on [days] with no distance, or with no calories from their app (energy
+     * source NONE): the figures the copying may ask Health Connect for again.
+     */
+    @Query(
+        "SELECT * FROM workouts WHERE source = 'SYNCED' AND hidden = 0 AND epochDay IN (:days) " +
+            "AND (distanceM IS NULL OR (energyKcal IS NULL AND energySource = 'NONE')) ORDER BY startedAtMillis",
+    )
+    suspend fun missingTotalsOn(days: List<Long>): List<WorkoutEntity>
+
     @Query("SELECT * FROM workouts WHERE origin = :origin AND originId = :originId")
     suspend fun synced(origin: String, originId: String): WorkoutEntity?
 

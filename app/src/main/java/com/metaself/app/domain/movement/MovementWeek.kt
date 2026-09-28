@@ -64,6 +64,8 @@ data class MovementDay(
  *   null when no day this week has one.
  * @property averageActiveKcal the mean movement calories over the days that have a figure, rounded;
  *   days without are not counted as zero. Null when none has one.
+ * "Visible" below means neither hidden nor a walk that does not count (D81).
+ *
  * @property workoutCount visible sessions this week that are not walks (D78).
  * @property walkCount visible walks this week, counted apart from workouts (D78).
  * @property workoutMinutes every visible session's time, walks included (D78).
@@ -96,7 +98,8 @@ data class MovementWeek(
         /**
          * @param days the health record's days from four weeks before this Monday to [today]; any
          *   others are ignored.
-         * @param workouts this week's workouts, hidden ones included — they are left out here.
+         * @param workouts this week's workouts, hidden ones and uncounted walks (D81) included — both
+         *   are left out here.
          * @param mealsByDay this week's meals, by day.
          */
         fun of(
@@ -109,7 +112,7 @@ data class MovementWeek(
             val byDay = days.associateBy { it.epochDay }
             val thisWeek = (monday..today).mapNotNull { byDay[it] }
             val visible = workouts
-                .filter { !it.hidden && it.epochDay in monday..today }
+                .filter { !it.hidden && it.counted && it.epochDay in monday..today }
                 .sortedBy { it.startedAtMillis }
             val distances = thisWeek.mapNotNull { it.distanceM }
             val active = thisWeek.mapNotNull { it.activeKcal }

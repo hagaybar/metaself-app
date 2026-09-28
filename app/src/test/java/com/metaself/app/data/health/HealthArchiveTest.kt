@@ -685,6 +685,8 @@ class HealthArchiveTest {
         override suspend fun bookmark(kind: HealthKind): HealthSyncEntity? = null
         override suspend fun historyActedOn(): Boolean = false
         override suspend fun markHistoryActedOn() = Unit
+        override suspend fun sessionGaps(days: Set<Long>): List<SessionGap> = error("not used")
+        override suspend fun fillSessionTotals(id: Long, totals: SessionTotals): Unit = error("not used")
         override suspend fun saveBookmark(bookmark: HealthSyncEntity) = Unit
         override suspend fun apply(records: List<ReadRecord>, deletedIds: List<String>): Set<Long> {
             applied += records

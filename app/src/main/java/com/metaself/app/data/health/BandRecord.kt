@@ -17,18 +17,23 @@ fun interface BandRecord {
 }
 
 /**
- * Four reads: the readings counted by the one new query, and the window's nights, workouts and days
- * through queries that already exist. Not one transaction: a copy landing between two reads can make
+ * Six reads: the readings counted by their query; the window's nights, workouts and days; which of
+ * the workouts their own app wrote a distance during; and whose walks do not count (D81). Not one transaction: a copy landing between two reads can make
  * one section a moment newer than another, which a page of counts can bear.
  */
-class RoomBandRecord @Inject constructor(private val database: MetaSelfDatabase) : BandRecord {
+class RoomBandRecord @Inject constructor(
+    private val database: MetaSelfDatabase,
+    private val walks: WalkChoices,
+) : BandRecord {
 
     override suspend fun report(fromDay: Long, toDay: Long): BandReport {
         val readings = database.healthReadingDao().countsByDay(READING_KINDS, fromDay, toDay).mapNotNull { it.toArrival() }
         val nights = database.sleepDao().sessionsBetween(fromDay, toDay).map { it.toArrival() }
-        val workouts = database.workoutDao().observeBetween(fromDay, toDay).first().map { it.toArrived() }
+        val ownDistance = database.workoutDao().idsWithOwnDistance(fromDay, toDay).toSet()
+        val workouts = database.workoutDao().observeBetween(fromDay, toDay).first()
+            .map { it.toArrived(ownDistance = it.id in ownDistance) }
         val days = database.healthDayDao().observeBetween(fromDay, toDay).first().map { it.toCoverage() }
-        return BandReport.of(fromDay, toDay, readings + nights, workouts, days)
+        return BandReport.of(fromDay, toDay, readings + nights, workouts, days, walks.uncounted.first())
     }
 
     private companion object {
@@ -42,7 +47,7 @@ fun ReadingCount.toArrival(): Arrival? = HealthKind.parse(kind)?.let { Arrival(i
 fun SleepSessionEntity.toArrival(): Arrival = Arrival(HealthKind.SLEEP, origin, epochDay, 1)
 
 /** Anything but TYPED reads as copied, as `toWorkout` reads an unknown source. */
-fun WorkoutEntity.toArrived(): ArrivedWorkout = ArrivedWorkout(
+fun WorkoutEntity.toArrived(ownDistance: Boolean = false): ArrivedWorkout = ArrivedWorkout(
     epochDay = epochDay,
     kind = WorkoutKind.parse(kind),
     typed = source == "TYPED",
@@ -51,6 +56,7 @@ fun WorkoutEntity.toArrived(): ArrivedWorkout = ArrivedWorkout(
     hasCalories = energyKcal != null && energySource == "BAND",
     hasHeartRate = avgHeartRate != null,
     hasTitle = !title.isNullOrBlank(),
+    ownDistance = ownDistance,
 )
 
 fun HealthDayEntity.toCoverage(): DayCoverage = DayCoverage(
