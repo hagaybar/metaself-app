@@ -94,8 +94,28 @@ class TrainerViewModelTest {
         assertThat(problems.recorded.map { it.kind }).containsExactly("trainer")
     }
 
+    /** Past midnight, the last three days move with the calendar: yesterday's session waits no more. */
+    @Test
+    fun `back on the screen on a new day, today is the new day`() = runTest {
+        val walk = walk(1, TEST_EPOCH_DAY - 2)
+        record.workouts.value = listOf(walk)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.home!!.waiting).isEqualTo(walk)
+
+        date = LocalDate.ofEpochDay(TEST_EPOCH_DAY + 1)
+        viewModel.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.today).isEqualTo(TEST_EPOCH_DAY + 1)
+        assertThat(viewModel.state.value.home!!.waiting).isNull()
+    }
+
+    private var date: LocalDate = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
+
     private fun viewModel(movement: MovementRecord = record) = TrainerViewModel(
-        movement, store, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW }, problems,
+        movement, store, Today { date }, Now { NOW }, problems,
     )
 
     /** A synced forty-minute walk at 07:00 on [day]. Invented. */

@@ -358,6 +358,11 @@ fun MetaSelfNavHost(
         composable(Destination.Trainer.route) {
             val trainerViewModel: TrainerViewModel = hiltViewModel()
             val trainerState by trainerViewModel.state.collectAsStateWithLifecycle()
+            // Left open past midnight, its last three days move to the new day on return.
+            LifecycleResumeEffect(trainerViewModel) {
+                trainerViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
             TrainerScreen(
                 state = trainerState,
                 onBack = { navController.popBackStack() },

@@ -61,15 +61,18 @@ fun TrainerScreen(
                     }
                 }
                 Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_plan_next)) }
+                // D85: a card with its title and Open, drawn as the waiting session's is.
                 home.keptPlan?.let { kept ->
-                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                        Text(
-                            stringResource(R.string.trainer_kept_plan),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(kept.plan.title, style = MaterialTheme.typography.titleSmall)
-                        TextButton(onClick = onOpenKept) { Text(stringResource(R.string.trainer_open_plan)) }
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                            Text(
+                                stringResource(R.string.trainer_kept_plan),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(kept.plan.title, style = MaterialTheme.typography.titleSmall)
+                            TextButton(onClick = onOpenKept) { Text(stringResource(R.string.trainer_open_plan)) }
+                        }
                     }
                 }
                 if (home.earlier.isNotEmpty()) {
