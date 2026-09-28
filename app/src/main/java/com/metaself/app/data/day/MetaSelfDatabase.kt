@@ -26,6 +26,9 @@ import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.product.ProductDao
 import com.metaself.app.data.product.ProductEntity
+import com.metaself.app.data.trainer.TrainerDao
+import com.metaself.app.data.trainer.TrainerPlanEntity
+import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.portion.Portions
@@ -58,8 +61,10 @@ import com.metaself.app.domain.portion.Portions
         MovementCorrectionEntity::class,
         HealthSyncEntity::class,
         ArchiveMonthEntity::class,
+        TrainerPlanEntity::class,
+        TrainerReviewEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {
@@ -85,6 +90,8 @@ abstract class MetaSelfDatabase : RoomDatabase() {
     abstract fun movementCorrectionDao(): MovementCorrectionDao
 
     abstract fun healthBookkeepingDao(): HealthBookkeepingDao
+
+    abstract fun trainerDao(): TrainerDao
 
     companion object {
 
