@@ -339,14 +339,65 @@ class SessionWitnessesTest {
             aSyncedWorkout(id = 1, distanceM = 3_000),
             fromFile(id = 2, distanceM = 2_000),
         ).single()
-        val typedOther = combine(fromFile(id = 2, distanceM = 2_000).copy(distanceSource = null, steps = 1), aSyncedWorkout(id = 1)).single()
 
         assertThat(widest.distanceM).isEqualTo(4_000)
         assertThat(widest.otherDistance).isEqualTo(OtherDistance(2_000, DistanceWitness.FILE))
-        assertThat(typedOther.otherDistance).isNull()
         val againstTyped = combine(fromFile(id = 2, distanceM = 4_000), typed(id = 3).copy(distanceM = 3_000)).single()
         assertThat(againstTyped.distanceM).isEqualTo(3_000)
         assertThat(againstTyped.otherDistance).isEqualTo(OtherDistance(4_000, DistanceWitness.FILE))
+    }
+
+    @Test
+    fun `a second typed distance that disagrees is said as typed`() {
+        val session = combine(typed(id = 3).copy(distanceM = 4_000), typed(id = 4, minutes = 40).copy(distanceM = 3_000)).single()
+
+        assertThat(session.distanceM).isEqualTo(4_000)
+        assertThat(session.distanceSource).isEqualTo(WorkoutFigureSource.TYPED)
+        assertThat(session.otherDistance).isEqualTo(OtherDistance(3_000, DistanceWitness.TYPED))
+    }
+
+    // --- Pace --------------------------------------------------------------------------------------
+
+    @Test
+    fun `a distance from another witness is paced over that witness's minutes`() {
+        // The lead is 60 minutes with no distance; the file's 5 km took 50 minutes: 10:00 a km.
+        val session = combine(aSyncedWorkout(id = 1, minutes = 60, kind = WorkoutKind.RUN), fromFile(id = 2, minutes = 50, distanceM = 5_000)).single()
+
+        assertThat(session.durationMinutes).isEqualTo(60)
+        assertThat(session.paceSecondsPerKm).isEqualTo(600)
+    }
+
+    @Test
+    fun `the lead's own distance is paced over its own minutes`() {
+        val session = combine(aSyncedWorkout(id = 1, minutes = 50, distanceM = 5_000), aSyncedWorkout(id = 2, minutes = 40)).single()
+
+        assertThat(session.paceSecondsPerKm).isEqualTo(600)
+        assertThat(session.distanceMinutes).isNull()
+    }
+
+    // --- Put back together ---------------------------------------------------------------------
+
+    @Test
+    fun `sessions split from an overlapping partner carry the split, so it can be undone`() {
+        val split = SessionSplit(1, 2)
+        val sessions = combine(aSyncedWorkout(id = 1), aSyncedWorkout(id = 2, minutes = 50), splits = setOf(split))
+
+        assertThat(sessions.map { it.splits }).containsExactly(listOf(split), listOf(split))
+    }
+
+    @Test
+    fun `a split between sessions that no longer overlap is not carried, and one still apart is carried by both sides`() {
+        val apart = combine(aSyncedWorkout(id = 1, from = 0, minutes = 30), aSyncedWorkout(id = 2, from = 100, minutes = 30), splits = setOf(SessionSplit(1, 2)))
+        val chained = combine(
+            aSyncedWorkout(id = 1),
+            aSyncedWorkout(id = 2, minutes = 50),
+            aSyncedWorkout(id = 3, minutes = 40),
+            splits = setOf(SessionSplit(1, 2)),
+        )
+
+        assertThat(apart.flatMap { it.splits }).isEmpty()
+        assertThat(chained.single { 2L in it.witnessIds }.splits).containsExactly(SessionSplit(1, 2))
+        assertThat(chained.single { 1L in it.witnessIds }.splits).containsExactly(SessionSplit(1, 2))
     }
 
     // --- A typed witness, splitting and hiding ---------------------------------------------------

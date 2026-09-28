@@ -1,5 +1,7 @@
 package com.metaself.app.domain.movement
 
+import java.util.Collections
+import java.util.IdentityHashMap
 import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
@@ -35,7 +37,8 @@ data class OtherDistance(val metres: Int, val saidBy: DistanceWitness)
  * skipped — so a third workout overlapping both halves of a split joins the first it meets, never both.
  *
  * A hidden workout (hidden on purpose) and a walk that does not count (D81) witness nothing; they pass
- * through unchanged, as does a session recorded once.
+ * through unchanged, as does a session recorded once. A session split from one it still overlaps
+ * carries that split ([Workout.splits]), so it can be put back together.
  */
 object SessionWitnesses {
 
@@ -52,11 +55,16 @@ object SessionWitnesses {
         val byStart = candidates.sortedWith(compareBy<Workout>({ it.startedAtMillis }, { it.id }))
 
         val edges = mutableListOf<Pair<Workout, Workout>>()
+        // Splits between workouts that still overlap: what "Put back together" can remove.
+        val standing = mutableSetOf<SessionSplit>()
         byStart.forEachIndexed { i, a ->
             var j = i + 1
             while (j < byStart.size && byStart[j].startedAtMillis <= endOf(a)) {
                 val b = byStart[j]
-                if (overlaps(a, b)) edges += if (a.id < b.id) a to b else b to a
+                if (overlaps(a, b)) {
+                    edges += if (a.id < b.id) a to b else b to a
+                    SessionSplit.of(a.id, b.id).takeIf { it in splitSet }?.let { standing += it }
+                }
                 j++
             }
         }
@@ -74,10 +82,14 @@ object SessionWitnesses {
             second.forEach { groupOf[it.id] = first }
         }
 
-        val groups = mutableListOf<MutableSet<Workout>>()
-        groupOf.values.forEach { group -> if (groups.none { it === group }) groups += group }
+        val groups = Collections.newSetFromMap(IdentityHashMap<MutableSet<Workout>, Boolean>())
+        groups.addAll(groupOf.values)
         val sessions = groups.map { group ->
-            if (group.size == 1) group.single() else session(group.toList())
+            val session = if (group.size == 1) group.single() else session(group.toList())
+            val ids = group.mapTo(HashSet()) { it.id }
+            val itsSplits = standing.filter { it.firstId in ids || it.secondId in ids }
+                .sortedWith(compareBy<SessionSplit>({ it.firstId }, { it.secondId }))
+            if (itsSplits.isEmpty()) session else session.copy(splits = itsSplits)
         }
         return (sessions + aside).sortedWith(compareBy<Workout>({ it.startedAtMillis }, { it.id }))
     }
@@ -157,6 +169,8 @@ object SessionWitnesses {
             counted = true,
             witnesses = ordered,
             otherDistance = distanceFrom?.let { chosen -> otherDistance(chosen, ordered) },
+            // Paced over the minutes the distance was measured in, never another witness's.
+            distanceMinutes = distanceFrom?.takeIf { it !== lead }?.durationMinutes,
         )
     }
 
