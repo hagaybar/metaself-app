@@ -74,12 +74,17 @@ data class Rhythm(val sessionsSoFar: Int, val daysLeft: Int)
  * conversation is kept or replayed. There is deliberately no field for a meal, sleep, a raw reading,
  * a single weigh-in, a target weight, a name, or an app or device name; `TrainerRequestTest` fails if
  * one is added.
+ *
+ * @property aboutMe the owner's standing note (D90), trimmed, sent unchanged; null when there is none.
+ * @property months a line for each of up to twelve months before the 42 days (D89), oldest first.
  */
 data class TrainerRequest(
     val question: TrainerQuestion,
     val today: Long,
+    val aboutMe: String?,
     val sessions: List<SessionFacts>,
     val weeks: List<WeekFacts>,
+    val months: List<MonthFacts>,
     val weight: WeightFacts?,
     val goal: GoalFacts?,
     val body: BodyFacts?,
@@ -97,12 +102,19 @@ data class TrainerRequest(
         /** The first day whose summaries the six weeks need: the Monday five weeks before this one. */
         fun firstSummaryDay(today: Long): Long = MovementWeek.mondayOf(today) - 7L * (WEEKS - 1)
 
+        /** The first day the monthly lines (D89) can need: the first of the month a year before this one. */
+        fun firstRecordDay(today: Long): Long = MonthlyLines.firstDay(today)
+
         /**
-         * @param workouts any workouts; only the visible, counted ones of the 42 days are sent.
+         * @param workouts any workouts; only the visible, counted ones of the 42 days are sent as
+         *   sessions, and those of the months before them are counted into the monthly lines (D89).
          * @param reviews any reviews; each is attached to its session.
          * @param plans the stored plans the reviews name, by id.
-         * @param days the daily summaries from [firstSummaryDay] to [today]; meals are never read.
+         * @param days the daily summaries from [firstSummaryDay] (or [firstRecordDay], for the monthly
+         *   lines) to [today]; meals are never read.
          * @param earlierFeedback newest first; the first [FEEDBACK_COUNT] are sent.
+         * @param earliestDay the first day the record holds anything; months before it have no line (D89).
+         * @param aboutMe the owner's note (D90), as stored.
          */
         fun of(
             question: TrainerQuestion,
@@ -115,6 +127,8 @@ data class TrainerRequest(
             profile: Profile?,
             currentYear: Int,
             earlierFeedback: List<Feedback>,
+            earliestDay: Long? = null,
+            aboutMe: String? = null,
         ): TrainerRequest {
             val first = firstDay(today)
             val byWorkout = reviews.associateBy { it.workoutId }
@@ -135,8 +149,10 @@ data class TrainerRequest(
             return TrainerRequest(
                 question = question,
                 today = today,
+                aboutMe = aboutMe?.trim()?.takeIf { it.isNotEmpty() },
                 sessions = sessions,
                 weeks = weeks,
+                months = MonthlyLines.of(today, earliestDay, workouts, reviews, days, trend),
                 weight = trend.lastOrNull()?.let { WeightFacts(it.trendKg, it.reading.epochDay, rate?.kgPerWeek, rate?.spanDays) },
                 goal = profile?.let { GoalFacts(it.goal.direction, it.goal.kgPerWeek) },
                 body = profile?.let { BodyFacts(it.ageYears(currentYear), it.sex, it.heightCm) },

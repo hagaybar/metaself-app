@@ -143,6 +143,41 @@ class WorkoutFileMatchTest {
         assertThat(WorkoutFileMatch.asWorkout(file(seconds = 10), zone).durationMinutes).isEqualTo(1)
     }
 
+    /**
+     * D91: a file of 60 minutes at 10:30 matches nothing (the walk is 30 minutes at 10:00). The day's
+     * walks it may fill are offered, by start; not the run, the hidden walk, the walk typed by hand, or
+     * the walk of another day.
+     */
+    @Test
+    fun `a file that matches nothing is offered the sessions of its kind on its day`() {
+        val file = file(written = "2026-09-03T10:30", seconds = 3_600, sport = "Walking")
+        val evening = synced(id = 2, startUtc = "2026-09-03T13:00:00Z", minutes = 45)
+        val run = synced(id = 3, startUtc = "2026-09-03T06:00:00Z", minutes = 60).copy(kind = WorkoutKind.RUN)
+        val hidden = synced(id = 4, startUtc = "2026-09-03T07:00:00Z", minutes = 60).copy(hidden = true)
+        val typed = aTypedWorkout(id = 5, kind = WorkoutKind.WALK, startedAtMillis = walk.startedAtMillis, minutes = 60)
+        val yesterday = synced(id = 6, startUtc = "2026-09-02T05:30:00Z", minutes = 60).copy(epochDay = TEST_EPOCH_DAY - 1)
+        val stored = listOf(evening, run, hidden, typed, yesterday, walk)
+
+        assertThat(WorkoutFileMatch.matches(file, stored, zone)).isEmpty()
+        assertThat(WorkoutFileMatch.sameKind(file, stored, zone)).containsExactly(walk, evening).inOrder()
+        assertThat(WorkoutFileMatch.sameKind(file.copy(sport = "Running"), stored, zone)).containsExactly(run)
+        assertThat(WorkoutFileMatch.sameKind(file.copy(sport = "Biking"), stored, zone)).isEmpty()
+    }
+
+    /**
+     * D91: both readings of the start count. Written 21:00 on 2 September with a Z that really is UTC,
+     * the file is 02:00 on 3 September in the phone's UTC+5: a walk on either day is offered.
+     */
+    @Test
+    fun `sessions of its kind on either reading's day are offered`() {
+        val file = file(written = "2026-09-02T21:00", instantUtc = "2026-09-02T21:00:00Z", seconds = 3_600, sport = "Walking")
+        val lateOnSecond = synced(id = 2, startUtc = "2026-09-02T15:00:00Z", minutes = 30).copy(epochDay = TEST_EPOCH_DAY - 1)
+        val earlyOnThird = synced(id = 3, startUtc = "2026-09-02T20:00:00Z", minutes = 30)
+
+        assertThat(WorkoutFileMatch.sameKind(file, listOf(earlyOnThird, lateOnSecond), zone))
+            .containsExactly(lateOnSecond, earlyOnThird).inOrder()
+    }
+
     private fun synced(id: Long, startUtc: String, minutes: Int) = Workout(
         id = id, epochDay = TEST_EPOCH_DAY, startedAtMillis = Instant.parse(startUtc).toEpochMilli(),
         durationMinutes = minutes, kind = WorkoutKind.WALK, title = "Walking", distanceM = null,

@@ -43,6 +43,12 @@ data class Backup(
      */
     @SerialName("trainer_reviews_without_workout")
     val trainerReviewsWithoutWorkout: List<BackupTrainerReview> = emptyList(),
+    /**
+     * D90: the owner's note for the trainer, "" when none. Null only in a file from before version 6,
+     * which had no note — and restoring one leaves the phone's note as it is, as a file with no AI
+     * settings leaves those.
+     */
+    @SerialName("about_me") val aboutMe: String? = null,
 ) {
     companion object {
         /**
@@ -68,8 +74,12 @@ data class Backup(
          * its workout, so a review needs no workout id in the file. A review whose workout is gone is
          * written on its own, in [trainerReviewsWithoutWorkout]. Restoring a version 1–4 file leaves
          * no plans and no reviews — a restore replaces.
+         *
+         * Version 6 adds the owner's note about himself for the trainer (D90), [aboutMe]. A version 1–5
+         * file has none, and restoring one leaves the phone's note as it is: the note is a setting,
+         * restored as the AI settings are, not part of the replaced record.
          */
-        const val CURRENT_VERSION = 5
+        const val CURRENT_VERSION = 6
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1

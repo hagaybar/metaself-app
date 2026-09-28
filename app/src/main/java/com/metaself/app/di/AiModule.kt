@@ -17,6 +17,8 @@ import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.AboutMeStore
+import com.metaself.app.data.trainer.DataStoreAboutMeStore
 import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
@@ -68,6 +70,11 @@ object AiModule {
         store: DataStore<Preferences>,
         today: Today,
     ): AiSettingsStore = DataStoreAiSettingsStore(store, today)
+
+    /** The owner's note for the trainer (D90), beside the AI settings. */
+    @Provides
+    @Singleton
+    fun provideAboutMeStore(store: DataStore<Preferences>): AboutMeStore = DataStoreAboutMeStore(store)
 
     /** What each model accepts, learned from its refusals (D57), beside the model's name. */
     @Provides

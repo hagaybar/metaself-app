@@ -1,5 +1,6 @@
 package com.metaself.app.ui.trainer
 
+import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.Workout
@@ -120,6 +121,15 @@ object TrainerWording {
         return if (parts.isEmpty()) null else "Heart " + parts.joinToString(SEP) + " (from the readings)"
     }
 
+    /** D90: the Trainer screen's About me card when no note is written yet. */
+    const val ABOUT_ME_EMPTY = "Tell the trainer about yourself — injuries, likes, what you're aiming for"
+
+    /** D90: the card's text — the note (the screen shows its first two lines), or [ABOUT_ME_EMPTY]. */
+    fun aboutMePreview(note: String): String = note.trim().ifEmpty { ABOUT_ME_EMPTY }
+
+    /** D90: "14 / 1,000" — the characters used, of the most the note holds. */
+    fun aboutMeCount(text: String): String = "${number(text.length)} / ${number(AboutMeStore.MAX)}"
+
     fun planned(title: String): String = "Planned: $title"
 
     fun minutes(step: PlanStep): String = "${step.fromMinute}–${step.toMinute}"
@@ -157,15 +167,19 @@ object TrainerWording {
         "THIS WEEK" to feedback.thisWeek,
     ).filter { it.second.isNotBlank() }
 
-    /** Design question 20: everything one request holds (D84), under the plan form's ask button. */
+    /**
+     * Design question 20: everything one request holds (D84), under the plan form's ask button — the
+     * note about yourself (D90) and the monthly lines (D89) included.
+     */
     fun privacyPlan(ceiling: Int): String = privacy("these answers", ceiling)
 
     /** Design question 20: everything one request holds (D84), under the review's save-and-ask button. */
     fun privacyReview(ceiling: Int): String = privacy("this session and your words", ceiling)
 
     private fun privacy(first: String, ceiling: Int): String =
-        "Sends to OpenAI, with your key: $first; your sessions of the last six weeks, with your words on them; " +
-            "weekly totals; your weight trend and goal rate; your age, sex and height; " +
+        "Sends to OpenAI, with your key: $first; your note about yourself; " +
+            "your sessions of the last six weeks, with your words on them; weekly totals; " +
+            "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; " +
             "and the trainer's last three feedbacks. One of today's $ceiling AI requests."
 
     /** Design question 16. */

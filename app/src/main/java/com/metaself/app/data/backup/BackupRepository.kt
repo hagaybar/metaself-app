@@ -19,6 +19,7 @@ import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
+import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
@@ -147,6 +148,7 @@ class BackupRepository @Inject constructor(
     private val reminders: ReminderStore,
     private val scheduler: ReminderScheduler,
     private val ai: AiSettingsStore,
+    private val aboutMe: AboutMeStore,
     private val foods: FoodRepository,
     private val savedMeals: SavedMealRepository,
     private val transaction: DatabaseTransaction,
@@ -205,6 +207,7 @@ class BackupRepository @Inject constructor(
             },
             trainerPlans = trainer.allPlans().map { it.toBackup() },
             trainerReviewsWithoutWorkout = reviews.withoutWorkout,
+            aboutMe = aboutMe.note.first(),
         )
     }
 
@@ -433,6 +436,7 @@ class BackupRepository @Inject constructor(
             arrival = backup.arrival?.let { GoalArrival(it.targetKg, it.epochDay) },
             milestones = backup.milestones.mapKeys { Milestone(it.key) },
             ai = backup.ai,
+            aboutMe = backup.aboutMe,
             reminder = backup.reminder?.let { Reminder(it.enabled, it.hour, it.minute) },
             workouts = workoutRows,
             nights = backup.sleep.dedupByRecord().map { night ->
@@ -561,6 +565,8 @@ class BackupRepository @Inject constructor(
             ai.setModel(it.model)
             ai.setDailyCeiling(it.dailyCeiling)
         }
+        // D90: a version 1–5 file has no note, and leaves the phone's as it is.
+        prepared.aboutMe?.let { aboutMe.save(it) }
         prepared.reminder?.let { reminders.save(it) }
     }
 
@@ -590,6 +596,7 @@ class BackupRepository @Inject constructor(
         val arrival: GoalArrival?,
         val milestones: Map<Milestone, Long>,
         val ai: BackupAi?,
+        val aboutMe: String?,
         val reminder: Reminder?,
         val workouts: List<WorkoutEntity>,
         /** Each night with its stages; the stages learn their night's id when it is inserted. */

@@ -10,6 +10,7 @@ import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AskTheTrainer
+import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
@@ -72,7 +73,7 @@ internal object TrainerScreens {
     }
 
     fun ask(record: FakeMovementRecord, store: TrainerStore, trainer: Trainer) = AskTheTrainer(
-        record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer,
+        record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer, InMemoryAboutMeStore(),
         today, Now { NOW }, CurrentYear { TEST_YEAR },
     )
 }

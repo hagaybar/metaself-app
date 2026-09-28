@@ -10,6 +10,7 @@ import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
+import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
@@ -45,6 +46,7 @@ class AskTheTrainerTest {
     private val store = FakeTrainerStore()
     private val weights = InMemoryWeightRepository()
     private val trainer = FakeTrainer()
+    private val aboutMe = InMemoryAboutMeStore()
 
     @BeforeEach
     fun setUp() {
@@ -203,8 +205,32 @@ class AskTheTrainerTest {
         assertThat(trainer.asked.single().earlierFeedback).containsExactly(FEEDBACK)
     }
 
+    /**
+     * D89, D90: the request reads a year back — the record begins on 1 June 2026, and June's walk is
+     * in June's line, though it is far outside the 42 days — and carries the owner's note.
+     */
+    @Test
+    fun `the request holds the months and the note`() = runTest {
+        val juneWalk = walk(id = 2, day = JUNE_1 + 9)
+        record.workouts.value = record.workouts.value + juneWalk
+        record.days.value = listOf(HealthDay(JUNE_1 + 9, steps = 6_000))
+        record.earliest.value = JUNE_1
+        aboutMe.save("Invented note.")
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+
+        ask().suggest(ANSWERS)
+
+        val asked = trainer.asked.single()
+        assertThat(asked.aboutMe).isEqualTo("Invented note.")
+        val june = asked.months.first()
+        assertThat(june.firstDay).isEqualTo(JUNE_1)
+        assertThat(june.sessions).isEqualTo(1)
+        assertThat(june.stepsADay).isEqualTo(6_000)
+        assertThat(asked.sessions.map { it.epochDay }).containsExactly(TEST_EPOCH_DAY)
+    }
+
     private fun ask() = AskTheTrainer(
-        record, store, weights, FakeProfileRepository(aProfile()), trainer,
+        record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe,
         Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW }, CurrentYear { TEST_YEAR },
     )
 
@@ -221,6 +247,7 @@ class AskTheTrainerTest {
         const val DAY = 86_400_000L
         const val HOUR = 3_600_000L
         const val NOW = TEST_EPOCH_DAY * DAY + 15 * HOUR
+        val JUNE_1 = LocalDate.of(2026, 6, 1).toEpochDay()
         val ANSWERS = PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE, "Invented words.")
         val PLAN = SessionPlan(
             "Steady walk",

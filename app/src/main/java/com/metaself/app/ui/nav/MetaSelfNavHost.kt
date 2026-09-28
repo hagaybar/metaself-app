@@ -65,6 +65,8 @@ import com.metaself.app.ui.screen.weight.WeightViewModel
 import com.metaself.app.ui.screen.movement.MovementScreen
 import com.metaself.app.ui.screen.movement.MovementViewModel
 import com.metaself.app.ui.screen.movement.TakeSharedWorkoutFile
+import com.metaself.app.ui.screen.trainer.AboutMeScreen
+import com.metaself.app.ui.screen.trainer.AboutMeViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionScreen
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.screen.trainer.ReviewSessionScreen
@@ -99,6 +101,9 @@ sealed class Destination(val route: String) {
         fun form(): String = "trainer/plan?show=" + PlanSessionViewModel.FORM
         fun kept(): String = "trainer/plan?show=" + PlanSessionViewModel.KEPT
     }
+
+    /** About me (D90): the owner's note for the trainer. */
+    data object AboutMe : Destination("trainer/about")
 
     /** How did it go (D87), for one session. */
     data object ReviewSession : Destination("trainer/review/{workoutId}") {
@@ -369,6 +374,19 @@ fun MetaSelfNavHost(
                 onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
                 onPlan = { navController.navigate(Destination.PlanSession.form()) },
                 onOpenKept = { navController.navigate(Destination.PlanSession.kept()) },
+                onAboutMe = { navController.navigate(Destination.AboutMe.route) },
+            )
+        }
+
+        composable(Destination.AboutMe.route) {
+            val aboutMeViewModel: AboutMeViewModel = hiltViewModel()
+            val aboutMeState by aboutMeViewModel.state.collectAsStateWithLifecycle()
+            AboutMeScreen(
+                state = aboutMeState,
+                onBack = { navController.popBackStack() },
+                onEdit = aboutMeViewModel::edit,
+                onSave = aboutMeViewModel::save,
+                onSaved = { navController.popBackStack() },
             )
         }
 

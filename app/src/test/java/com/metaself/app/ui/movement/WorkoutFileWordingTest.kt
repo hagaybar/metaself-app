@@ -61,6 +61,32 @@ class WorkoutFileWordingTest {
             .isEqualTo("This session already had everything in the file; nothing changed.")
     }
 
+    /** D91: with the day's sessions of its kind to offer, the line asks; the time is the file's. */
+    @Test
+    fun `no exact match with sessions of its kind asks which`() {
+        val half = file.copy(writtenAt = LocalDateTime.of(2026, 9, 3, 10, 30))
+
+        assertThat(line(ImportOutcome.NoMatch(half, listOf(walk))))
+            .isEqualTo("No session matches this file exactly (Thu 3 Sep 10:30). Is it one of these?")
+        assertThat(WorkoutFileWording.OR_ADD).isEqualTo("Or, if it is a session the record does not have:")
+        assertThat(WorkoutFileWording.choice(walk, zone)).isEqualTo("Walking · 10:00 · 40 min")
+    }
+
+    /**
+     * The header's time and the offered sessions' times are both wall clock in the phone's zone — the
+     * reading "Add it as a workout" stores — so they compare directly, whatever marker the file gave.
+     * Zone UTC+5: a file written 10:30 with a Z says 10:30, as a walk added from it would.
+     */
+    @Test
+    fun `the header's time is the file's wall clock, as the sessions' times are`() {
+        val plus5 = ZoneOffset.ofHours(5)
+        val marked = file.copy(writtenAt = LocalDateTime.of(2026, 9, 3, 10, 30), instant = Instant.parse("2026-09-03T10:30:00Z"))
+        val added = com.metaself.app.domain.movement.WorkoutFileMatch.asWorkout(marked, plus5)
+
+        assertThat(WorkoutFileWording.line(ImportOutcome.NoMatch(marked, listOf(walk)), plus5)).contains("(Thu 3 Sep 10:30)")
+        assertThat(WorkoutFileWording.choice(added, plus5)).contains(" · 10:30 · ")
+    }
+
     @Test
     fun `no match, several, an added workout and a failed write each have their line`() {
         assertThat(line(ImportOutcome.NoMatch(file))).isEqualTo("No workout matches this file (Thu 3 Sep 10:00).")

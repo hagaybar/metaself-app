@@ -210,8 +210,19 @@ private fun WorkoutFileLines(
                     },
                 )
                 when (outcome) {
-                    is ImportOutcome.NoMatch -> TextButton(onClick = onAdd, enabled = idle) {
-                        Text(stringResource(R.string.movement_file_add))
+                    // D91: the day's sessions of the file's kind first, then adding it under its own line.
+                    is ImportOutcome.NoMatch -> {
+                        outcome.sameKind.forEach { workout ->
+                            TextButton(onClick = { onChoose(workout.id) }, enabled = idle) {
+                                Text(WorkoutFileWording.choice(workout, zone))
+                            }
+                        }
+                        if (outcome.sameKind.isNotEmpty()) {
+                            Text(WorkoutFileWording.OR_ADD, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        TextButton(onClick = onAdd, enabled = idle) {
+                            Text(stringResource(R.string.movement_file_add))
+                        }
                     }
                     is ImportOutcome.Several -> outcome.choices.forEach { workout ->
                         TextButton(onClick = { onChoose(workout.id) }, enabled = idle) {
@@ -381,7 +392,7 @@ private fun DayRow(
             )
         }
         if (open) {
-            val details = MovementWeekWording.detailRows(day)
+            val details = MovementWeekWording.detailRows(day, ZoneId.systemDefault())
             if (details.isNotEmpty()) {
                 Column(
                     modifier = Modifier

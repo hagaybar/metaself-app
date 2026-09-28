@@ -100,14 +100,14 @@ class TrainerWordingTest {
         assertThat(TrainerWording.FROM_TRAINER).isEqualTo("From the AI trainer · advice, not a measurement")
         assertThat(TrainerWording.privacyPlan(30)).isEqualTo(
             "Sends to OpenAI, with your key: these answers; " +
-                "your sessions of the last six weeks, with your words on them; weekly totals; " +
-                "your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
+                "your note about yourself; your sessions of the last six weeks, with your words on them; weekly totals; " +
+                "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
                 "One of today's 30 AI requests.",
         )
         assertThat(TrainerWording.privacyReview(30)).isEqualTo(
             "Sends to OpenAI, with your key: this session and your words; " +
-                "your sessions of the last six weeks, with your words on them; weekly totals; " +
-                "your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
+                "your note about yourself; your sessions of the last six weeks, with your words on them; weekly totals; " +
+                "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
                 "One of today's 30 AI requests.",
         )
         assertThat(TrainerWording.planned("Steady walk")).isEqualTo("Planned: Steady walk")

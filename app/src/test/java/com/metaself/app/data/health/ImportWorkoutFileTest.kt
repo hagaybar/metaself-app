@@ -114,6 +114,45 @@ class ImportWorkoutFileTest {
         assertThat(store.rows.first { it.id == 1L }.distanceM).isNull()
     }
 
+    /** D91: a file of 30 minutes that finds no partner lists the day's walk it might be, which can then be chosen. */
+    @Test
+    fun `no match on a day with a session of its kind offers it, and choosing it fills it`() = runTest {
+        val longer = walk.copy(durationMinutes = 60)
+        store.rows += longer
+        files.texts[URI] = tcx(metres = 3_000)
+
+        val none = import.import(URI)
+
+        assertThat(none).isInstanceOf(ImportOutcome.NoMatch::class.java)
+        none as ImportOutcome.NoMatch
+        assertThat(none.sameKind).containsExactly(longer)
+        assertThat(store.daysAsked).hasSize(1)
+        val chosen = import.choose(none.file, 1)
+        assertThat((chosen as ImportOutcome.Filled).added).isEqualTo(AddedFigures(distanceM = 3_000))
+    }
+
+    /** D91: a session hidden between the offer and the tap is not filled; the offer is made again without it. */
+    @Test
+    fun `a session hidden before it is chosen is not filled`() = runTest {
+        store.rows += walk.copy(durationMinutes = 60)
+        files.texts[URI] = tcx(metres = 3_000)
+        val none = import.import(URI) as ImportOutcome.NoMatch
+        store.rows[0] = store.rows[0].copy(hidden = true)
+
+        val chosen = import.choose(none.file, 1)
+
+        assertThat(chosen).isEqualTo(ImportOutcome.NoMatch(none.file, emptyList()))
+        assertThat(store.rows.single().distanceM).isNull()
+    }
+
+    @Test
+    fun `no match on a day with no session of its kind offers none`() = runTest {
+        store.rows += walk.copy(durationMinutes = 60, kind = WorkoutKind.RUN)
+        files.texts[URI] = tcx(metres = 3_000)
+
+        assertThat((import.import(URI) as ImportOutcome.NoMatch).sameKind).isEmpty()
+    }
+
     @Test
     fun `a file refused for its content is said, not logged`() = runTest {
         files.texts[URI] = "not a workout"

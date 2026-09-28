@@ -196,6 +196,12 @@
     <string name="trainer_kept_plan">YOUR KEPT PLAN</string>
     <string name="trainer_open_plan">Open</string>
     <string name="trainer_earlier">EARLIER SESSIONS</string>
+    <string name="trainer_about_me">ABOUT ME</string>
+    <string name="about_me_title">About me</string>
+    <string name="about_me_help">What the trainer should always know: injuries, likes and dislikes, equipment, what the training is for. It is sent, as written, with every question to the trainer.</string>
+    <string name="about_me_field">About you</string>
+    <string name="about_me_save">Save</string>
+    <string name="about_me_saving">Saving…</string>
     <string name="trainer_unreadable">The trainer\'s record could not be read; Recent problems says why.</string>
     <string name="plan_title">Plan my next session</string>
     <string name="plan_row_what">WHAT</string>

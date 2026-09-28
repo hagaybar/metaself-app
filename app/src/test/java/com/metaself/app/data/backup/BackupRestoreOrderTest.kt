@@ -20,6 +20,7 @@ import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
+import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupAi
@@ -105,11 +106,23 @@ class BackupRestoreOrderTest {
                 "saveArrival",
                 "ai.setModel",
                 "ai.setDailyCeiling",
+                "aboutMe.save",
                 "reminders.save",
                 "commit",
                 "alarm.schedule",
             ).inOrder()
         }
+
+    /** D90: the file's note replaces the phone's, as written; a file from before the note leaves the phone's alone. */
+    @Test
+    fun `the file's note is restored, and a file without one leaves the note alone`() = runTest {
+        restorer().restore(aFile())
+        assertThat(written.getValue("aboutMe.save").first()).isEqualTo("Invented note.")
+
+        log.clear()
+        restorer().restore(aFile().copy(version = 5, aboutMe = null))
+        assertThat(log).doesNotContain("aboutMe.save")
+    }
 
     @Test
     fun `a settings write that throws rolls the database back and puts the settings back`() = runTest {
@@ -270,6 +283,7 @@ class BackupRestoreOrderTest {
                 reminders = Reminders(),
                 scheduler = Scheduler(),
                 ai = Ai(),
+                aboutMe = AboutMe(),
                 foods = Foods(),
                 savedMeals = SavedMeals(),
                 transaction = Transaction(),
@@ -367,6 +381,7 @@ class BackupRestoreOrderTest {
         arrival = BackupArrival(75.0, TEST_EPOCH_DAY),
         reminder = BackupReminder(enabled = true, hour = 20, minute = 0),
         ai = BackupAi("some-model", 30),
+        aboutMe = "Invented note.",
         workouts = listOf(
             BackupWorkout(
                 epochDay = TEST_EPOCH_DAY,
@@ -414,6 +429,7 @@ class BackupRestoreOrderTest {
         reminders = Reminders(),
         scheduler = Scheduler(),
         ai = Ai(),
+        aboutMe = AboutMe(),
         foods = Foods(),
         savedMeals = SavedMeals(),
         transaction = Transaction(),
@@ -538,6 +554,14 @@ class BackupRestoreOrderTest {
 
         override fun cancel() {
             log += "alarm.cancel"
+        }
+    }
+
+    private inner class AboutMe : AboutMeStore {
+        override val note: Flow<String> = MutableStateFlow("")
+        override suspend fun save(note: String) {
+            log += "aboutMe.save"
+            written["aboutMe.save"] = listOf(note)
         }
     }
 

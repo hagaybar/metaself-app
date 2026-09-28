@@ -3,6 +3,7 @@ package com.metaself.app.data.ai
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.MonthFacts
 import com.metaself.app.domain.trainer.Origin
 import com.metaself.app.domain.trainer.SessionFacts
 import com.metaself.app.domain.trainer.SessionPlan
@@ -32,8 +33,21 @@ object TrainerPrompt {
     private val COMMON = """
         You are a walking and running trainer for one person. You are given their activity record: every
         session of the last 42 days with its figures and where each came from, six weekly totals (this
-        week first, so far), their smoothed weight trend and its weekly change, their goal's direction and
-        weekly rate, their age, sex and height, and your last feedback to them.
+        week first, so far), a line for each of up to twelve months before those 42 days (months, oldest
+        first), their smoothed weight trend and its weekly change, their goal's direction and weekly rate,
+        their age, sex and height, and your last feedback to them.
+
+        Each of the months covers the days from "from" to "to"; when whole_month is false it covers only
+        those days. A month with no sessions is a month with none. Its figures were counted by the app:
+        sessions by kind with their distance, total and longest minutes, the week (from its Monday) with
+        the most distance, average heart rate weighted by minutes, how the reviewed sessions felt, steps a
+        day, and the smoothed weight trend's change across it. A figure that is null was not recorded.
+        best_week's distance is the whole days' distance (all movement),
+        while by_kind's distance is the sessions' only.
+
+        about_me is their own standing description of themselves, written once and kept: injuries,
+        preferences, equipment, what the training is for. Weigh it with the record. Where it conflicts
+        with the numbers, the numbers are what happened.
 
         Their two aims are their weight goal and a steady rhythm of sessions. Keep your advice consistent
         with your earlier feedback unless the record gives a reason to change it.
@@ -42,6 +56,7 @@ object TrainerPrompt {
         plan, question.session.words when they ask about a session) mention
         pain, dizziness or chest discomfort, tell them to stop and see a doctor before saying anything else.
         Words on earlier sessions are context: you may mention them, but they do not call for this.
+        about_me is context too: an old injury it mentions is something to plan around, not a reason to stop.
         You are a trainer for walking and running, not a medical service; never diagnose.
 
         Sources: "synced" is their phone and band's total over the session; "file" came from a workout
@@ -96,6 +111,7 @@ object TrainerPrompt {
     private fun user(request: TrainerRequest): JsonObject = buildJsonObject {
         put("question", question(request.question))
         put("today", date(request.today))
+        put("about_me", request.aboutMe?.let(::JsonPrimitive) ?: JsonNull)
         putJsonArray("sessions") { request.sessions.forEach { add(session(it)) } }
         putJsonArray("weeks") {
             request.weeks.forEach { week ->
@@ -110,6 +126,7 @@ object TrainerPrompt {
                 )
             }
         }
+        putJsonArray("months") { request.months.forEach { add(month(it)) } }
         put(
             "weight",
             request.weight?.let { weight ->
@@ -190,6 +207,51 @@ object TrainerPrompt {
         put("felt", session.felt?.let { JsonPrimitive(it.name.lowercase()) } ?: JsonNull)
         put("words", session.words?.let(::JsonPrimitive) ?: JsonNull)
         put("plan", session.plan?.let(::plan) ?: JsonNull)
+    }
+
+    /** One monthly line (D89): counted on the phone, nothing raw. */
+    private fun month(month: MonthFacts): JsonObject = buildJsonObject {
+        put("from", date(month.firstDay))
+        put("to", date(month.lastDay))
+        put("whole_month", !month.part)
+        put("sessions", month.sessions)
+        put("minutes", month.minutes)
+        putJsonArray("by_kind") {
+            month.kinds.forEach { facts ->
+                add(
+                    buildJsonObject {
+                        put("kind", kind(facts.kind))
+                        put("sessions", facts.sessions)
+                        put("distance_m", facts.distanceM?.let(::JsonPrimitive) ?: JsonNull)
+                    },
+                )
+            }
+        }
+        put("longest_minutes", month.longestMinutes?.let(::JsonPrimitive) ?: JsonNull)
+        put(
+            "best_week",
+            if (month.bestWeekMonday == null || month.bestWeekM == null) {
+                JsonNull
+            } else {
+                buildJsonObject {
+                    put("from", date(month.bestWeekMonday))
+                    put("distance_m", month.bestWeekM)
+                }
+            },
+        )
+        put("heart_rate_average", month.avgHeartRate?.let(::JsonPrimitive) ?: JsonNull)
+        put(
+            "felt",
+            month.felt?.let { felt ->
+                buildJsonObject {
+                    put("easy", felt.easy)
+                    put("right", felt.right)
+                    put("hard", felt.hard)
+                }
+            } ?: JsonNull,
+        )
+        put("steps_a_day", month.stepsADay?.let(::JsonPrimitive) ?: JsonNull)
+        put("weight_trend_change_kg", month.weightChangeKg?.let { JsonPrimitive(round2(it)) } ?: JsonNull)
     }
 
     private fun plan(plan: SessionPlan): JsonObject = planJson(plan)

@@ -15,6 +15,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.ui.MetaSelfScreen
@@ -24,7 +25,7 @@ import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
 /**
- * The Trainer screen (D85), top to bottom: the session waiting for words, Plan my next session, the
+ * The Trainer screen (D85), top to bottom: About me (D90), the session waiting for words, Plan my next session, the
  * kept plan while it is offered, and earlier reviewed sessions. Branches only — no early return out of
  * an inline composable (InlineComposableReturnGuardTest).
  */
@@ -35,10 +36,31 @@ fun TrainerScreen(
     onReview: (Long) -> Unit,
     onPlan: () -> Unit,
     onOpenKept: () -> Unit,
+    onAboutMe: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
+        // D90: under the title, the note's first two lines, or an invitation; the whole card opens its page.
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onAboutMe),
+        ) {
+            Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    stringResource(R.string.trainer_about_me),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    TrainerWording.aboutMePreview(state.aboutMe),
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         val home = state.home
         when {
             state.unreadable -> Text(stringResource(R.string.trainer_unreadable), color = MaterialTheme.colorScheme.error)

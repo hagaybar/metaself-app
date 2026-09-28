@@ -177,9 +177,13 @@ class MovementViewModel(
         fileStep { files.add(file) }
     }
 
-    /** One of several matching workouts was chosen for the file. */
+    /** One of several matching workouts, or of the same-kind sessions offered after no match (D91), was chosen. */
     fun chooseForFile(id: Long) {
-        val file = (fileImport.value?.outcome as? ImportOutcome.Several)?.file ?: return
+        val file = when (val outcome = fileImport.value?.outcome) {
+            is ImportOutcome.Several -> outcome.file
+            is ImportOutcome.NoMatch -> outcome.file.takeIf { outcome.sameKind.any { it.id == id } }
+            else -> null
+        } ?: return
         fileStep { files.choose(file, id) }
     }
 

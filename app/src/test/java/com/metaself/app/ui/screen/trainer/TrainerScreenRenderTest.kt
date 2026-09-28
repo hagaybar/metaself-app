@@ -111,11 +111,28 @@ class TrainerScreenRenderTest {
     @Test
     fun `an unreadable record says so`() {
         val texts = render.texts {
-            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {})
+            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {}, {})
         }
 
         assertThat(texts).contains("The trainer's record could not be read; Recent problems says why.")
         assertThat(texts).doesNotContain("Plan my next session")
+    }
+
+    /** D90: under the title, the note's first lines, or an invitation to write one; either opens its page. */
+    @Test
+    fun `the About me card shows the note or asks for one`() {
+        var opened = false
+        val empty = draw(TrainerHome(null, null, emptyList()), onAboutMe = { opened = true })
+
+        assertThat(empty).contains("ABOUT ME")
+        assertThat(empty).contains("Tell the trainer about yourself — injuries, likes, what you're aiming for")
+        assertThat(render.isDrawnBefore("ABOUT ME", "Plan my next session")).isTrue()
+        render.click("Tell the trainer")
+        assertThat(opened).isTrue()
+
+        val written = draw(TrainerHome(null, null, emptyList()), aboutMe = "Invented note.\nSecond invented line.")
+        assertThat(written).contains("Invented note.\nSecond invented line.")
+        assertThat(written).doesNotContain("Tell the trainer about yourself — injuries, likes, what you're aiming for")
     }
 
     private fun draw(
@@ -123,13 +140,16 @@ class TrainerScreenRenderTest {
         onReview: (Long) -> Unit = {},
         onPlan: () -> Unit = {},
         onOpenKept: () -> Unit = {},
+        onAboutMe: () -> Unit = {},
+        aboutMe: String = "",
     ): List<String> = render.texts {
         TrainerScreen(
-            state = TrainerViewModel.State(home = home, today = TEST_EPOCH_DAY),
+            state = TrainerViewModel.State(home = home, today = TEST_EPOCH_DAY, aboutMe = aboutMe),
             onBack = {},
             onReview = onReview,
             onPlan = onPlan,
             onOpenKept = onOpenKept,
+            onAboutMe = onAboutMe,
         )
     }
 
