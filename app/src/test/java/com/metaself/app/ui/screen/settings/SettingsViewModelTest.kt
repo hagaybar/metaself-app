@@ -39,6 +39,7 @@ import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.domain.ai.EstimateResult
@@ -642,6 +643,7 @@ class SettingsViewModelTest {
             reminders = Reminders(),
             scheduler = Scheduler(),
             ai = Ai(),
+            aboutMe = InMemoryAboutMeStore(),
             foods = FakeFoodRepository(),
             savedMeals = FakeSavedMealRepository(),
             transaction = object : DatabaseTransaction {

@@ -133,8 +133,29 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 5`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(5)
+    fun `the format is version 6`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(6)
+    }
+
+    /** D90: the owner's note about himself goes in the file, under its own name, and comes back as written. */
+    @Test
+    fun `the note about yourself survives the file`() {
+        val withNote = full.copy(aboutMe = "Invented note.\nSecond invented line.")
+
+        val text = BackupCodec.encode(withNote)
+
+        assertThat(text).contains("\"about_me\"")
+        assertThat(BackupCodec.decode(text)!!.aboutMe).isEqualTo("Invented note.\nSecond invented line.")
+    }
+
+    /** D90: every file written before the note existed stays restorable, and has none. */
+    @Test
+    fun `a version 5 file still reads, with no note`() {
+        val version5 = """{"version": 5, "exported_at": 1000, "meals": [], "weights": []}"""
+
+        val read = BackupCodec.decode(version5)!!
+
+        assertThat(read.aboutMe).isNull()
     }
 
     /** D88: a plan, and a review inside its workout, survive the file. Invented figures and words. */

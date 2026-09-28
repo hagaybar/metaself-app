@@ -48,6 +48,7 @@ import com.metaself.app.data.health.MovementCorrectionEntity
 import com.metaself.app.data.health.SleepSessionEntity
 import com.metaself.app.data.health.SleepStageEntity
 import com.metaself.app.data.health.WorkoutEntity
+import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightEntity
@@ -786,6 +787,21 @@ class BackupRoundTripTest {
         assertThat(db.trainerDao().allPlans()).isEmpty()
     }
 
+    /** D90: the note goes out with the file and comes back with it. Invented words. */
+    @Test
+    fun `the note about yourself comes back`() = runTest {
+        aboutMe.save("Invented note.")
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        assertThat(file.aboutMe).isEqualTo("Invented note.")
+        aboutMe.save("")
+        repository().restore(file)
+
+        assertThat(aboutMe.note.value).isEqualTo("Invented note.")
+    }
+
+    private val aboutMe = InMemoryAboutMeStore()
+
     /** A synced forty-minute walk starting at [startedAt]. Invented figures. */
     private fun aWalk(startedAt: Long) = WorkoutEntity(
         epochDay = 20_699, startedAtMillis = startedAt, durationMinutes = 40, kind = "WALK",
@@ -810,6 +826,7 @@ class BackupRoundTripTest {
         reminders = NoReminders(),
         scheduler = NoScheduler(),
         ai = NoAiSettings(),
+        aboutMe = aboutMe,
         foods = foods(),
         savedMeals = savedMeals,
         transaction = RoomDatabaseTransaction(db),
