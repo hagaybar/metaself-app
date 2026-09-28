@@ -113,15 +113,26 @@ class TrainerRequestTest {
         assertThat(weeks[1].sessions).isEqualTo(0)
     }
 
-    /** The weight screen's figures: the smoothed line now, and its measured weekly change. */
+    /**
+     * The weight screen's figures: the smoothed line now, and its measured weekly change. The readings
+     * differ from each other and from the line, so sending any one of them would show. Invented:
+     * 80.4, 79.2 and 78.6 kg a fortnight apart put the line at 78.80006 kg (a tenth's pull a day), and
+     * the 28 days from the first reading at 1.59994 kg down, 0.39998 kg a week.
+     */
     @Test
     fun `the weight is the trend and its measured rate, never a weigh-in`() {
-        val weight = request().weight!!
+        val readings = listOf(WeightReading(20_671, 80.4), WeightReading(20_685, 79.2), WeightReading(20_699, 78.6))
+        val request = request(readings = readings)
+        val weight = request.weight!!
 
-        assertThat(weight.trendKg).isEqualTo(80.0)
+        assertThat(weight.trendKg).isWithin(1e-4).of(78.80006)
         assertThat(weight.asOfEpochDay).isEqualTo(20_699L)
-        assertThat(weight.kgPerWeek).isEqualTo(0.0)
+        assertThat(weight.kgPerWeek!!).isWithin(1e-4).of(-0.39998)
         assertThat(weight.overDays).isEqualTo(28)
+        readings.forEach { reading ->
+            assertThat(weight.trendKg).isNotEqualTo(reading.kg)
+            assertThat(request.toString()).doesNotContain(reading.kg.toString())
+        }
         assertThat(request(readings = emptyList()).weight).isNull()
     }
 
@@ -135,7 +146,7 @@ class TrainerRequestTest {
         assertThat(request(profile = null).body).isNull()
     }
 
-    /** The rhythm is counted here, never by the model (D87). */
+    /** The rhythm is counted here, never by the model (D87). A Thursday: Friday to Sunday are left, today not counted. */
     @Test
     fun `this week's sessions so far and the days left are counted on the phone`() {
         assertThat(request().thisWeek).isEqualTo(Rhythm(sessionsSoFar = 2, daysLeft = 3))

@@ -74,25 +74,52 @@ class TrainerPromptTest {
         assertThat(session.getValue("zone_max").jsonPrimitive.content).isEqualTo("estimated")
     }
 
-    /** D84's "never sent". If this fails because the prompt's own wording used a word, rephrase the prompt. */
+    /**
+     * D84's "never sent". If this fails because the prompt's own wording used a word, rephrase the prompt.
+     *
+     * Each category has at least one value the fixtures below really hold: the title "Quillberry loop";
+     * the day's sleep (430) and resting heart rate (58); the weigh-ins (80.4, 79.2, 78.6, none equal to
+     * the smoothed line) and the profile's weight (83.0); the target (71.5). The words ("sleep",
+     * "meal", ...) and the package name have no path into a request; they stay as a guard on the prompt.
+     */
     @Test
     fun `no meal, sleep, weigh-in, target, title or app name is sent`() {
         listOf(TrainerPrompt.planBody("a-model", planRequest()), TrainerPrompt.feedbackBody("a-model", reviewRequest()))
             .map { it.lowercase() }
             .forEach { body ->
-                listOf("quillberry", "com.example", "sleep", "slept", "meal", "eaten", "breakfast", "83.0", "71.5", "430", "resting")
-                    .forEach { forbidden -> assertThat(body).doesNotContain(forbidden) }
+                listOf(
+                    "quillberry", "com.example", "sleep", "slept", "meal", "eaten", "breakfast",
+                    "83.0", "80.4", "79.2", "78.6", "71.5", "430", "58", "resting",
+                ).forEach { forbidden -> assertThat(body).doesNotContain(forbidden) }
             }
     }
 
+    /** The smoothed line goes, rounded; the fixture's weigh-ins are 80.4, 79.2 and 78.6 (invented). */
     @Test
-    fun `pain, dizziness or chest discomfort come before anything else, and it is not medical`() {
-        val system = systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))
+    fun `the weight sent is the smoothed line`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.planBody("a-model", planRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+        val weight = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("weight").jsonObject
 
-        assertThat(system).contains("pain, dizziness or chest discomfort")
-        assertThat(system).contains("stop and see a doctor")
-        assertThat(system).contains("not a medical service")
-        assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest()))).contains("pain, dizziness or chest discomfort")
+        assertThat(weight.getValue("trend_kg").jsonPrimitive.content).isEqualTo("78.8")
+    }
+
+    /**
+     * D87: the rule is about the words in the question itself — the form's words for a plan, the
+     * review's words for feedback. Words on earlier sessions are context, and do not trigger it.
+     */
+    @Test
+    fun `pain, dizziness or chest discomfort in the question come before anything else, and it is not medical`() {
+        listOf(TrainerPrompt.feedbackBody("a-model", reviewRequest()), TrainerPrompt.planBody("a-model", planRequest()))
+            .map(::systemContent)
+            .forEach { system ->
+                assertThat(system).contains("pain, dizziness or chest discomfort")
+                assertThat(system).contains("stop and see a doctor")
+                assertThat(system).contains("not a medical service")
+                assertThat(system).contains("question.words")
+                assertThat(system).contains("question.session.words")
+                assertThat(system).contains("Words on earlier sessions are context")
+                assertThat(system).doesNotContain("anywhere in this request")
+            }
     }
 
     @Test
@@ -101,6 +128,17 @@ class TrainerPromptTest {
 
         assertThat(system).contains("this_week")
         assertThat(system).contains("never count sessions yourself")
+    }
+
+    /** The days left do not count today, and the model is told so. Today is a Thursday: three are left. */
+    @Test
+    fun `the days left are named as after today`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.planBody("a-model", planRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+        val thisWeek = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("this_week").jsonObject
+
+        assertThat(thisWeek.keys).containsExactly("sessions_so_far", "days_left_after_today")
+        assertThat(thisWeek.getValue("days_left_after_today").jsonPrimitive.int).isEqualTo(3)
+        assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest()))).contains("not counting today")
     }
 
     @Test
@@ -156,7 +194,7 @@ class TrainerPromptTest {
         plans = mapOf(9L to plan),
         days = listOf(HealthDay(TEST_EPOCH_DAY, distanceM = 4_000, activeKcal = 300, sleepMinutes = 430, restingHeartRate = 58)),
         readings = listOf(
-            WeightReading(TEST_EPOCH_DAY - 28, 80.0), WeightReading(TEST_EPOCH_DAY - 14, 80.0), WeightReading(TEST_EPOCH_DAY, 80.0),
+            WeightReading(TEST_EPOCH_DAY - 28, 80.4), WeightReading(TEST_EPOCH_DAY - 14, 79.2), WeightReading(TEST_EPOCH_DAY, 78.6),
         ),
         profile = aProfile(weightKg = 83.0, goal = Goal.lose(0.5, targetKg = 71.5)),
         currentYear = TEST_YEAR, earlierFeedback = emptyList(),

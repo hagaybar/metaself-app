@@ -7,6 +7,7 @@ import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TrainerReply
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -41,16 +42,16 @@ object TrainerResponse {
         val steps = payload.getValue("steps").jsonArray.map { element ->
             val step = element.jsonObject
             PlanStep(
-                fromMinute = step.getValue("from_minute").jsonPrimitive.int,
-                toMinute = step.getValue("to_minute").jsonPrimitive.int,
-                what = step.getValue("what").jsonPrimitive.content.trim(),
-                how = step.getValue("how").jsonPrimitive.content.trim(),
+                fromMinute = step.minute("from_minute"),
+                toMinute = step.minute("to_minute"),
+                what = step.text("what"),
+                how = step.text("how"),
             )
         }
         val plan = SessionPlan(
-            title = payload.getValue("title").jsonPrimitive.content.trim(),
+            title = payload.text("title"),
             steps = steps,
-            why = payload.getValue("why").jsonPrimitive.content.trim(),
+            why = payload.text("why"),
         )
         plan.takeIf(::usable)
     }.getOrNull()
@@ -58,7 +59,7 @@ object TrainerResponse {
     /** Feedback in the reply's shape, or null for anything else. */
     fun readFeedback(content: String?): Feedback? = runCatching {
         val payload = json.parseToJsonElement(content!!).jsonObject
-        fun part(name: String) = payload.getValue(name).jsonPrimitive.content.trim()
+        fun part(name: String) = payload.text(name)
         val followed = when (part("plan_followed")) {
             "yes" -> PlanFollowed.YES
             "partly" -> PlanFollowed.PARTLY
@@ -79,6 +80,23 @@ object TrainerResponse {
         json.parseToJsonElement(body).jsonObject["choices"]!!.jsonArray
             .first().jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
     }.getOrNull()
+
+    /**
+     * A text part, which must be a JSON string: `jsonPrimitive.content` alone would read null as "null"
+     * and a number or a boolean as its digits or word. Anything else throws, and so reads as unreadable.
+     */
+    private fun JsonObject.text(name: String): String {
+        val value = getValue(name).jsonPrimitive
+        require(value.isString) { "$name is not a string" }
+        return value.content.trim()
+    }
+
+    /** A whole minute, which must be a JSON number: "10" in quotes is text, not a minute. */
+    private fun JsonObject.minute(name: String): Int {
+        val value = getValue(name).jsonPrimitive
+        require(!value.isString) { "$name is not a number" }
+        return value.int
+    }
 
     /** Design question 18. */
     private fun usable(plan: SessionPlan): Boolean =

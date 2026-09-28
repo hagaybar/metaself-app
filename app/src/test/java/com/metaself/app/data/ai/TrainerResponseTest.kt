@@ -65,6 +65,25 @@ class TrainerResponseTest {
         assertUnreadable(TrainerResponse.parseFeedback("not json", "a-model"))
     }
 
+    /** A text part must be a JSON string: null, a number or a boolean is not "null", "7" or "true". */
+    @Test
+    fun `a text part that is not a string is unreadable`() {
+        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"A steady session\"", "null")), "a-model"))
+        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"numbers\":\"Invented.\"", "\"numbers\":7")), "a-model"))
+        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"As planned.\"", "true")), "a-model"))
+        assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"Steady walk with two climbs\"", "42")), "a-model"))
+        assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"Invented reason.\"", "null")), "a-model"))
+        assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"Warm up\"", "false")), "a-model"))
+        assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"zone 3\"", "3")), "a-model"))
+        assertThat(TrainerResponse.readFeedback(goodFeedback.replace("\"yes\"", "null"))).isNull()
+    }
+
+    /** A minute is a JSON number: "10" in quotes is not one. */
+    @Test
+    fun `a minute given as text is unreadable`() {
+        assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"to_minute\":10", "\"to_minute\":\"10\"")), "a-model"))
+    }
+
     /** With no plan, "against the plan" may be empty. */
     @Test
     fun `with no plan the against-plan part may be empty`() {

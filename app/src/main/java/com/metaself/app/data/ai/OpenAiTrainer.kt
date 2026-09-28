@@ -12,8 +12,10 @@ import okhttp3.OkHttpClient
 /**
  * The one implementation behind [Trainer] (D84). What is sent is [TrainerPrompt] and what comes back is
  * [TrainerResponse], both pure; the call is [OpenAiCall], shared with the meal estimator and the food
- * review — the key, the day's ceiling, the counting and the failures are one code path. One call, no
- * retry.
+ * review — the key, the day's ceiling, the counting and the failures are one code path. Each ask is
+ * one [OpenAiCall.send]: nothing here retries, but that call may send again when the provider rejects
+ * a parameter the model does not accept (D57), and every attempt sent is counted against the day's
+ * ceiling.
  *
  * The base URL is a parameter so a test can point it at a local server. **No test in this project
  * makes a real network call.**

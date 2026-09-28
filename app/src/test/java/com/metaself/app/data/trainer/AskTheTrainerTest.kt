@@ -96,6 +96,40 @@ class AskTheTrainerTest {
         assertThat(store.keptPlan()).isNull()
     }
 
+    /** Design question 9: with no plan matched, "followed its plan" is "no plan", whatever the model said. */
+    @Test
+    fun `with no plan the feedback is stored as no plan, whatever the model judged`() = runTest {
+        trainer.feedback += TrainerReply.Answered(FEEDBACK, "a-model")
+
+        val outcome = ask().save(1, Felt.RIGHT, "Invented.", planId = null, withFeedback = true) as AskTheTrainer.Reviewed.WithFeedback
+
+        assertThat(outcome.review.feedback!!.followed).isEqualTo(PlanFollowed.NO_PLAN)
+        assertThat(store.reviewOf(1)!!.feedback!!.followed).isEqualTo(PlanFollowed.NO_PLAN)
+        assertThat(outcome.review.feedback!!.copy(followed = PlanFollowed.YES)).isEqualTo(FEEDBACK)
+    }
+
+    /** A plan id that no longer finds a stored plan is no plan too: nothing was sent to judge against. */
+    @Test
+    fun `a plan that cannot be found counts as no plan`() = runTest {
+        trainer.feedback += TrainerReply.Answered(FEEDBACK.copy(followed = PlanFollowed.PARTLY), "a-model")
+
+        val outcome = ask().save(1, Felt.RIGHT, "Invented.", planId = 77, withFeedback = true) as AskTheTrainer.Reviewed.WithFeedback
+
+        assertThat((trainer.asked.single().question as TrainerQuestion.Review).session.plan).isNull()
+        assertThat(outcome.review.feedback!!.followed).isEqualTo(PlanFollowed.NO_PLAN)
+    }
+
+    /** With a plan matched, the model's judgement stands. */
+    @Test
+    fun `with a plan the model's judgement is kept`() = runTest {
+        val planId = store.addPlan(aStoredPlan())
+        trainer.feedback += TrainerReply.Answered(FEEDBACK.copy(followed = PlanFollowed.PARTLY), "a-model")
+
+        val outcome = ask().save(1, Felt.RIGHT, "Invented.", planId, withFeedback = true) as AskTheTrainer.Reviewed.WithFeedback
+
+        assertThat(outcome.review.feedback!!.followed).isEqualTo(PlanFollowed.PARTLY)
+    }
+
     /** D87: if the call fails, the words are saved anyway. */
     @Test
     fun `a failed feedback call keeps the words`() = runTest {

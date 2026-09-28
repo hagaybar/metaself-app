@@ -38,9 +38,11 @@ object TrainerPrompt {
         His two aims are his weight goal and a steady rhythm of sessions. Keep your advice consistent
         with your earlier feedback unless the record gives a reason to change it.
 
-        Safety comes first. If his words anywhere in this request mention
-        pain, dizziness or chest discomfort, tell him to stop and see a doctor before saying anything
-        else. You are a trainer for walking and running, not a medical service; never diagnose.
+        Safety comes first. If his words in the question itself (question.words when he asks for a
+        plan, question.session.words when he asks about a session) mention
+        pain, dizziness or chest discomfort, tell him to stop and see a doctor before saying anything else.
+        Words on earlier sessions are context: you may mention them, but they do not call for this.
+        You are a trainer for walking and running, not a medical service; never diagnose.
 
         Sources: "synced" is his phone and band's total over the session; "file" came from a workout
         file; "typed" he typed himself; "band" is the band's own energy figure; "estimated" is this
@@ -48,8 +50,9 @@ object TrainerPrompt {
         readings; zones are measured against a maximum that is "estimated" (220 minus age) unless it
         says "observed". An estimate is weaker evidence than a measurement.
 
-        The rhythm: this_week gives the sessions he has done this week so far and the days left in it,
-        counted by the app. Use those numbers; never count sessions yourself.
+        The rhythm: this_week gives the sessions he has done this week so far and the days left in it
+        after today (not counting today), counted by the app. Use those numbers;
+        never count sessions yourself.
 
         Write plain English, to him, in the second person. Short sentences. Every figure you mention
         must be one given here or one you propose for the next session.
@@ -138,7 +141,7 @@ object TrainerPrompt {
         )
         putJsonObject("this_week") {
             put("sessions_so_far", request.thisWeek.sessionsSoFar)
-            put("days_left", request.thisWeek.daysLeft)
+            put("days_left_after_today", request.thisWeek.daysLeft)
         }
         putJsonArray("earlier_feedback") { request.earlierFeedback.forEach { add(feedback(it)) } }
     }

@@ -10,6 +10,7 @@ import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.profile.GoalDirection
 import com.metaself.app.domain.profile.Profile
 import com.metaself.app.domain.profile.Sex
+import com.metaself.app.domain.profile.ageYears
 import com.metaself.app.domain.weight.MeasuredRate
 import com.metaself.app.domain.weight.WeightReading
 import com.metaself.app.domain.weight.WeightTrend
@@ -62,7 +63,10 @@ data class GoalFacts(val direction: GoalDirection, val kgPerWeek: Double)
 
 data class BodyFacts(val ageYears: Int, val sex: Sex, val heightCm: Int)
 
-/** This week's rhythm, counted on the phone and handed to the model (D87). */
+/**
+ * This week's rhythm, counted on the phone and handed to the model (D87). [daysLeft] is the days after
+ * today to Sunday, not counting today (0 on a Sunday); the prompt names it `days_left_after_today`.
+ */
 data class Rhythm(val sessionsSoFar: Int, val daysLeft: Int)
 
 /**
@@ -135,7 +139,7 @@ data class TrainerRequest(
                 weeks = weeks,
                 weight = trend.lastOrNull()?.let { WeightFacts(it.trendKg, it.reading.epochDay, rate?.kgPerWeek, rate?.spanDays) },
                 goal = profile?.let { GoalFacts(it.goal.direction, it.goal.kgPerWeek) },
-                body = profile?.let { BodyFacts(currentYear - it.birthYear, it.sex, it.heightCm) },
+                body = profile?.let { BodyFacts(it.ageYears(currentYear), it.sex, it.heightCm) },
                 thisWeek = Rhythm(weeks.first().sessions, (thisMonday + 6 - today).toInt()),
                 earlierFeedback = earlierFeedback.take(FEEDBACK_COUNT),
             )
@@ -173,7 +177,10 @@ data class TrainerRequest(
     }
 }
 
-/** Asking the model (D84): one call each, no retry, nothing in its vocabulary that names a vendor. */
+/**
+ * Asking the model (D84): one ask each, nothing in its vocabulary that names a vendor. An
+ * implementation may resend on a rejected parameter (D57); it never retries a failed answer.
+ */
 interface Trainer {
     /** [request]'s question must be [TrainerQuestion.Plan]. */
     suspend fun suggest(request: TrainerRequest): TrainerReply<SessionPlan>

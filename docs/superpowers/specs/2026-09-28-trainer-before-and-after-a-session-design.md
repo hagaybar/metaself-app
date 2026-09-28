@@ -85,8 +85,11 @@ say, for next time, and this week (the rhythm, counted on the phone from stored 
 by the model) — and is shown under "From the AI trainer · advice, not a measurement". If the call fails,
 the words are saved anyway and the session row offers **Get feedback** later.
 
-If the owner's words mention pain, dizziness or chest discomfort, the prompt tells the model to advise
-stopping and seeing a doctor before anything else. It is a trainer for walking and running, not a
+If the owner's words in the question itself mention pain, dizziness or chest discomfort, the prompt
+tells the model to advise stopping and seeing a doctor before anything else. "The question itself" is
+the form's words when he asks for a plan (D86), and the review's words when he asks for feedback on a
+session. Words on older sessions, sent as part of the 42 days, are context only: the model may mention
+them, but they do not force the doctor advice first. It is a trainer for walking and running, not a
 medical service.
 
 ## D88 — What is stored

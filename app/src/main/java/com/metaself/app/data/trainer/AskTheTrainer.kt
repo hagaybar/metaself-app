@@ -9,6 +9,7 @@ import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanAnswers
+import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
@@ -73,7 +74,10 @@ class AskTheTrainer @Inject constructor(
         return when (val reply = trainer.feedback(request(question, exceptWorkoutId = workoutId))) {
             is TrainerReply.Failed -> Reviewed.NoFeedback(saved, reply.failure)
             is TrainerReply.Answered -> {
-                val answered = saved.copy(feedback = reply.value, feedbackAtMillis = now(), model = reply.model)
+                // With no plan sent there is nothing to have followed, whatever the model judged
+                // (design question 9); a planId whose plan is gone sends none either.
+                val feedback = if (plan == null) reply.value.copy(followed = PlanFollowed.NO_PLAN) else reply.value
+                val answered = saved.copy(feedback = feedback, feedbackAtMillis = now(), model = reply.model)
                 store.putReview(answered)
                 if (planId != null) store.unkeep(planId)
                 Reviewed.WithFeedback(answered)
