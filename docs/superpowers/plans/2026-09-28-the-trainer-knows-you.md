@@ -280,10 +280,14 @@ existing codec/format test), `BackupRoundTripTest`, `BackupRestoreOrderTest`, `S
 3. **The best week's distance** is D74's week distance — the sum of the days' de-duplicated totals, as the
    six weekly totals and the Movement screen count it — not the sum of the sessions' distances. A week
    whose Monday is in the covered range may run past the month's end (and past the cut); that is what
-   "whose Monday falls in the month" says. Ties go to the earlier week.
+   "whose Monday falls in the month" says. Ties go to the earlier week. (Changed during review: the
+   week's days are counted only up to the cut before the 42-day detail, so no day is counted twice; a
+   week whose distance is zero is no best week, and none is sent.)
 4. **Trend at a day** is the smoothed line after the last reading on or before that day. The change is sent
    only when both ends have one and the month holds a reading of its own (otherwise the change would be a
-   fabricated 0.0). It is rounded to two decimals, as the weekly change is.
+   fabricated 0.0). It is rounded to two decimals, as the weekly change is. (Changed during review: the
+   trend at each end must rest on a weigh-in at most 14 days before it, or on it; otherwise the change
+   would be close to the difference of two raw weigh-ins, and none is sent. Added to D89 in the spec.)
 5. **Kinds order** in a line: most sessions first, ties in the kinds' own order.
 6. **Felt counts** are null when no session of the month has a felt review, so "no reviews" is not sent as
    "felt nothing".
@@ -309,3 +313,9 @@ existing codec/format test), `BackupRoundTripTest`, `BackupRestoreOrderTest`, `S
     screen shows.
 15. **The problem log's line** for a no-match file is unchanged; the choice made afterwards is logged as
     D82's choose already is.
+16. **(Added during review.)** D91's same-kind sessions are looked for on the days of both readings of
+    the file's start, as the match itself does. The header's time is the file's wall clock, which is the
+    phone's-zone reading the offered sessions' times and "Add it as a workout" use, so they compare
+    directly. A choice is checked again at the tap: a session hidden or gone since the offer is not
+    filled, and the offer is made again as it now stands. The note's 1,000-character limit never splits
+    a character outside the basic plane.

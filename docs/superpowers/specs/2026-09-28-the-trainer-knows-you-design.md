@@ -25,7 +25,8 @@ Every trainer request also carries up to twelve **monthly lines**, computed on t
   - how many sessions felt easy, right and hard, where reviews exist (D87);
   - average steps a day, over days that have a step count;
   - the change in the smoothed weight trend from the month's first day to its last, when the trend
-    exists at both ends (never a single weigh-in).
+    exists at both ends (never a single weigh-in). The trend at each end must rest on a weigh-in at
+    most 14 days before it (or on it); after a longer gap the month has no weight change.
 - Sessions counted are the same as everywhere else: visible, and counted by the week (D74, D81).
 
 An invented line: *"May: 9 sessions (7 walks, 2 swims), 400 min; walking 38 km, swimming 1.5 km;

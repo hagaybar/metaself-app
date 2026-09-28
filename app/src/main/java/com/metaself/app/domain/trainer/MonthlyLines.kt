@@ -18,16 +18,21 @@ data class FeltCounts(val easy: Int, val right: Int, val hard: Int)
 /**
  * One month's line (D89), computed on the phone. [firstDay]..[lastDay] are the days it covers; [part]
  * when that is not the whole calendar month (the month cut before the 42-day detail, or the month the
- * record begins in). Every figure is null when the month has nothing to make it from — never zero.
+ * record begins in). A count or total the month really has is sent as it is, zero included (a month with
+ * no sessions has 0 sessions and 0 minutes); every other figure is null when the month has nothing to
+ * make it from, never a made-up zero.
  *
  * @property kinds most sessions first, ties in [WorkoutKind]'s order.
  * @property bestWeekMonday the Monday, in the covered days, of the week with the most distance, by
- *   D74's week distance (the days' totals added up); the week may run past the month's end.
+ *   D74's week distance (the days' totals added up) over its days up to the cut before the 42-day
+ *   detail, so no day is counted twice; the week may otherwise run past the month's end. Null when no
+ *   such week has any distance above zero.
  * @property avgHeartRate the sessions' average heart rates, weighted by their minutes.
  * @property felt null when no session of the month has a felt review.
  * @property stepsADay the mean over the covered days that have a step count.
  * @property weightChangeKg the smoothed trend's change from the first day to the last; null unless the
- *   trend exists at the first day and the month holds a reading of its own (never a single weigh-in).
+ *   trend at each end rests on a weigh-in at most [TREND_FRESH_DAYS] days before it (or on it) and the
+ *   month holds a reading of its own (never a single weigh-in).
  */
 data class MonthFacts(
     val firstDay: Long,
@@ -50,6 +55,13 @@ data class MonthFacts(
 object MonthlyLines {
 
     const val MONTHS = 12
+
+    /**
+     * A choice, not a measurement: how old the last weigh-in under the trend may be at a month's end
+     * (D89). After a longer gap the next reading dominates the line, and the change would be close to
+     * the difference of two raw weigh-ins.
+     */
+    const val TREND_FRESH_DAYS = 14
 
     /** The first day any monthly line can cover: the first of the month twelve months before this one. */
     fun firstDay(today: Long): Long =
@@ -89,7 +101,7 @@ object MonthlyLines {
             if (first > last) {
                 null
             } else {
-                month(first, last, first != monthStart || last != monthEnd, visible, feltBy, byDay, trend)
+                month(first, last, cut, first != monthStart || last != monthEnd, visible, feltBy, byDay, trend)
             }
         }
     }
@@ -97,6 +109,7 @@ object MonthlyLines {
     private fun month(
         first: Long,
         last: Long,
+        cut: Long,
         part: Boolean,
         visible: List<Workout>,
         feltBy: Map<Long, Felt?>,
@@ -114,9 +127,11 @@ object MonthlyLines {
         val best = (first..last)
             .filter { MovementWeek.mondayOf(it) == it }
             .mapNotNull { monday ->
-                (monday..monday + 6).mapNotNull { byDay[it]?.distanceM }
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { monday to it.sum() }
+                // Only up to the cut: the days after it are in the 42-day detail already.
+                (monday..minOf(monday + 6, cut)).mapNotNull { byDay[it]?.distanceM }
+                    .sum()
+                    .takeIf { it > 0 }
+                    ?.let { monday to it }
             }
             .maxWithOrNull(compareBy<Pair<Long, Int>> { it.second }.thenByDescending { it.first })
 
@@ -149,10 +164,14 @@ object MonthlyLines {
         )
     }
 
-    /** The trend after the last reading on or before each end; null unless both exist and differ. */
+    /**
+     * The trend after the last reading on or before each end; null unless both exist, each rests on a
+     * reading at most [TREND_FRESH_DAYS] before its end, and they differ.
+     */
     private fun weightChange(first: Long, last: Long, trend: List<TrendPoint>): Double? {
         val start = trend.lastOrNull { it.reading.epochDay <= first } ?: return null
         val end = trend.lastOrNull { it.reading.epochDay <= last } ?: return null
-        return if (end.reading.epochDay <= first) null else end.trendKg - start.trendKg
+        val fresh = first - start.reading.epochDay <= TREND_FRESH_DAYS && last - end.reading.epochDay <= TREND_FRESH_DAYS
+        return if (!fresh || end.reading.epochDay <= first) null else end.trendKg - start.trendKg
     }
 }

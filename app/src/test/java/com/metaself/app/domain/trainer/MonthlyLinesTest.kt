@@ -152,6 +152,28 @@ class MonthlyLinesTest {
         assertThat(may.bestWeekM).isEqualTo(1_000)
     }
 
+    /**
+     * D89: no day is counted twice. July is cut on Thursday 23 July; the week of Monday 20 July runs
+     * into the 42-day detail, and only its days up to the cut count: 3 km, not 13.
+     */
+    @Test
+    fun `the best week stops at the cut`() {
+        val july = lines(days = listOf(HealthDay(JULY_20 + 2, distanceM = 3_000), HealthDay(JULY_20 + 5, distanceM = 10_000)))
+            .single { it.firstDay == JULY_1 }
+
+        assertThat(july.bestWeekMonday).isEqualTo(JULY_20)
+        assertThat(july.bestWeekM).isEqualTo(3_000)
+    }
+
+    /** A week whose days all say 0 m is not a best week; nothing is sent rather than a zero. */
+    @Test
+    fun `a week of no distance is no best week`() {
+        val june = june(days = listOf(HealthDay(JUNE_1, distanceM = 0), HealthDay(JUNE_1 + 7, distanceM = 0)))
+
+        assertThat(june.bestWeekMonday).isNull()
+        assertThat(june.bestWeekM).isNull()
+    }
+
     @Test
     fun `of two weeks as far, the earlier is the best`() {
         val june = june(days = listOf(HealthDay(JUNE_1 + 7, distanceM = 5_000), HealthDay(JUNE_1 + 14, distanceM = 5_000)))
@@ -215,6 +237,18 @@ class MonthlyLinesTest {
         assertThat(june(readings = listOf(WeightReading(MAY_31, 80.0), WeightReading(JULY_1, 79.0))).weightChangeKg).isNull()
     }
 
+    /** The trend at each end must rest on a weigh-in at most 14 days before it; after a longer gap it is stale. */
+    @Test
+    fun `a trend resting on a weigh-in more than 14 days before an end gives no weight change`() {
+        val staleStart = listOf(WeightReading(JUNE_1 - 15, 80.0), WeightReading(JUNE_30, 79.0))
+        val staleEnd = listOf(WeightReading(MAY_31, 80.0), WeightReading(JUNE_30 - 15, 79.0))
+        val fresh = listOf(WeightReading(JUNE_1 - 14, 80.0), WeightReading(JUNE_30 - 14, 79.0))
+
+        assertThat(june(readings = staleStart).weightChangeKg).isNull()
+        assertThat(june(readings = staleEnd).weightChangeKg).isNull()
+        assertThat(june(readings = fresh).weightChangeKg).isNotNull()
+    }
+
     @Test
     fun `a month with no trend at its first day has no weight change`() {
         assertThat(june(readings = listOf(WeightReading(JUNE_1 + 1, 80.0), WeightReading(JUNE_30, 79.0))).weightChangeKg).isNull()
@@ -235,5 +269,6 @@ class MonthlyLinesTest {
         val JUNE_1 = LocalDate.of(2026, 6, 1).toEpochDay()
         val JUNE_30 = LocalDate.of(2026, 6, 30).toEpochDay()
         val JULY_1 = LocalDate.of(2026, 7, 1).toEpochDay()
+        val JULY_20 = LocalDate.of(2026, 7, 20).toEpochDay()
     }
 }
