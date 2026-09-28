@@ -157,15 +157,19 @@ object TrainerWording {
         "THIS WEEK" to feedback.thisWeek,
     ).filter { it.second.isNotBlank() }
 
-    /** Design question 20: everything one request holds (D84), under the plan form's ask button. */
+    /**
+     * Design question 20: everything one request holds (D84), under the plan form's ask button — the
+     * note about yourself (D90) and the monthly lines (D89) included.
+     */
     fun privacyPlan(ceiling: Int): String = privacy("these answers", ceiling)
 
     /** Design question 20: everything one request holds (D84), under the review's save-and-ask button. */
     fun privacyReview(ceiling: Int): String = privacy("this session and your words", ceiling)
 
     private fun privacy(first: String, ceiling: Int): String =
-        "Sends to OpenAI, with your key: $first; your sessions of the last six weeks, with your words on them; " +
-            "weekly totals; your weight trend and goal rate; your age, sex and height; " +
+        "Sends to OpenAI, with your key: $first; your note about yourself; " +
+            "your sessions of the last six weeks, with your words on them; weekly totals; " +
+            "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; " +
             "and the trainer's last three feedbacks. One of today's $ceiling AI requests."
 
     /** Design question 16. */

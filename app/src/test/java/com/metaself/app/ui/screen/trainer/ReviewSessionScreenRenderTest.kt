@@ -48,8 +48,8 @@ class ReviewSessionScreenRenderTest {
         assertThat(texts).contains("Tap the microphone on your keyboard to speak instead of typing.")
         assertThat(texts).contains(
             "Sends to OpenAI, with your key: this session and your words; " +
-                "your sessions of the last six weeks, with your words on them; weekly totals; " +
-                "your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
+                "your note about yourself; your sessions of the last six weeks, with your words on them; weekly totals; " +
+                "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
                 "One of today's 30 AI requests.",
         )
     }
