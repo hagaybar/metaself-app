@@ -11,7 +11,7 @@
 <header><a class="back" href="./">← MetaSelf</a></header>
 
 <h1>Privacy</h1>
-<p class="updated">Last updated 25 September 2026</p>
+<p class="updated">Last updated 29 September 2026</p>
 
 <p>MetaSelf is a personal Android application written for a single user. It is not published on any
 app store, has no accounts, no analytics, no advertising and no operator. <strong>There is no server
@@ -21,7 +21,9 @@ in it.</p>
 <h2>What it stores, and where</h2>
 
 <p>Everything you log lives <strong>on your phone</strong>: meals and their nutrition figures,
-weights, your profile, your goal, your settings. It is held in the application's own private
+weights, your profile, your goal, your settings, the health record described below, workouts you
+type in, what you tell the trainer, the note you write about yourself, and the trainer's plans and
+feedback. It is held in the application's own private
 storage, which no other app can read.</p>
 
 <p>Your OpenAI API key, and your Open Food Facts password if you choose to save one, are stored
@@ -31,7 +33,7 @@ or export.</p>
 
 <h2>What leaves your phone, and when</h2>
 
-<p>Five things, each only when you do something that requires it.</p>
+<p>Six things, each only when you do something that requires it.</p>
 
 <ol>
   <li><strong>A meal description, and your answers about it, to OpenAI.</strong> When you ask for an
@@ -48,6 +50,18 @@ or export.</p>
   else goes with it — no other food, not what or when you ate, not your weight, age, goal or any
   identifier. Nothing is sent unless you press the button.</li>
 
+  <li><strong>Your training record, to OpenAI, when you ask the trainer.</strong> When you press
+  the button to plan a session or to get feedback on one, the request is sent using <em>your
+  own</em> API key and holds: your answers or your words about the session; the note you wrote about
+  yourself; your sessions of the last six weeks (kind, date, minutes, distance, steps, calories,
+  heart rate and heart-rate zones, how each felt and what you wrote about it); weekly totals for six
+  weeks; one summary line for each of the twelve months before that (sessions, minutes, distance,
+  steps a day, heart rate, how sessions felt, and the change in your weight trend); your smoothed weight trend and how
+  fast it is moving; your goal's direction and rate; your age, sex and height; and the trainer's last
+  three feedbacks. <strong>Never sent:</strong> meals or anything you ate, sleep, individual
+  readings, a single weigh-in, a target weight, your name, or which app or device recorded a
+  session. The same list is shown on screen beside the button.</li>
+
   <li><strong>A barcode number, to Open Food Facts.</strong> Only the number. The camera is used
   for nothing but reading barcodes; the picture is read on the phone and never stored or sent. A
   product you have scanned before is answered from your own phone and sends nothing.</li>
@@ -58,11 +72,13 @@ or export.</p>
   username, because that database credits contributions. <strong>Nothing about you goes with
   it:</strong> not your weight, your history, or what or when you ate.</li>
 
-  <li><strong>A backup file, to your own Google Drive</strong>, if you turn that on. The application
+  <li><strong>Backup files, to your own Google Drive</strong>, if you turn that on. The application
   requests the <code>drive.file</code> scope, which grants access <strong>only to files the
   application itself creates</strong>. It cannot see, list, open or modify anything else in your
-  Drive. The file is the same export you can save by hand, and your API key is deliberately not in
-  it.</li>
+  Drive. The daily file is the same export you can save by hand — which includes your health record,
+  workouts, sleep, the trainer's plans and feedback and your note about yourself — and your API key
+  is deliberately not in it. The detailed health readings, too many for a daily file, go as one
+  compressed file per month.</li>
 </ol>
 
 <p>That is the complete list. There is no analytics, no crash reporting, no advertising identifier,
@@ -70,14 +86,22 @@ no tracking of any kind, and no other network destination.</p>
 
 <h2>Health and fitness data</h2>
 
-<p>If you allow it, the application reads <strong>steps, active calories and exercise sessions</strong>
-from Android's Health Connect, in order to work out whether you have moved more than usual on a given
-day.</p>
+<p>If you allow it, the application reads from Android's Health Connect: <strong>steps, distance,
+active and total calories burned, exercise sessions, heart rate, resting heart rate, heart-rate
+variability, oxygen saturation, respiratory rate, sleep, weight and body fat</strong>, including
+history older than Health Connect's usual 30 days. It keeps its own copy on your phone, noting which
+app each figure came from, and uses it to work out whether you have moved more than usual, to show
+the Movement screen, and to answer the trainer.</p>
+
+<p>A workout file you share into the application from another app is read on the phone and sends
+nothing.</p>
 
 <div class="note">
-  This data is used on your phone, for that purpose, and is <strong>never transmitted
-  anywhere</strong>. The application never writes to Health Connect. You can withdraw the permission
-  at any time and it simply stops reading it.
+  Health data leaves your phone in exactly two ways, both listed above: inside your backup to your
+  own Google Drive, if you turn that on, and as the summaries in a trainer request, when you ask
+  one. It is <strong>never sent anywhere else</strong>, and never used for advertising. The
+  application never writes to Health Connect. You can withdraw the permission at any time and it
+  stops reading.
 </div>
 
 <h2>Your data is yours</h2>
@@ -86,7 +110,8 @@ day.</p>
 You can have a copy written automatically into a folder of your choosing.</p>
 
 <p>To delete everything, uninstall the application. Android removes its private storage with it.
-There is nothing held anywhere else to delete, because there is nowhere else.</p>
+Files it wrote to your own Google Drive or to a folder you chose are yours and stay where they are
+until you delete them; nothing is held anywhere else, because there is nowhere else.</p>
 
 <h2>Children</h2>
 
