@@ -1,14 +1,23 @@
 package com.metaself.app.ui.screen.trainer
 
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -18,10 +27,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.Tick
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.movement.MovementWeekWording
 import com.metaself.app.ui.theme.Spacing
@@ -148,6 +160,7 @@ fun TrainerScreen(
 }
 
 /** D95, D97: the weekly plan's card — an offer, the running plan's week, or an ended plan's count. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun PlanCardView(card: PlanCard, onEvaluate: () -> Unit, onSeePlan: () -> Unit, onAdjust: () -> Unit) {
     when (card) {
@@ -165,21 +178,12 @@ private fun PlanCardView(card: PlanCard, onEvaluate: () -> Unit, onSeePlan: () -
                 if (card.weekIndex in card.progress.weeks.indices) {
                     val week = card.progress.weeks[card.weekIndex]
                     Text(ProgrammeWording.weekDates(week.monday), style = MaterialTheme.typography.bodyMedium)
-                    week.ticks.forEach { tick ->
-                        Column(Modifier.heightIn(min = 44.dp), verticalArrangement = Arrangement.Center) {
-                            Text(ProgrammeWording.tickTitle(tick), style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                tick.by?.let(ProgrammeWording::tickLine) ?: tick.planned.what,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
+                    week.ticks.forEach { tick -> TickRow(tick) }
                     card.progress.weeks.take(card.weekIndex).forEach { past ->
                         Text(ProgrammeWording.pastWeek(past), style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
                     TextButton(onClick = onSeePlan) { Text(stringResource(R.string.trainer_see_plan)) }
                     TextButton(onClick = onAdjust) { Text(stringResource(R.string.trainer_adjust_plan)) }
                 }
@@ -196,6 +200,47 @@ private fun PlanCardView(card: PlanCard, onEvaluate: () -> Unit, onSeePlan: () -
                 Text(ProgrammeWording.endedLine(card.progress), style = MaterialTheme.typography.bodyMedium)
                 Button(onClick = onEvaluate) { Text(stringResource(R.string.trainer_evaluate_again)) }
             }
+        }
+    }
+}
+
+/**
+ * D95: one planned session of this week — a filled check for done, an empty circle for not yet, each
+ * with its word for a screen reader — then what was planned and, once done, the session that did it.
+ */
+@Composable
+private fun TickRow(tick: Tick) {
+    Row(
+        modifier = Modifier
+            .heightIn(min = 44.dp)
+            .semantics(mergeDescendants = true) {},
+        horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (tick.by != null) {
+            Icon(
+                Icons.Filled.CheckCircle,
+                contentDescription = stringResource(R.string.plan_tick_done),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp),
+            )
+        } else {
+            val notYet = stringResource(R.string.plan_tick_not_yet)
+            Box(
+                Modifier
+                    .size(24.dp)
+                    .padding(2.dp)
+                    .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
+                    .semantics { contentDescription = notYet },
+            )
+        }
+        Column {
+            Text(ProgrammeWording.plannedTitle(tick.planned), style = MaterialTheme.typography.titleSmall)
+            Text(
+                tick.by?.let(ProgrammeWording::tickLine) ?: tick.planned.what,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

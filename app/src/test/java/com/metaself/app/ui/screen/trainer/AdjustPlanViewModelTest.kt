@@ -133,6 +133,58 @@ class AdjustPlanViewModelTest {
         assertThat(viewModel.state.value.finished).isTrue()
     }
 
+    /** A second tap on Keep this version before the first has written is ignored: one write, no refusal. */
+    @Test
+    fun `a double tap on keep this version writes once and says no refusal`() = runTest {
+        trainer.adjustments += TrainerReply.Answered(REST, "a-model")
+        val viewModel = watched()
+        advanceUntilIdle()
+        viewModel.adjust()
+        advanceUntilIdle()
+
+        viewModel.keepNew()
+        viewModel.keepNew()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.finished).isTrue()
+        assertThat(viewModel.state.value.refused).isNull()
+        assertThat(problems.recorded).isEmpty()
+        assertThat(programmes.running()!!.id).isEqualTo(viewModel.state.value.shown!!.id)
+    }
+
+    @Test
+    fun `a double tap on stop it stops once and says no refusal`() = runTest {
+        val viewModel = watched()
+        advanceUntilIdle()
+
+        viewModel.askStop()
+        viewModel.confirmStop()
+        viewModel.confirmStop()
+        advanceUntilIdle()
+
+        assertThat(programmes.running()).isNull()
+        assertThat(viewModel.state.value.finished).isTrue()
+        assertThat(viewModel.state.value.refused).isNull()
+        assertThat(problems.recorded).isEmpty()
+    }
+
+    /** While an adjustment is being asked for, Stop is not taken: the answer would adjust a stopped plan. */
+    @Test
+    fun `stop is ignored while an adjustment is asked for`() = runTest {
+        trainer.adjustments += TrainerReply.Answered(REST, "a-model")
+        val viewModel = watched()
+        advanceUntilIdle()
+
+        viewModel.adjust()
+        viewModel.askStop()
+        viewModel.confirmStop()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.confirmStop).isFalse()
+        assertThat(programmes.running()!!.id).isEqualTo(runningId)
+        assertThat(viewModel.state.value.shown).isNotNull()
+    }
+
     @Test
     fun `a failed adjustment says why and keeps the words`() = runTest {
         trainer.adjustments += TrainerReply.Failed(EstimateResult.NoKey)

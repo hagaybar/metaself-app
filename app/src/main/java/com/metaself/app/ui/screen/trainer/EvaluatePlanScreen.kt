@@ -51,24 +51,32 @@ fun EvaluatePlanScreen(
             state.loading -> Unit
             state.onRunning && running == null -> Text(stringResource(R.string.weeks_not_running))
             state.onRunning && running != null -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+                FromTrainerLabel()
                 state.evaluation?.let { EvaluationView(it) }
                 WeeksPlanView(running.programme.plan, running.programme.ask, running.programme.startEpochDay ?: 0, running.progress)
             }
             shown == null -> EvaluateForm(state, onChange, onAsk)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+                FromTrainerLabel()
                 shown.evaluation?.let { EvaluationView(it) }
                 WeeksPlanView(shown.plan, shown.ask, state.startIfKept, null)
                 if (state.kept) {
                     Text(stringResource(R.string.weeks_kept), style = MaterialTheme.typography.bodyMedium)
                 } else {
-                    Button(onClick = onKeep, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.weeks_keep)) }
+                    Button(onClick = onKeep, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                        Text(stringResource(R.string.weeks_keep))
+                    }
+                }
+                OutlinedButton(onClick = onAskAgain, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.plan_again))
+                }
+                if (!state.kept) {
                     Text(
                         stringResource(R.string.weeks_keep_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                OutlinedButton(onClick = onAskAgain, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.plan_again)) }
             }
         }
         state.refused?.let { refused -> Text(stringResource(refused.sentence), color = MaterialTheme.colorScheme.error) }

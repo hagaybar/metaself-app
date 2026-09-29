@@ -48,10 +48,38 @@ class AdjustPlanScreenRenderTest {
             onKeepNew = { keptNew = true },
         )
 
-        assertThat(texts).contains("From the AI trainer · advice, not a measurement")
+        assertThat(texts.count { it == "From the AI trainer · advice, not a measurement" }).isEqualTo(1)
+        assertThat(render.isDrawnBefore("From the AI trainer", "THE PLAN")).isTrue()
         assertThat(texts).contains("Keep the old one")
         render.click("Keep this version")
         assertThat(keptNew).isTrue()
+    }
+
+    /** In the plan's last week there is no week after it: the page names this week's rest. */
+    @Test
+    fun `in the last week the page says this week's rest is rewritten`() {
+        val last = PlanCard.of(RUNNING.programme.copy(startEpochDay = TEST_EPOCH_DAY - 10), emptyList(), TEST_EPOCH_DAY) as PlanCard.Running
+        val texts = draw(AdjustPlanViewModel.State(loading = false, running = last, today = TEST_EPOCH_DAY))
+
+        assertThat(texts).containsAtLeast("Week 1: 0 of 2 done", "Week 2 (this week): 0 of 2 so far", "Week 2: the rest to be rewritten").inOrder()
+    }
+
+    /** While an adjustment is asked for, or a write is under way, Stop cannot be pressed; nor can the keeps while writing. */
+    @Test
+    fun `stop and the keeps cannot be pressed while asking or writing`() {
+        draw(AdjustPlanViewModel.State(loading = false, running = RUNNING, asking = true, today = TEST_EPOCH_DAY))
+        assertThat(render.isEnabled("Stop this plan")).isFalse()
+
+        draw(AdjustPlanViewModel.State(loading = false, running = RUNNING, today = TEST_EPOCH_DAY))
+        assertThat(render.isEnabled("Stop this plan")).isTrue()
+
+        draw(
+            AdjustPlanViewModel.State(
+                loading = false, running = RUNNING, shown = RUNNING.programme.copy(id = 2, replacesId = 1), writing = true, today = TEST_EPOCH_DAY,
+            ),
+        )
+        assertThat(render.isEnabled("Keep this version")).isFalse()
+        assertThat(render.isEnabled("Keep the old one")).isFalse()
     }
 
     private fun draw(

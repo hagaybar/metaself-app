@@ -109,9 +109,10 @@ class TrainerScreenRenderTest {
     }
 
     @Test
-    fun `with nothing to show, only Plan my next session`() {
+    fun `with nothing to show, the offer to evaluate and Plan my next session`() {
         val texts = draw(TrainerHome(null, null, emptyList()))
 
+        assertThat(texts).contains("Evaluate me and plan the weeks ahead")
         assertThat(texts).contains("Plan my next session")
         assertThat(texts).containsNoneOf("WAITING FOR YOUR WORDS", "YOUR KEPT PLAN", "EARLIER SESSIONS")
     }
@@ -161,12 +162,23 @@ class TrainerScreenRenderTest {
 
         assertThat(texts).contains("YOUR 2-WEEK PLAN · WEEK 1 OF 2")
         assertThat(texts).contains("This week, Mon 31 Aug – Sun 6 Sep")
-        assertThat(texts).contains("Done: Easy walk, 30 min")
-        assertThat(texts).contains("To do: Easy walk, 30 min")
+        // A check for done, an empty circle for not yet, each told to a screen reader; no word prefix.
+        assertThat(texts).containsAtLeast("Easy walk, 30 min", "Done", "Easy walk, 30 min", "Not yet")
+        assertThat(texts.none { it.startsWith("Done: ") || it.startsWith("To do: ") }).isTrue()
         assertThat(texts).contains("Next in your plan: easy walk, 30 min")
         assertThat(texts).contains("See the plan")
         render.click("Adjust the plan")
         assertThat(adjusted).isTrue()
+    }
+
+    /** D85, D95: the session waiting for words, then the plan's card, then Plan my next session. */
+    @Test
+    fun `the waiting session comes first, then the plan card, then Plan my next session`() {
+        val card = PlanCard.of(RUNNING, emptyList(), TEST_EPOCH_DAY) as PlanCard.Running
+        draw(TrainerHome(WAITING, null, emptyList(), card, card.next))
+
+        assertThat(render.isDrawnBefore("WAITING FOR YOUR WORDS", "YOUR 2-WEEK PLAN")).isTrue()
+        assertThat(render.isDrawnBefore("YOUR 2-WEEK PLAN", "Plan my next session")).isTrue()
     }
 
     @Test

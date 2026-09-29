@@ -19,6 +19,19 @@ import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.trainer.ProgrammeWording
 import com.metaself.app.ui.trainer.TrainerWording
 
+/**
+ * D4: "From the AI trainer · advice, not a measurement". Drawn once, by each page, above everything the
+ * trainer wrote — the evaluation as well as the plan — never inside [WeeksPlanView], which comes second.
+ */
+@Composable
+internal fun FromTrainerLabel() {
+    Text(
+        TrainerWording.FROM_TRAINER,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
 /** D94: where you stand — the headline and its parts; "since last time" only when there is one. */
 @Composable
 internal fun EvaluationView(evaluation: Evaluation) {
@@ -44,17 +57,12 @@ private fun LabelledPart(label: Int, text: String) {
 }
 
 /**
- * D94, D95: a plan's heading, dates, weeks and why. With [progress], each session says whether it is done
+ * D94, D95: a plan's heading, dates, weeks and why, under a [FromTrainerLabel] its caller draws first. With [progress], each session says whether it is done
  * (the running plan); without, it says what it is (an answer not yet kept).
  */
 @Composable
 internal fun WeeksPlanView(plan: WeeksPlan, ask: ProgrammeAsk, start: Long, progress: PlanProgress?) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-        Text(
-            TrainerWording.FROM_TRAINER,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
         Text(
             ProgrammeWording.planHeading(ask),
             style = MaterialTheme.typography.labelSmall,

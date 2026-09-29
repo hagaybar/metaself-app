@@ -264,6 +264,8 @@
     <string name="adjust_stop_question">Stop this plan? It is kept on record.</string>
     <string name="adjust_stop_yes">Stop it</string>
     <string name="adjust_stop_no">Keep going</string>
+    <string name="plan_tick_done">Done</string>
+    <string name="plan_tick_not_yet">Not yet</string>
     <string name="feedback_done">Done</string>
     <string name="workout_sheet_new">Log a workout</string>
     <string name="workout_sheet_edit">Change this workout</string>

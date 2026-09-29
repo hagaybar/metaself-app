@@ -35,7 +35,20 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
         assertThat(texts).containsAtLeast("HOW MANY WEEKS", "2 weeks", "4 weeks", "6 weeks", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
-        assertThat(texts.any { it.contains("your last evaluation and how its plan went") }).isTrue()
+        assertThat(texts.any { it.contains("your last evaluation and how its plan went") && it.endsWith("Never meals.") }).isTrue()
+    }
+
+    /** As the approved mock-up: 4 weeks and 3 sessions a week are chosen, so Ask is ready at once. */
+    @Test
+    fun `the form opens on 4 weeks and 3 sessions a week, ready to ask`() {
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
+
+        assertThat(render.isSelected("4 weeks")).isTrue()
+        assertThat(render.isSelected("2 weeks")).isFalse()
+        assertThat(render.isSelected("3")).isTrue()
+        assertThat(render.isEnabled("Ask the trainer")).isTrue()
+
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = EvaluatePlanViewModel.Form(weeks = 4)))
         assertThat(render.isEnabled("Ask the trainer")).isFalse()
     }
 
@@ -45,12 +58,15 @@ class EvaluatePlanScreenRenderTest {
         var kept = false
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = SHOWN), onKeep = { kept = true })
 
-        assertThat(texts).contains("From the AI trainer · advice, not a measurement")
+        assertThat(texts.count { it == "From the AI trainer · advice, not a measurement" }).isEqualTo(1)
+        assertThat(render.isDrawnBefore("From the AI trainer", "WHERE YOU STAND")).isTrue()
         assertThat(texts).containsAtLeast("WHERE YOU STAND", "Invented headline.", "Going well.", "To work on.").inOrder()
         assertThat(texts).doesNotContain("Since last time.")
         assertThat(texts).containsAtLeast("THE PLAN · 2 WEEKS · 2 SESSIONS A WEEK", "Invented plan", "Starts Mon 31 Aug, ends Sun 13 Sep").inOrder()
         assertThat(texts).containsAtLeast("Week 1 · settle in", "Easy walk, 30 min", "Invented line").inOrder()
         assertThat(texts).contains("Keeping it replaces any plan you have now. The evaluation is kept either way.")
+        assertThat(render.isDrawnBefore("Keep this plan", "Ask again")).isTrue()
+        assertThat(render.isDrawnBefore("Ask again", "Keeping it replaces")).isTrue()
         render.click("Keep this plan")
         assertThat(kept).isTrue()
     }
@@ -63,8 +79,18 @@ class EvaluatePlanScreenRenderTest {
         val running = PlanCard.of(SHOWN.copy(startEpochDay = TEST_EPOCH_DAY - 3, status = ProgrammeStatus.RUNNING), emptyList(), TEST_EPOCH_DAY) as PlanCard.Running
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, onRunning = true, running = running, evaluation = SHOWN.evaluation))
         assertThat(texts).contains("Your plan")
+        assertThat(render.isDrawnBefore("From the AI trainer", "WHERE YOU STAND")).isTrue()
         assertThat(texts).contains("To do: Easy walk, 30 min")
         assertThat(texts).doesNotContain("Keep this plan")
+    }
+
+    /** A tap on Keep is not taken twice: while it writes, Keep and Ask again cannot be pressed. */
+    @Test
+    fun `while Keep is writing, Keep and Ask again cannot be pressed`() {
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = SHOWN, writing = true))
+
+        assertThat(render.isEnabled("Keep this plan")).isFalse()
+        assertThat(render.isEnabled("Ask again")).isFalse()
     }
 
     private fun draw(

@@ -45,7 +45,7 @@ class EvaluatePlanViewModel @Inject constructor(
     @ApplicationScope private val outliving: CoroutineScope,
 ) : ViewModel() {
 
-    /** The form's two rows and its words; a row is null until answered. */
+    /** The form's two rows and its words; a row is null until answered. The page opens on [PRESET]. */
     data class Form(val weeks: Int? = null, val perWeek: Int? = null, val words: String = "") {
         fun ask(): ProgrammeAsk? {
             return ProgrammeAsk(weeks ?: return null, perWeek ?: return null, words)
@@ -54,12 +54,14 @@ class EvaluatePlanViewModel @Inject constructor(
 
     /**
      * @property shown the answer just arrived: OFFERED until kept.
+     * @property writing Keep this plan was tapped and its write has not finished; a second tap is
+     *   ignored, so it cannot refuse the first one's work as "nothing changed".
      * @property onRunning opened on the running plan; [running] is it (null when none runs) and
      *   [evaluation] its chain's.
      */
     data class State(
         val loading: Boolean = false,
-        val form: Form = Form(),
+        val form: Form = PRESET,
         val asking: Boolean = false,
         val failure: EstimateResult? = null,
         val shown: Programme? = null,
@@ -70,6 +72,7 @@ class EvaluatePlanViewModel @Inject constructor(
         val today: Long = 0,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
         val refused: ActionRefused? = null,
+        val writing: Boolean = false,
     ) {
         val canAsk: Boolean get() = form.ask() != null && !asking
 
@@ -115,21 +118,26 @@ class EvaluatePlanViewModel @Inject constructor(
 
     fun keep() {
         val shown = local.value.shown ?: return
-        if (local.value.kept) return
-        local.update { it.copy(refused = null) }
-        guarded(problems, onRefused = { local.update { it.copy(refused = ActionRefused.NOTHING_CHANGED) } }) {
+        if (local.value.kept || local.value.writing) return
+        local.update { it.copy(refused = null, writing = true) }
+        guarded(problems, onRefused = { local.update { it.copy(writing = false, refused = ActionRefused.NOTHING_CHANGED) } }) {
             val start = ask.keepProgramme(shown.id)
-            local.update { it.copy(kept = true, shown = shown.copy(startEpochDay = start, status = ProgrammeStatus.RUNNING)) }
+            local.update {
+                it.copy(writing = false, kept = true, shown = shown.copy(startEpochDay = start, status = ProgrammeStatus.RUNNING))
+            }
         }
     }
 
-    /** Back to the form, the answers kept (D94); the answer stays stored, offered. */
-    fun askAgain() = local.update { it.copy(shown = null, kept = false, failure = null, refused = null) }
+    /** Back to the form, the answers kept (D94); the answer stays stored, offered. Not while Keep is writing. */
+    fun askAgain() = local.update { if (it.writing) it else it.copy(shown = null, kept = false, failure = null, refused = null) }
 
     companion object {
         /** The navigation argument: [RUNNING] opens on the running plan; anything else on the form. */
         const val SHOW = "show"
         const val FORM = "form"
         const val RUNNING = "running"
+
+        /** The approved mock-up's pre-selection: 4 weeks, 3 sessions a week — Ask is ready at once, and both rows still change. */
+        val PRESET = Form(weeks = 4, perWeek = 3)
     }
 }

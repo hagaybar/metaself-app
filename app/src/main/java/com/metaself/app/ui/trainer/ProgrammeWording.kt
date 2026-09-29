@@ -83,6 +83,9 @@ object ProgrammeWording {
         else -> "Weeks $from to $to: to be rewritten"
     }
 
+    /** The last week, adjusted: only its sessions not yet done are rewritten. */
+    fun restRewritten(week: Int): String = "Week $week: the rest to be rewritten"
+
     fun adjustRule(start: Long, weeks: Int): String =
         "The trainer rewrites this week's remaining sessions and the weeks after. Weeks already over stay as they were. " +
             "The end date stays ${date(ProgrammeCalendar.lastDay(start, weeks))}."

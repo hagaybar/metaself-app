@@ -126,6 +126,38 @@ class EvaluatePlanViewModelTest {
         assertThat(viewModel.state.value.loading).isFalse()
     }
 
+    /** As the approved mock-up: the form opens on 4 weeks and 3 sessions a week, and both still change. */
+    @Test
+    fun `the form opens ready to ask, and its rows still change`() = runTest {
+        val viewModel = watched()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(weeks = 4, perWeek = 3))
+        assertThat(viewModel.state.value.canAsk).isTrue()
+
+        viewModel.change(viewModel.state.value.form.copy(weeks = 6))
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(weeks = 6, perWeek = 3))
+    }
+
+    /** A second tap on Keep before the first has written is ignored: one write, and no refusal said. */
+    @Test
+    fun `a double tap on keep writes once and says no refusal`() = runTest {
+        trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
+        val viewModel = watched()
+        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.ask()
+        advanceUntilIdle()
+
+        viewModel.keep()
+        viewModel.keep()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.kept).isTrue()
+        assertThat(viewModel.state.value.refused).isNull()
+        assertThat(problems.recorded).isEmpty()
+        assertThat(programmes.running()!!.id).isEqualTo(viewModel.state.value.shown!!.id)
+    }
+
     @Test
     fun `a failed keep is said`() = runTest {
         trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")

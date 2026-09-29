@@ -38,6 +38,11 @@ class AdjustPlanViewModel @Inject constructor(
     @ApplicationScope private val outliving: CoroutineScope,
 ) : ViewModel() {
 
+    /**
+     * @property writing Keep this version or Stop it was tapped and its write has not finished (and,
+     *   once it has, the page is closing): every further tap that would write is ignored, so a second
+     *   tap cannot refuse the first one's work as "nothing changed".
+     */
     data class State(
         val loading: Boolean = true,
         val running: PlanCard.Running? = null,
@@ -50,8 +55,12 @@ class AdjustPlanViewModel @Inject constructor(
         val today: Long = 0,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
         val refused: ActionRefused? = null,
+        val writing: Boolean = false,
     ) {
-        val canAsk: Boolean get() = running != null && !asking && shown == null
+        val canAsk: Boolean get() = running != null && !asking && shown == null && !writing
+
+        /** Stop this plan is not offered while an adjustment is being asked for, or a write is under way. */
+        val canStop: Boolean get() = running != null && !asking && !writing
     }
 
     private val local = MutableStateFlow(State(today = today().toEpochDay()))
@@ -88,24 +97,26 @@ class AdjustPlanViewModel @Inject constructor(
 
     fun keepNew() {
         val shown = local.value.shown ?: return
-        local.update { it.copy(refused = null) }
-        guarded(problems, onRefused = { local.update { it.copy(refused = ActionRefused.NOTHING_CHANGED) } }) {
+        if (local.value.writing) return
+        local.update { it.copy(refused = null, writing = true) }
+        guarded(problems, onRefused = { local.update { it.copy(writing = false, refused = ActionRefused.NOTHING_CHANGED) } }) {
             ask.keepAdjusted(shown)
             local.update { it.copy(finished = true) }
         }
     }
 
     /** Design question 6: nothing more is stored; the new version stays offered. */
-    fun keepOld() = local.update { it.copy(finished = true) }
+    fun keepOld() = local.update { if (it.writing) it else it.copy(finished = true) }
 
-    fun askStop() = local.update { it.copy(confirmStop = true) }
+    fun askStop() = local.update { if (it.canStop) it.copy(confirmStop = true) else it }
 
     fun cancelStop() = local.update { it.copy(confirmStop = false) }
 
     fun confirmStop() {
         val id = local.value.running?.programme?.id ?: return
-        local.update { it.copy(confirmStop = false, refused = null) }
-        guarded(problems, onRefused = { local.update { it.copy(refused = ActionRefused.NOTHING_CHANGED) } }) {
+        if (!local.value.canStop) return
+        local.update { it.copy(confirmStop = false, refused = null, writing = true) }
+        guarded(problems, onRefused = { local.update { it.copy(writing = false, refused = ActionRefused.NOTHING_CHANGED) } }) {
             ask.stop(id)
             local.update { it.copy(finished = true) }
         }

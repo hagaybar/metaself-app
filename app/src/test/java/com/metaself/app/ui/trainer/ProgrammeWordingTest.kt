@@ -62,6 +62,7 @@ class ProgrammeWordingTest {
         assertThat(ProgrammeWording.rewritten(3, 4)).isEqualTo("Weeks 3 and 4: to be rewritten")
         assertThat(ProgrammeWording.rewritten(2, 4)).isEqualTo("Weeks 2 to 4: to be rewritten")
         assertThat(ProgrammeWording.rewritten(4, 4)).isEqualTo("Week 4: to be rewritten")
+        assertThat(ProgrammeWording.restRewritten(4)).isEqualTo("Week 4: the rest to be rewritten")
         assertThat(ProgrammeWording.adjustRule(start, 4)).isEqualTo(
             "The trainer rewrites this week's remaining sessions and the weeks after. Weeks already over stay as they were. " +
                 "The end date stays Sun 27 Sep.",

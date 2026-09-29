@@ -178,8 +178,9 @@ object TrainerWording {
     /** Design question 20: everything one request holds (D84), under the review's save-and-ask button. */
     fun privacyReview(ceiling: Int): String = privacy("this session and your words", ceiling)
 
-    /** D93: the evaluation's request also holds the last evaluation and how its plan went. */
-    fun privacyEvaluate(ceiling: Int): String = privacy("these answers", ceiling, extra = "your last evaluation and how its plan went")
+    /** D93: the evaluation's request also holds the last evaluation and how its plan went, and never meals. */
+    fun privacyEvaluate(ceiling: Int): String =
+        privacy("these answers", ceiling, extra = "your last evaluation and how its plan went") + " Never meals."
 
     /** D97. */
     fun privacyAdjust(ceiling: Int): String = privacy("your plan, how it has gone, and your words", ceiling)

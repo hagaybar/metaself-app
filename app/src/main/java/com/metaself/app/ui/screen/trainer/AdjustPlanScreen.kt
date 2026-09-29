@@ -50,9 +50,14 @@ fun AdjustPlanScreen(
             state.loading -> Unit
             running == null -> Text(stringResource(R.string.weeks_not_running))
             shown != null -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+                FromTrainerLabel()
                 WeeksPlanView(shown.plan, shown.ask, running.programme.startEpochDay ?: 0, null)
-                Button(onClick = onKeepNew, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.adjust_keep_new)) }
-                OutlinedButton(onClick = onKeepOld, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.adjust_keep_old)) }
+                Button(onClick = onKeepNew, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.adjust_keep_new))
+                }
+                OutlinedButton(onClick = onKeepOld, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.adjust_keep_old))
+                }
             }
             else -> AdjustForm(state, running, onWords, onAdjust, onAskStop)
         }
@@ -62,7 +67,9 @@ fun AdjustPlanScreen(
         AlertDialog(
             onDismissRequest = onCancelStop,
             text = { Text(stringResource(R.string.adjust_stop_question)) },
-            confirmButton = { TextButton(onClick = onConfirmStop) { Text(stringResource(R.string.adjust_stop_yes)) } },
+            confirmButton = {
+                TextButton(onClick = onConfirmStop, enabled = state.canStop) { Text(stringResource(R.string.adjust_stop_yes)) }
+            },
             dismissButton = { TextButton(onClick = onCancelStop) { Text(stringResource(R.string.adjust_stop_no)) } },
         )
     }
@@ -89,12 +96,12 @@ private fun AdjustForm(
             running.progress.weeks.take(current).forEach { Text(ProgrammeWording.pastWeek(it)) }
             if (running.weekIndex >= 0) Text(ProgrammeWording.thisWeekSoFar(running.progress.weeks[current]))
             val firstRewritten = if (running.weekIndex >= 0) current + 2 else 1
-            if (firstRewritten <= programme.ask.weeks) {
-                Text(
-                    ProgrammeWording.rewritten(firstRewritten, programme.ask.weeks),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+            // In the last week no week after it is left: the rewritten part is this week's rest.
+            val rewritten = when {
+                firstRewritten <= programme.ask.weeks -> ProgrammeWording.rewritten(firstRewritten, programme.ask.weeks)
+                else -> ProgrammeWording.restRewritten(current + 1)
             }
+            Text(rewritten, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         OutlinedTextField(
             value = state.words,
@@ -117,6 +124,6 @@ private fun AdjustForm(
             )
             state.failure?.let { Text(TrainerWording.failure(it), color = MaterialTheme.colorScheme.error) }
         }
-        TextButton(onClick = onAskStop) { Text(stringResource(R.string.adjust_stop)) }
+        TextButton(onClick = onAskStop, enabled = state.canStop) { Text(stringResource(R.string.adjust_stop)) }
     }
 }
