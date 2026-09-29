@@ -108,7 +108,7 @@ class AskTheTrainer @Inject constructor(
         if (!withFeedback) return Reviewed.Saved(saved)
 
         val plan = planId?.let { store.plans(listOf(it))[it] }
-        val question = TrainerRequest.reviewQuestion(workout, saved, plan).copy(planned = running()?.progress?.tickOf(workout.id))
+        val question = TrainerRequest.reviewQuestion(workout, saved, plan).copy(planned = cardProgress()?.tickOf(workout.id))
         return when (val reply = trainer.feedback(request(question, exceptWorkoutId = workoutId))) {
             is TrainerReply.Failed -> Reviewed.NoFeedback(saved, reply.failure)
             is TrainerReply.Answered -> {
@@ -192,11 +192,23 @@ class AskTheTrainer @Inject constructor(
     suspend fun stop(id: Long) = programmes.stop(id, today().toEpochDay())
 
     /** The running plan with its ticks, while it runs; null when none runs or it has ended. Reads only. */
-    suspend fun running(): PlanCard.Running? {
-        val programme = programmes.running() ?: return null
-        val start = programme.startEpochDay ?: return null
+    suspend fun running(): PlanCard.Running? = card() as? PlanCard.Running
+
+    /**
+     * D96: the ticks of the plan on the Trainer screen's card, running or ended — a session on the plan's
+     * last Sunday, reviewed on the Monday after, still ticked its planned session. Reads only.
+     */
+    private suspend fun cardProgress(): PlanProgress? = when (val card = card()) {
+        is PlanCard.Running -> card.progress
+        is PlanCard.Ended -> card.progress
+        PlanCard.None -> null
+    }
+
+    private suspend fun card(): PlanCard {
+        val programme = programmes.running() ?: return PlanCard.None
+        val start = programme.startEpochDay ?: return PlanCard.None
         val workouts = record.observeWorkouts(start, ProgrammeCalendar.lastDay(start, programme.ask.weeks)).first()
-        return PlanCard.of(programme, workouts, today().toEpochDay()) as? PlanCard.Running
+        return PlanCard.of(programme, workouts, today().toEpochDay())
     }
 
     /** D96: the running plan's next session this week, for the plan form. Reads only; nothing is sent. */

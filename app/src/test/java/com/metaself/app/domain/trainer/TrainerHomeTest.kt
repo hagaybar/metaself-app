@@ -92,6 +92,7 @@ class TrainerHomeTest {
 
         val last = start + 13
         assertThat(PlanCard.of(running, emptyList(), today = last + 1)).isInstanceOf(PlanCard.Ended::class.java)
+        assertThat(PlanCard.of(running, emptyList(), today = last + 14)).isInstanceOf(PlanCard.Ended::class.java)
         assertThat(PlanCard.of(running, emptyList(), today = last + 15)).isEqualTo(PlanCard.None)
         assertThat(PlanCard.of(null, emptyList(), today = TEST_EPOCH_DAY)).isEqualTo(PlanCard.None)
     }

@@ -59,6 +59,9 @@ class AskTheTrainerTest {
     private val aboutMe = InMemoryAboutMeStore()
     private val programmes = FakeProgrammeStore()
 
+    /** Today, as the phone reads it; [TEST_EPOCH_DAY] unless a test moves it. */
+    private var day = TEST_EPOCH_DAY
+
     @BeforeEach
     fun setUp() {
         store.workouts.value = listOf(walk(id = 1, day = TEST_EPOCH_DAY))
@@ -379,9 +382,84 @@ class AskTheTrainerTest {
         assertThat(programmes.rows.value.first { it.id == version }.stoppedEpochDay).isEqualTo(TEST_EPOCH_DAY)
     }
 
+    /** D96: the plan has ended by date, but a session on its last Sunday still ticked, and feedback is told so. */
+    @Test
+    fun `feedback the day after the plan ends is told which planned session the last day's session ticked`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY - 14, TEST_EPOCH_DAY - 14)
+        store.workouts.value = listOf(walk(id = 1, day = MONDAY - 1))
+        record.workouts.value = store.workouts.value
+        day = MONDAY
+        trainer.feedback += TrainerReply.Answered(FEEDBACK, "a-model")
+
+        ask().save(workoutId = 1, felt = Felt.RIGHT, words = "", planId = null, withFeedback = true)
+
+        assertThat((trainer.asked.single().question as TrainerQuestion.Review).planned).isEqualTo(PlannedTick(2, WALK_30))
+    }
+
+    /** D94: asked on a Thursday, the plan would start this Monday; kept on the Friday, it starts next Monday. */
+    @Test
+    fun `evaluated on Thursday and kept on Friday, the plan starts the next Monday`() = runTest {
+        trainer.evaluations += TrainerReply.Answered(EvaluationAndPlan(EVALUATION, WEEKS), "a-model")
+        val offered = ask().evaluate(ProgrammeAsk(2, 2)) as AskTheTrainer.Evaluated.Offered
+        assertThat((trainer.asked.single().question as TrainerQuestion.Evaluate).startEpochDay).isEqualTo(MONDAY)
+
+        day = TEST_EPOCH_DAY + 1
+        val start = ask().keepProgramme(offered.programme.id)
+
+        assertThat(start).isEqualTo(MONDAY + 7)
+        assertThat(programmes.running()!!.startEpochDay).isEqualTo(MONDAY + 7)
+    }
+
+    /** Design question 4: adjusted before week 1 starts, every week is rewritten and nothing is ticked. */
+    @Test
+    fun `adjusting before week 1 rewrites every week`() = runTest {
+        day = TEST_EPOCH_DAY + 1
+        val id = programmes.add(offered())
+        ask().keepProgramme(id)
+        day = TEST_EPOCH_DAY + 2
+        val rest = WeeksPlan("Invented new", listOf(PlanWeek("a", listOf(WALK_20)), PlanWeek("b", listOf(WALK_20, WALK_30))), "Invented.")
+        trainer.adjustments += TrainerReply.Answered(rest, "a-model")
+
+        val outcome = ask().adjust("Invented.") as AskTheTrainer.Adjusted.Offered
+
+        val question = trainer.asked.single().question as TrainerQuestion.Adjust
+        assertThat(question.weekIndex).isEqualTo(0)
+        assertThat(question.doneByWeek).isEmpty()
+        assertThat(question.tickedThisWeek).isEmpty()
+        assertThat(question.thisWeekMax).isEqualTo(2)
+        assertThat(outcome.programme.plan.weeks).isEqualTo(rest.weeks)
+    }
+
+    /**
+     * Design questions 1 and 2: the last evaluation is sent with the newest kept version of its plan,
+     * dated the day the evaluation was made; the version was stopped on week 2's Monday, so a session
+     * after that day is not counted.
+     */
+    @Test
+    fun `the last evaluation follows its adjusted chain and stops counting on the stop day`() = runTest {
+        val first = programmes.add(offered().copy(createdAtMillis = (MONDAY - 7) * DAY + 12 * HOUR))
+        programmes.keep(first, MONDAY - 7, MONDAY - 7)
+        val adjusted = WeeksPlan("Invented adjusted", listOf(PlanWeek("w", listOf(WALK_30, WALK_30)), PlanWeek("x", listOf(WALK_20, WALK_20))), "Invented.")
+        val version = programmes.add(offered().copy(evaluation = null, plan = adjusted, replacesId = first))
+        programmes.keepAdjusted(version, first, MONDAY - 5)
+        programmes.stop(version, MONDAY)
+        store.workouts.value = listOf(walk(id = 1, day = MONDAY - 7), walk(id = 2, day = MONDAY), walk(id = 3, day = MONDAY + 1))
+        record.workouts.value = store.workouts.value
+        trainer.evaluations += TrainerReply.Answered(EvaluationAndPlan(EVALUATION, WEEKS), "a-model")
+
+        ask().evaluate(ProgrammeAsk(2, 2))
+
+        val last = (trainer.asked.single().question as TrainerQuestion.Evaluate).last!!
+        assertThat(last.plan).isEqualTo(adjusted)
+        assertThat(last.epochDay).isEqualTo(MONDAY - 7)
+        assertThat(last.evaluation).isEqualTo(EVALUATION)
+        assertThat(last.doneByWeek).containsExactly(1, 1).inOrder()
+    }
+
     private fun ask() = AskTheTrainer(
         record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe, programmes,
-        Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW }, CurrentYear { TEST_YEAR },
+        Today { LocalDate.ofEpochDay(day) }, Now { NOW }, CurrentYear { TEST_YEAR },
     )
 
     /** A synced forty-minute walk starting at 08:00 on [day]. Invented. */
