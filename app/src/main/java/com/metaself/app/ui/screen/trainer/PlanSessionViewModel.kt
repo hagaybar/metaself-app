@@ -93,19 +93,20 @@ class PlanSessionViewModel @Inject constructor(
                 local.update { it.copy(loading = false, shown = kept, kept = kept != null) }
             }
         }
-        if (!openedOnKept) {
-            // D96: a convenience — a failed read leaves the form empty (and is logged), nothing more.
-            guarded(problems, onRefused = {}) {
-                val next = ask.nextPlanned() ?: return@guarded
-                local.update { now ->
-                    if (now.form != Form() || now.asking) {
-                        now.copy(next = next)
-                    } else {
-                        now.copy(
-                            next = next,
-                            form = Form(time = NextInPlan.time(next.session.minutes), wish = NextInPlan.wish(next.session.effort)),
-                        )
-                    }
+        // D96: the next planned session is read however the screen opened — Ask again from a kept plan
+        // shows the form, and its request sends it. The form is pre-filled only when opened on the form,
+        // once, and only while untouched. A convenience: a failed read leaves the form empty (and is
+        // logged), nothing more.
+        guarded(problems, onRefused = {}) {
+            val next = ask.nextPlanned() ?: return@guarded
+            local.update { now ->
+                if (openedOnKept || now.form != Form() || now.asking) {
+                    now.copy(next = next)
+                } else {
+                    now.copy(
+                        next = next,
+                        form = Form(time = NextInPlan.time(next.session.minutes), wish = NextInPlan.wish(next.session.effort)),
+                    )
                 }
             }
         }

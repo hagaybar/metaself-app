@@ -108,7 +108,7 @@ class AskTheTrainer @Inject constructor(
         if (!withFeedback) return Reviewed.Saved(saved)
 
         val plan = planId?.let { store.plans(listOf(it))[it] }
-        val question = TrainerRequest.reviewQuestion(workout, saved, plan).copy(planned = cardProgress()?.tickOf(workout.id))
+        val question = TrainerRequest.reviewQuestion(workout, saved, plan).copy(planned = plannedTickOf(workout.id))
         return when (val reply = trainer.feedback(request(question, exceptWorkoutId = workoutId))) {
             is TrainerReply.Failed -> Reviewed.NoFeedback(saved, reply.failure)
             is TrainerReply.Answered -> {
@@ -210,6 +210,9 @@ class AskTheTrainer @Inject constructor(
         val workouts = record.observeWorkouts(start, ProgrammeCalendar.lastDay(start, programme.ask.weeks)).first()
         return PlanCard.of(programme, workouts, today().toEpochDay())
     }
+
+    /** D96: the planned session [workoutId] ticked, which its feedback request sends. Reads only; nothing is sent. */
+    suspend fun plannedTickOf(workoutId: Long): PlannedTick? = cardProgress()?.tickOf(workoutId)
 
     /** D96: the running plan's next session this week, for the plan form. Reads only; nothing is sent. */
     suspend fun nextPlanned(): PlannedTick? = running()?.next

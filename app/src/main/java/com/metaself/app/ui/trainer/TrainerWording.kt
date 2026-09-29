@@ -175,8 +175,14 @@ object TrainerWording {
     fun privacyPlan(ceiling: Int, withPlan: Boolean = false): String =
         privacy(if (withPlan) "these answers and the next session in your weekly plan" else "these answers", ceiling)
 
-    /** Design question 20: everything one request holds (D84), under the review's save-and-ask button. */
-    fun privacyReview(ceiling: Int): String = privacy("this session and your words", ceiling)
+    /**
+     * Design question 20: everything one request holds (D84), under the review's save-and-ask button; when
+     * the session ticked a planned session of the weekly plan, that planned session too (D96).
+     */
+    fun privacyReview(ceiling: Int, withPlanned: Boolean = false): String = privacy(
+        if (withPlanned) "this session and your words, and the session in your weekly plan it ticked" else "this session and your words",
+        ceiling,
+    )
 
     /** D93: the evaluation's request also holds the last evaluation and how its plan went, and never meals. */
     fun privacyEvaluate(ceiling: Int): String =

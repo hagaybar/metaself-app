@@ -15,6 +15,7 @@ import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanMatch
+import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.ActionRefused
@@ -72,6 +73,8 @@ class ReviewSessionViewModel @Inject constructor(
         val today: Long = 0,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
         val refused: ActionRefused? = null,
+        /** D96: the weekly plan's planned session this session ticked; its feedback request sends it. */
+        val planned: PlannedTick? = null,
     ) {
         val canSave: Boolean get() = workout != null && !gone && !working && (felt != null || words.isNotBlank())
     }
@@ -113,6 +116,11 @@ class ReviewSessionViewModel @Inject constructor(
                     it.copy(workout = workout, plan = plan, felt = review?.felt, words = review?.words.orEmpty(), feedback = review?.feedback)
                 }
             }
+        }
+        // D96: only for the privacy line — a failed read leaves it without the plan (and is logged), nothing more.
+        guarded(problems, onRefused = {}) {
+            val planned = ask.plannedTickOf(workoutId) ?: return@guarded
+            local.update { it.copy(planned = planned) }
         }
     }
 

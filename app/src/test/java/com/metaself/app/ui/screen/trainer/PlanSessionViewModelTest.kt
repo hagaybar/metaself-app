@@ -292,6 +292,25 @@ class PlanSessionViewModelTest {
         assertThat(state.form.activity).isNull()
     }
 
+    /** Opened on a kept suggestion, Ask again shows the form with the next planned session named, not pre-filled. */
+    @Test
+    fun `opened on the kept plan, ask again names the next planned session without pre-filling`() = runTest {
+        val walk40 = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line")
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), null, WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(walk40, walk40)) }, "Invented."), "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        store.keep(store.addPlan(TrainerScreens.storedPlan(createdAt = NOW - HOUR)))
+
+        val viewModel = watched(SavedStateHandle(mapOf(PlanSessionViewModel.SHOW to PlanSessionViewModel.KEPT)))
+        advanceUntilIdle()
+        viewModel.askAgain()
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertThat(state.shown).isNull()
+        assertThat(state.next).isEqualTo(PlannedTick(1, walk40))
+        assertThat(state.form).isEqualTo(PlanSessionViewModel.Form())
+    }
+
     @Test
     fun `with no plan running the form opens empty`() = runTest {
         val viewModel = watched()

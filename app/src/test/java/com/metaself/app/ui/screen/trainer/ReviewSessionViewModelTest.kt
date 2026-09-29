@@ -5,12 +5,21 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.health.FakeMovementRecord
+import com.metaself.app.data.trainer.FakeProgrammeStore
 import com.metaself.app.data.trainer.FakeTrainer
 import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PlannedTick
+import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.Felt
@@ -59,6 +68,7 @@ class ReviewSessionViewModelTest {
     private val record = FakeMovementRecord()
     private val store = FakeTrainerStore()
     private val trainer = FakeTrainer()
+    private val programmes = FakeProgrammeStore()
     private val problems = RecordingProblemLog()
     private val session = walk(1)
 
@@ -84,6 +94,21 @@ class ReviewSessionViewModelTest {
         assertThat(state.workout).isEqualTo(session)
         assertThat(state.plan!!.plan.title).isEqualTo("Steady walk")
         assertThat(state.today).isEqualTo(TEST_EPOCH_DAY)
+    }
+
+    /** D96: the session ticked a planned session of the running weekly plan, which the feedback request sends. */
+    @Test
+    fun `opening reads the planned session the session ticked`() = runTest {
+        val walk40 = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line")
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), null, WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(walk40, walk40)) }, "Invented."), "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+
+        assertThat(opened().state.value.planned).isEqualTo(PlannedTick(1, walk40))
+    }
+
+    @Test
+    fun `with no weekly plan the session ticked nothing`() = runTest {
+        assertThat(opened().state.value.planned).isNull()
     }
 
     @Test
@@ -378,7 +403,7 @@ class ReviewSessionViewModelTest {
         val make = {
             ReviewSessionViewModel(
                 SavedStateHandle(mapOf(ReviewSessionViewModel.WORKOUT_ID to 1L)),
-                TrainerScreens.ask(record, store, trainer), store, FakeAiSettings(),
+                TrainerScreens.ask(record, store, trainer, programmes), store, FakeAiSettings(),
                 TrainerScreens.today, problems, outliving,
             )
         }
