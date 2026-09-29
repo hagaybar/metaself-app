@@ -11,6 +11,13 @@ import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanStep
@@ -20,6 +27,7 @@ import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerHome
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
@@ -135,12 +143,51 @@ class TrainerScreenRenderTest {
         assertThat(written).doesNotContain("Tell the trainer about yourself — injuries, likes, what you're aiming for")
     }
 
+    @Test
+    fun `with no plan the screen offers an evaluation`() {
+        var asked = false
+        val texts = draw(TrainerHome(null, null, emptyList()), onEvaluate = { asked = true })
+
+        assertThat(texts).contains("Evaluate me and plan the weeks ahead")
+        render.click("Evaluate me and plan the weeks ahead")
+        assertThat(asked).isTrue()
+    }
+
+    @Test
+    fun `a running plan shows its week, its ticks, the doors, and the next session under Plan my next session`() {
+        var adjusted = false
+        val card = PlanCard.of(RUNNING, listOf(WAITING.copy(epochDay = TEST_EPOCH_DAY - 3)), TEST_EPOCH_DAY) as PlanCard.Running
+        val texts = draw(TrainerHome(null, null, emptyList(), card, card.next), onAdjust = { adjusted = true })
+
+        assertThat(texts).contains("YOUR 2-WEEK PLAN · WEEK 1 OF 2")
+        assertThat(texts).contains("This week, Mon 31 Aug – Sun 6 Sep")
+        assertThat(texts).contains("Done: Easy walk, 30 min")
+        assertThat(texts).contains("To do: Easy walk, 30 min")
+        assertThat(texts).contains("Next in your plan: easy walk, 30 min")
+        assertThat(texts).contains("See the plan")
+        render.click("Adjust the plan")
+        assertThat(adjusted).isTrue()
+    }
+
+    @Test
+    fun `an ended plan shows its count and offers a new evaluation`() {
+        val ended = PlanCard.of(RUNNING, emptyList(), TEST_EPOCH_DAY + 11) as PlanCard.Ended
+        val texts = draw(TrainerHome(null, null, emptyList(), ended))
+
+        assertThat(texts).contains("YOUR 2-WEEK PLAN HAS ENDED")
+        assertThat(texts).contains("0 of 4 planned sessions done · weeks 0 of 2, 0 of 2")
+        assertThat(texts).contains("Evaluate me and plan again")
+    }
+
     private fun draw(
         home: TrainerHome,
         onReview: (Long) -> Unit = {},
         onPlan: () -> Unit = {},
         onOpenKept: () -> Unit = {},
         onAboutMe: () -> Unit = {},
+        onEvaluate: () -> Unit = {},
+        onSeePlan: () -> Unit = {},
+        onAdjust: () -> Unit = {},
         aboutMe: String = "",
     ): List<String> = render.texts {
         TrainerScreen(
@@ -150,6 +197,9 @@ class TrainerScreenRenderTest {
             onPlan = onPlan,
             onOpenKept = onOpenKept,
             onAboutMe = onAboutMe,
+            onEvaluate = onEvaluate,
+            onSeePlan = onSeePlan,
+            onAdjust = onAdjust,
         )
     }
 
@@ -169,6 +219,12 @@ class TrainerScreenRenderTest {
             answers = PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE),
             plan = SessionPlan("Steady walk", listOf(PlanStep(0, 45, "Walk", "")), "Invented."),
             model = "a-model", kept = true,
+        )
+
+        val EASY_30 = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Invented line")
+        val RUNNING = Programme(
+            1, 0, ProgrammeAsk(2, 2), null, WeeksPlan("Invented plan", List(2) { PlanWeek("w", listOf(EASY_30, EASY_30)) }, "Invented."),
+            "a-model", TEST_EPOCH_DAY - 3, ProgrammeStatus.RUNNING,
         )
 
         val FEEDBACK = Feedback("Invented headline.", "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.YES)

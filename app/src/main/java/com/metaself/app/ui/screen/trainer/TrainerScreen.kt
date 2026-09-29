@@ -3,30 +3,37 @@ package com.metaself.app.ui.screen.trainer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.movement.MovementWeekWording
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.ProgrammeWording
 import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
 /**
- * The Trainer screen (D85), top to bottom: About me (D90), the session waiting for words, Plan my next session, the
- * kept plan while it is offered, and earlier reviewed sessions. Branches only — no early return out of
+ * The Trainer screen (D85), top to bottom: About me (D90), the session waiting for words, the weekly
+ * plan's card (D95, D97) — an offer to evaluate, the running plan's week, or an ended plan's count —
+ * Plan my next session with the plan's next session under it (D96), the kept plan while it is offered,
+ * and earlier reviewed sessions. Branches only — no early return out of
  * an inline composable (InlineComposableReturnGuardTest).
  */
 @Composable
@@ -37,6 +44,9 @@ fun TrainerScreen(
     onPlan: () -> Unit,
     onOpenKept: () -> Unit,
     onAboutMe: () -> Unit,
+    onEvaluate: () -> Unit = {},
+    onSeePlan: () -> Unit = {},
+    onAdjust: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val zone = ZoneId.systemDefault()
@@ -82,7 +92,13 @@ fun TrainerScreen(
                         }
                     }
                 }
-                Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_plan_next)) }
+                PlanCardView(home.plan, onEvaluate, onSeePlan, onAdjust)
+                Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(stringResource(R.string.trainer_plan_next))
+                        home.next?.let { Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall) }
+                    }
+                }
                 // D85: a card with its title and Open, drawn as the waiting session's is.
                 home.keptPlan?.let { kept ->
                     Card(modifier = Modifier.fillMaxWidth()) {
@@ -126,6 +142,59 @@ fun TrainerScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/** D95, D97: the weekly plan's card — an offer, the running plan's week, or an ended plan's count. */
+@Composable
+private fun PlanCardView(card: PlanCard, onEvaluate: () -> Unit, onSeePlan: () -> Unit, onAdjust: () -> Unit) {
+    when (card) {
+        PlanCard.None -> OutlinedButton(onClick = onEvaluate, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.trainer_evaluate))
+        }
+        is PlanCard.Running -> Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    ProgrammeWording.cardHeading(card.programme.ask.weeks, card.weekIndex, card.programme.startEpochDay ?: 0),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(card.programme.plan.title, style = MaterialTheme.typography.titleMedium)
+                if (card.weekIndex in card.progress.weeks.indices) {
+                    val week = card.progress.weeks[card.weekIndex]
+                    Text(ProgrammeWording.weekDates(week.monday), style = MaterialTheme.typography.bodyMedium)
+                    week.ticks.forEach { tick ->
+                        Column(Modifier.heightIn(min = 44.dp), verticalArrangement = Arrangement.Center) {
+                            Text(ProgrammeWording.tickTitle(tick), style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                tick.by?.let(ProgrammeWording::tickLine) ?: tick.planned.what,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    card.progress.weeks.take(card.weekIndex).forEach { past ->
+                        Text(ProgrammeWording.pastWeek(past), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    TextButton(onClick = onSeePlan) { Text(stringResource(R.string.trainer_see_plan)) }
+                    TextButton(onClick = onAdjust) { Text(stringResource(R.string.trainer_adjust_plan)) }
+                }
+            }
+        }
+        is PlanCard.Ended -> Card(modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                Text(
+                    ProgrammeWording.endedHeading(card.programme.ask.weeks),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(card.programme.plan.title, style = MaterialTheme.typography.titleMedium)
+                Text(ProgrammeWording.endedLine(card.progress), style = MaterialTheme.typography.bodyMedium)
+                Button(onClick = onEvaluate) { Text(stringResource(R.string.trainer_evaluate_again)) }
             }
         }
     }
