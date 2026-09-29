@@ -7,6 +7,9 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.assumeSqliteRuntime
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomDatabaseTransaction
+import com.metaself.app.data.letter.LETTER_MONDAY
+import com.metaself.app.data.letter.RoomLetterStore
+import com.metaself.app.data.letter.aWeeklyLetter
 import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
@@ -928,6 +931,26 @@ class HealthRecordStoreTest {
         assertThat(programmes.confirmations(1)).containsExactly(10L, true, 20L, false)
         assertThat(programmes.observeConfirmations(2).first()).containsExactly(10L, false)
         assertThat(db.trainerDao().allConfirmations().first { it.programmeId == 1L && it.workoutId == 10L }.answeredAtMillis).isEqualTo(1_000)
+    }
+
+    /** D104 over a real table: one letter a week, found by its week; read once. Invented figures. */
+    @Test
+    fun `a weekly letter is stored once a week and read once`() = runTest {
+        val letters = RoomLetterStore(db.trainerDao())
+        val first = aWeeklyLetter(weekMonday = LETTER_MONDAY)
+
+        val id = letters.add(first)
+        runCatching { letters.add(first.copy(createdAtMillis = 2_000, model = "another-model")) }
+            .also { assertThat(it.isFailure).isTrue() }
+        letters.add(aWeeklyLetter(weekMonday = LETTER_MONDAY - 7))
+
+        assertThat(letters.of(LETTER_MONDAY)).isEqualTo(first.copy(id = id))
+        assertThat(letters.observeAll().first().map { it.weekMonday }).containsExactly(LETTER_MONDAY, LETTER_MONDAY - 7).inOrder()
+
+        letters.markRead(LETTER_MONDAY, atMillis = 3_000)
+        letters.markRead(LETTER_MONDAY, atMillis = 4_000)
+        assertThat(letters.of(LETTER_MONDAY)!!.readAtMillis).isEqualTo(3_000)
+        assertThat(letters.of(LETTER_MONDAY - 7)!!.readAtMillis).isNull()
     }
 
     private fun aFeedback(headline: String) =

@@ -18,7 +18,9 @@ import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.drive.DriveArchiveDrive
 import com.metaself.app.data.letter.FoodTotals
+import com.metaself.app.data.letter.LetterStore
 import com.metaself.app.data.letter.RoomFoodTotals
+import com.metaself.app.data.letter.RoomLetterStore
 import com.metaself.app.data.lifecycle.AppForeground
 import com.metaself.app.data.lifecycle.ProcessAppForeground
 import com.metaself.app.data.health.ArchiveDrive
@@ -269,6 +271,10 @@ object DataModule {
     @Provides
     @Singleton
     fun provideProgrammeStore(store: RoomProgrammeStore): ProgrammeStore = store
+
+    @Provides
+    @Singleton
+    fun provideLetterStore(store: RoomLetterStore): LetterStore = store
 
     @Provides
     fun provideTrainerReviews(store: TrainerStore): TrainerReviews = store
