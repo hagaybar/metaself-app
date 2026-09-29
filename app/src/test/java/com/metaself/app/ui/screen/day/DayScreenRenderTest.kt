@@ -525,6 +525,24 @@ class DayScreenRenderTest {
         assertThat(dismissed).isTrue()
     }
 
+    /** D99, D103: the one-time note that sets the letter up, on today only, with Set up and a way to put it away. */
+    @Test
+    fun `the letter's setup note is on today with Set up, and never on a past day`() {
+        var setUp = false
+        var dismissed = false
+        val note = "Your weekly letter arrives Sundays at 20:00. Allow notifications so you see it."
+        val texts = draw(emptyList(), letterSetup = note, onSetUpLetter = { setUp = true }, onDismissLetterSetup = { dismissed = true })
+
+        assertThat(texts).containsAtLeast(note, "Set up", "Got it").inOrder()
+        render.click("Set up")
+        assertThat(setUp).isTrue()
+        render.click("Got it")
+        assertThat(dismissed).isTrue()
+
+        val past = draw(emptyList(), isToday = false, letterSetup = note)
+        assertThat(past).doesNotContain(note)
+    }
+
     @Test
     fun `a past day never notes the weekly letter`() {
         val texts = draw(emptyList(), isToday = false, weeklyLetter = "Invented headline")
@@ -1661,6 +1679,9 @@ class DayScreenRenderTest {
         weeklyLetter: String? = null,
         onOpenWeeklyLetter: () -> Unit = {},
         onDismissWeeklyLetter: () -> Unit = {},
+        letterSetup: String? = null,
+        onSetUpLetter: () -> Unit = {},
+        onDismissLetterSetup: () -> Unit = {},
     ): List<String> = render.texts {
         DayScreenContent(
             state = DayUiState.Ready(
@@ -1700,6 +1721,9 @@ class DayScreenRenderTest {
             weeklyLetter = weeklyLetter,
             onOpenWeeklyLetter = onOpenWeeklyLetter,
             onDismissWeeklyLetter = onDismissWeeklyLetter,
+            letterSetup = letterSetup,
+            onSetUpLetter = onSetUpLetter,
+            onDismissLetterSetup = onDismissLetterSetup,
         )
     }
 }

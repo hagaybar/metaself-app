@@ -11,6 +11,8 @@ import com.metaself.app.MainActivity
 import com.metaself.app.R
 import com.metaself.app.domain.letter.WeeklyLetter
 import com.metaself.app.ui.letter.LetterWording
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
 
 /**
  * The weekly letter's two notifications (D99, D103): one when a letter has arrived, whose tap opens it;
@@ -44,6 +46,11 @@ object LetterNotifications {
         post(context, FAILED_ID, LetterWording.FAILED_TITLE, LetterWording.FAILED_TEXT, tap)
     }
 
+    /** Takes down "couldn't be written", if it is showing: the letter has been written after all. */
+    fun cancelFailed(context: Context) {
+        context.getSystemService(NotificationManager::class.java)?.let { runCatching { it.cancel(FAILED_ID) } }
+    }
+
     private fun post(context: Context, id: Int, title: String, text: String, tap: Intent) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         ensureChannel(manager)
@@ -74,4 +81,20 @@ object LetterNotifications {
             NotificationChannel(CHANNEL_ID, LetterWording.CHANNEL, NotificationManager.IMPORTANCE_DEFAULT),
         )
     }
+}
+
+/**
+ * The notifications [WriteWeeklyLetter] touches (D103): when a letter is stored — by a Sunday retry or by
+ * Write it now — the "couldn't be written" notification is out of date and is taken down.
+ */
+fun interface LetterNotifier {
+    fun letterWritten()
+
+    companion object {
+        val NONE = LetterNotifier { }
+    }
+}
+
+class AndroidLetterNotifier @Inject constructor(@ApplicationContext private val context: Context) : LetterNotifier {
+    override fun letterWritten() = LetterNotifications.cancelFailed(context)
 }

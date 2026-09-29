@@ -90,6 +90,9 @@ fun DayPager(
     weeklyLetter: String? = null,
     onOpenWeeklyLetter: () -> Unit = {},
     onDismissWeeklyLetter: () -> Unit = {},
+    letterSetup: String? = null,
+    onSetUpLetter: () -> Unit = {},
+    onDismissLetterSetup: () -> Unit = {},
 ) {
     // Today's sentence under a ratio changes with the clock alone — "next meal from 12:00" becomes
     // "your 14 hours were up" at 12:00, and "Good morning." goes at noon — so the moment it is said
@@ -122,6 +125,9 @@ fun DayPager(
             weeklyLetter = weeklyLetter,
             onOpenWeeklyLetter = onOpenWeeklyLetter,
             onDismissWeeklyLetter = onDismissWeeklyLetter,
+            letterSetup = letterSetup,
+            onSetUpLetter = onSetUpLetter,
+            onDismissLetterSetup = onDismissLetterSetup,
         )
     }
 }
@@ -147,6 +153,9 @@ private fun DayPagerOn(
     weeklyLetter: String?,
     onOpenWeeklyLetter: () -> Unit,
     onDismissWeeklyLetter: () -> Unit,
+    letterSetup: String?,
+    onSetUpLetter: () -> Unit,
+    onDismissLetterSetup: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -299,6 +308,9 @@ private fun DayPagerOn(
                         weeklyLetter = weeklyLetter,
                         onOpenWeeklyLetter = onOpenWeeklyLetter,
                         onDismissWeeklyLetter = onDismissWeeklyLetter,
+                        letterSetup = letterSetup,
+                        onSetUpLetter = onSetUpLetter,
+                        onDismissLetterSetup = onDismissLetterSetup,
                     )
                 }
             }

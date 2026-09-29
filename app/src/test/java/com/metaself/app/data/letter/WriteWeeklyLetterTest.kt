@@ -51,6 +51,7 @@ class WriteWeeklyLetterTest {
     private val aboutMe = InMemoryAboutMeStore()
     private val letters = FakeLetterStore()
     private val events = mutableListOf<String>()
+    private var told = 0
     private var granted = false
     private var copySucceeds = true
     private var onCopy: suspend () -> Unit = {}
@@ -76,6 +77,7 @@ class WriteWeeklyLetterTest {
         },
         now = { NOW },
         year = { 2026 },
+        notifier = { told++ },
     )
 
     private fun walk(id: Long, day: Long, minutes: Int = 40) = Workout(
@@ -87,6 +89,23 @@ class WriteWeeklyLetterTest {
 
     private fun someFood() {
         food.days = mapOf(LETTER_MONDAY to DayTotals(2_000, 100, 200, 70))
+    }
+
+    /** D103: a letter stored after all takes down "couldn't be written"; a failure or a quiet week leaves it. */
+    @Test
+    fun `a stored letter tells the notifications, and nothing else does`() = runTest {
+        someFood()
+        job()(LETTER_MONDAY)
+        assertThat(told).isEqualTo(1)
+
+        letters.letters.value = emptyList()
+        writer = FakeLetterWriter(LetterReply.Failed(EstimateResult.Unreachable(), null))
+        job()(LETTER_MONDAY)
+        assertThat(told).isEqualTo(1)
+
+        food.days = emptyMap()
+        assertThat(job()(LETTER_MONDAY)).isEqualTo(WriteWeeklyLetter.Outcome.Quiet)
+        assertThat(told).isEqualTo(1)
     }
 
     @Test

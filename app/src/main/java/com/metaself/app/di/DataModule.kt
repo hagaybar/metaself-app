@@ -21,6 +21,10 @@ import com.metaself.app.data.letter.FoodTotals
 import com.metaself.app.data.letter.LetterStore
 import com.metaself.app.data.letter.RoomFoodTotals
 import com.metaself.app.data.letter.RoomLetterStore
+import com.metaself.app.data.letter.AndroidLetterNotifier
+import com.metaself.app.data.letter.AndroidNotificationAccess
+import com.metaself.app.data.letter.NotificationAccess
+import com.metaself.app.data.letter.LetterNotifier
 import com.metaself.app.data.letter.LetterScheduling
 import com.metaself.app.data.letter.WeeklyLetterJob
 import com.metaself.app.data.letter.WeeklyLetterScheduler
@@ -285,6 +289,12 @@ object DataModule {
     /** The weekly letter's setting re-queues the Sunday run through this (D99). */
     @Provides
     fun provideLetterScheduling(scheduler: WeeklyLetterScheduler): LetterScheduling = scheduler
+
+    @Provides
+    fun provideNotificationAccess(access: AndroidNotificationAccess): NotificationAccess = access
+
+    @Provides
+    fun provideLetterNotifier(notifier: AndroidLetterNotifier): LetterNotifier = notifier
 
     /** Write it now's way to the letter's job (design question 19). */
     @Provides

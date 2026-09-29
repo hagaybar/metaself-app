@@ -174,6 +174,10 @@ fun DayScreenContent(
     weeklyLetter: String? = null,
     onOpenWeeklyLetter: () -> Unit = {},
     onDismissWeeklyLetter: () -> Unit = {},
+    // D99, D103: the one-time note that sets the letter up — its words, Set up, and putting it away.
+    letterSetup: String? = null,
+    onSetUpLetter: () -> Unit = {},
+    onDismissLetterSetup: () -> Unit = {},
 ) = CompositionLocalProvider(LocalMoves provides Motion.moves(state.isToday, LocalMoves.current)) {
     // Today moves, the past is still (public issue #16): everything drawn for a past day is still,
     // whatever the system allows, and today moves only if the system allows motion at all.
@@ -199,6 +203,15 @@ fun DayScreenContent(
                 onAction = onOpenWeeklyLetter,
                 dismissLabel = LetterWording.DISMISS,
                 onDismiss = onDismissWeeklyLetter,
+            )
+        }
+        if (state.isToday && letterSetup != null) {
+            MarginNote(
+                text = letterSetup,
+                actionLabel = LetterWording.SET_UP,
+                onAction = onSetUpLetter,
+                dismissLabel = LetterWording.DISMISS,
+                onDismiss = onDismissLetterSetup,
             )
         }
 

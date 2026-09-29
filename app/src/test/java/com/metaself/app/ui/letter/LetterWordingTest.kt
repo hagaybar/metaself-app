@@ -115,6 +115,20 @@ class LetterWordingTest {
     }
 
     @Test
+    fun `the setup note asks for what is still wanted`() {
+        assertThat(LetterWording.setupNote(20, notifications = true, background = false))
+            .isEqualTo("Your weekly letter arrives Sundays at 20:00. Allow notifications so you see it.")
+        assertThat(LetterWording.setupNote(20, notifications = true, background = true)).isEqualTo(
+            "Your weekly letter arrives Sundays at 20:00. Allow notifications so you see it. Then allow Sunday's band " +
+                "data — so Sunday's letter includes sessions from today.",
+        )
+        assertThat(LetterWording.setupNote(18, notifications = false, background = true))
+            .isEqualTo("Your weekly letter arrives Sundays at 18:00. Allow Sunday's band data — so Sunday's letter includes sessions from today.")
+        assertThat(LetterWording.setupNote(20, notifications = false, background = false)).isNull()
+        assertThat(LetterWording.SET_UP).isEqualTo("Set up")
+    }
+
+    @Test
     fun `the list, Write it now and what it sends`() {
         assertThat(LetterWording.LIST_TITLE).isEqualTo("Weekly letters")
         assertThat(LetterWording.WRITE_NOW).isEqualTo("Write it now")

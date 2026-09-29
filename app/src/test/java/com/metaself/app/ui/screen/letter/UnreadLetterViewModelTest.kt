@@ -36,6 +36,10 @@ class UnreadLetterViewModelTest {
         override suspend fun dismiss(weekMonday: Long) {
             dismissed.value = weekMonday
         }
+        override val setupDone = MutableStateFlow(false)
+        override suspend fun markSetupDone() {
+            setupDone.value = true
+        }
     }
     private var today = LETTER_MONDAY + 7
 

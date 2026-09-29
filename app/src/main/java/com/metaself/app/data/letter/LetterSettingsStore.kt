@@ -53,6 +53,10 @@ interface LetterNoteStore {
     /** The Monday of the week whose note was put away; null for none. */
     val dismissed: Flow<Long?>
     suspend fun dismiss(weekMonday: Long)
+
+    /** Whether the one-time "allow notifications" note has been put away or its Set up gone through. */
+    val setupDone: Flow<Boolean>
+    suspend fun markSetupDone()
 }
 
 class DataStoreLetterNoteStore(private val store: DataStore<Preferences>) : LetterNoteStore {
@@ -62,7 +66,14 @@ class DataStoreLetterNoteStore(private val store: DataStore<Preferences>) : Lett
         store.edit { it[DISMISSED] = weekMonday }
     }
 
+    override val setupDone: Flow<Boolean> = store.data.map { it[SETUP_DONE] ?: false }
+
+    override suspend fun markSetupDone() {
+        store.edit { it[SETUP_DONE] = true }
+    }
+
     private companion object {
         val DISMISSED = longPreferencesKey("weekly_letter_note_dismissed")
+        val SETUP_DONE = booleanPreferencesKey("weekly_letter_setup_done")
     }
 }

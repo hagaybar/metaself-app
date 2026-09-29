@@ -67,6 +67,8 @@ class WriteWeeklyLetter @Inject constructor(
     private val status: HealthRecordStatus,
     private val now: Now,
     private val year: CurrentYear,
+    /** Told when a letter is stored, so a "couldn't be written" notification still showing is taken down. */
+    private val notifier: LetterNotifier = LetterNotifier.NONE,
 ) : WeeklyLetterJob {
     sealed interface Outcome {
         data object Quiet : Outcome
@@ -138,6 +140,8 @@ class WriteWeeklyLetter @Inject constructor(
                     model = reply.model, bandDataUntil = bandDataUntil,
                 )
                 letters.add(letter)
+                // A notification is never worth failing a stored letter for.
+                runCatching { notifier.letterWritten() }
                 Outcome.Written(letter)
             }
         }

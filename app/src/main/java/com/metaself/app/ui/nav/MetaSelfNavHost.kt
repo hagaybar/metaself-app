@@ -3,9 +3,11 @@ package com.metaself.app.ui.nav
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.health.connect.client.PermissionController
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,8 +67,10 @@ import com.metaself.app.ui.screen.weight.WeightViewModel
 import com.metaself.app.ui.screen.movement.MovementScreen
 import com.metaself.app.ui.screen.movement.MovementViewModel
 import com.metaself.app.ui.screen.movement.TakeSharedWorkoutFile
+import com.metaself.app.data.health.HealthPermissions
 import com.metaself.app.data.letter.LetterOpen
 import com.metaself.app.ui.screen.letter.LetterScreen
+import com.metaself.app.ui.screen.letter.LetterSetupViewModel
 import com.metaself.app.ui.screen.letter.LetterViewModel
 import com.metaself.app.ui.screen.letter.LettersScreen
 import com.metaself.app.ui.screen.letter.LettersViewModel
@@ -299,6 +303,31 @@ fun MetaSelfNavHost(
     NavHost(navController = navController, startDestination = Destination.start.route) {
 
         composable(Destination.Today.route) {
+            // D99, D103: the one-time note that sets the weekly letter up. The permissions are read again
+            // whenever the day comes to the front; Set up asks for notifications, then the band's
+            // background read where it is offered, and is then done whatever was chosen.
+            val setupViewModel: LetterSetupViewModel = hiltViewModel()
+            val letterSetup by setupViewModel.note.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(setupViewModel) {
+                setupViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
+            val askBackground = rememberLauncherForActivityResult(
+                PermissionController.createRequestPermissionResultContract(),
+            ) {
+                setupViewModel.done()
+                setupViewModel.lookedAt()
+            }
+            val askNotifications = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) {
+                if (letterSetup?.askBackground == true) {
+                    askBackground.launch(setOf(HealthPermissions.BACKGROUND))
+                } else {
+                    setupViewModel.done()
+                    setupViewModel.lookedAt()
+                }
+            }
             DayPager(
                 viewModel = dayViewModel,
                 onOpenProfile = onEditProfile,
@@ -324,6 +353,18 @@ fun MetaSelfNavHost(
                 weeklyLetter = unreadLetter?.headline,
                 onOpenWeeklyLetter = { unreadLetter?.let { navController.navigate(Destination.Letter.of(it.weekMonday)) } },
                 onDismissWeeklyLetter = { unreadLetter?.let { unreadLetterViewModel.dismiss(it.weekMonday) } },
+                letterSetup = letterSetup?.text,
+                onSetUpLetter = {
+                    val note = letterSetup
+                    when {
+                        note == null -> Unit
+                        note.askNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        note.askBackground -> askBackground.launch(setOf(HealthPermissions.BACKGROUND))
+                        else -> setupViewModel.done()
+                    }
+                },
+                onDismissLetterSetup = setupViewModel::done,
             )
         }
 

@@ -122,6 +122,23 @@ object LetterWording {
     fun bandNote(untilMillis: Long, zone: ZoneId): String =
         "Band data up to ${DAY_TIME.format(Instant.ofEpochMilli(untilMillis).atZone(zone))}."
 
+    const val SET_UP = "Set up"
+
+    /**
+     * The one-time note that sets the letter up (D99, D103): what it still needs — notifications, so it is
+     * seen; the band's background read, with the setting's reason — or null when it needs nothing.
+     */
+    fun setupNote(hour: Int, notifications: Boolean, background: Boolean): String? {
+        val arrives = "Your weekly letter arrives Sundays at ${hour(hour)}."
+        val band = "allow Sunday's band data — so Sunday's letter includes sessions from today."
+        return when {
+            notifications && background -> "$arrives Allow notifications so you see it. Then $band"
+            notifications -> "$arrives Allow notifications so you see it."
+            background -> "$arrives " + band.replaceFirstChar { it.uppercase() }
+            else -> null
+        }
+    }
+
     fun settingLine(on: Boolean, hour: Int): String = if (on) "Sundays at ${hour(hour)}" else "Off"
 
     fun hour(hour: Int): String = String.format(Locale.US, "%02d:00", hour)
