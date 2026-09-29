@@ -120,7 +120,7 @@ class TrainerScreenRenderTest {
     @Test
     fun `an unreadable record says so`() {
         val texts = render.texts {
-            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {}, {})
+            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {}, {}, {}, {}, {})
         }
 
         assertThat(texts).contains("The trainer's record could not be read; Recent problems says why.")

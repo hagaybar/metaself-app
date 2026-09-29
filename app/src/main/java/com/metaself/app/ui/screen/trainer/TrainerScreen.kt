@@ -56,9 +56,9 @@ fun TrainerScreen(
     onPlan: () -> Unit,
     onOpenKept: () -> Unit,
     onAboutMe: () -> Unit,
-    onEvaluate: () -> Unit = {},
-    onSeePlan: () -> Unit = {},
-    onAdjust: () -> Unit = {},
+    onEvaluate: () -> Unit,
+    onSeePlan: () -> Unit,
+    onAdjust: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val zone = ZoneId.systemDefault()
