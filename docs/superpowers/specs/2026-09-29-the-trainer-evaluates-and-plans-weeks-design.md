@@ -135,14 +135,16 @@ formats 1–7 still read (no programmes).
 
 - One row per answer that arrives, kept or not: id, createdAtMillis, the form's weeks, perWeek and words,
   the evaluation (JSON text, null on an adjusted version), the plan (JSON text, the composed version),
-  the model's name, startEpochDay (null until kept), status, stoppedEpochDay (null unless stopped), and replacesId (the version an adjustment
+  the model's name, startEpochDay (null until kept), status, stoppedEpochDay (the day it stopped running —
+  stopped, replaced, or adjusted — else null), and replacesId (the version an adjustment
   was made from, else null).
 - **status:** OFFERED (arrived, not kept), RUNNING (at most one row), REPLACED (a newer plan was kept),
   ADJUSTED (a newer version of it was kept) or STOPPED. There is no ENDED: a RUNNING plan past its
   last Sunday is ended by date.
 - **The last evaluation** sent by D93 is the newest row with an evaluation that was kept at some point
   (status RUNNING, REPLACED, ADJUSTED or STOPPED); an offered-and-not-kept evaluation is not sent, since
-  the owner did not take it up. Its plan's counts are D95's, over the weeks it ran.
+  the owner did not take it up. Its plan is the newest kept version of it, and that plan's counts are
+  D95's, over the weeks it ran, up to the day it stopped running.
 - Ticks are not stored (D95). No foreign key to workouts; nothing is renumbered on restore. A restore
   replaces the table, and the confirmation before a restore counts plans on both sides, as D88's does.
 
