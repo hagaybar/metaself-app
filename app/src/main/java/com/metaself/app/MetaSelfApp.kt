@@ -1,6 +1,8 @@
 package com.metaself.app
 
 import android.app.Application
+import androidx.hilt.work.HiltWorkerFactory
+import androidx.work.Configuration
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.ui.crashDetail
 import dagger.hilt.android.HiltAndroidApp
@@ -13,10 +15,17 @@ import javax.inject.Inject
  * places its annotations go, and both exist from step 1.
  */
 @HiltAndroidApp
-class MetaSelfApp : Application() {
+class MetaSelfApp : Application(), Configuration.Provider {
 
     @Inject
     lateinit var problems: ProblemLog
+
+    /** Hilt's factory, so a worker is built with its dependencies (D99). */
+    @Inject
+    lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().setWorkerFactory(workerFactory).build()
 
     override fun onCreate() {
         super.onCreate()

@@ -211,6 +211,12 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    // D99: the weekly letter is written in the background; Android gives an alarm seconds, and the
+    // letter needs a copy and an AI answer. WorkManager waits for a network, retries and survives a
+    // restart; Hilt's factory lets the worker be injected.
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
