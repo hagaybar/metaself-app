@@ -6,16 +6,26 @@ import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.health.FakeMovementRecord
+import com.metaself.app.data.trainer.FakeProgrammeStore
 import com.metaself.app.data.trainer.FakeTrainer
 import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.day.TEST_EPOCH_DAY
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PlannedTick
+import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
@@ -55,6 +65,7 @@ class PlanSessionViewModelTest {
     private val record = FakeMovementRecord()
     private val store = FakeTrainerStore()
     private val trainer = FakeTrainer()
+    private val programmes = FakeProgrammeStore()
     private val settings = FakeAiSettings()
     private val problems = RecordingProblemLog()
 
@@ -264,13 +275,58 @@ class PlanSessionViewModelTest {
         assertThat(viewModel.state.value.ceiling).isEqualTo(20)
     }
 
+    /** D96: the form opens on the next planned session's time and effort; every row stays changeable. */
+    @Test
+    fun `the empty form is pre-filled from the next planned session`() = runTest {
+        val walk40 = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line")
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), null, WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(walk40, walk40)) }, "Invented."), "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+
+        val viewModel = watched()
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertThat(state.next).isEqualTo(PlannedTick(1, walk40))
+        assertThat(state.form.time).isEqualTo(TimeAvailable.MIN_45)
+        assertThat(state.form.wish).isEqualTo(Wish.NOT_SURE)
+        assertThat(state.form.activity).isNull()
+    }
+
+    /** Opened on a kept suggestion, Ask again shows the form with the next planned session named, not pre-filled. */
+    @Test
+    fun `opened on the kept plan, ask again names the next planned session without pre-filling`() = runTest {
+        val walk40 = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line")
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), null, WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(walk40, walk40)) }, "Invented."), "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        store.keep(store.addPlan(TrainerScreens.storedPlan(createdAt = NOW - HOUR)))
+
+        val viewModel = watched(SavedStateHandle(mapOf(PlanSessionViewModel.SHOW to PlanSessionViewModel.KEPT)))
+        advanceUntilIdle()
+        viewModel.askAgain()
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertThat(state.shown).isNull()
+        assertThat(state.next).isEqualTo(PlannedTick(1, walk40))
+        assertThat(state.form).isEqualTo(PlanSessionViewModel.Form())
+    }
+
+    @Test
+    fun `with no plan running the form opens empty`() = runTest {
+        val viewModel = watched()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.next).isNull()
+        assertThat(viewModel.state.value.form).isEqualTo(PlanSessionViewModel.Form())
+    }
+
     /** A view model whose state is collected for the length of the test, as a screen would. */
     private fun TestScope.watched(
         saved: SavedStateHandle = SavedStateHandle(),
         trainer: Trainer = this@PlanSessionViewModelTest.trainer,
         entry: ViewModelStore = ViewModelStore(),
     ): PlanSessionViewModel {
-        val make = { PlanSessionViewModel(saved, TrainerScreens.ask(record, store, trainer), store, settings, problems, outliving) }
+        val make = { PlanSessionViewModel(saved, TrainerScreens.ask(record, store, trainer, programmes), store, settings, problems, outliving) }
         // Held in a store, as the nav host's entry holds it, so clearing the store is leaving the screen.
         val viewModel = ViewModelProvider(entry, TrainerScreens.factory(make))[PlanSessionViewModel::class.java]
         backgroundScope.launch { viewModel.state.collect {} }

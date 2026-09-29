@@ -3,8 +3,12 @@ package com.metaself.app.ui.screen.trainer
 import androidx.compose.ui.semantics.Role
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.ActionRefused
@@ -41,6 +45,15 @@ class PlanSessionScreenRenderTest {
         assertThat(texts).containsAtLeast("Fresh", "Normal", "Tired").inOrder()
         assertThat(texts).containsAtLeast("Easy", "A push", "Not sure").inOrder()
         assertThat(texts).contains("Anything else? (optional)")
+    }
+
+    @Test
+    fun `the next planned session is named above the rows, and in the privacy line`() {
+        val next = PlannedTick(1, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line"))
+        val texts = draw(PlanSessionViewModel.State(next = next))
+
+        assertThat(texts).containsAtLeast("Next in your plan: steady walk, 40 min", "WHAT").inOrder()
+        assertThat(texts.any { it.contains("these answers and the next session in your weekly plan") }).isTrue()
     }
 
     @Test

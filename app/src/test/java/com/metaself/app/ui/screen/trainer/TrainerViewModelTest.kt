@@ -5,6 +5,7 @@ import com.metaself.app.data.health.FakeMovementRecord
 import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.FakeProgrammeStore
 import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
@@ -14,7 +15,14 @@ import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -39,6 +47,7 @@ class TrainerViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val record = FakeMovementRecord()
     private val store = FakeTrainerStore()
+    private val programmes = FakeProgrammeStore()
     private val problems = RecordingProblemLog()
     private val aboutMe = InMemoryAboutMeStore()
 
@@ -128,10 +137,24 @@ class TrainerViewModelTest {
         assertThat(viewModel.state.value.home!!.waiting).isNull()
     }
 
+    /** D95: a plan kept elsewhere shows at once, ticked from the record. Invented. */
+    @Test
+    fun `a running plan shows with its ticks`() = runTest {
+        record.workouts.value = listOf(walk(1, TEST_EPOCH_DAY))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        val id = programmes.add(RUNNING_PLAN)
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        advanceUntilIdle()
+
+        val card = viewModel.state.value.home!!.plan as PlanCard.Running
+        assertThat(card.progress.weeks.first().done).isEqualTo(1)
+    }
+
     private var date: LocalDate = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
 
     private fun viewModel(movement: MovementRecord = record) = TrainerViewModel(
-        movement, store, aboutMe, Today { date }, Now { NOW }, problems,
+        movement, store, programmes, aboutMe, Today { date }, Now { NOW }, problems,
     )
 
     /** A synced forty-minute walk at 07:00 on [day]. Invented. */
@@ -145,5 +168,7 @@ class TrainerViewModelTest {
         const val HOUR = 3_600_000L
         const val DAY = 86_400_000L
         const val NOW = TEST_EPOCH_DAY * DAY + 15 * HOUR
+        val EASY_30 = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Invented line")
+        val RUNNING_PLAN = Programme(0, NOW, ProgrammeAsk(2, 2), null, WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(EASY_30, EASY_30)) }, "Invented."), "a-model")
     }
 }

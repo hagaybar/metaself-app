@@ -10,10 +10,12 @@ import com.metaself.app.data.day.RoomDatabaseTransaction
 import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.RoomProgrammeStore
 import com.metaself.app.data.trainer.RoomTrainerStore
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.health.HealthKind
 import com.metaself.app.domain.movement.FileWorkout
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.trainer.Feedback
@@ -23,10 +25,17 @@ import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanStep
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -839,6 +848,71 @@ class HealthRecordStoreTest {
         title = null, distanceM = 4_000, energyKcal = null, energySource = "NONE",
         effort = null, source = "SYNCED", origin = ORIGIN, originId = "w-1", note = null,
     )
+
+    /** D98 over a real table: keep, adjust, stop; one running at a time. */
+    @Test
+    fun `a weekly plan is kept, adjusted and stopped, one running at a time`() = runTest {
+        val programmes = RoomProgrammeStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val plan = WeeksPlan(
+            "Invented",
+            List(2) {
+                PlanWeek(
+                    "w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk")),
+                )
+            },
+            "Invented.",
+        )
+        val offered = Programme(0, 1_000, ProgrammeAsk(2, 2), null, plan, "m")
+        val first = programmes.add(offered)
+        val second = programmes.add(offered.copy(createdAtMillis = 2_000))
+
+        programmes.keep(first, startEpochDay = day - 3, today = day)
+        programmes.keep(second, startEpochDay = day - 3, today = day)
+        val adjusted = programmes.add(offered.copy(createdAtMillis = 3_000, replacesId = second))
+        programmes.keepAdjusted(adjusted, second, today = day)
+
+        val all = programmes.all().associateBy { it.id }
+        assertThat(all.getValue(first).status).isEqualTo(ProgrammeStatus.REPLACED)
+        assertThat(all.getValue(first).stoppedEpochDay).isEqualTo(day)
+        assertThat(all.getValue(second).status).isEqualTo(ProgrammeStatus.ADJUSTED)
+        assertThat(all.getValue(second).stoppedEpochDay).isEqualTo(day)
+        assertThat(programmes.running()!!.id).isEqualTo(adjusted)
+        assertThat(programmes.running()!!.startEpochDay).isEqualTo(day - 3)
+
+        programmes.stop(adjusted, today = day)
+        assertThat(programmes.running()).isNull()
+        val stopped = programmes.all().single { it.id == adjusted }
+        assertThat(stopped.status).isEqualTo(ProgrammeStatus.STOPPED)
+        assertThat(stopped.stoppedEpochDay).isEqualTo(day)
+    }
+
+    /** D98 over a real table: a write on a row in the wrong state is refused and changes nothing. */
+    @Test
+    fun `a weekly plan write on a row in the wrong state is refused, and nothing changes`() = runTest {
+        val programmes = RoomProgrammeStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val plan = WeeksPlan(
+            "Invented",
+            List(2) { PlanWeek("w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))) },
+            "Invented.",
+        )
+        val offered = Programme(0, 1_000, ProgrammeAsk(2, 2), null, plan, "m")
+        val replaced = programmes.add(offered)
+        val running = programmes.add(offered.copy(createdAtMillis = 2_000))
+        programmes.keep(replaced, startEpochDay = day - 10, today = day - 7)
+        programmes.keep(running, startEpochDay = day - 3, today = day - 3)
+        val stale = programmes.add(offered.copy(createdAtMillis = 3_000, replacesId = replaced))
+        val before = db.trainerDao().allProgrammes()
+
+        // Keep on a row that is not an offered answer: the running plan is not replaced.
+        runCatching { programmes.keep(replaced, startEpochDay = day, today = day) }.also { assertThat(it.isFailure).isTrue() }
+        // An adjusted version of a plan no longer running.
+        runCatching { programmes.keepAdjusted(stale, replaced, today = day) }.also { assertThat(it.isFailure).isTrue() }
+        // Stop on a plan no longer running: its stop day stays the day it was replaced.
+        runCatching { programmes.stop(replaced, today = day) }.also { assertThat(it.isFailure).isTrue() }
+
+        assertThat(db.trainerDao().allProgrammes()).isEqualTo(before)
+        assertThat(programmes.running()!!.id).isEqualTo(running)
+    }
 
     private fun aFeedback(headline: String) =
         Feedback(headline, "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.NO_PLAN)

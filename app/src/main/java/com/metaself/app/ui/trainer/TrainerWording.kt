@@ -169,17 +169,33 @@ object TrainerWording {
 
     /**
      * Design question 20: everything one request holds (D84), under the plan form's ask button — the
-     * note about yourself (D90) and the monthly lines (D89) included.
+     * note about yourself (D90) and the monthly lines (D89) included; with a running weekly plan, its
+     * next session too (D96).
      */
-    fun privacyPlan(ceiling: Int): String = privacy("these answers", ceiling)
+    fun privacyPlan(ceiling: Int, withPlan: Boolean = false): String =
+        privacy(if (withPlan) "these answers and the next session in your weekly plan" else "these answers", ceiling)
 
-    /** Design question 20: everything one request holds (D84), under the review's save-and-ask button. */
-    fun privacyReview(ceiling: Int): String = privacy("this session and your words", ceiling)
+    /**
+     * Design question 20: everything one request holds (D84), under the review's save-and-ask button; when
+     * the session ticked a planned session of the weekly plan, that planned session too (D96).
+     */
+    fun privacyReview(ceiling: Int, withPlanned: Boolean = false): String = privacy(
+        if (withPlanned) "this session and your words, and the session in your weekly plan it ticked" else "this session and your words",
+        ceiling,
+    )
 
-    private fun privacy(first: String, ceiling: Int): String =
+    /** D93: the evaluation's request also holds the last evaluation and how its plan went, and never meals. */
+    fun privacyEvaluate(ceiling: Int): String =
+        privacy("these answers", ceiling, extra = "your last evaluation and how its plan went") + " Never meals."
+
+    /** D97. */
+    fun privacyAdjust(ceiling: Int): String = privacy("your plan, how it has gone, and your words", ceiling)
+
+    private fun privacy(first: String, ceiling: Int, extra: String? = null): String =
         "Sends to OpenAI, with your key: $first; your note about yourself; " +
             "your sessions of the last six weeks, with your words on them; weekly totals; " +
             "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; " +
+            (extra?.let { "$it; " } ?: "") +
             "and the trainer's last three feedbacks. One of today's $ceiling AI requests."
 
     /** Design question 16. */

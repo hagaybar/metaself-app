@@ -63,6 +63,58 @@ class TrainerHomeTest {
         assertThat(home(recent = combined, reviews = listOf(reviewOf(2))).waiting).isNull()
     }
 
+    // --- D95, D97. The plan starts Monday 31 August 2026 (TEST_EPOCH_DAY - 3). --------------------
+
+    private val start = TEST_EPOCH_DAY - 3
+    private val walk30 = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Easy walk")
+    private val walk40 = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk")
+    private val running = Programme(
+        id = 1, createdAtMillis = 0, ask = ProgrammeAsk(2, 2), evaluation = null,
+        plan = WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(walk30, walk40)) }, "Invented."),
+        model = "a-model", startEpochDay = start, status = ProgrammeStatus.RUNNING,
+    )
+
+    @Test
+    fun `a running plan shows its week, its ticks and the next planned session`() {
+        val card = PlanCard.of(running, listOf(planSession(1, start + 1)), today = TEST_EPOCH_DAY) as PlanCard.Running
+
+        assertThat(card.weekIndex).isEqualTo(0)
+        assertThat(card.progress.weeks.first().done).isEqualTo(1)
+        assertThat(card.next).isEqualTo(PlannedTick(1, walk40))
+    }
+
+    @Test
+    fun `before week 1 there is no next session, and after the last day the plan has ended for fourteen days`() {
+        val later = running.copy(startEpochDay = start + 7)
+        val before = PlanCard.of(later, emptyList(), today = TEST_EPOCH_DAY) as PlanCard.Running
+        assertThat(before.weekIndex).isEqualTo(-1)
+        assertThat(before.next).isNull()
+
+        val last = start + 13
+        assertThat(PlanCard.of(running, emptyList(), today = last + 1)).isInstanceOf(PlanCard.Ended::class.java)
+        assertThat(PlanCard.of(running, emptyList(), today = last + 14)).isInstanceOf(PlanCard.Ended::class.java)
+        assertThat(PlanCard.of(running, emptyList(), today = last + 15)).isEqualTo(PlanCard.None)
+        assertThat(PlanCard.of(null, emptyList(), today = TEST_EPOCH_DAY)).isEqualTo(PlanCard.None)
+    }
+
+    @Test
+    fun `the home carries the card and the next session`() {
+        val home = TrainerHome.of(
+            today = TEST_EPOCH_DAY, nowMillis = 0, recent = emptyList(), reviewed = emptyList(), reviews = emptyList(),
+            kept = null, running = running, planWorkouts = emptyList(),
+        )
+
+        assertThat(home.plan).isInstanceOf(PlanCard.Running::class.java)
+        assertThat(home.next).isEqualTo(PlannedTick(1, walk30))
+    }
+
+    /** A synced thirty-minute walk at 07:00 on [day]. Invented. */
+    private fun planSession(id: Long, day: Long) = Workout(
+        id = id, epochDay = day, startedAtMillis = day * DAY + 7 * HOUR, durationMinutes = 30,
+        kind = WorkoutKind.WALK, title = null, distanceM = null, energyKcal = null, energySource = EnergySource.NONE,
+        effort = null, source = WorkoutSource.SYNCED, hidden = false, note = null,
+    )
+
     private fun home(
         recent: List<Workout> = emptyList(),
         reviewed: List<Workout> = emptyList(),

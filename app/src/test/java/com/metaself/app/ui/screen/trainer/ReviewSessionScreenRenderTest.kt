@@ -2,6 +2,10 @@ package com.metaself.app.ui.screen.trainer
 
 import androidx.compose.ui.semantics.Role
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
@@ -52,6 +56,17 @@ class ReviewSessionScreenRenderTest {
                 "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
                 "One of today's 30 AI requests.",
         )
+    }
+
+    /** D96: when the session ticked a planned session, the privacy line names it; otherwise not. */
+    @Test
+    fun `the privacy line names the planned session the session ticked, only when there is one`() {
+        val planned = PlannedTick(1, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line"))
+
+        assertThat(draw(form.copy(planned = planned)).any {
+            it.startsWith("Sends to OpenAI, with your key: this session and your words, and the session in your weekly plan it ticked; ")
+        }).isTrue()
+        assertThat(draw(form).any { it.contains("weekly plan") }).isFalse()
     }
 
     @Test

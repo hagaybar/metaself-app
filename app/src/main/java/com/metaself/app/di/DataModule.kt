@@ -68,6 +68,9 @@ import com.metaself.app.data.day.MIGRATION_5_6
 import com.metaself.app.data.day.MIGRATION_6_7
 import com.metaself.app.data.day.MIGRATION_7_8
 import com.metaself.app.data.day.MIGRATION_8_9
+import com.metaself.app.data.day.MIGRATION_9_10
+import com.metaself.app.data.trainer.ProgrammeStore
+import com.metaself.app.data.trainer.RoomProgrammeStore
 import com.metaself.app.data.trainer.RoomTrainerStore
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerReviews
@@ -158,6 +161,7 @@ object DataModule {
         MIGRATION_6_7,
         MIGRATION_7_8,
         MIGRATION_8_9,
+        MIGRATION_9_10,
     ).build()
 
     @Provides
@@ -251,6 +255,10 @@ object DataModule {
     @Provides
     @Singleton
     fun provideTrainerStore(store: RoomTrainerStore): TrainerStore = store
+
+    @Provides
+    @Singleton
+    fun provideProgrammeStore(store: RoomProgrammeStore): ProgrammeStore = store
 
     @Provides
     fun provideTrainerReviews(store: TrainerStore): TrainerReviews = store

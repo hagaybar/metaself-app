@@ -20,10 +20,41 @@ enum class Origin { SYNCED, FILE, TYPED }
 
 /** What is being asked (D84's "the question"). */
 sealed interface TrainerQuestion {
-    data class Plan(val answers: PlanAnswers) : TrainerQuestion
+    /** [planned]: the running weekly plan's next session, which the suggestion is shaped around (D96). */
+    data class Plan(val answers: PlanAnswers, val planned: PlannedTick? = null) : TrainerQuestion
 
-    /** [session] carries the felt effort, the words and the matched plan being asked about. */
-    data class Review(val session: SessionFacts) : TrainerQuestion
+    /**
+     * [session] carries the felt effort, the words and the matched plan being asked about; [planned] is
+     * the weekly plan's session it ticked, and its week (D96).
+     */
+    data class Review(val session: SessionFacts, val planned: PlannedTick? = null) : TrainerQuestion
+
+    /**
+     * D93: the form, the Monday the plan would start if kept now (D94), and the last kept evaluation
+     * with how its plan went (D98), or null.
+     */
+    data class Evaluate(val ask: ProgrammeAsk, val startEpochDay: Long, val last: LastEvaluation?) : TrainerQuestion
+
+    /**
+     * D97: the running [plan], the week the owner is in ([weekIndex], from 0), the done-count of each week
+     * before it, the planned sessions already ticked this week, how many this week may still hold
+     * ([thisWeekMax]), and the owner's words. Every count is the phone's (D95).
+     */
+    data class Adjust(
+        val ask: ProgrammeAsk,
+        val startEpochDay: Long,
+        val plan: WeeksPlan,
+        val weekIndex: Int,
+        val doneByWeek: List<Int>,
+        val tickedThisWeek: List<PlannedSession>,
+        val thisWeekMax: Int,
+        val words: String,
+    ) : TrainerQuestion {
+        init {
+            require(weekIndex in plan.weeks.indices) { "weekIndex must name one of the plan's weeks, not $weekIndex" }
+            require(thisWeekMax >= 0) { "thisWeekMax cannot be negative, not $thisWeekMax" }
+        }
+    }
 }
 
 /** One session as D84 sends it. [title] and [origin] of the workout are deliberately absent. */
@@ -204,4 +235,10 @@ interface Trainer {
 
     /** [request]'s question must be [TrainerQuestion.Review]. */
     suspend fun feedback(request: TrainerRequest): TrainerReply<Feedback>
+
+    /** [request]'s question must be [TrainerQuestion.Evaluate] (D93). */
+    suspend fun evaluate(request: TrainerRequest): TrainerReply<EvaluationAndPlan>
+
+    /** [request]'s question must be [TrainerQuestion.Adjust] (D97). The reply is this week and the weeks after. */
+    suspend fun adjust(request: TrainerRequest): TrainerReply<WeeksPlan>
 }

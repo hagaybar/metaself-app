@@ -134,6 +134,21 @@ class TrainerWordingTest {
             .doesNotContain("AGAINST THE PLAN")
     }
 
+    /** D93, D97 (design question 10): each weekly-plan request names what it adds. */
+    @Test
+    fun `the weekly plan's privacy lines name what they add`() {
+        assertThat(TrainerWording.privacyEvaluate(30)).contains("your last evaluation and how its plan went")
+        assertThat(TrainerWording.privacyAdjust(30)).startsWith("Sends to OpenAI, with your key: your plan, how it has gone, and your words;")
+        assertThat(TrainerWording.privacyPlan(30, withPlan = true)).contains("these answers and the next session in your weekly plan")
+        assertThat(TrainerWording.privacyPlan(30)).isEqualTo(TrainerWording.privacyPlan(30, withPlan = false))
+        assertThat(TrainerWording.privacyReview(30, withPlanned = true))
+            .startsWith("Sends to OpenAI, with your key: this session and your words, and the session in your weekly plan it ticked; ")
+        assertThat(TrainerWording.privacyReview(30)).isEqualTo(TrainerWording.privacyReview(30, withPlanned = false))
+        // D93: the evaluation's line alone ends by saying what never goes.
+        assertThat(TrainerWording.privacyEvaluate(30)).endsWith("One of today's 30 AI requests. Never meals.")
+        assertThat(TrainerWording.privacyAdjust(30)).endsWith("One of today's 30 AI requests.")
+    }
+
     /** A synced forty-minute walk starting at [hour]:[minute] UTC on [day]. Invented. */
     private fun walkAt(day: Long, hour: Int, minute: Int) = Workout(
         id = 1, epochDay = day, startedAtMillis = day * DAY + hour * HOUR + minute * MINUTE, durationMinutes = 40,

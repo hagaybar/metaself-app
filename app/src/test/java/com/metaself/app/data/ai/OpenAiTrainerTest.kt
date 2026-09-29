@@ -10,6 +10,10 @@ import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.Rhythm
 import com.metaself.app.domain.trainer.SessionFacts
 import com.metaself.app.domain.trainer.TimeAvailable
@@ -17,6 +21,7 @@ import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.WeekFacts
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -117,6 +122,48 @@ class OpenAiTrainerTest {
         assertThat((reply as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreachable::class.java)
     }
 
+    @Test
+    fun `an evaluation is one call, checked against the form`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_EVALUATION)))
+        server.enqueue(MockResponse().setBody(reply(GOOD_EVALUATION)))
+
+        val fits = trainer().evaluate(EVALUATE_REQUEST)
+        val tooFewWeeks = trainer().evaluate(
+            request(TrainerQuestion.Evaluate(ProgrammeAsk(4, 2), TEST_EPOCH_DAY - 3, null)),
+        )
+
+        assertThat(fits).isInstanceOf(TrainerReply.Answered::class.java)
+        assertThat((tooFewWeeks as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreadable::class.java)
+        assertThat(server.takeRequest().body.readUtf8()).contains("evaluation_and_plan")
+    }
+
+    @Test
+    fun `an adjustment is one call, checked against the weeks left`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_REST)))
+
+        val reply = trainer().adjust(ADJUST_REQUEST)
+
+        assertThat((reply as TrainerReply.Answered).value.weeks).hasSize(2)
+        assertThat(server.takeRequest().body.readUtf8()).contains("weeks_plan")
+    }
+
+    /**
+     * The weeks left come from the plan's own remaining weeks, not `ask.weeks - weekIndex`: a plan of
+     * four weeks, two weeks in, has two weeks left even though the ask (six weeks) minus the week index
+     * (two) would also read four. A two-week reply is accepted; a four-week reply is refused.
+     */
+    @Test
+    fun `the weeks left for an adjustment come from the plan's own weeks, not the ask`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_REST)))
+        server.enqueue(MockResponse().setBody(reply(FOUR_WEEK_REST)))
+
+        val twoWeekReply = trainer().adjust(MID_PLAN_ADJUST_REQUEST)
+        val fourWeekReply = trainer().adjust(MID_PLAN_ADJUST_REQUEST)
+
+        assertThat(twoWeekReply).isInstanceOf(TrainerReply.Answered::class.java)
+        assertThat((fourWeekReply as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreadable::class.java)
+    }
+
     private fun trainer(
         key: String? = "a-key",
         settings: FakeSettings = FakeSettings(),
@@ -203,5 +250,43 @@ class OpenAiTrainerTest {
                 ),
             ),
         )
+
+        val GOOD_EVALUATION = """{"evaluation":{"headline":"Invented","going_well":"Invented.","to_work_on":"Invented.","since_last":""},
+            "plan":{"title":"Invented","weeks":[
+            {"focus":"a","sessions":[{"kind":"walk","minutes":30,"effort":"easy","what":"Walk"}]},
+            {"focus":"b","sessions":[{"kind":"walk","minutes":40,"effort":"steady","what":"Walk"}]}],"why":"Invented."}}"""
+
+        val GOOD_REST = """{"title":"Invented","weeks":[
+            {"focus":"now","sessions":[]},
+            {"focus":"next","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]}],"why":"Invented."}"""
+
+        val EVALUATE_REQUEST = request(TrainerQuestion.Evaluate(ProgrammeAsk(2, 2), TEST_EPOCH_DAY - 3, null))
+
+        private val SOME_PLAN = WeeksPlan(
+            "Invented",
+            List(2) { PlanWeek("w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))) },
+            "Invented.",
+        )
+
+        val ADJUST_REQUEST = request(
+            TrainerQuestion.Adjust(ProgrammeAsk(2, 2), TEST_EPOCH_DAY - 3, SOME_PLAN, 0, emptyList(), emptyList(), 1, "Invented."),
+        )
+
+        /** A four-week plan, two weeks in: two weeks are left, though the six-week ask minus two also reads four. */
+        private val FOUR_WEEK_PLAN = WeeksPlan(
+            "Invented",
+            List(4) { PlanWeek("w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))) },
+            "Invented.",
+        )
+
+        val MID_PLAN_ADJUST_REQUEST = request(
+            TrainerQuestion.Adjust(ProgrammeAsk(6, 2), TEST_EPOCH_DAY - 3, FOUR_WEEK_PLAN, 2, emptyList(), emptyList(), 1, "Invented."),
+        )
+
+        val FOUR_WEEK_REST = """{"title":"Invented","weeks":[
+            {"focus":"a","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]},
+            {"focus":"b","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]},
+            {"focus":"c","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]},
+            {"focus":"d","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]}],"why":"Invented."}"""
     }
 }

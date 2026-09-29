@@ -10,17 +10,25 @@ import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.profile.Goal
 import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanStep
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PlannedTick
+import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.domain.weight.WeightReading
 import kotlinx.serialization.json.Json
@@ -191,7 +199,10 @@ class TrainerPromptTest {
      */
     @Test
     fun `pain, dizziness or chest discomfort in the question come before anything else, and it is not medical`() {
-        listOf(TrainerPrompt.feedbackBody("a-model", reviewRequest()), TrainerPrompt.planBody("a-model", planRequest()))
+        listOf(
+            TrainerPrompt.feedbackBody("a-model", reviewRequest()), TrainerPrompt.planBody("a-model", planRequest()),
+            TrainerPrompt.evaluateBody("a-model", evaluateRequest()), TrainerPrompt.adjustBody("a-model", adjustRequest()),
+        )
             .map(::systemContent)
             .forEach { system ->
                 assertThat(system).contains("pain, dizziness or chest discomfort")
@@ -208,7 +219,10 @@ class TrainerPromptTest {
     @Test
     fun `the instructions name no gender`() {
         val gendered = Regex("\\b(he|his|him|himself|she|her|hers|herself)\\b", RegexOption.IGNORE_CASE)
-        listOf(TrainerPrompt.feedbackBody("a-model", reviewRequest()), TrainerPrompt.planBody("a-model", planRequest()))
+        listOf(
+            TrainerPrompt.feedbackBody("a-model", reviewRequest()), TrainerPrompt.planBody("a-model", planRequest()),
+            TrainerPrompt.evaluateBody("a-model", evaluateRequest()), TrainerPrompt.adjustBody("a-model", adjustRequest()),
+        )
             .map(::systemContent)
             .forEach { system -> assertThat(gendered.findAll(system).map { it.value }.toList()).isEmpty() }
     }
@@ -242,7 +256,7 @@ class TrainerPromptTest {
 
     @Test
     fun `each body is built one way, from one request`() {
-        listOf("planBody", "feedbackBody").forEach { name ->
+        listOf("planBody", "feedbackBody", "evaluateBody", "adjustBody").forEach { name ->
             val ways = TrainerPrompt::class.java.declaredMethods.filter { it.name == name }
             assertThat(ways).hasSize(1)
             assertThat(ways.single().parameterTypes.toList())
@@ -255,6 +269,134 @@ class TrainerPromptTest {
         assertThrows<IllegalArgumentException> { TrainerPrompt.planBody("a-model", reviewRequest()) }
         assertThrows<IllegalArgumentException> { TrainerPrompt.feedbackBody("a-model", planRequest()) }
     }
+
+    // --- D93–D97 -----------------------------------------------------------------------------------
+
+    @Test
+    fun `an evaluation request names its schema and sends the form, the start and the last evaluation`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.evaluateBody("a-model", evaluateRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+        val user = Json.parseToJsonElement(userContent(body)).jsonObject
+        val question = user.getValue("question").jsonObject
+
+        assertThat(body.toString()).contains("evaluation_and_plan")
+        assertThat(user.keys).containsExactly(
+            "question", "today", "about_me", "sessions", "weeks", "months", "weight", "goal", "body", "this_week",
+            "earlier_feedback",
+        )
+        assertThat(question.keys).containsExactly("kind", "weeks", "sessions_a_week", "words", "starts", "last_evaluation")
+        assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("evaluate")
+        assertThat(question.getValue("starts").jsonPrimitive.content).isEqualTo("2026-08-31")
+        val last = question.getValue("last_evaluation").jsonObject
+        assertThat(last.keys).containsExactly("date", "evaluation", "plan", "done_by_week")
+        assertThat(last.getValue("done_by_week").jsonArray.map { it.jsonPrimitive.int }).containsExactly(3, 2).inOrder()
+        val planned = last.getValue("plan").jsonObject.getValue("weeks").jsonArray.first().jsonObject
+            .getValue("sessions").jsonArray.first().jsonObject
+        assertThat(planned.keys).containsExactly("kind", "minutes", "effort", "what")
+        assertThat(planned.getValue("effort").jsonPrimitive.content).isEqualTo("steady")
+    }
+
+    @Test
+    fun `with no earlier evaluation, last_evaluation is null and since_last may be empty`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.evaluateBody("a-model", evaluateRequest(last = null), RequestProfile.DETERMINISTIC)).jsonObject
+        val question = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("question").jsonObject
+
+        assertThat(question.getValue("last_evaluation")).isEqualTo(JsonNull)
+        assertThat(systemContent(TrainerPrompt.evaluateBody("a-model", evaluateRequest()))).contains("empty string when there is none")
+    }
+
+    @Test
+    fun `an adjust request sends the plan, the week, the phone's counts and the words`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.adjustBody("a-model", adjustRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+        val question = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("question").jsonObject
+
+        assertThat(body.toString()).contains("weeks_plan")
+        assertThat(question.keys).containsExactly(
+            "kind", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "done_by_week", "done_this_week",
+            "max_this_week", "words",
+        )
+        assertThat(question.getValue("this_week_number").jsonPrimitive.int).isEqualTo(2)
+        assertThat(question.getValue("done_by_week").jsonArray.map { it.jsonPrimitive.int }).containsExactly(3)
+        assertThat(question.getValue("done_this_week").jsonArray).hasSize(1)
+        assertThat(question.getValue("max_this_week").jsonPrimitive.int).isEqualTo(2)
+    }
+
+    @Test
+    fun `the weekly plan's instructions say what may come back, and that the counts are the phone's`() {
+        val evaluate = systemContent(TrainerPrompt.evaluateBody("a-model", evaluateRequest()))
+        val adjust = systemContent(TrainerPrompt.adjustBody("a-model", adjustRequest()))
+
+        assertThat(evaluate).contains("exactly as many weeks as asked")
+        assertThat(evaluate).contains("5 to 180")
+        assertThat(evaluate).contains("do not invent a test or a score")
+        assertThat(evaluate).contains("fewer numbers than weeks")
+        assertThat(adjust).contains("max_this_week")
+        assertThat(adjust).contains("Weeks already over are not yours to change")
+        listOf(evaluate, adjust).forEach { system ->
+            assertThat(system).contains("counted by the app")
+            assertThat(system).contains("pain, dizziness or chest discomfort")
+            assertThat(system).contains("an evaluation or a change to their weekly plan")
+        }
+    }
+
+    @Test
+    fun `a plan question and a review carry the weekly plan's session, or null`() {
+        val tick = PlannedTick(2, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk"))
+        val withPlanned = request(
+            TrainerQuestion.Plan(PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.FRESH, Wish.NOT_SURE), tick),
+        )
+        val question = Json.parseToJsonElement(userContent(Json.parseToJsonElement(
+            TrainerPrompt.planBody("a-model", withPlanned, RequestProfile.DETERMINISTIC),
+        ).jsonObject)).jsonObject.getValue("question").jsonObject
+        val review = Json.parseToJsonElement(userContent(Json.parseToJsonElement(
+            TrainerPrompt.feedbackBody("a-model", reviewRequest(), RequestProfile.DETERMINISTIC),
+        ).jsonObject)).jsonObject.getValue("question").jsonObject
+
+        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "kind", "minutes", "effort", "what")
+        assertThat(question.getValue("planned").jsonObject.getValue("week").jsonPrimitive.int).isEqualTo(2)
+        assertThat(review.getValue("planned")).isEqualTo(JsonNull)
+        assertThat(systemContent(TrainerPrompt.planBody("a-model", withPlanned))).contains("question.planned")
+    }
+
+    @Test
+    fun `an evaluate body for another question, or an adjust body for another, is refused`() {
+        assertThrows<IllegalArgumentException> { TrainerPrompt.evaluateBody("a-model", planRequest()) }
+        assertThrows<IllegalArgumentException> { TrainerPrompt.adjustBody("a-model", evaluateRequest()) }
+    }
+
+    @Test
+    fun `a review's own weekly-plan tick is sent too, with its keys and week number`() {
+        val tick = PlannedTick(3, PlannedSession(WorkoutKind.RUN, 25, PlannedEffort.PUSH, "Push run"))
+        val ticked = request(TrainerQuestion.Review(TrainerRequest.reviewQuestion(walk, review, plan).session, tick))
+
+        val question = Json.parseToJsonElement(userContent(Json.parseToJsonElement(
+            TrainerPrompt.feedbackBody("a-model", ticked, RequestProfile.DETERMINISTIC),
+        ).jsonObject)).jsonObject.getValue("question").jsonObject
+
+        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "kind", "minutes", "effort", "what")
+        assertThat(question.getValue("planned").jsonObject.getValue("week").jsonPrimitive.int).isEqualTo(3)
+    }
+
+    /** plan_followed judges the matched single-session plan alone; a weekly-plan tick is context for against_plan only. */
+    @Test
+    fun `plan_followed stays about the matched single-session plan, even when a weekly tick is given`() {
+        val system = systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))
+
+        assertThat(system).contains("plan_followed")
+        assertThat(system).contains("question.session.plan")
+        assertThat(system).contains("question.planned does not change it")
+    }
+
+    /** Invented: a four-week, three-a-week ask; the plan starts Monday 31 August 2026. */
+    private fun evaluateRequest(last: LastEvaluation? = LAST) = request(
+        TrainerQuestion.Evaluate(ProgrammeAsk(4, 3, "Invented words."), TEST_EPOCH_DAY - 3, last),
+    )
+
+    private fun adjustRequest() = request(
+        TrainerQuestion.Adjust(
+            ProgrammeAsk(4, 3), TEST_EPOCH_DAY - 10, WEEKS, weekIndex = 1, doneByWeek = listOf(3),
+            tickedThisWeek = listOf(STEADY), thisWeekMax = 2, words = "Invented words.",
+        ),
+    )
 
     // --- Fixtures, all invented --------------------------------------------------------------------
 
@@ -341,5 +483,12 @@ class TrainerPromptTest {
     private companion object {
         val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
         const val NOTE = "Invented note: an old knee injury, so no running downhill.\nWalks before work."
+        val STEADY = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk")
+        val WEEKS = WeeksPlan(
+            "Invented plan",
+            listOf(PlanWeek("settle in", listOf(STEADY, STEADY, STEADY)), PlanWeek("a little longer", listOf(STEADY, STEADY, STEADY))),
+            "Invented reason.",
+        )
+        val LAST = LastEvaluation(TEST_EPOCH_DAY - 30, Evaluation("Invented.", "Invented.", "Invented.", ""), WEEKS, listOf(3, 2))
     }
 }

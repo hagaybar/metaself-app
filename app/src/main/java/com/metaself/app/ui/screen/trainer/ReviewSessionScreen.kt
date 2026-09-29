@@ -126,7 +126,7 @@ private fun ReviewForm(
                 Text(stringResource(R.string.review_just_save))
             }
             Text(
-                TrainerWording.privacyReview(state.ceiling),
+                TrainerWording.privacyReview(state.ceiling, withPlanned = state.planned != null),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
