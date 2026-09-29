@@ -267,12 +267,16 @@ class MealDaoTest {
         mealOf(DAY, macros(100, 5, 10, 2))
         mealOf(DAY + 1, macros(400, 30, 20, 20))
         mealOf(DAY + 10, macros(900, 1, 1, 1))
+        // The span's edges: the day before it is left out, its last day is in.
+        mealOf(DAY - 1, macros(700, 1, 1, 1))
+        mealOf(DAY + 6, macros(600, 40, 60, 20))
 
         val rows = dao.totalsByDayBetween(DAY, DAY + 6).associateBy { it.epochDay }
 
-        assertThat(rows.keys).containsExactly(DAY, DAY + 1)
+        assertThat(rows.keys).containsExactly(DAY, DAY + 1, DAY + 6)
         assertThat(rows.getValue(DAY)).isEqualTo(DayTotalsRow(DAY, 900, 35, 90, 22))
         assertThat(rows.getValue(DAY + 1)).isEqualTo(DayTotalsRow(DAY + 1, 400, 30, 20, 20))
+        assertThat(rows.getValue(DAY + 6)).isEqualTo(DayTotalsRow(DAY + 6, 600, 40, 60, 20))
     }
 
     private fun macros(kcal: Int, protein: Int, carbs: Int, fat: Int) = listOf(kcal, protein, carbs, fat)

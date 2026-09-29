@@ -105,16 +105,22 @@ data class FourWeekAverage(
     val daysLogged: Double,
     val kcal: Int?,
     val proteinG: Int?,
+    val carbsG: Int?,
+    val fatG: Int?,
     val weightChangeKg: Double?,
     val sessions: Double,
     val distanceM: Int?,
     val stepsADay: Int?,
 )
 
-/** This week and the four before it, oldest last (D100), with today's calorie target (design question 1). */
+/**
+ * This week and the four before it, oldest last (D100), with today's calorie target (design question 1).
+ * Exactly four earlier weeks, always: a week with nothing in it is still a week, and counts in the
+ * averages that take whole weeks.
+ */
 data class LetterFigures(val week: WeekFigures, val earlier: List<WeekFigures>, val targetKcal: Int?) {
     init {
-        require(earlier.size <= WEEKS_BEFORE) { "at most $WEEKS_BEFORE earlier weeks" }
+        require(earlier.size == WEEKS_BEFORE) { "exactly $WEEKS_BEFORE earlier weeks" }
     }
 
     val average: FourWeekAverage by lazy {
@@ -123,6 +129,8 @@ data class LetterFigures(val week: WeekFigures, val earlier: List<WeekFigures>, 
             daysLogged = earlier.map { it.food.daysLogged }.averageOrZero(),
             kcal = ints { it.food.kcal },
             proteinG = ints { it.food.proteinG },
+            carbsG = ints { it.food.carbsG },
+            fatG = ints { it.food.fatG },
             weightChangeKg = earlier.mapNotNull { it.weightChangeKg }.takeIf { it.isNotEmpty() }?.average(),
             sessions = earlier.map { it.movement.sessions }.averageOrZero(),
             distanceM = ints { it.movement.distanceM },

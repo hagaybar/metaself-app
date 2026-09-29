@@ -14,6 +14,7 @@ import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.weight.WeightReading
 import com.metaself.app.domain.weight.WeightTrend
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 /** D100. Every figure is invented and round; the week is the one holding [TEST_EPOCH_DAY]. */
 class WeekFiguresTest {
@@ -37,6 +38,17 @@ class WeekFiguresTest {
         val week = WeekFigures.of(monday, food, emptyList(), emptyList(), emptyList(), emptyList(), plan = null)
 
         assertThat(week.food).isEqualTo(FoodWeek(daysLogged = 2, kcal = 2_100, proteinG = 110, carbsG = 210, fatG = 70))
+    }
+
+    @Test
+    fun `a food average half-way between two whole numbers rounds up`() {
+        val food = mapOf(
+            monday to DayTotals(2_000, 100, 200, 60),
+            monday + 1 to DayTotals(2_201, 101, 201, 61),
+        )
+        val week = WeekFigures.of(monday, food, emptyList(), emptyList(), emptyList(), emptyList(), plan = null)
+
+        assertThat(week.food).isEqualTo(FoodWeek(daysLogged = 2, kcal = 2_101, proteinG = 101, carbsG = 201, fatG = 61))
     }
 
     @Test
@@ -81,15 +93,29 @@ class WeekFiguresTest {
 
     @Test
     fun `the 4-week average is over the earlier weeks that have a figure, and none when no week has`() {
-        fun food(kcal: Int) = mapOf(monday to DayTotals(kcal, 100, 200, 60))
-        val earlier = listOf(2_000, 2_200).mapIndexed { i, kcal ->
-            WeekFigures.of(monday - 7L * (i + 1), food(kcal).mapKeys { it.key - 7L * (i + 1) }, emptyList(), emptyList(), emptyList(), emptyList(), null)
+        fun food(kcal: Int, carbs: Int, fat: Int) = mapOf(monday to DayTotals(kcal, 100, carbs, fat))
+        val earlier = listOf(Triple(2_000, 200, 60), Triple(2_200, 240, 80)).mapIndexed { i, (kcal, carbs, fat) ->
+            WeekFigures.of(monday - 7L * (i + 1), food(kcal, carbs, fat).mapKeys { it.key - 7L * (i + 1) }, emptyList(), emptyList(), emptyList(), emptyList(), null)
         } + List(2) { i -> WeekFigures.of(monday - 7L * (i + 3), emptyMap(), emptyList(), emptyList(), emptyList(), emptyList(), null) }
         val figures = LetterFigures(WeekFigures.of(monday, emptyMap(), emptyList(), emptyList(), emptyList(), emptyList(), null), earlier, targetKcal = 2_100)
 
         assertThat(figures.average.kcal).isEqualTo(2_100)
+        assertThat(figures.average.proteinG).isEqualTo(100)
+        assertThat(figures.average.carbsG).isEqualTo(220)
+        assertThat(figures.average.fatG).isEqualTo(70)
         assertThat(figures.average.daysLogged).isWithin(0.001).of(0.5)
         assertThat(figures.average.weightChangeKg).isNull()
+    }
+
+    @Test
+    fun `the figures always hold exactly four earlier weeks`() {
+        fun week(monday: Long) = WeekFigures.of(monday, emptyMap(), emptyList(), emptyList(), emptyList(), emptyList(), null)
+        val thisWeek = week(monday)
+
+        listOf(3, 5).forEach { n ->
+            val earlier = List(n) { week(monday - 7L * (it + 1)) }
+            assertThrows<IllegalArgumentException> { LetterFigures(thisWeek, earlier, targetKcal = null) }
+        }
     }
 
     private companion object {
