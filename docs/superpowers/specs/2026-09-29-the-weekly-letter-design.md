@@ -45,7 +45,8 @@
 For the week (Monday–Sunday) and for **each of the four weeks before it**, separately:
 
 - **Food**, over the days that hold a meal: calories, protein, carbs and fat a day (the day totals, averaged),
-  the daily calorie target that applied, and **days logged** out of 7.
+  the daily calorie target in force now (no history of targets is kept; the same figure stands in both
+  columns), and **days logged** out of 7.
 - **Weight**: the change of the smoothed trend across the week (never a single weigh-in), and the goal's
   weekly rate. A week whose trend does not rest on a weigh-in at most 14 days old has none (as D89).
 - **Movement**: counted sessions (visible, counted, a combined session once — D74, D81, D92), their
@@ -101,8 +102,8 @@ effort, and for encouragement without blame when a week goes badly — a trainer
 
 - **The notification** (a channel of its own, "Weekly letter", so it can be silenced without silencing
   the meal reminder — amends D15): "Your week is in" and the headline. It opens the letter.
-- **The day screen** shows a card "YOUR WEEK IS IN · <dates>", the headline and **Read it**, above
-  today's meals, until the letter has been opened.
+- **The day screen** shows a margin note, as every notice on the day is (D49): "Your week is in:
+  <headline>" and **Read it**, with the day's other notices, until the letter has been opened.
 - **Weekly letters**, from the Trainer screen: every letter, newest first, by week and headline.
 - **The letter page**: the dates, the headline, "From the AI trainer · advice, not a measurement. The
   figures were counted on your phone." (D4), the four parts under their headings, the close, then the box
@@ -112,9 +113,9 @@ effort, and for encouragement without blame when a week goes badly — a trainer
 
 ## D104 — What is stored
 
-Room version 11 adds `weekly_letters`: id, weekMonday (unique), createdAtMillis, the figures (JSON: this
+Room version 12 adds `weekly_letters`: id, weekMonday (unique), createdAtMillis, the figures (JSON: this
 week and the four before, as counted), the letter (JSON, D102's shape), the model's name, bandDataUntil
-(nullable), and readAtMillis (nullable). It goes into the backup, whose format becomes **9**; formats 1–8
+(nullable), and readAtMillis (nullable). It goes into the backup, whose format becomes **10**; formats 1–9
 still read (no letters), and a restore replaces. The setting (switch, hour) is stored with the AI
 settings and restored as they are.
 
