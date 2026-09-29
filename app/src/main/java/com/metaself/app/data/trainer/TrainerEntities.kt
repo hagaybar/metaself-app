@@ -42,3 +42,26 @@ data class TrainerReviewEntity(
     val feedbackAtMillis: Long?,
     val model: String?,
 )
+
+/**
+ * One evaluation with its plan, or an adjusted version of a plan (D98). Every answer that arrives is a
+ * row, kept or not. [evaluation] and [plan] are `TrainerResponse.encodeEvaluation` / `encodeWeeksPlan`'s
+ * JSON; [status] is a `ProgrammeStatus` name; [stoppedEpochDay] is the day it stopped running, whatever
+ * stopped it. **No foreign key**: [replacesId] names another row of this table, and a restore replaces
+ * the table whole.
+ */
+@Entity(tableName = "trainer_programmes")
+data class TrainerProgrammeEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val createdAtMillis: Long,
+    val weeks: Int,
+    val perWeek: Int,
+    val words: String?,
+    val evaluation: String?,
+    val plan: String,
+    val model: String,
+    val startEpochDay: Long?,
+    val status: String,
+    val stoppedEpochDay: Long?,
+    val replacesId: Long?,
+)

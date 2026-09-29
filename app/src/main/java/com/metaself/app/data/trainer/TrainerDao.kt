@@ -55,6 +55,29 @@ interface TrainerDao {
     )
     suspend fun latestFeedback(count: Int, exceptWorkoutId: Long): List<String>
 
+    // The weekly plans (D98).
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertProgramme(programme: TrainerProgrammeEntity): Long
+
+    @Query("SELECT * FROM trainer_programmes WHERE id = :id")
+    suspend fun programme(id: Long): TrainerProgrammeEntity?
+
+    @Query("SELECT * FROM trainer_programmes WHERE status = 'RUNNING' ORDER BY createdAtMillis DESC LIMIT 1")
+    fun observeRunning(): Flow<TrainerProgrammeEntity?>
+
+    @Query("SELECT * FROM trainer_programmes WHERE status = 'RUNNING' ORDER BY createdAtMillis DESC LIMIT 1")
+    suspend fun running(): TrainerProgrammeEntity?
+
+    /** Every running plan but [exceptId] stops today, replaced (D98). */
+    @Query("UPDATE trainer_programmes SET status = 'REPLACED', stoppedEpochDay = :today WHERE status = 'RUNNING' AND id != :exceptId")
+    suspend fun replaceRunning(exceptId: Long, today: Long)
+
+    @Query("UPDATE trainer_programmes SET status = :status, stoppedEpochDay = :day WHERE id = :id")
+    suspend fun endProgramme(id: Long, status: String, day: Long)
+
+    @Query("UPDATE trainer_programmes SET status = 'RUNNING', startEpochDay = :start, stoppedEpochDay = NULL WHERE id = :id")
+    suspend fun runProgramme(id: Long, start: Long)
+
     // The backup (D88).
     @Query("SELECT * FROM trainer_plans ORDER BY id")
     suspend fun allPlans(): List<TrainerPlanEntity>
@@ -73,4 +96,13 @@ interface TrainerDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertReviews(reviews: List<TrainerReviewEntity>)
+
+    @Query("SELECT * FROM trainer_programmes ORDER BY id")
+    suspend fun allProgrammes(): List<TrainerProgrammeEntity>
+
+    @Query("DELETE FROM trainer_programmes")
+    suspend fun deleteProgrammes()
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertProgrammes(programmes: List<TrainerProgrammeEntity>)
 }
