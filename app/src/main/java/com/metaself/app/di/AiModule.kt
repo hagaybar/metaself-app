@@ -10,6 +10,7 @@ import com.metaself.app.data.ai.DataStoreAiSettingsStore
 import com.metaself.app.data.ai.DataStoreRequestProfileStore
 import com.metaself.app.data.ai.EncryptedApiKeyStore
 import com.metaself.app.data.ai.OpenAiFoodReviewer
+import com.metaself.app.data.ai.OpenAiLetterWriter
 import com.metaself.app.data.ai.OpenAiMealConversation
 import com.metaself.app.data.ai.OpenAiMealEstimator
 import com.metaself.app.data.ai.OpenAiTrainer
@@ -22,6 +23,7 @@ import com.metaself.app.data.trainer.DataStoreAboutMeStore
 import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
+import com.metaself.app.domain.letter.LetterWriter
 import com.metaself.app.domain.trainer.Trainer
 import dagger.Module
 import dagger.Provides
@@ -129,4 +131,15 @@ object AiModule {
         profiles: RequestProfileStore,
         problems: ProblemLog,
     ): Trainer = OpenAiTrainer(keys, settings, client, profiles, problems)
+
+    /** The weekly letter (D101): the same key, ceiling, client, profiles and log as the estimator. */
+    @Provides
+    @Singleton
+    fun provideLetterWriter(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        profiles: RequestProfileStore,
+        problems: ProblemLog,
+    ): LetterWriter = OpenAiLetterWriter(keys, settings, client, profiles, problems)
 }
