@@ -65,6 +65,12 @@ import com.metaself.app.ui.screen.weight.WeightViewModel
 import com.metaself.app.ui.screen.movement.MovementScreen
 import com.metaself.app.ui.screen.movement.MovementViewModel
 import com.metaself.app.ui.screen.movement.TakeSharedWorkoutFile
+import com.metaself.app.data.letter.LetterOpen
+import com.metaself.app.ui.screen.letter.LetterScreen
+import com.metaself.app.ui.screen.letter.LetterViewModel
+import com.metaself.app.ui.screen.letter.LettersScreen
+import com.metaself.app.ui.screen.letter.LettersViewModel
+import com.metaself.app.ui.screen.letter.UnreadLetterViewModel
 import com.metaself.app.ui.screen.trainer.AboutMeScreen
 import com.metaself.app.ui.screen.trainer.AboutMeViewModel
 import com.metaself.app.ui.screen.trainer.AdjustPlanScreen
@@ -117,6 +123,14 @@ sealed class Destination(val route: String) {
 
     /** About me (D90): the owner's note for the trainer. */
     data object AboutMe : Destination("trainer/about")
+
+    /** Weekly letters (D103): every letter, and Write it now. */
+    data object Letters : Destination("trainer/letters")
+
+    /** One weekly letter (D103), by its week's Monday. */
+    data object Letter : Destination("trainer/letter/{week}") {
+        fun of(week: Long): String = "trainer/letter/$week"
+    }
 
     /** How did it go (D87), for one session. */
     data object ReviewSession : Destination("trainer/review/{workoutId}") {
@@ -256,8 +270,23 @@ fun MetaSelfNavHost(
     dayViewModel: DayViewModel = hiltViewModel(),
     weightViewModel: WeightViewModel = hiltViewModel(),
     sharedFileViewModel: SharedFileViewModel = hiltViewModel(),
+    openedLettersViewModel: OpenedLettersViewModel = hiltViewModel(),
+    unreadLetterViewModel: UnreadLetterViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
+
+    // A weekly letter notification's tap (D103) opens its letter, or Weekly letters for the failure's.
+    val openedLetter by openedLettersViewModel.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(openedLetter) {
+        if (openedLetter != null) {
+            when (val open = openedLettersViewModel.take()) {
+                is LetterOpen.Letter -> navController.navigate(Destination.Letter.of(open.weekMonday)) { launchSingleTop = true }
+                LetterOpen.List -> navController.navigate(Destination.Letters.route) { launchSingleTop = true }
+                null -> Unit
+            }
+        }
+    }
+    val unreadLetter by unreadLetterViewModel.unread.collectAsStateWithLifecycle()
 
     // A workout file shared to MetaSelf (D82) opens Movement, which takes and imports it once on screen.
     val sharedFile by sharedFileViewModel.pending.collectAsStateWithLifecycle()
@@ -292,6 +321,9 @@ fun MetaSelfNavHost(
                 onOpenSettings = { navController.navigate(Destination.Settings.route) },
                 onOpenWindowSettings = { navController.navigate(Destination.Settings.atWindow) },
                 onOpenManager = { navController.navigate(Destination.Foods.route) },
+                weeklyLetter = unreadLetter?.headline,
+                onOpenWeeklyLetter = { unreadLetter?.let { navController.navigate(Destination.Letter.of(it.weekMonday)) } },
+                onDismissWeeklyLetter = { unreadLetter?.let { unreadLetterViewModel.dismiss(it.weekMonday) } },
             )
         }
 
@@ -394,8 +426,29 @@ fun MetaSelfNavHost(
                 onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
                 onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
+                onLetters = { navController.navigate(Destination.Letters.route) },
                 onAnswer = trainerViewModel::answer,
             )
+        }
+
+        composable(Destination.Letters.route) {
+            val lettersViewModel: LettersViewModel = hiltViewModel()
+            val lettersState by lettersViewModel.state.collectAsStateWithLifecycle()
+            LettersScreen(
+                state = lettersState,
+                onBack = { navController.popBackStack() },
+                onOpen = { navController.navigate(Destination.Letter.of(it)) },
+                onWriteNow = lettersViewModel::writeNow,
+            )
+        }
+
+        composable(
+            route = Destination.Letter.route,
+            arguments = listOf(navArgument(LetterViewModel.WEEK) { type = NavType.LongType }),
+        ) {
+            val letterViewModel: LetterViewModel = hiltViewModel()
+            val letterState by letterViewModel.state.collectAsStateWithLifecycle()
+            LetterScreen(state = letterState, onBack = { navController.popBackStack() })
         }
 
         composable(Destination.AboutMe.route) {

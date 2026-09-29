@@ -64,6 +64,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.ui.letter.LetterWording
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
@@ -168,6 +169,11 @@ fun DayScreenContent(
     // The Movement screen (D75). Null — every caller written before it — leaves the step line a
     // line, not a door.
     onOpenMovement: (() -> Unit)? = null,
+    // D103: the unread weekly letter's headline, noted on today until the letter is opened or the note
+    // put away. Null — every caller written before it — draws no note.
+    weeklyLetter: String? = null,
+    onOpenWeeklyLetter: () -> Unit = {},
+    onDismissWeeklyLetter: () -> Unit = {},
 ) = CompositionLocalProvider(LocalMoves provides Motion.moves(state.isToday, LocalMoves.current)) {
     // Today moves, the past is still (public issue #16): everything drawn for a past day is still,
     // whatever the system allows, and today moves only if the system allows motion at all.
@@ -182,6 +188,18 @@ fun DayScreenContent(
         // together: reaching the goal switches it to holding, which leaves no milestone to reach.
         (state.goalReached ?: state.milestoneReached)?.let { reached ->
             MarginNote(text = reached, style = MaterialTheme.typography.titleMedium)
+        }
+
+        // D103: the week's letter has arrived. A margin note as every notice on the day is (D49), on
+        // today only — the past never nags (D14) — with Read it, and a way to put it away.
+        if (state.isToday && weeklyLetter != null) {
+            MarginNote(
+                text = LetterWording.dayNote(weeklyLetter),
+                actionLabel = LetterWording.READ_IT,
+                onAction = onOpenWeeklyLetter,
+                dismissLabel = LetterWording.DISMISS,
+                onDismiss = onDismissWeeklyLetter,
+            )
         }
 
         // D49 items 2, 3 and 4: the number, what it means, and how much of the day has gone.
@@ -529,6 +547,9 @@ private fun MarginNote(
     style: TextStyle = MaterialTheme.typography.bodyMedium,
     dismissLabel: String? = null,
     onDismiss: (() -> Unit)? = null,
+    // A note that leads somewhere (D103's Read it): drawn before its dismissal, on the same line.
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
 ) {
     Row(
         modifier = modifier
@@ -548,7 +569,24 @@ private fun MarginNote(
         ) {
             Text(text = text, style = style, color = MetaSelfInk.two)
 
-            if (dismissLabel != null && onDismiss != null) {
+            if (actionLabel != null && onAction != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+                    TextButton(
+                        onClick = onAction,
+                        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                    ) {
+                        Text(actionLabel)
+                    }
+                    if (dismissLabel != null && onDismiss != null) {
+                        TextButton(
+                            onClick = onDismiss,
+                            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                        ) {
+                            Text(dismissLabel)
+                        }
+                    }
+                }
+            } else if (dismissLabel != null && onDismiss != null) {
                 TextButton(
                     onClick = onDismiss,
                     contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),

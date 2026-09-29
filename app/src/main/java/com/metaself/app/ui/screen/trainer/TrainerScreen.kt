@@ -36,6 +36,7 @@ import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.Tick
 import com.metaself.app.ui.MetaSelfScreen
+import com.metaself.app.ui.letter.LetterWording
 import com.metaself.app.ui.movement.MovementWeekWording
 import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.trainer.ProgrammeWording
@@ -60,6 +61,8 @@ fun TrainerScreen(
     onEvaluate: () -> Unit,
     onSeePlan: () -> Unit,
     onAdjust: () -> Unit,
+    /** D103: Weekly letters, under About me. */
+    onLetters: () -> Unit,
     modifier: Modifier = Modifier,
     /** D105: the owner's answer to "count it for this?" — the session's id, and Yes (true) or No. */
     onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
@@ -85,6 +88,16 @@ fun TrainerScreen(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
+        }
+        // D103: every weekly letter, newest first.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .clickable(role = Role.Button, onClick = onLetters),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(LetterWording.LIST_TITLE, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
         }
         val home = state.home
         when {

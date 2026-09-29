@@ -26,12 +26,21 @@ import javax.inject.Singleton
  * Called when the app opens and at every change of the setting ([keepScheduled]), and by the worker when
  * it finishes; any number of calls leave the same one run.
  */
+/** Queue the Sunday run as the setting now says; an interface so the setting's view model can be tested. */
+interface LetterScheduling {
+    suspend fun schedule()
+}
+
 @Singleton
 class WeeklyLetterScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
     private val settings: LetterSettingsStore,
     private val problems: ProblemLog,
-) {
+) : LetterScheduling {
+
+    /** From the setting's page, after it is written: as [schedule] from now. */
+    override suspend fun schedule() = schedule(LocalDateTime.now(), null)
+
     /**
      * Schedules now and again at every change of the setting — switched, a new hour, or a restore — for as
      * long as the caller's scope lives. Never throws but a cancellation: a failure is logged by kind (D8).

@@ -21,7 +21,9 @@ import com.metaself.app.data.letter.FoodTotals
 import com.metaself.app.data.letter.LetterStore
 import com.metaself.app.data.letter.RoomFoodTotals
 import com.metaself.app.data.letter.RoomLetterStore
+import com.metaself.app.data.letter.LetterScheduling
 import com.metaself.app.data.letter.WeeklyLetterJob
+import com.metaself.app.data.letter.WeeklyLetterScheduler
 import com.metaself.app.data.letter.WriteWeeklyLetter
 import com.metaself.app.data.lifecycle.AppForeground
 import com.metaself.app.data.lifecycle.ProcessAppForeground
@@ -279,6 +281,10 @@ object DataModule {
     @Provides
     @Singleton
     fun provideLetterStore(store: RoomLetterStore): LetterStore = store
+
+    /** The weekly letter's setting re-queues the Sunday run through this (D99). */
+    @Provides
+    fun provideLetterScheduling(scheduler: WeeklyLetterScheduler): LetterScheduling = scheduler
 
     /** Write it now's way to the letter's job (design question 19). */
     @Provides

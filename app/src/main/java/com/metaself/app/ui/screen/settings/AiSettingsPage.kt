@@ -51,6 +51,8 @@ fun AiSettingsPage(
     onDismissFailure: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The weekly letter's setting (D99), drawn at the page's end; the destination supplies it. */
+    weeklyLetter: @Composable () -> Unit = {},
 ) {
     var typedKey by remember { mutableStateOf("") }
     // The model's box is his while he edits it: it follows the stored name only until he types,
@@ -254,5 +256,11 @@ fun AiSettingsPage(
             }
             RefusedHere(state.failed, SettingsPart.TEST, onDismissFailure)
         }
+
+        HorizontalDivider()
+
+        // --- the weekly letter (D99) ---
+
+        weeklyLetter()
     }
 }
