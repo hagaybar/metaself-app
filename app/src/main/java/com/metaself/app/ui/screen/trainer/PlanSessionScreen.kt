@@ -28,6 +28,7 @@ import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.ProgrammeWording
 import com.metaself.app.ui.trainer.TrainerWording
 
 /**
@@ -68,6 +69,7 @@ private fun PlanForm(
 ) {
     val form = state.form
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+        state.next?.let { Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.titleSmall) }
         // What the trainer is asked is what is on screen: nothing changes while it is asked.
         val open = !state.asking
         ChoiceRow(R.string.plan_row_what, PlanActivity.entries, form.activity, TrainerWording::activity, open) {
@@ -96,7 +98,7 @@ private fun PlanForm(
                 Text(stringResource(if (state.asking) R.string.plan_asking else R.string.plan_ask))
             }
             Text(
-                TrainerWording.privacyPlan(state.ceiling),
+                TrainerWording.privacyPlan(state.ceiling, withPlan = state.next != null),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

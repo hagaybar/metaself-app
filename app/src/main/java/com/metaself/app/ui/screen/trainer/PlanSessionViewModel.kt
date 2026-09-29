@@ -11,8 +11,10 @@ import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.trainer.Feeling
+import com.metaself.app.domain.trainer.NextInPlan
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
+import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.Wish
@@ -70,6 +72,8 @@ class PlanSessionViewModel @Inject constructor(
         val kept: Boolean = false,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
         val refused: ActionRefused? = null,
+        /** D96: the running plan's next session; the form was pre-filled from it. */
+        val next: PlannedTick? = null,
     ) {
         val canAsk: Boolean get() = form.answers() != null && !asking
     }
@@ -87,6 +91,22 @@ class PlanSessionViewModel @Inject constructor(
                 // No kept plan any more (it lapsed, or feedback used it): the form, as Ask again would.
                 val kept = store.keptPlan()
                 local.update { it.copy(loading = false, shown = kept, kept = kept != null) }
+            }
+        }
+        if (!openedOnKept) {
+            // D96: a convenience — a failed read leaves the form empty (and is logged), nothing more.
+            guarded(problems, onRefused = {}) {
+                val next = ask.nextPlanned() ?: return@guarded
+                local.update { now ->
+                    if (now.form != Form() || now.asking) {
+                        now.copy(next = next)
+                    } else {
+                        now.copy(
+                            next = next,
+                            form = Form(time = NextInPlan.time(next.session.minutes), wish = NextInPlan.wish(next.session.effort)),
+                        )
+                    }
+                }
             }
         }
     }
