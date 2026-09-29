@@ -69,8 +69,11 @@ object LetterRun {
         return Ran(after(outcome, weekMonday, now), (outcome as? WriteWeeklyLetter.Outcome.Written)?.letter)
     }
 
-    /** [block]'s value, or null after logging its failure by kind (D8). A cancellation is passed on. */
-    private suspend fun <T> guarded(problems: ProblemLog, what: String, block: suspend () -> T): T? = try {
+    /**
+     * [block]'s value, or null after logging its failure by kind (D8). A cancellation is passed on. Write it
+     * now goes through this too, so a tap's failure is logged as the Sunday run's is.
+     */
+    internal suspend fun <T> guarded(problems: ProblemLog, what: String, block: suspend () -> T): T? = try {
         block()
     } catch (cancelled: CancellationException) {
         throw cancelled

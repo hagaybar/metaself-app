@@ -43,6 +43,15 @@ import javax.inject.Inject
  * Nothing here logs: the writer logs a failed ask by its kind, and a failure's details — an
  * [EstimateResult.Unreadable]'s answer above all — never leave the [Outcome].
  */
+/**
+ * What Write it now needs of the letter's job (design question 19): [WriteWeeklyLetter] is the one; an
+ * interface so the screen's test can stand in for it.
+ */
+interface WeeklyLetterJob {
+    suspend fun write(weekMonday: Long, copy: Boolean): WriteWeeklyLetter.Outcome
+    suspend fun wanted(weekMonday: Long): Boolean
+}
+
 class WriteWeeklyLetter @Inject constructor(
     private val food: FoodTotals,
     private val weights: WeightRepository,
@@ -58,7 +67,7 @@ class WriteWeeklyLetter @Inject constructor(
     private val status: HealthRecordStatus,
     private val now: Now,
     private val year: CurrentYear,
-) {
+) : WeeklyLetterJob {
     sealed interface Outcome {
         data object Quiet : Outcome
         data object AlreadyWritten : Outcome
@@ -85,6 +94,8 @@ class WriteWeeklyLetter @Inject constructor(
 
         private fun Int?.retryable(): Boolean = this != null && (this == TOO_MANY_REQUESTS || this in 500..599)
     }
+
+    override suspend fun write(weekMonday: Long, copy: Boolean): Outcome = invoke(weekMonday, copy)
 
     /** [copy] false for Write it now: the app is in front and its own copy runs anyway (design question 19). */
     suspend operator fun invoke(weekMonday: Long, copy: Boolean = true): Outcome {
@@ -136,7 +147,7 @@ class WriteWeeklyLetter @Inject constructor(
      * Whether [weekMonday]'s week still wants a letter: it has none and is not quiet. Reads only — no copy,
      * no ask. For a run that comes too late to write (design question 6) and for Write it now.
      */
-    suspend fun wanted(weekMonday: Long): Boolean =
+    override suspend fun wanted(weekMonday: Long): Boolean =
         letters.of(weekMonday) == null && !count(weekMonday).week(weekMonday).quiet
 
     /** The record over [weekMonday]'s week and the four before it, read once. */

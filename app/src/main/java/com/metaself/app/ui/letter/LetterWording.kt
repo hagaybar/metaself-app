@@ -34,7 +34,7 @@ object LetterWording {
     const val BOX_AVERAGE = "4-WEEK AVG"
 
     const val UNREADABLE = "This letter could not be read; Recent problems says why."
-    const val MISSING = "This letter is not here any more."
+    const val MISSING = "This letter could not be opened."
 
     const val READ_IT = "Read it"
     const val DISMISS = "Got it"

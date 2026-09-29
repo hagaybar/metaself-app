@@ -21,6 +21,8 @@ import com.metaself.app.data.letter.FoodTotals
 import com.metaself.app.data.letter.LetterStore
 import com.metaself.app.data.letter.RoomFoodTotals
 import com.metaself.app.data.letter.RoomLetterStore
+import com.metaself.app.data.letter.WeeklyLetterJob
+import com.metaself.app.data.letter.WriteWeeklyLetter
 import com.metaself.app.data.lifecycle.AppForeground
 import com.metaself.app.data.lifecycle.ProcessAppForeground
 import com.metaself.app.data.health.ArchiveDrive
@@ -277,6 +279,10 @@ object DataModule {
     @Provides
     @Singleton
     fun provideLetterStore(store: RoomLetterStore): LetterStore = store
+
+    /** Write it now's way to the letter's job (design question 19). */
+    @Provides
+    fun provideWeeklyLetterJob(job: WriteWeeklyLetter): WeeklyLetterJob = job
 
     @Provides
     fun provideTrainerReviews(store: TrainerStore): TrainerReviews = store
