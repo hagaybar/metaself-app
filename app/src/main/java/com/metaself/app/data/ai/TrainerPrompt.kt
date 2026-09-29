@@ -2,13 +2,17 @@ package com.metaself.app.data.ai
 
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.MonthFacts
 import com.metaself.app.domain.trainer.Origin
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.SessionFacts
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -53,7 +57,8 @@ object TrainerPrompt {
         with your earlier feedback unless the record gives a reason to change it.
 
         Safety comes first. If their words in the question itself (question.words when they ask for a
-        plan, question.session.words when they ask about a session) mention
+        plan, an evaluation or a change to their weekly plan; question.session.words when they ask about
+        a session) mention
         pain, dizziness or chest discomfort, tell them to stop and see a doctor before saying anything else.
         Words on earlier sessions are context: you may mention them, but they do not call for this.
         about_me is context too: an old injury it mentions is something to plan around, not a reason to stop.
@@ -82,6 +87,10 @@ object TrainerPrompt {
         from_minute and to_minute (whole minutes from the start), what it is, and how: a speed, an
         incline or a heart-rate zone where they apply, otherwise an empty string. The steps must fit the
         time they have.
+
+        When question.planned is given, they are following a weekly plan and this is its next session
+        (its week, kind, minutes, effort and what it is): shape the suggestion around it unless their
+        answers say otherwise.
     """.trimIndent()
 
     private val FEEDBACK = """
@@ -91,6 +100,40 @@ object TrainerPrompt {
         numbers (what its figures say), next_time (one concrete change for the next session), and
         this_week (the rhythm, from this_week). Give plan_followed: "yes", "partly" or "no" against the
         plan, or "no_plan" when there was none.
+
+        When question.planned is given, the session ticked that session of their weekly plan (counted by
+        the app); say how it went against it in against_plan as well.
+    """.trimIndent()
+
+    private val EVALUATE = """
+        They are asking where they stand, and for a plan for the weeks ahead. The question gives how many
+        weeks, how many sessions a week they can manage (sessions_a_week), any words of theirs, the date the
+        plan starts (starts, a Monday; weeks run Monday to Sunday), and your last evaluation if there is one,
+        with the plan that ran with it and how many of its sessions were done each week (done_by_week,
+        counted by the app).
+
+        Reply with an evaluation and a plan. The evaluation: a one-line headline; going_well; to_work_on;
+        and since_last, what has changed since the last evaluation, or an empty string when there is none.
+        Judge from the record; do not invent a test or a score.
+
+        The plan: a title; exactly as many weeks as asked, in order, each with a short focus and between
+        one and sessions_a_week sessions; each session has a kind (walk, run, cycle, swim, strength or
+        other), whole minutes from 5 to 180, an effort (easy, steady or push) and one line on what it is.
+        Sessions have no day: each can be done on any day of its week. Then one paragraph on why.
+    """.trimIndent()
+
+    private val ADJUST = """
+        They are following your weekly plan and ask you to change what is left of it. The question gives
+        the plan, the week they are in (this_week_number, from 1), how many planned sessions were done in
+        each week before it (done_by_week, counted by the app), the planned sessions already done this week
+        (done_this_week, counted by the app), and their words.
+
+        Reply with a plan in the same shape for this week and the weeks after: a title; one entry per
+        remaining week, starting with this one; and one paragraph on why. For this week give only the
+        sessions still to do, at most max_this_week, and none is allowed; for each later week between one
+        and sessions_a_week. Each session has a kind (walk, run, cycle, swim, strength or other), whole
+        minutes from 5 to 180, an effort (easy, steady or push) and one line on what it is. Keep the same
+        number of weeks; the end date does not move. Weeks already over are not yours to change.
     """.trimIndent()
 
     fun planBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
@@ -101,6 +144,16 @@ object TrainerPrompt {
     fun feedbackBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Review) { "feedback is asked with a review question" }
         return ChatRequest.body(model, profile, messages(FEEDBACK, request), "session_feedback", FEEDBACK_SCHEMA)
+    }
+
+    fun evaluateBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
+        require(request.question is TrainerQuestion.Evaluate) { "an evaluation is asked with an evaluation question" }
+        return ChatRequest.body(model, profile, messages(EVALUATE, request), "evaluation_and_plan", EVALUATION_SCHEMA)
+    }
+
+    fun adjustBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
+        require(request.question is TrainerQuestion.Adjust) { "an adjustment is asked with an adjust question" }
+        return ChatRequest.body(model, profile, messages(ADJUST, request), "weeks_plan", WEEKS_PLAN_SCHEMA)
     }
 
     private fun messages(task: String, request: TrainerRequest) = listOf(
@@ -173,12 +226,48 @@ object TrainerPrompt {
             put("feeling", question.answers.feeling.name.lowercase())
             put("wants", question.answers.wish.name.lowercase().replace('_', ' '))
             put("words", question.answers.words.trim())
+            put("planned", question.planned?.let(::plannedTick) ?: JsonNull)
         }
         is TrainerQuestion.Review -> buildJsonObject {
             put("kind", "review")
             put("session", session(question.session))
+            put("planned", question.planned?.let(::plannedTick) ?: JsonNull)
         }
-        is TrainerQuestion.Evaluate, is TrainerQuestion.Adjust -> throw IllegalArgumentException("Task 4")
+        is TrainerQuestion.Evaluate -> buildJsonObject {
+            put("kind", "evaluate")
+            put("weeks", question.ask.weeks)
+            put("sessions_a_week", question.ask.perWeek)
+            put("words", question.ask.words.trim())
+            put("starts", date(question.startEpochDay))
+            put(
+                "last_evaluation",
+                question.last?.let { last ->
+                    buildJsonObject {
+                        put("date", date(last.epochDay))
+                        put("evaluation", evaluationJson(last.evaluation))
+                        put("plan", weeksPlanJson(last.plan))
+                        putJsonArray("done_by_week") { last.doneByWeek.forEach { add(it) } }
+                    }
+                } ?: JsonNull,
+            )
+        }
+        is TrainerQuestion.Adjust -> buildJsonObject {
+            put("kind", "adjust")
+            put("weeks", question.ask.weeks)
+            put("sessions_a_week", question.ask.perWeek)
+            put("starts", date(question.startEpochDay))
+            put("plan", weeksPlanJson(question.plan))
+            put("this_week_number", question.weekIndex + 1)
+            putJsonArray("done_by_week") { question.doneByWeek.forEach { add(it) } }
+            putJsonArray("done_this_week") { question.tickedThisWeek.forEach { add(plannedJson(it)) } }
+            put("max_this_week", question.thisWeekMax)
+            put("words", question.words.trim())
+        }
+    }
+
+    private fun plannedTick(tick: PlannedTick): JsonObject = buildJsonObject {
+        put("week", tick.week)
+        plannedJson(tick.session).forEach { (name, value) -> put(name, value) }
     }
 
     private fun session(session: SessionFacts): JsonObject = buildJsonObject {
@@ -287,6 +376,38 @@ object TrainerPrompt {
         put("plan_followed", feedback.followed.name.lowercase())
     }
 
+    /** A planned session in the reply schema's own shape (D94). */
+    fun plannedJson(session: PlannedSession): JsonObject = buildJsonObject {
+        put("kind", kind(session.kind))
+        put("minutes", session.minutes)
+        put("effort", session.effort.name.lowercase())
+        put("what", session.what)
+    }
+
+    /** A plan of weeks in the reply schema's own shape: sent back, and what `TrainerResponse.encodeWeeksPlan` stores. */
+    fun weeksPlanJson(plan: WeeksPlan): JsonObject = buildJsonObject {
+        put("title", plan.title)
+        putJsonArray("weeks") {
+            plan.weeks.forEach { week ->
+                add(
+                    buildJsonObject {
+                        put("focus", week.focus)
+                        putJsonArray("sessions") { week.sessions.forEach { add(plannedJson(it)) } }
+                    },
+                )
+            }
+        }
+        put("why", plan.why)
+    }
+
+    /** An evaluation in the reply schema's own shape: sent as the last one, and what `TrainerResponse.encodeEvaluation` stores. */
+    fun evaluationJson(evaluation: Evaluation): JsonObject = buildJsonObject {
+        put("headline", evaluation.headline)
+        put("going_well", evaluation.goingWell)
+        put("to_work_on", evaluation.toWorkOn)
+        put("since_last", evaluation.sinceLast)
+    }
+
     private fun kind(kind: WorkoutKind): String = when (kind) {
         WorkoutKind.RUN -> "run"
         WorkoutKind.WALK -> "walk"
@@ -342,5 +463,35 @@ object TrainerPrompt {
             put("type", "string")
             putJsonArray("enum") { add("yes"); add("partly"); add("no"); add("no_plan") }
         },
+    )
+
+    private fun enumOf(vararg values: String) = buildJsonObject {
+        put("type", "string")
+        putJsonArray("enum") { values.forEach { add(it) } }
+    }
+
+    private fun arraySchema(items: JsonObject) = buildJsonObject {
+        put("type", "array")
+        put("items", items)
+    }
+
+    private val PLANNED_SCHEMA: JsonObject = strictObject(
+        "kind" to enumOf("walk", "run", "cycle", "swim", "strength", "other"),
+        "minutes" to integer(),
+        "effort" to enumOf("easy", "steady", "push"),
+        "what" to string(),
+    )
+
+    private val WEEKS_PLAN_SCHEMA: JsonObject = strictObject(
+        "title" to string(),
+        "weeks" to arraySchema(strictObject("focus" to string(), "sessions" to arraySchema(PLANNED_SCHEMA))),
+        "why" to string(),
+    )
+
+    private val EVALUATION_SCHEMA: JsonObject = strictObject(
+        "evaluation" to strictObject(
+            "headline" to string(), "going_well" to string(), "to_work_on" to string(), "since_last" to string(),
+        ),
+        "plan" to WEEKS_PLAN_SCHEMA,
     )
 }
