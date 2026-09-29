@@ -102,7 +102,9 @@ object TrainerPrompt {
         plan, or "no_plan" when there was none.
 
         When question.planned is given, the session ticked that session of their weekly plan (counted by
-        the app); say how it went against it in against_plan as well.
+        the app); say how it went against it in against_plan as well. plan_followed still judges only the
+        plan in question.session.plan — "no_plan" when that is null, even though question.planned is
+        given; question.planned does not change it.
     """.trimIndent()
 
     private val EVALUATE = """
@@ -110,7 +112,8 @@ object TrainerPrompt {
         weeks, how many sessions a week they can manage (sessions_a_week), any words of theirs, the date the
         plan starts (starts, a Monday; weeks run Monday to Sunday), and your last evaluation if there is one,
         with the plan that ran with it and how many of its sessions were done each week (done_by_week,
-        counted by the app).
+        counted by the app: one number for each week that had begun, so a plan stopped early has
+        fewer numbers than weeks).
 
         Reply with an evaluation and a plan. The evaluation: a one-line headline; going_well; to_work_on;
         and since_last, what has changed since the last evaluation, or an empty string when there is none.

@@ -44,7 +44,7 @@ class OpenAiTrainer(
         val question = request.question
         require(question is TrainerQuestion.Evaluate) { "an evaluation is asked with an evaluation question" }
         return ask({ model, profile -> TrainerPrompt.evaluateBody(model, request, profile) }) { body, model ->
-            TrainerResponse.parseEvaluation(body, model, question.ask)
+            TrainerResponse.parseEvaluation(body, model, question.ask, hadLast = question.last != null)
         }
     }
 
@@ -52,7 +52,9 @@ class OpenAiTrainer(
         val question = request.question
         require(question is TrainerQuestion.Adjust) { "an adjustment is asked with an adjust question" }
         return ask({ model, profile -> TrainerPrompt.adjustBody(model, request, profile) }) { body, model ->
-            TrainerResponse.parseAdjusted(body, model, question.ask.weeks - question.weekIndex, question.ask.perWeek, question.thisWeekMax)
+            TrainerResponse.parseAdjusted(
+                body, model, question.plan.weeks.size - question.weekIndex, question.ask.perWeek, question.thisWeekMax,
+            )
         }
     }
 

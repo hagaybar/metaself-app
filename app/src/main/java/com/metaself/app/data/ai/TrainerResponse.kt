@@ -44,9 +44,15 @@ object TrainerResponse {
         content(body)?.let(::readFeedback)?.let { TrainerReply.Answered(it, model) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
-    /** D94: the evaluation and a plan that [fits][WeeksPlan.fits] [ask]; anything else is unreadable. */
-    fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk): TrainerReply<EvaluationAndPlan> =
-        content(body)?.let(::readEvaluationAndPlan)?.takeIf { it.plan.fits(ask) }?.let { TrainerReply.Answered(it, model) }
+    /**
+     * D94: the evaluation and a plan that [fits][WeeksPlan.fits] [ask]; anything else is unreadable.
+     * [hadLast] is whether a last evaluation was sent; when it was not, since_last is blanked even if
+     * the model wrote one — D94 says it is empty when there is none, and the answer is not failed for it.
+     */
+    fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk, hadLast: Boolean): TrainerReply<EvaluationAndPlan> =
+        content(body)?.let(::readEvaluationAndPlan)?.takeIf { it.plan.fits(ask) }
+            ?.let { if (hadLast) it else it.copy(evaluation = it.evaluation.copy(sinceLast = "")) }
+            ?.let { TrainerReply.Answered(it, model) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
     /** D97: this week and the weeks after, [fitting the rest][WeeksPlan.fitsRest]. */

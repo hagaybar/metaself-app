@@ -132,7 +132,7 @@ class TrainerResponseTest {
 
     @Test
     fun `an evaluation reply becomes an evaluation and a plan`() {
-        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2)) as TrainerReply.Answered
+        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2), hadLast = true) as TrainerReply.Answered
 
         assertThat(reply.value.evaluation.headline).isEqualTo("Invented headline")
         assertThat(reply.value.evaluation.sinceLast).isEmpty()
@@ -146,9 +146,9 @@ class TrainerResponseTest {
         val threeInOneWeek = weeksPlan(week(session(), session(), session()), week(session()))
         val anEmptyWeek = weeksPlan(week(), week(session()))
 
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(4, 2)))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(threeInOneWeek)), "a-model", ProgrammeAsk(2, 2)))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(anEmptyWeek)), "a-model", ProgrammeAsk(2, 2)))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(4, 2), hadLast = true))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(threeInOneWeek)), "a-model", ProgrammeAsk(2, 2), hadLast = true))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(anEmptyWeek)), "a-model", ProgrammeAsk(2, 2), hadLast = true))
     }
 
     @Test
@@ -158,9 +158,31 @@ class TrainerResponseTest {
             session(kind = "dance"), session(effort = "hard"), session(minutes = 4), session(minutes = 181),
             session().replace("30", "\"30\""), session().replace("Invented line", " "),
         ).forEach { bad ->
-            assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(weeksPlan(week(bad), week(session())))), "a-model", ask))
+            assertUnreadable(
+                TrainerResponse.parseEvaluation(reply(evaluated(weeksPlan(week(bad), week(session())))), "a-model", ask, hadLast = true),
+            )
         }
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks).replace("Invented headline", "")), "a-model", ask))
+        assertUnreadable(
+            TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks).replace("Invented headline", "")), "a-model", ask, hadLast = true),
+        )
+    }
+
+    @Test
+    fun `since_last is blanked when no last evaluation was sent, even if the model wrote one`() {
+        val withSinceLast = evaluated(twoWeeks).replace("\"since_last\":\"\"", "\"since_last\":\"Invented change.\"")
+
+        val reply = TrainerResponse.parseEvaluation(reply(withSinceLast), "a-model", ProgrammeAsk(2, 2), hadLast = false) as TrainerReply.Answered
+
+        assertThat(reply.value.evaluation.sinceLast).isEmpty()
+    }
+
+    @Test
+    fun `since_last is kept when a last evaluation was sent`() {
+        val withSinceLast = evaluated(twoWeeks).replace("\"since_last\":\"\"", "\"since_last\":\"Invented change.\"")
+
+        val reply = TrainerResponse.parseEvaluation(reply(withSinceLast), "a-model", ProgrammeAsk(2, 2), hadLast = true) as TrainerReply.Answered
+
+        assertThat(reply.value.evaluation.sinceLast).isEqualTo("Invented change.")
     }
 
     @Test
@@ -176,7 +198,7 @@ class TrainerResponseTest {
 
     @Test
     fun `an evaluation and a plan survive being written for storage`() {
-        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2)) as TrainerReply.Answered
+        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2), hadLast = true) as TrainerReply.Answered
 
         assertThat(TrainerResponse.readEvaluation(TrainerResponse.encodeEvaluation(reply.value.evaluation))).isEqualTo(reply.value.evaluation)
         assertThat(TrainerResponse.readWeeksPlan(TrainerResponse.encodeWeeksPlan(reply.value.plan))).isEqualTo(reply.value.plan)

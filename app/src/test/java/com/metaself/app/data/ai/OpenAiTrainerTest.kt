@@ -147,6 +147,23 @@ class OpenAiTrainerTest {
         assertThat(server.takeRequest().body.readUtf8()).contains("weeks_plan")
     }
 
+    /**
+     * The weeks left come from the plan's own remaining weeks, not `ask.weeks - weekIndex`: a plan of
+     * four weeks, two weeks in, has two weeks left even though the ask (six weeks) minus the week index
+     * (two) would also read four. A two-week reply is accepted; a four-week reply is refused.
+     */
+    @Test
+    fun `the weeks left for an adjustment come from the plan's own weeks, not the ask`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_REST)))
+        server.enqueue(MockResponse().setBody(reply(FOUR_WEEK_REST)))
+
+        val twoWeekReply = trainer().adjust(MID_PLAN_ADJUST_REQUEST)
+        val fourWeekReply = trainer().adjust(MID_PLAN_ADJUST_REQUEST)
+
+        assertThat(twoWeekReply).isInstanceOf(TrainerReply.Answered::class.java)
+        assertThat((fourWeekReply as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreadable::class.java)
+    }
+
     private fun trainer(
         key: String? = "a-key",
         settings: FakeSettings = FakeSettings(),
@@ -254,5 +271,22 @@ class OpenAiTrainerTest {
         val ADJUST_REQUEST = request(
             TrainerQuestion.Adjust(ProgrammeAsk(2, 2), TEST_EPOCH_DAY - 3, SOME_PLAN, 0, emptyList(), emptyList(), 1, "Invented."),
         )
+
+        /** A four-week plan, two weeks in: two weeks are left, though the six-week ask minus two also reads four. */
+        private val FOUR_WEEK_PLAN = WeeksPlan(
+            "Invented",
+            List(4) { PlanWeek("w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))) },
+            "Invented.",
+        )
+
+        val MID_PLAN_ADJUST_REQUEST = request(
+            TrainerQuestion.Adjust(ProgrammeAsk(6, 2), TEST_EPOCH_DAY - 3, FOUR_WEEK_PLAN, 2, emptyList(), emptyList(), 1, "Invented."),
+        )
+
+        val FOUR_WEEK_REST = """{"title":"Invented","weeks":[
+            {"focus":"a","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]},
+            {"focus":"b","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]},
+            {"focus":"c","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]},
+            {"focus":"d","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]}],"why":"Invented."}"""
     }
 }

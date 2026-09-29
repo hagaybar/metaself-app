@@ -328,6 +328,7 @@ class TrainerPromptTest {
         assertThat(evaluate).contains("exactly as many weeks as asked")
         assertThat(evaluate).contains("5 to 180")
         assertThat(evaluate).contains("do not invent a test or a score")
+        assertThat(evaluate).contains("fewer numbers than weeks")
         assertThat(adjust).contains("max_this_week")
         assertThat(adjust).contains("Weeks already over are not yours to change")
         listOf(evaluate, adjust).forEach { system ->
@@ -360,6 +361,29 @@ class TrainerPromptTest {
     fun `an evaluate body for another question, or an adjust body for another, is refused`() {
         assertThrows<IllegalArgumentException> { TrainerPrompt.evaluateBody("a-model", planRequest()) }
         assertThrows<IllegalArgumentException> { TrainerPrompt.adjustBody("a-model", evaluateRequest()) }
+    }
+
+    @Test
+    fun `a review's own weekly-plan tick is sent too, with its keys and week number`() {
+        val tick = PlannedTick(3, PlannedSession(WorkoutKind.RUN, 25, PlannedEffort.PUSH, "Push run"))
+        val ticked = request(TrainerQuestion.Review(TrainerRequest.reviewQuestion(walk, review, plan).session, tick))
+
+        val question = Json.parseToJsonElement(userContent(Json.parseToJsonElement(
+            TrainerPrompt.feedbackBody("a-model", ticked, RequestProfile.DETERMINISTIC),
+        ).jsonObject)).jsonObject.getValue("question").jsonObject
+
+        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "kind", "minutes", "effort", "what")
+        assertThat(question.getValue("planned").jsonObject.getValue("week").jsonPrimitive.int).isEqualTo(3)
+    }
+
+    /** plan_followed judges the matched single-session plan alone; a weekly-plan tick is context for against_plan only. */
+    @Test
+    fun `plan_followed stays about the matched single-session plan, even when a weekly tick is given`() {
+        val system = systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))
+
+        assertThat(system).contains("plan_followed")
+        assertThat(system).contains("question.session.plan")
+        assertThat(system).contains("question.planned does not change it")
     }
 
     /** Invented: a four-week, three-a-week ask; the plan starts Monday 31 August 2026. */

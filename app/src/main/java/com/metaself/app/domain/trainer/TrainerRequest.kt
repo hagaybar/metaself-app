@@ -49,7 +49,12 @@ sealed interface TrainerQuestion {
         val tickedThisWeek: List<PlannedSession>,
         val thisWeekMax: Int,
         val words: String,
-    ) : TrainerQuestion
+    ) : TrainerQuestion {
+        init {
+            require(weekIndex in plan.weeks.indices) { "weekIndex must name one of the plan's weeks, not $weekIndex" }
+            require(thisWeekMax >= 0) { "thisWeekMax cannot be negative, not $thisWeekMax" }
+        }
+    }
 }
 
 /** One session as D84 sends it. [title] and [origin] of the workout are deliberately absent. */
