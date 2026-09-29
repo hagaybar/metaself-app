@@ -18,6 +18,7 @@ import com.metaself.app.data.health.SessionSplitDao
 import com.metaself.app.data.health.SessionSplitEntity
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.health.WorkoutEntity
+import com.metaself.app.data.letter.LetterSettingsStore
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
@@ -26,6 +27,7 @@ import com.metaself.app.data.trainer.PlanConfirmationEntity
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
+import com.metaself.app.data.trainer.WeeklyLetterEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.data.weight.WeightEntity
@@ -44,6 +46,7 @@ import com.metaself.app.domain.backup.BackupSleep
 import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupTrainerPlan
 import com.metaself.app.domain.backup.BackupTrainerProgramme
+import com.metaself.app.domain.backup.BackupWeeklyLetter
 import com.metaself.app.domain.backup.BackupWeight
 import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.Confidence
@@ -96,6 +99,8 @@ data class RestoreResult(
     val trainerReviews: Int = 0,
     /** D98. */
     val trainerProgrammes: Int = 0,
+    /** D104. */
+    val weeklyLetters: Int = 0,
 ) {
     companion object {
         /** What [backup] holds, counted as a restore would report it: the file saved, or the file offered. */
@@ -113,6 +118,8 @@ data class RestoreResult(
             trainerReviews = backup.workouts.count { it.trainerReview != null } + backup.trainerReviewsWithoutWorkout.size,
             // Counted as the restore writes them: one row per id.
             trainerProgrammes = backup.trainerProgrammes.distinctBy { it.id }.size,
+            // One per week, as the restore writes them.
+            weeklyLetters = backup.weeklyLetters.distinctBy { it.weekMonday }.size,
         )
     }
 }
@@ -163,6 +170,7 @@ class BackupRepository @Inject constructor(
     private val savedMeals: SavedMealRepository,
     private val transaction: DatabaseTransaction,
     private val snapshot: SettingsSnapshot,
+    private val letterSettings: LetterSettingsStore,
 ) {
 
     suspend fun export(nowMillis: Long): Backup {
@@ -176,6 +184,7 @@ class BackupRepository @Inject constructor(
         val milestones = profiles.milestones.first()
         val reminder = reminders.reminder.first()
         val aiSettings = ai.settings.first()
+        val letter = letterSettings.settings.first()
         val everyWorkout = workouts.all()
         val reviews = BackupReviews.split(everyWorkout.map { it.id }.toSet(), trainer.allReviews())
 
@@ -202,7 +211,7 @@ class BackupRepository @Inject constructor(
             arrival = arrival?.let { BackupArrival(it.targetKg, it.epochDay) },
             milestones = milestones.mapKeys { it.key.name },
             reminder = BackupReminder(reminder.enabled, reminder.hour, reminder.minute),
-            ai = BackupAi(aiSettings.model, aiSettings.dailyCeiling),
+            ai = BackupAi(aiSettings.model, aiSettings.dailyCeiling, weeklyLetter = letter.on, weeklyLetterHour = letter.hour),
             foods = everyFood.map(BackupFoods::toBackup),
             savedMeals = builtMeals.map(BackupFoods::toBackup),
             workouts = everyWorkout.map { it.toBackup(reviews.byWorkout[it.id]) },
@@ -221,6 +230,7 @@ class BackupRepository @Inject constructor(
             sessionSplits = BackupSplits.toFile(everyWorkout.map { it.id }, splits.all()),
             trainerProgrammes = trainer.allProgrammes().map { it.toBackup() },
             planConfirmations = BackupConfirmations.toFile(everyWorkout.map { it.id }, trainer.allConfirmations()),
+            weeklyLetters = trainer.allLetters().map { it.toBackup() },
         )
     }
 
@@ -285,6 +295,7 @@ class BackupRepository @Inject constructor(
                 trainer.deletePlans()
                 trainer.deleteProgrammes()
                 trainer.deleteConfirmations()
+                trainer.deleteLetters()
                 splits.deleteAll()
                 // The copying starts again from scratch: a record read again replaces its rows, so
                 // nothing is doubled, and nothing recorded after this file was made is missed.
@@ -309,6 +320,7 @@ class BackupRepository @Inject constructor(
                 trainer.insertReviews(prepared.reviews)
                 trainer.insertProgrammes(prepared.programmes)
                 trainer.insertConfirmations(prepared.confirmations)
+                trainer.insertLetters(prepared.letters)
                 // Last, and inside: a throw here is still a throw out of the transaction.
                 restoreSettings(prepared)
             }
@@ -345,6 +357,7 @@ class BackupRepository @Inject constructor(
             trainerPlans = prepared.plans.size,
             trainerReviews = prepared.reviews.size,
             trainerProgrammes = prepared.programmes.size,
+            weeklyLetters = prepared.letters.size,
         )
     }
 
@@ -476,6 +489,8 @@ class BackupRepository @Inject constructor(
             splits = BackupSplits.rows(backup.sessionSplits, keptAt.map { it + 1 }),
             // D105: by file position too.
             confirmations = BackupConfirmations.rows(backup.planConfirmations, keptAt.map { it + 1 }),
+            // D104: one per week (the table's unique index), numbered afresh.
+            letters = backup.weeklyLetters.distinctBy { it.weekMonday }.map { it.toEntity() },
         )
     }
 
@@ -590,6 +605,9 @@ class BackupRepository @Inject constructor(
         prepared.ai?.let {
             ai.setModel(it.model)
             ai.setDailyCeiling(it.dailyCeiling)
+            // D104: a version 1–9 file has no letter setting, and leaves the phone's as it is.
+            it.weeklyLetter?.let { on -> letterSettings.setOn(on) }
+            it.weeklyLetterHour?.let { hour -> letterSettings.setHour(hour) }
         }
         // D90: a version 1–5 file has no note, and leaves the phone's as it is.
         prepared.aboutMe?.let { aboutMe.save(it) }
@@ -638,6 +656,8 @@ class BackupRepository @Inject constructor(
         val splits: List<SessionSplitEntity>,
         /** D105: each under the id its session is inserted with ([BackupConfirmations]). */
         val confirmations: List<PlanConfirmationEntity>,
+        /** D104: one per week, id 0. */
+        val letters: List<WeeklyLetterEntity>,
     )
 
     /** How much a restore would destroy, so the question asked is a real one. */
@@ -658,6 +678,7 @@ class BackupRepository @Inject constructor(
             trainerPlans = trainer.allPlans().size,
             trainerReviews = trainer.allReviews().size,
             trainerProgrammes = trainer.allProgrammes().size,
+            weeklyLetters = trainer.allLetters().size,
         )
     }
 
@@ -802,6 +823,15 @@ private fun TrainerProgrammeEntity.toBackup() = BackupTrainerProgramme(
 
 private fun BackupTrainerProgramme.toEntity() = TrainerProgrammeEntity(
     id, createdAtMillis, weeks, perWeek, words, evaluation, plan, model, startEpochDay, status, stoppedEpochDay, replacesId,
+)
+
+private fun WeeklyLetterEntity.toBackup() = BackupWeeklyLetter(
+    weekMonday, createdAtMillis, figures, letter, model, bandDataUntil, readAtMillis,
+)
+
+/** Id 0: the table numbers the letters afresh. */
+private fun BackupWeeklyLetter.toEntity() = WeeklyLetterEntity(
+    0, weekMonday, createdAtMillis, figures, letter, model, bandDataUntil, readAtMillis,
 )
 
 /** Id 0 here; [BackupRepository]'s prepare numbers the rows 1…n, so a review can name its workout (D88). */

@@ -133,8 +133,32 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 9`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(9)
+    fun `the format is version 10`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(10)
+    }
+
+    /** D104: the weekly letters and the letter's setting ride in the file; a version 1–9 file has neither. Invented. */
+    @Test
+    fun `weekly letters and the letter's setting are written and read back, and an older file has neither`() {
+        val letter = BackupWeeklyLetter(
+            weekMonday = 20_696, createdAtMillis = 1_000, figures = "{}", letter = "{}", model = "m",
+            bandDataUntil = 2_000, readAtMillis = 3_000,
+        )
+        val withLetters = full.copy(
+            weeklyLetters = listOf(letter),
+            ai = BackupAi("m", 10, weeklyLetter = false, weeklyLetterHour = 21),
+        )
+        val text = BackupCodec.encode(withLetters)
+
+        assertThat(text).contains("\"weekly_letters\"")
+        assertThat(text).contains("\"weekly_letter_hour\": 21")
+        assertThat(BackupCodec.decode(text)).isEqualTo(withLetters)
+        // A version 9 file has no block and no setting: written out by hand, as the older files are.
+        val version9 = """{"version": 9, "exported_at": 1000, "meals": [], "weights": [], "ai": {"model": "m", "daily_ceiling": 10}}"""
+        val read = BackupCodec.decode(version9)!!
+        assertThat(read.weeklyLetters).isEmpty()
+        assertThat(read.ai!!.weeklyLetter).isNull()
+        assertThat(read.ai!!.weeklyLetterHour).isNull()
     }
 
     /** D105: the owner's answers ride in the file by session position; a version 1–8 file has none. Invented. */

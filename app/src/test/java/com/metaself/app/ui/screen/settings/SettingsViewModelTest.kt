@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.letter.InMemoryLetterSettingsStore
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.ai.ApiKeyStore
@@ -652,6 +653,7 @@ class SettingsViewModelTest {
                 override suspend fun run(block: suspend () -> Unit) = block()
             },
             snapshot = snapshot,
+            letterSettings = InMemoryLetterSettingsStore(),
         )
 
     private fun viewModel(

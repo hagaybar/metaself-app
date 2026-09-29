@@ -159,4 +159,38 @@ class BackupWordingTest {
 
         assertThat(RestoreResult.inFile(file).trainerProgrammes).isEqualTo(2)
     }
+
+    /** D104: weekly letters are named when either side has some, last. Invented counts. */
+    @Test
+    fun `the confirmation names weekly letters when either side has some, last`() {
+        val text = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 4, weights = 6, hasProfile = true, trainerProgrammes = 1, weeklyLetters = 2),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true, weeklyLetters = 1),
+        )
+
+        assertThat(text).contains("6 weights, 1 weekly plan and 2 weekly letters already on this phone")
+        assertThat(text).contains("5 weights, 0 weekly plans and 1 weekly letter from the file")
+    }
+
+    @Test
+    fun `a phone holding only weekly letters still has something to lose, and a phone with none never names them`() {
+        val onlyLetters = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 0, weights = 0, hasProfile = false, weeklyLetters = 1),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true),
+        )
+        val none = BackupWording.restored(RestoreResult(meals = 4, weights = 5, hasProfile = true))
+
+        assertThat(onlyLetters).contains("1 weekly letter")
+        assertThat(onlyLetters).doesNotContain("nothing here to lose")
+        assertThat(none).doesNotContain("letter")
+    }
+
+    /** D104: a file's letters are counted as the restore writes them, one per week. Invented. */
+    @Test
+    fun `a file's weekly letters are counted once per week`() {
+        val row = BackupWeeklyLetter(20_696, 1_000, "{}", "{}", "m")
+        val file = Backup(weeklyLetters = listOf(row, row.copy(createdAtMillis = 2_000), row.copy(weekMonday = 20_689)))
+
+        assertThat(RestoreResult.inFile(file).weeklyLetters).isEqualTo(2)
+    }
 }
