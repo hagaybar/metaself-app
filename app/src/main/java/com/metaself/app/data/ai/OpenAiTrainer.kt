@@ -6,6 +6,7 @@ import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.Trainer
+import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.WeeksPlan
@@ -39,10 +40,21 @@ class OpenAiTrainer(
     override suspend fun feedback(request: TrainerRequest): TrainerReply<Feedback> =
         ask({ model, profile -> TrainerPrompt.feedbackBody(model, request, profile) }, TrainerResponse::parseFeedback)
 
-    // TODO("Task 6"): replaced by the real evaluate/adjust calls in Task 6.
-    override suspend fun evaluate(request: TrainerRequest): TrainerReply<EvaluationAndPlan> = TODO("Task 6")
+    override suspend fun evaluate(request: TrainerRequest): TrainerReply<EvaluationAndPlan> {
+        val question = request.question
+        require(question is TrainerQuestion.Evaluate) { "an evaluation is asked with an evaluation question" }
+        return ask({ model, profile -> TrainerPrompt.evaluateBody(model, request, profile) }) { body, model ->
+            TrainerResponse.parseEvaluation(body, model, question.ask)
+        }
+    }
 
-    override suspend fun adjust(request: TrainerRequest): TrainerReply<WeeksPlan> = TODO("Task 6")
+    override suspend fun adjust(request: TrainerRequest): TrainerReply<WeeksPlan> {
+        val question = request.question
+        require(question is TrainerQuestion.Adjust) { "an adjustment is asked with an adjust question" }
+        return ask({ model, profile -> TrainerPrompt.adjustBody(model, request, profile) }) { body, model ->
+            TrainerResponse.parseAdjusted(body, model, question.ask.weeks - question.weekIndex, question.ask.perWeek, question.thisWeekMax)
+        }
+    }
 
     private suspend fun <T> ask(
         build: (String, RequestProfile) -> String,
