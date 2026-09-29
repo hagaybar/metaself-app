@@ -16,6 +16,7 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.AttemptFacts
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.Feedback
@@ -23,10 +24,12 @@ import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
+import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.Programme
@@ -313,6 +316,7 @@ class AskTheTrainerTest {
         val last = (trainer.asked.single().question as TrainerQuestion.Evaluate).last!!
         assertThat(last.evaluation).isEqualTo(EVALUATION)
         assertThat(last.doneByWeek).containsExactly(2)
+        assertThat(last.weeks.single().sessions.map { it.outcome }).containsExactly(PlannedOutcome.DONE, PlannedOutcome.DONE)
     }
 
     @Test
@@ -438,7 +442,7 @@ class AskTheTrainerTest {
      */
     @Test
     fun `the last evaluation follows its adjusted chain and stops counting on the stop day`() = runTest {
-        val first = programmes.add(offered().copy(createdAtMillis = (MONDAY - 7) * DAY + 12 * HOUR))
+        val first = programmes.add(offered().copy(createdAtMillis = (MONDAY - 8) * DAY + 12 * HOUR))
         programmes.keep(first, MONDAY - 7, MONDAY - 7)
         val adjusted = WeeksPlan("Invented adjusted", listOf(PlanWeek("w", listOf(WALK_30, WALK_30)), PlanWeek("x", listOf(WALK_20, WALK_20))), "Invented.")
         val version = programmes.add(offered().copy(evaluation = null, plan = adjusted, replacesId = first))
@@ -452,9 +456,115 @@ class AskTheTrainerTest {
 
         val last = (trainer.asked.single().question as TrainerQuestion.Evaluate).last!!
         assertThat(last.plan).isEqualTo(adjusted)
-        assertThat(last.epochDay).isEqualTo(MONDAY - 7)
+        assertThat(last.epochDay).isEqualTo(MONDAY - 8)
         assertThat(last.evaluation).isEqualTo(EVALUATION)
         assertThat(last.doneByWeek).containsExactly(1, 1).inOrder()
+    }
+
+    // --- D105 -------------------------------------------------------------------------------------
+
+    /** Kept at noon on Thursday: walks at 08:00 on the Tuesday and that morning came before it. */
+    @Test
+    fun `a session before the plan was kept ticks nothing`() = runTest {
+        val id = programmes.add(offered().copy(createdAtMillis = TEST_EPOCH_DAY * DAY + 12 * HOUR))
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        store.workouts.value = listOf(walk(id = 1, day = MONDAY + 1), walk(id = 2, day = TEST_EPOCH_DAY))
+        record.workouts.value = store.workouts.value
+
+        assertThat(ask().running()!!.progress.done).isEqualTo(0)
+        assertThat(ask().plannedTickOf(2)).isNull()
+    }
+
+    /**
+     * An adjusted version counts from its first version's keep, and the answer is stored under that first
+     * version. Invented: kept Wednesday noon, adjusted Thursday; a walk Wednesday morning does not count, a
+     * twenty-minute walk on Thursday morning is a candidate for a thirty-minute place.
+     */
+    @Test
+    fun `an adjusted plan counts from its first keep, and a candidate's answer is stored under it`() = runTest {
+        val first = programmes.add(offered().copy(createdAtMillis = (MONDAY + 2) * DAY + 12 * HOUR))
+        programmes.keep(first, MONDAY, MONDAY + 2)
+        val version = programmes.add(offered().copy(evaluation = null, replacesId = first, createdAtMillis = NOW - HOUR))
+        programmes.keepAdjusted(version, first, TEST_EPOCH_DAY)
+        store.workouts.value = listOf(walk(id = 1, day = MONDAY + 2), walk(id = 2, day = TEST_EPOCH_DAY).copy(durationMinutes = 20))
+        record.workouts.value = store.workouts.value
+
+        val before = ask().running()!!.progress.weeks.first()
+        assertThat(before.done).isEqualTo(0)
+        assertThat(before.ticks.first().candidate?.id).isEqualTo(2L)
+
+        ask().answerCandidate(2, confirmed = true)
+
+        assertThat(programmes.confirmationRows.value).containsExactly(PlanConfirmation(first, 2, true, NOW))
+        val after = ask().running()!!.progress.weeks.first()
+        assertThat(after.done).isEqualTo(1)
+        assertThat(after.ticks.first().short).isTrue()
+    }
+
+    /**
+     * A shorter session said yes to keeps its place when an adjustment adds a shorter planned session:
+     * the twenty-minute walk stays on the thirty-minute place, and the new twenty-minute one is still to do.
+     */
+    @Test
+    fun `a session said yes to keeps its place after an adjustment adds a shorter one`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, MONDAY)
+        store.workouts.value = listOf(walk(id = 1, day = MONDAY + 1).copy(durationMinutes = 20))
+        record.workouts.value = store.workouts.value
+        ask().answerCandidate(1, confirmed = true)
+        trainer.adjustments += TrainerReply.Answered(
+            WeeksPlan("Invented new", listOf(PlanWeek("w", listOf(WALK_20)), PlanWeek("x", listOf(WALK_20))), "Invented."),
+            "a-model",
+        )
+        val version = (ask().adjust("Invented.") as AskTheTrainer.Adjusted.Offered).programme
+        assertThat(version.plan.weeks.first().sessions).containsExactly(WALK_30, WALK_20).inOrder()
+
+        ask().keepAdjusted(version)
+
+        val week = ask().running()!!.progress.weeks.first()
+        assertThat(week.ticks.map { it.by?.id }).containsExactly(1L, null).inOrder()
+        assertThat(week.ticks.first().short).isTrue()
+        assertThat(week.next).isEqualTo(WALK_20)
+    }
+
+    @Test
+    fun `answering a session that is not waiting for an answer is refused, and nothing is stored`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        store.workouts.value = listOf(walk(id = 1, day = MONDAY), walk(id = 2, day = MONDAY + 1).copy(durationMinutes = 20))
+        record.workouts.value = store.workouts.value
+
+        assertThat(runCatching { ask().answerCandidate(1, confirmed = true) }.isFailure).isTrue()
+        assertThat(runCatching { ask().answerCandidate(9, confirmed = true) }.isFailure).isTrue()
+        ask().answerCandidate(2, confirmed = false)
+        assertThat(runCatching { ask().answerCandidate(2, confirmed = true) }.isFailure).isTrue()
+
+        assertThat(programmes.confirmationRows.value).containsExactly(PlanConfirmation(id, 2, false, NOW))
+    }
+
+    /** Invented: last week a full walk and a confirmed shorter one; this week a ten-minute walk. */
+    @Test
+    fun `adjusting tells the trainer each session's outcome and the attempts, and counts a confirmed one as done`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY - 7, TEST_EPOCH_DAY - 7)
+        store.workouts.value = listOf(
+            walk(id = 1, day = MONDAY - 7),
+            walk(id = 2, day = MONDAY - 6).copy(durationMinutes = 20),
+            walk(id = 3, day = MONDAY).copy(durationMinutes = 10),
+        )
+        record.workouts.value = store.workouts.value
+        programmes.confirm(PlanConfirmation(id, 2, true, NOW - DAY))
+        trainer.adjustments += TrainerReply.Answered(WeeksPlan("Invented new", listOf(PlanWeek("w", listOf(WALK_20))), "Invented."), "a-model")
+
+        ask().adjust("Invented.")
+
+        val question = trainer.asked.single().question as TrainerQuestion.Adjust
+        assertThat(question.doneByWeek).containsExactly(2)
+        assertThat(question.howItWent.map { it.week }).containsExactly(1, 2).inOrder()
+        assertThat(question.howItWent[0].sessions.map { it.outcome }).containsExactly(PlannedOutcome.DONE, PlannedOutcome.DONE_SHORT).inOrder()
+        assertThat(question.howItWent[0].sessions.map { it.minutesDone }).containsExactly(40, 20).inOrder()
+        assertThat(question.howItWent[1].attempts).containsExactly(AttemptFacts(WorkoutKind.WALK, 10, 30))
+        assertThat(question.thisWeekMax).isEqualTo(2)
     }
 
     private fun ask() = AskTheTrainer(
@@ -489,7 +599,10 @@ class AskTheTrainerTest {
         val WEEKS = WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(WALK_30, WALK_30)) }, "Invented reason.")
         val EVALUATION = Evaluation("Invented headline.", "Invented.", "Invented.", "")
 
-        /** An evaluation made at noon, so its day is the same in any zone within eleven hours of UTC. */
-        fun offered() = Programme(0, TEST_EPOCH_DAY * DAY + 12 * HOUR, ProgrammeAsk(2, 2), EVALUATION, WEEKS, "a-model")
+        /**
+         * An evaluation made at noon, so its day is the same in any zone within eleven hours of UTC — on the
+         * Sunday before the earliest plan here starts, so every session in these tests comes after it (D105).
+         */
+        fun offered() = Programme(0, (MONDAY - 15) * DAY + 12 * HOUR, ProgrammeAsk(2, 2), EVALUATION, WEEKS, "a-model")
     }
 }

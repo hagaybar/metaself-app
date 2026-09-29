@@ -38,7 +38,8 @@ sealed interface TrainerQuestion {
     /**
      * D97: the running [plan], the week the owner is in ([weekIndex], from 0), the done-count of each week
      * before it, the planned sessions already ticked this week, how many this week may still hold
-     * ([thisWeekMax]), and the owner's words. Every count is the phone's (D95).
+     * ([thisWeekMax]), the owner's words, and how each week up to and including this one went — each
+     * planned session's outcome and the attempts ([howItWent], D105). Every count is the phone's (D95).
      */
     data class Adjust(
         val ask: ProgrammeAsk,
@@ -49,6 +50,7 @@ sealed interface TrainerQuestion {
         val tickedThisWeek: List<PlannedSession>,
         val thisWeekMax: Int,
         val words: String,
+        val howItWent: List<WeekOutcome>,
     ) : TrainerQuestion {
         init {
             require(weekIndex in plan.weeks.indices) { "weekIndex must name one of the plan's weeks, not $weekIndex" }

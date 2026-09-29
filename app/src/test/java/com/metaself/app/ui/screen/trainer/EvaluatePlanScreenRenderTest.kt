@@ -5,6 +5,7 @@ import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -76,7 +77,7 @@ class EvaluatePlanScreenRenderTest {
         assertThat(draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = SHOWN, kept = true)))
             .contains("Kept. It is on the Trainer screen.")
 
-        val running = PlanCard.of(SHOWN.copy(startEpochDay = TEST_EPOCH_DAY - 3, status = ProgrammeStatus.RUNNING), emptyList(), TEST_EPOCH_DAY) as PlanCard.Running
+        val running = PlanCard.of(SHOWN.copy(startEpochDay = TEST_EPOCH_DAY - 3, status = ProgrammeStatus.RUNNING), emptyList(), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, onRunning = true, running = running, evaluation = SHOWN.evaluation))
         assertThat(texts).contains("Your plan")
         assertThat(render.isDrawnBefore("From the AI trainer", "WHERE YOU STAND")).isTrue()

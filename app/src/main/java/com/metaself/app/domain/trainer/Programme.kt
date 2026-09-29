@@ -75,5 +75,29 @@ data class Programme(
 /** A planned session with its week, counted from 1 (D96). */
 data class PlannedTick(val week: Int, val session: PlannedSession)
 
-/** D93: the last kept evaluation, the plan that ran with it, and how many of its sessions were done each week. */
-data class LastEvaluation(val epochDay: Long, val evaluation: Evaluation, val plan: WeeksPlan, val doneByWeek: List<Int>)
+/**
+ * D93, D105: the last kept evaluation, the plan that ran with it, how many of its sessions were done each
+ * week, and how each week went ([weeks], one per week that had begun, as [doneByWeek]).
+ */
+data class LastEvaluation(
+    val epochDay: Long,
+    val evaluation: Evaluation,
+    val plan: WeeksPlan,
+    val doneByWeek: List<Int>,
+    val weeks: List<WeekOutcome> = emptyList(),
+)
+
+/** D105: the owner's answer to "count it for this?", stored under the chain's first version. */
+data class PlanConfirmation(val programmeId: Long, val workoutId: Long, val confirmed: Boolean, val answeredAtMillis: Long)
+
+/** D105: a planned session done as long as planned, done shorter and confirmed, or not done. Sent by name. */
+enum class PlannedOutcome { DONE, DONE_SHORT, NOT_DONE }
+
+/** [minutesDone] is the ticking session's, null when not done. */
+data class SessionOutcome(val planned: PlannedSession, val outcome: PlannedOutcome, val minutesDone: Int?)
+
+/** D105: a session that ticked nothing, its minutes against the planned minutes of the session it came nearest to. */
+data class AttemptFacts(val kind: WorkoutKind, val minutes: Int, val plannedMinutes: Int)
+
+/** D105: one week of a plan as the trainer is told it; [week] is counted from 1. */
+data class WeekOutcome(val week: Int, val sessions: List<SessionOutcome>, val attempts: List<AttemptFacts>)

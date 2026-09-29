@@ -394,6 +394,7 @@ fun MetaSelfNavHost(
                 onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
                 onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
+                onAnswer = trainerViewModel::answer,
             )
         }
 

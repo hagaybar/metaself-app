@@ -23,6 +23,7 @@ import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
+import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.PlanWeek
@@ -912,6 +913,21 @@ class HealthRecordStoreTest {
 
         assertThat(db.trainerDao().allProgrammes()).isEqualTo(before)
         assertThat(programmes.running()!!.id).isEqualTo(running)
+    }
+
+    /** D105 over a real table: answers are read by the chain's first version, and the first answer stands. */
+    @Test
+    fun `an answer is stored under its plan, and a second for the same session is ignored`() = runTest {
+        val programmes = RoomProgrammeStore(db.trainerDao(), RoomDatabaseTransaction(db))
+
+        programmes.confirm(PlanConfirmation(programmeId = 1, workoutId = 10, confirmed = true, answeredAtMillis = 1_000))
+        programmes.confirm(PlanConfirmation(programmeId = 1, workoutId = 10, confirmed = false, answeredAtMillis = 2_000))
+        programmes.confirm(PlanConfirmation(programmeId = 1, workoutId = 20, confirmed = false, answeredAtMillis = 3_000))
+        programmes.confirm(PlanConfirmation(programmeId = 2, workoutId = 10, confirmed = false, answeredAtMillis = 4_000))
+
+        assertThat(programmes.confirmations(1)).containsExactly(10L, true, 20L, false)
+        assertThat(programmes.observeConfirmations(2).first()).containsExactly(10L, false)
+        assertThat(db.trainerDao().allConfirmations().first { it.programmeId == 1L && it.workoutId == 10L }.answeredAtMillis).isEqualTo(1_000)
     }
 
     private fun aFeedback(headline: String) =

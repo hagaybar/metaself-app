@@ -10,6 +10,7 @@ import com.metaself.app.data.day.MIGRATION_6_7
 import com.metaself.app.data.day.MIGRATION_7_8
 import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.day.MIGRATION_9_10
+import com.metaself.app.data.day.MIGRATION_10_11
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -697,6 +698,33 @@ class MigrationTest {
         val migrated = helper.runMigrationsAndValidate(TEST_DB, 10, true, MIGRATION_9_10)
 
         listOf("trainer_programmes" to 0, "workouts" to 1, "trainer_reviews" to 1).forEach { (table, rows) ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(rows)
+            }
+        }
+        migrated.close()
+    }
+
+    /** D105: one new table, empty; every weekly plan and workout kept. Invented figures. */
+    @Test
+    fun `a version 10 database migrates to version 11 with an empty answers table, keeping its weekly plans`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 10).use { db ->
+            db.execSQL(
+                "INSERT INTO workouts (id, epochDay, startedAtMillis, durationMinutes, kind, energySource, source, hidden) " +
+                    "VALUES (1, 20699, 1000, 40, 'WALK', 'NONE', 'SYNCED', 0)",
+            )
+            db.execSQL(
+                "INSERT INTO trainer_programmes (id, createdAtMillis, weeks, perWeek, plan, model, status) " +
+                    "VALUES (1, 1000, 4, 3, '{}', 'm', 'OFFERED')",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 11, true, MIGRATION_10_11)
+
+        listOf("plan_confirmations" to 0, "workouts" to 1, "trainer_programmes" to 1).forEach { (table, rows) ->
             migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
                 assertThat(cursor.moveToFirst()).isTrue()
                 assertThat(cursor.getInt(0)).isEqualTo(rows)

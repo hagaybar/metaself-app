@@ -7,6 +7,7 @@ import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.trainer.PlanProgress
+import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -43,19 +44,26 @@ class ProgrammeWordingTest {
 
     @Test
     fun `ticks say done or to do, and which session did it`() {
-        val progress = PlanProgress.of(plan, start, listOf(session(1, start)), until = TEST_EPOCH_DAY)
+        val progress = PlanProgress.of(plan, start, listOf(session(1, start)), until = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap()))
         val week = progress.weeks.first()
 
         assertThat(ProgrammeWording.tickTitle(week.ticks[0])).isEqualTo("Done: Steady walk, 40 min")
         assertThat(ProgrammeWording.tickTitle(week.ticks[1])).isEqualTo("To do: Steady walk, 40 min")
-        assertThat(ProgrammeWording.tickLine(week.ticks[0].by!!)).isEqualTo("Done Mon · Walking, 32 min")
+        assertThat(ProgrammeWording.tickLine(week.ticks[0].by!!)).isEqualTo("Done Mon · Walking, 45 min")
         assertThat(ProgrammeWording.pastWeek(week)).isEqualTo("Week 1: 1 of 3 done")
         assertThat(ProgrammeWording.thisWeekSoFar(week)).isEqualTo("Week 1 (this week): 1 of 3 so far")
     }
 
+    /** D105: the question under a planned session. Invented. */
+    @Test
+    fun `a shorter session is asked about by its name and minutes`() {
+        assertThat(ProgrammeWording.candidateLine(session(1, start).copy(durationMinutes = 20)))
+            .isEqualTo("Walking, 20 min — count it for this?")
+    }
+
     @Test
     fun `an ended plan counts every week, and the adjust page says what is rewritten`() {
-        val progress = PlanProgress.of(plan, start, listOf(session(1, start), session(2, start + 7)), until = start + 27)
+        val progress = PlanProgress.of(plan, start, listOf(session(1, start), session(2, start + 7)), until = start + 27, counting = PlanCounting(1, 0, emptyMap()))
 
         assertThat(ProgrammeWording.endedHeading(4)).isEqualTo("YOUR 4-WEEK PLAN HAS ENDED")
         assertThat(ProgrammeWording.endedLine(progress)).isEqualTo("2 of 12 planned sessions done · weeks 1 of 3, 1 of 3, 0 of 3, 0 of 3")
@@ -71,7 +79,7 @@ class ProgrammeWordingTest {
 
     /** A synced thirty-two-minute walk at 07:00 on [day]. Invented. */
     private fun session(id: Long, day: Long) = Workout(
-        id = id, epochDay = day, startedAtMillis = day * 86_400_000L + 7 * 3_600_000L, durationMinutes = 32,
+        id = id, epochDay = day, startedAtMillis = day * 86_400_000L + 7 * 3_600_000L, durationMinutes = 45,
         kind = WorkoutKind.WALK, title = null, distanceM = null, energyKcal = null, energySource = EnergySource.NONE,
         effort = null, source = WorkoutSource.SYNCED, hidden = false, note = null,
     )

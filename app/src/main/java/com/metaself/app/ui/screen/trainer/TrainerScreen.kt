@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.Tick
 import com.metaself.app.ui.MetaSelfScreen
@@ -60,6 +61,8 @@ fun TrainerScreen(
     onSeePlan: () -> Unit,
     onAdjust: () -> Unit,
     modifier: Modifier = Modifier,
+    /** D105: the owner's answer to "count it for this?" — the session's id, and Yes (true) or No. */
+    onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
 ) {
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
@@ -104,7 +107,10 @@ fun TrainerScreen(
                         }
                     }
                 }
-                PlanCardView(home.plan, onEvaluate, onSeePlan, onAdjust)
+                PlanCardView(home.plan, state.answering, onEvaluate, onSeePlan, onAdjust, onAnswer)
+                state.refused?.let { refused ->
+                    Text(stringResource(refused.sentence), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+                }
                 Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(stringResource(R.string.trainer_plan_next))
@@ -162,7 +168,14 @@ fun TrainerScreen(
 /** D95, D97: the weekly plan's card — an offer, the running plan's week, or an ended plan's count. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun PlanCardView(card: PlanCard, onEvaluate: () -> Unit, onSeePlan: () -> Unit, onAdjust: () -> Unit) {
+private fun PlanCardView(
+    card: PlanCard,
+    answering: Set<Long>,
+    onEvaluate: () -> Unit,
+    onSeePlan: () -> Unit,
+    onAdjust: () -> Unit,
+    onAnswer: (Long, Boolean) -> Unit,
+) {
     when (card) {
         PlanCard.None -> OutlinedButton(onClick = onEvaluate, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.trainer_evaluate))
@@ -178,7 +191,10 @@ private fun PlanCardView(card: PlanCard, onEvaluate: () -> Unit, onSeePlan: () -
                 if (card.weekIndex in card.progress.weeks.indices) {
                     val week = card.progress.weeks[card.weekIndex]
                     Text(ProgrammeWording.weekDates(week.monday), style = MaterialTheme.typography.bodyMedium)
-                    week.ticks.forEach { tick -> TickRow(tick) }
+                    week.ticks.forEach { tick ->
+                        TickRow(tick)
+                        tick.candidate?.let { candidate -> CandidateRow(candidate, candidate.id !in answering, onAnswer) }
+                    }
                     card.progress.weeks.take(card.weekIndex).forEach { past ->
                         Text(ProgrammeWording.pastWeek(past), style = MaterialTheme.typography.bodySmall)
                     }
@@ -241,6 +257,30 @@ private fun TickRow(tick: Tick) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/**
+ * D105: under a planned session, a shorter session waiting for the owner's answer — "Walking, 20 min —
+ * count it for this?" (invented) — with Yes and No, each at least 48 dp tall, not pressable while an
+ * answer is being written.
+ */
+@Composable
+private fun CandidateRow(candidate: Workout, enabled: Boolean, onAnswer: (Long, Boolean) -> Unit) {
+    Column(Modifier.padding(start = 32.dp)) {
+        Text(ProgrammeWording.candidateLine(candidate), style = MaterialTheme.typography.bodyMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            OutlinedButton(
+                onClick = { onAnswer(candidate.id, true) },
+                enabled = enabled,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.plan_candidate_yes)) }
+            OutlinedButton(
+                onClick = { onAnswer(candidate.id, false) },
+                enabled = enabled,
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.plan_candidate_no)) }
         }
     }
 }

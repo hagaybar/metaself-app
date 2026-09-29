@@ -32,6 +32,8 @@ data class TrainerHome(
             kept: TrainerPlan?,
             running: Programme? = null,
             planWorkouts: List<Workout> = emptyList(),
+            /** D105: what the running plan counts from, and the owner's answers; no card without it. */
+            counting: PlanCounting? = null,
         ): TrainerHome {
             // D92: a combined session reviewed on another of its witnesses is not waiting.
             val byWorkout = SessionReviews.bySession(recent, reviews)
@@ -42,7 +44,7 @@ data class TrainerHome(
                 .filter { !it.hidden }
                 .mapNotNull { workout -> byWorkout[workout.id]?.let { ReviewedSession(workout, it) } }
                 .sortedByDescending { it.workout.startedAtMillis }
-            val plan = PlanCard.of(running, planWorkouts, today)
+            val plan = if (counting == null) PlanCard.None else PlanCard.of(running, planWorkouts, today, counting)
             return TrainerHome(waiting, PlanMatch.offered(kept, nowMillis), earlier, plan, (plan as? PlanCard.Running)?.next)
         }
     }
@@ -68,12 +70,12 @@ sealed interface PlanCard {
     data class Ended(val programme: Programme, val progress: PlanProgress) : PlanCard
 
     companion object {
-        /** [workouts]: the record over the plan's weeks; only its counted sessions tick (D95). */
-        fun of(running: Programme?, workouts: List<Workout>, today: Long): PlanCard {
+        /** [workouts]: the record over the plan's weeks; only its counted sessions after [counting]'s moment tick (D95, D105). */
+        fun of(running: Programme?, workouts: List<Workout>, today: Long, counting: PlanCounting): PlanCard {
             val start = running?.startEpochDay
             if (running == null || start == null || running.status != ProgrammeStatus.RUNNING) return None
             val last = ProgrammeCalendar.lastDay(start, running.ask.weeks)
-            val progress = PlanProgress.of(running.plan, start, workouts, minOf(today, last))
+            val progress = PlanProgress.of(running.plan, start, workouts, minOf(today, last), counting)
             return when {
                 today <= last -> Running(running, progress, ProgrammeCalendar.weekIndex(start, today).coerceAtLeast(-1))
                 ProgrammeCalendar.endedShown(start, running.ask.weeks, today) -> Ended(running, progress)

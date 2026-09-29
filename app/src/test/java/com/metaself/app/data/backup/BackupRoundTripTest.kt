@@ -56,6 +56,7 @@ import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.data.trainer.PlanConfirmationEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.data.trainer.TrainerReviewEntity
@@ -739,6 +740,8 @@ class BackupRoundTripTest {
             TrainerProgrammeEntity(0, 1_000, 4, 3, null, null, weeksPlan, "m", 20_696, "RUNNING", null, null),
         )
         val programmes = db.trainerDao().allProgrammes()
+        // D105: an answer about the second walk rides by position and comes back on it.
+        db.trainerDao().insertConfirmation(PlanConfirmationEntity(programmes.single().id, second, true, 3_000))
 
         val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
         assertThat(file.version).isEqualTo(Backup.CURRENT_VERSION)
@@ -747,6 +750,9 @@ class BackupRoundTripTest {
         assertThat(db.trainerDao().allProgrammes()).isEqualTo(programmes)
 
         val walks = db.workoutDao().all()
+        val answer = db.trainerDao().allConfirmations().single()
+        assertThat(walks.first { it.id == answer.workoutId }.startedAtMillis).isEqualTo(2_000L)
+        assertThat(answer.confirmed).isTrue()
         val review = db.trainerDao().allReviews().single()
         assertThat(walks.first { it.id == review.workoutId }.startedAtMillis).isEqualTo(2_000L)
         assertThat(review.planId).isEqualTo(db.trainerDao().allPlans().single().id)

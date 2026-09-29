@@ -269,7 +269,7 @@ class OpenAiTrainerTest {
         )
 
         val ADJUST_REQUEST = request(
-            TrainerQuestion.Adjust(ProgrammeAsk(2, 2), TEST_EPOCH_DAY - 3, SOME_PLAN, 0, emptyList(), emptyList(), 1, "Invented."),
+            TrainerQuestion.Adjust(ProgrammeAsk(2, 2), TEST_EPOCH_DAY - 3, SOME_PLAN, 0, emptyList(), emptyList(), 1, "Invented.", emptyList()),
         )
 
         /** A four-week plan, two weeks in: two weeks are left, though the six-week ask minus two also reads four. */
@@ -280,7 +280,7 @@ class OpenAiTrainerTest {
         )
 
         val MID_PLAN_ADJUST_REQUEST = request(
-            TrainerQuestion.Adjust(ProgrammeAsk(6, 2), TEST_EPOCH_DAY - 3, FOUR_WEEK_PLAN, 2, emptyList(), emptyList(), 1, "Invented."),
+            TrainerQuestion.Adjust(ProgrammeAsk(6, 2), TEST_EPOCH_DAY - 3, FOUR_WEEK_PLAN, 2, emptyList(), emptyList(), 1, "Invented.", emptyList()),
         )
 
         val FOUR_WEEK_REST = """{"title":"Invented","weeks":[

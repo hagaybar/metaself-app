@@ -12,6 +12,7 @@ import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -157,7 +158,7 @@ class TrainerScreenRenderTest {
     @Test
     fun `a running plan shows its week, its ticks, the doors, and the next session under Plan my next session`() {
         var adjusted = false
-        val card = PlanCard.of(RUNNING, listOf(WAITING.copy(epochDay = TEST_EPOCH_DAY - 3)), TEST_EPOCH_DAY) as PlanCard.Running
+        val card = PlanCard.of(RUNNING, listOf(WAITING.copy(epochDay = TEST_EPOCH_DAY - 3)), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running
         val texts = draw(TrainerHome(null, null, emptyList(), card, card.next), onAdjust = { adjusted = true })
 
         assertThat(texts).contains("YOUR 2-WEEK PLAN · WEEK 1 OF 2")
@@ -174,16 +175,39 @@ class TrainerScreenRenderTest {
     /** D85, D95: the session waiting for words, then the plan's card, then Plan my next session. */
     @Test
     fun `the waiting session comes first, then the plan card, then Plan my next session`() {
-        val card = PlanCard.of(RUNNING, emptyList(), TEST_EPOCH_DAY) as PlanCard.Running
+        val card = PlanCard.of(RUNNING, emptyList(), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running
         draw(TrainerHome(WAITING, null, emptyList(), card, card.next))
 
         assertThat(render.isDrawnBefore("WAITING FOR YOUR WORDS", "YOUR 2-WEEK PLAN")).isTrue()
         assertThat(render.isDrawnBefore("YOUR 2-WEEK PLAN", "Plan my next session")).isTrue()
     }
 
+    /** D105: a twenty-minute walk under a thirty-minute place is asked about, with Yes and No. Invented. */
+    @Test
+    fun `a shorter session is asked about under its planned session, and Yes answers for it`() {
+        var answered: Pair<Long, Boolean>? = null
+        val short = WAITING.copy(epochDay = TEST_EPOCH_DAY - 3, startedAtMillis = (TEST_EPOCH_DAY - 3) * DAY + 7 * HOUR, durationMinutes = 20)
+        val card = PlanCard.of(RUNNING, listOf(short), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running
+        val texts = draw(TrainerHome(null, null, emptyList(), card, card.next), onAnswer = { id, yes -> answered = id to yes })
+
+        assertThat(texts).containsAtLeast("Easy walk, 30 min", "Walking, 20 min — count it for this?", "Yes", "No").inOrder()
+        render.click("Yes")
+        assertThat(answered).isEqualTo(5L to true)
+    }
+
+    @Test
+    fun `while its answer is being written, Yes and No cannot be pressed`() {
+        val short = WAITING.copy(epochDay = TEST_EPOCH_DAY - 3, startedAtMillis = (TEST_EPOCH_DAY - 3) * DAY + 7 * HOUR, durationMinutes = 20)
+        val card = PlanCard.of(RUNNING, listOf(short), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running
+        draw(TrainerHome(null, null, emptyList(), card, card.next), answering = setOf(5L))
+
+        assertThat(render.isEnabled("Yes")).isFalse()
+        assertThat(render.isEnabled("No")).isFalse()
+    }
+
     @Test
     fun `an ended plan shows its count and offers a new evaluation`() {
-        val ended = PlanCard.of(RUNNING, emptyList(), TEST_EPOCH_DAY + 11) as PlanCard.Ended
+        val ended = PlanCard.of(RUNNING, emptyList(), TEST_EPOCH_DAY + 11, PlanCounting(1, 0, emptyMap())) as PlanCard.Ended
         val texts = draw(TrainerHome(null, null, emptyList(), ended))
 
         assertThat(texts).contains("YOUR 2-WEEK PLAN HAS ENDED")
@@ -201,9 +225,11 @@ class TrainerScreenRenderTest {
         onSeePlan: () -> Unit = {},
         onAdjust: () -> Unit = {},
         aboutMe: String = "",
+        onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
+        answering: Set<Long> = emptySet(),
     ): List<String> = render.texts {
         TrainerScreen(
-            state = TrainerViewModel.State(home = home, today = TEST_EPOCH_DAY, aboutMe = aboutMe),
+            state = TrainerViewModel.State(home = home, today = TEST_EPOCH_DAY, aboutMe = aboutMe, answering = answering),
             onBack = {},
             onReview = onReview,
             onPlan = onPlan,
@@ -212,6 +238,7 @@ class TrainerScreenRenderTest {
             onEvaluate = onEvaluate,
             onSeePlan = onSeePlan,
             onAdjust = onAdjust,
+            onAnswer = onAnswer,
         )
     }
 

@@ -76,7 +76,7 @@ class TrainerHomeTest {
 
     @Test
     fun `a running plan shows its week, its ticks and the next planned session`() {
-        val card = PlanCard.of(running, listOf(planSession(1, start + 1)), today = TEST_EPOCH_DAY) as PlanCard.Running
+        val card = PlanCard.of(running, listOf(planSession(1, start + 1)), today = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap())) as PlanCard.Running
 
         assertThat(card.weekIndex).isEqualTo(0)
         assertThat(card.progress.weeks.first().done).isEqualTo(1)
@@ -86,22 +86,22 @@ class TrainerHomeTest {
     @Test
     fun `before week 1 there is no next session, and after the last day the plan has ended for fourteen days`() {
         val later = running.copy(startEpochDay = start + 7)
-        val before = PlanCard.of(later, emptyList(), today = TEST_EPOCH_DAY) as PlanCard.Running
+        val before = PlanCard.of(later, emptyList(), today = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap())) as PlanCard.Running
         assertThat(before.weekIndex).isEqualTo(-1)
         assertThat(before.next).isNull()
 
         val last = start + 13
-        assertThat(PlanCard.of(running, emptyList(), today = last + 1)).isInstanceOf(PlanCard.Ended::class.java)
-        assertThat(PlanCard.of(running, emptyList(), today = last + 14)).isInstanceOf(PlanCard.Ended::class.java)
-        assertThat(PlanCard.of(running, emptyList(), today = last + 15)).isEqualTo(PlanCard.None)
-        assertThat(PlanCard.of(null, emptyList(), today = TEST_EPOCH_DAY)).isEqualTo(PlanCard.None)
+        assertThat(PlanCard.of(running, emptyList(), today = last + 1, counting = PlanCounting(1, 0, emptyMap()))).isInstanceOf(PlanCard.Ended::class.java)
+        assertThat(PlanCard.of(running, emptyList(), today = last + 14, counting = PlanCounting(1, 0, emptyMap()))).isInstanceOf(PlanCard.Ended::class.java)
+        assertThat(PlanCard.of(running, emptyList(), today = last + 15, counting = PlanCounting(1, 0, emptyMap()))).isEqualTo(PlanCard.None)
+        assertThat(PlanCard.of(null, emptyList(), today = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap()))).isEqualTo(PlanCard.None)
     }
 
     @Test
     fun `the home carries the card and the next session`() {
         val home = TrainerHome.of(
             today = TEST_EPOCH_DAY, nowMillis = 0, recent = emptyList(), reviewed = emptyList(), reviews = emptyList(),
-            kept = null, running = running, planWorkouts = emptyList(),
+            kept = null, running = running, planWorkouts = emptyList(), counting = PlanCounting(1, 0, emptyMap()),
         )
 
         assertThat(home.plan).isInstanceOf(PlanCard.Running::class.java)

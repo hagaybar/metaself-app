@@ -2,6 +2,7 @@ package com.metaself.app.data.trainer
 
 import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.data.day.DatabaseTransaction
+import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
@@ -38,6 +39,13 @@ interface ProgrammeStore {
 
     /** D97: [id] stops [today]. Refused (throws) when [id] is no longer running. */
     suspend fun stop(id: Long, today: Long)
+
+    /** D105: the owner's answers stored under [programmeId] (a chain's first version), by workout id; true is Yes. */
+    fun observeConfirmations(programmeId: Long): Flow<Map<Long, Boolean>>
+    suspend fun confirmations(programmeId: Long): Map<Long, Boolean>
+
+    /** D105: stores an answer; a second for the same session and plan is ignored — the first stands. */
+    suspend fun confirm(confirmation: PlanConfirmation)
 }
 
 class RoomProgrammeStore @Inject constructor(
@@ -76,6 +84,18 @@ class RoomProgrammeStore @Inject constructor(
     /** Refused (throws) when [id] is no longer running: a stale screen must not restamp a replaced plan. */
     override suspend fun stop(id: Long, today: Long) {
         check(dao.stopRunning(id, today) == 1) { "the plan being stopped is no longer running" }
+    }
+
+    override fun observeConfirmations(programmeId: Long): Flow<Map<Long, Boolean>> =
+        dao.observeConfirmations(programmeId).map { rows -> rows.associate { it.workoutId to it.confirmed } }
+
+    override suspend fun confirmations(programmeId: Long): Map<Long, Boolean> =
+        dao.confirmations(programmeId).associate { it.workoutId to it.confirmed }
+
+    override suspend fun confirm(confirmation: PlanConfirmation) {
+        dao.insertConfirmation(
+            PlanConfirmationEntity(confirmation.programmeId, confirmation.workoutId, confirmation.confirmed, confirmation.answeredAtMillis),
+        )
     }
 }
 

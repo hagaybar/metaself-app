@@ -56,6 +56,11 @@ data class Backup(
     @SerialName("session_splits") val sessionSplits: List<BackupSessionSplit> = emptyList(),
     /** D98: the trainer's weekly plans, every row, kept or not. Empty in a file from before version 8. */
     @SerialName("trainer_programmes") val trainerProgrammes: List<BackupTrainerProgramme> = emptyList(),
+    /**
+     * D105: the owner's answers to "count it for this?", each naming its session by position in
+     * [workouts], counted from 1, as a split does. Empty in a file from before version 9.
+     */
+    @SerialName("plan_confirmations") val planConfirmations: List<BackupPlanConfirmation> = emptyList(),
 ) {
     companion object {
         /**
@@ -93,8 +98,12 @@ data class Backup(
          * Version 8 adds the trainer's weekly plans (D98), [trainerProgrammes], each row as stored with
          * its id, which another row's `replaces_id` may name. A version 1–7 file has none, and restoring
          * one leaves none — a restore replaces.
+         *
+         * Version 9 adds the owner's answers about shorter sessions (D105), [planConfirmations], each naming
+         * its weekly plan by id and its session by position in the file. A version 1–8 file has none, and
+         * restoring one leaves none — a restore replaces.
          */
-        const val CURRENT_VERSION = 8
+        const val CURRENT_VERSION = 9
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -338,6 +347,18 @@ data class BackupTrainerProgramme(
     val status: String,
     @SerialName("stopped_epoch_day") val stoppedEpochDay: Long? = null,
     @SerialName("replaces_id") val replacesId: Long? = null,
+)
+
+/**
+ * One answer to "count it for this?" (D105): [programmeId] names a [BackupTrainerProgramme]'s id (a chain's
+ * first version); [workout] is the session's position in the file's `workouts`, counted from 1.
+ */
+@Serializable
+data class BackupPlanConfirmation(
+    @SerialName("programme_id") val programmeId: Long,
+    val workout: Int,
+    val confirmed: Boolean,
+    @SerialName("answered_at") val answeredAtMillis: Long,
 )
 
 /**

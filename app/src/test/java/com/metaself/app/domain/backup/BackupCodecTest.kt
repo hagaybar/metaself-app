@@ -133,8 +133,20 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 8`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(8)
+    fun `the format is version 9`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(9)
+    }
+
+    /** D105: the owner's answers ride in the file by session position; a version 1–8 file has none. Invented. */
+    @Test
+    fun `answers about shorter sessions are written and read back, and an older file has none`() {
+        val answer = BackupPlanConfirmation(programmeId = 3, workout = 1, confirmed = true, answeredAtMillis = 1_000)
+        val text = BackupCodec.encode(full.copy(planConfirmations = listOf(answer)))
+
+        assertThat(text).contains("\"plan_confirmations\"")
+        assertThat(BackupCodec.decode(text)!!.planConfirmations).containsExactly(answer)
+        val version8 = """{"version": 8, "exported_at": 1000, "meals": [], "weights": []}"""
+        assertThat(BackupCodec.decode(version8)!!.planConfirmations).isEmpty()
     }
 
     /** D98: the weekly plans ride in the file as rows; a version 1–7 file has none. Invented. */
