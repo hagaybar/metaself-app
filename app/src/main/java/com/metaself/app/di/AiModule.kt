@@ -17,6 +17,8 @@ import com.metaself.app.data.ai.OpenAiTrainer
 import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.letter.DataStoreLetterSettingsStore
+import com.metaself.app.data.letter.LetterSettingsStore
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.DataStoreAboutMeStore
@@ -77,6 +79,11 @@ object AiModule {
     @Provides
     @Singleton
     fun provideAboutMeStore(store: DataStore<Preferences>): AboutMeStore = DataStoreAboutMeStore(store)
+
+    /** The weekly letter's switch and hour (D99), beside the AI settings. */
+    @Provides
+    @Singleton
+    fun provideLetterSettingsStore(store: DataStore<Preferences>): LetterSettingsStore = DataStoreLetterSettingsStore(store)
 
     /** What each model accepts, learned from its refusals (D57), beside the model's name. */
     @Provides
