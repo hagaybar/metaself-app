@@ -873,12 +873,45 @@ class HealthRecordStoreTest {
 
         val all = programmes.all().associateBy { it.id }
         assertThat(all.getValue(first).status).isEqualTo(ProgrammeStatus.REPLACED)
+        assertThat(all.getValue(first).stoppedEpochDay).isEqualTo(day)
         assertThat(all.getValue(second).status).isEqualTo(ProgrammeStatus.ADJUSTED)
+        assertThat(all.getValue(second).stoppedEpochDay).isEqualTo(day)
         assertThat(programmes.running()!!.id).isEqualTo(adjusted)
         assertThat(programmes.running()!!.startEpochDay).isEqualTo(day - 3)
 
         programmes.stop(adjusted, today = day)
         assertThat(programmes.running()).isNull()
+        val stopped = programmes.all().single { it.id == adjusted }
+        assertThat(stopped.status).isEqualTo(ProgrammeStatus.STOPPED)
+        assertThat(stopped.stoppedEpochDay).isEqualTo(day)
+    }
+
+    /** D98 over a real table: a write on a row in the wrong state is refused and changes nothing. */
+    @Test
+    fun `a weekly plan write on a row in the wrong state is refused, and nothing changes`() = runTest {
+        val programmes = RoomProgrammeStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val plan = WeeksPlan(
+            "Invented",
+            List(2) { PlanWeek("w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))) },
+            "Invented.",
+        )
+        val offered = Programme(0, 1_000, ProgrammeAsk(2, 2), null, plan, "m")
+        val replaced = programmes.add(offered)
+        val running = programmes.add(offered.copy(createdAtMillis = 2_000))
+        programmes.keep(replaced, startEpochDay = day - 10, today = day - 7)
+        programmes.keep(running, startEpochDay = day - 3, today = day - 3)
+        val stale = programmes.add(offered.copy(createdAtMillis = 3_000, replacesId = replaced))
+        val before = db.trainerDao().allProgrammes()
+
+        // Keep on a row that is not an offered answer: the running plan is not replaced.
+        runCatching { programmes.keep(replaced, startEpochDay = day, today = day) }.also { assertThat(it.isFailure).isTrue() }
+        // An adjusted version of a plan no longer running.
+        runCatching { programmes.keepAdjusted(stale, replaced, today = day) }.also { assertThat(it.isFailure).isTrue() }
+        // Stop on a plan no longer running: its stop day stays the day it was replaced.
+        runCatching { programmes.stop(replaced, today = day) }.also { assertThat(it.isFailure).isTrue() }
+
+        assertThat(db.trainerDao().allProgrammes()).isEqualTo(before)
+        assertThat(programmes.running()!!.id).isEqualTo(running)
     }
 
     private fun aFeedback(headline: String) =

@@ -23,7 +23,10 @@ import java.lang.reflect.Proxy
 class RoomProgrammeStoreWritesTest {
 
     private val log = mutableListOf<String>()
-    private var stored: TrainerProgrammeEntity? = null
+    private val stored = mutableMapOf<Long, TrainerProgrammeEntity>()
+
+    /** What the guarded updates (`runProgramme`, `stopRunning`) report as changed. */
+    private var changed = 1
 
     @Test
     fun `keeping a plan replaces the running one and starts this one, in one transaction`() = runTest {
@@ -33,29 +36,58 @@ class RoomProgrammeStoreWritesTest {
     }
 
     @Test
+    fun `keeping a row that is not an offered answer is refused, and the replacement rolls back`() = runTest {
+        changed = 0
+
+        assertThrows<IllegalStateException> { store().keep(id = 4, startEpochDay = 20_696, today = 20_699) }
+        assertThat(log).containsExactly("begin", "replaceRunning(4, 20699)", "runProgramme(4, 20696)", "rollback").inOrder()
+    }
+
+    @Test
     fun `keeping an adjusted version ends the old one as adjusted and runs the new one from the old start`() = runTest {
-        stored = PROGRAMME.toEntity().copy(id = 3, status = "RUNNING", startEpochDay = 20_696)
+        running(3)
+        version(5, replacesId = 3)
 
         store().keepAdjusted(newId = 5, oldId = 3, today = 20_699)
 
         assertThat(log).containsExactly(
-            "begin", "programme(3)", "endProgramme(3, ADJUSTED, 20699)", "runProgramme(5, 20696)", "commit",
+            "begin", "programme(3)", "programme(5)", "endProgramme(3, ADJUSTED, 20699)", "runProgramme(5, 20696)", "commit",
         ).inOrder()
     }
 
     @Test
     fun `an adjusted version of a plan no longer running is refused, and nothing is written`() = runTest {
-        stored = PROGRAMME.toEntity().copy(id = 3, status = "STOPPED", startEpochDay = 20_696)
+        stored[3] = PROGRAMME.toEntity().copy(id = 3, status = "STOPPED", startEpochDay = 20_696)
+        version(5, replacesId = 3)
 
         assertThrows<IllegalStateException> { store().keepAdjusted(newId = 5, oldId = 3, today = 20_699) }
-        assertThat(log.filter { it.startsWith("endProgramme") || it.startsWith("runProgramme") }).isEmpty()
+        assertThat(writes()).isEmpty()
     }
 
     @Test
-    fun `stopping is one write with today's date`() = runTest {
+    fun `an adjusted version made from another plan, already kept, or missing is refused, and nothing is written`() = runTest {
+        running(3)
+        version(5, replacesId = 2)
+        stored[6] = PROGRAMME.toEntity().copy(id = 6, status = "REPLACED", startEpochDay = 20_696, replacesId = 3)
+
+        listOf(5L, 6L, 9L).forEach { newId ->
+            assertThrows<IllegalStateException> { store().keepAdjusted(newId = newId, oldId = 3, today = 20_699) }
+        }
+        assertThat(writes()).isEmpty()
+    }
+
+    @Test
+    fun `stopping is one guarded write with today's date`() = runTest {
         store().stop(id = 4, today = 20_699)
 
-        assertThat(log).containsExactly("endProgramme(4, STOPPED, 20699)")
+        assertThat(log).containsExactly("stopRunning(4, 20699)")
+    }
+
+    @Test
+    fun `stopping a plan no longer running is refused`() = runTest {
+        changed = 0
+
+        assertThrows<IllegalStateException> { store().stop(id = 4, today = 20_699) }
     }
 
     @Test
@@ -70,10 +102,25 @@ class RoomProgrammeStoreWritesTest {
 
     private fun store() = RoomProgrammeStore(dao(), Transaction())
 
+    private fun running(id: Long) {
+        stored[id] = PROGRAMME.toEntity().copy(id = id, status = "RUNNING", startEpochDay = 20_696)
+    }
+
+    private fun version(id: Long, replacesId: Long) {
+        stored[id] = PROGRAMME.toEntity().copy(id = id, evaluation = null, replacesId = replacesId)
+    }
+
+    private fun writes() = log.filter { it.startsWith("endProgramme") || it.startsWith("runProgramme") }
+
     private inner class Transaction : DatabaseTransaction {
         override suspend fun run(block: suspend () -> Unit) {
             log += "begin"
-            block()
+            try {
+                block()
+            } catch (e: Throwable) {
+                log += "rollback"
+                throw e
+            }
             log += "commit"
         }
     }
@@ -87,12 +134,12 @@ class RoomProgrammeStoreWritesTest {
                 "equals" -> false
                 "programme" -> {
                     log += "programme(${args[0]})"
-                    stored
+                    stored[args[0] as Long]
                 }
                 else -> {
                     // A suspending call's last argument is its continuation.
                     log += method.name + "(" + args.dropLast(1).joinToString() + ")"
-                    Unit
+                    if (method.name == "runProgramme" || method.name == "stopRunning") changed else Unit
                 }
             }
         } as TrainerDao

@@ -150,4 +150,13 @@ class BackupWordingTest {
         assertThat(text).contains("1 weekly plan")
         assertThat(text).doesNotContain("nothing here to lose")
     }
+
+    /** D98: a file's weekly plans are counted as the restore writes them, one per id. Invented. */
+    @Test
+    fun `a file's weekly plans are counted once per id`() {
+        val row = BackupTrainerProgramme(3, 1_000, 4, 3, null, null, "{}", "m", null, "OFFERED", null, null)
+        val file = Backup(trainerProgrammes = listOf(row, row, row.copy(id = 4)))
+
+        assertThat(RestoreResult.inFile(file).trainerProgrammes).isEqualTo(2)
+    }
 }

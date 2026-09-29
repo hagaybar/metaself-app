@@ -24,16 +24,19 @@ interface ProgrammeStore {
     /** Stores a new answer, OFFERED; its id. */
     suspend fun add(programme: Programme): Long
 
-    /** D94: [id] runs from [startEpochDay]; any other running plan stops [today], replaced. One transaction. */
+    /**
+     * D94: [id] runs from [startEpochDay]; any other running plan stops [today], replaced. Refused (throws)
+     * unless [id] is an offered answer never run. One transaction.
+     */
     suspend fun keep(id: Long, startEpochDay: Long, today: Long)
 
     /**
      * D97: [oldId] stops [today], adjusted, and [newId] runs from its start. Refused (throws) when [oldId]
-     * is no longer running. One transaction.
+     * is no longer running, or [newId] is not an offered version made from it. One transaction.
      */
     suspend fun keepAdjusted(newId: Long, oldId: Long, today: Long)
 
-    /** D97: [id] stops [today]. */
+    /** D97: [id] stops [today]. Refused (throws) when [id] is no longer running. */
     suspend fun stop(id: Long, today: Long)
 }
 
@@ -52,7 +55,8 @@ class RoomProgrammeStore @Inject constructor(
 
     override suspend fun keep(id: Long, startEpochDay: Long, today: Long) = transaction.run {
         dao.replaceRunning(id, today)
-        dao.runProgramme(id, startEpochDay)
+        // Only an offered answer starts; otherwise the throw rolls the replacement back.
+        check(dao.runProgramme(id, startEpochDay) == 1) { "only an offered plan can be kept" }
     }
 
     override suspend fun keepAdjusted(newId: Long, oldId: Long, today: Long) = transaction.run {
@@ -61,11 +65,18 @@ class RoomProgrammeStore @Inject constructor(
         check(old != null && old.status == ProgrammeStatus.RUNNING.name && start != null) {
             "the plan being adjusted is no longer running"
         }
+        val version = dao.programme(newId)
+        check(version != null && version.status == ProgrammeStatus.OFFERED.name && version.replacesId == oldId) {
+            "not an offered version of the plan being adjusted"
+        }
         dao.endProgramme(oldId, ProgrammeStatus.ADJUSTED.name, today)
-        dao.runProgramme(newId, start)
+        check(dao.runProgramme(newId, start) == 1) { "only an offered plan can be kept" }
     }
 
-    override suspend fun stop(id: Long, today: Long) = dao.endProgramme(id, ProgrammeStatus.STOPPED.name, today)
+    /** Refused (throws) when [id] is no longer running: a stale screen must not restamp a replaced plan. */
+    override suspend fun stop(id: Long, today: Long) {
+        check(dao.stopRunning(id, today) == 1) { "the plan being stopped is no longer running" }
+    }
 }
 
 /** Null when this version cannot read the row: such a plan is offered nowhere and sent nowhere. */

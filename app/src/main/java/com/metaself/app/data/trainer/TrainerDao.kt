@@ -75,8 +75,16 @@ interface TrainerDao {
     @Query("UPDATE trainer_programmes SET status = :status, stoppedEpochDay = :day WHERE id = :id")
     suspend fun endProgramme(id: Long, status: String, day: Long)
 
-    @Query("UPDATE trainer_programmes SET status = 'RUNNING', startEpochDay = :start, stoppedEpochDay = NULL WHERE id = :id")
-    suspend fun runProgramme(id: Long, start: Long)
+    /** [id] stops [day] only if it is still running; how many rows changed (0 or 1). */
+    @Query("UPDATE trainer_programmes SET status = 'STOPPED', stoppedEpochDay = :day WHERE id = :id AND status = 'RUNNING'")
+    suspend fun stopRunning(id: Long, day: Long): Int
+
+    /** [id] runs from [start] only if it is an offered answer never run; how many rows changed (0 or 1). */
+    @Query(
+        "UPDATE trainer_programmes SET status = 'RUNNING', startEpochDay = :start, stoppedEpochDay = NULL " +
+            "WHERE id = :id AND status = 'OFFERED'",
+    )
+    suspend fun runProgramme(id: Long, start: Long): Int
 
     // The backup (D88).
     @Query("SELECT * FROM trainer_plans ORDER BY id")

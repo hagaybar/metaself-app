@@ -110,7 +110,8 @@ data class RestoreResult(
             ),
             trainerPlans = backup.trainerPlans.size,
             trainerReviews = backup.workouts.count { it.trainerReview != null } + backup.trainerReviewsWithoutWorkout.size,
-            trainerProgrammes = backup.trainerProgrammes.size,
+            // Counted as the restore writes them: one row per id.
+            trainerProgrammes = backup.trainerProgrammes.distinctBy { it.id }.size,
         )
     }
 }

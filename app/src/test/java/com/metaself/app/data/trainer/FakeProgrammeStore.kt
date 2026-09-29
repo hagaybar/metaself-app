@@ -25,6 +25,7 @@ class FakeProgrammeStore : ProgrammeStore {
 
     override suspend fun keep(id: Long, startEpochDay: Long, today: Long) {
         write()
+        check(rows.value.any { it.id == id && it.status == ProgrammeStatus.OFFERED }) { "only an offered plan can be kept" }
         rows.value = rows.value.map {
             when {
                 it.id == id -> it.copy(status = ProgrammeStatus.RUNNING, startEpochDay = startEpochDay, stoppedEpochDay = null)
@@ -36,8 +37,13 @@ class FakeProgrammeStore : ProgrammeStore {
 
     override suspend fun keepAdjusted(newId: Long, oldId: Long, today: Long) {
         write()
-        val old = rows.value.first { it.id == oldId }
-        check(old.status == ProgrammeStatus.RUNNING) { "the plan being adjusted is no longer running" }
+        val old = rows.value.firstOrNull { it.id == oldId }
+        check(old != null && old.status == ProgrammeStatus.RUNNING && old.startEpochDay != null) {
+            "the plan being adjusted is no longer running"
+        }
+        check(rows.value.any { it.id == newId && it.status == ProgrammeStatus.OFFERED && it.replacesId == oldId }) {
+            "not an offered version of the plan being adjusted"
+        }
         rows.value = rows.value.map {
             when (it.id) {
                 oldId -> it.copy(status = ProgrammeStatus.ADJUSTED, stoppedEpochDay = today)
@@ -49,6 +55,7 @@ class FakeProgrammeStore : ProgrammeStore {
 
     override suspend fun stop(id: Long, today: Long) {
         write()
+        check(rows.value.any { it.id == id && it.status == ProgrammeStatus.RUNNING }) { "the plan being stopped is no longer running" }
         rows.value = rows.value.map { if (it.id == id) it.copy(status = ProgrammeStatus.STOPPED, stoppedEpochDay = today) else it }
     }
 
