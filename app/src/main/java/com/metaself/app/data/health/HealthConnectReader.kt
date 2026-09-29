@@ -52,7 +52,7 @@ import kotlin.math.roundToInt
 class HealthConnectReader @Inject constructor(
     @ApplicationContext private val context: Context,
     private val problems: ProblemLog,
-) : HealthSource {
+) : HealthSource, BackgroundHealthRead {
 
     private val client: HealthConnectClient?
         get() = runCatching {
@@ -99,6 +99,28 @@ class HealthConnectReader @Inject constructor(
         available && try {
             HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY in
                 (client?.permissionController?.getGrantedPermissions() ?: emptySet())
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            false
+        }
+    }
+
+    /** D99. A Health Connect too old to know the feature answers not offered rather than failing. */
+    override suspend fun offered(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            client?.features?.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND) ==
+                HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            false
+        }
+    }
+
+    override suspend fun granted(): Boolean = withContext(Dispatchers.IO) {
+        offered() && try {
+            HealthPermissions.BACKGROUND in (client?.permissionController?.getGrantedPermissions() ?: emptySet())
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {

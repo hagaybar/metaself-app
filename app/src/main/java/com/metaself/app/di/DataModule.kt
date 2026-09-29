@@ -31,6 +31,8 @@ import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthConnectReader
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.HealthReadingDao
+import com.metaself.app.data.health.BackgroundHealthCopy
+import com.metaself.app.data.health.BackgroundHealthRead
 import com.metaself.app.data.health.HealthRecordCopier
 import com.metaself.app.data.health.AppLabels
 import com.metaself.app.data.health.BandRecord
@@ -289,6 +291,11 @@ object DataModule {
     @Singleton
     fun provideHealthSource(reader: HealthConnectReader): HealthSource = reader
 
+    /** D99: the same reader, asked whether it may read while the app is not in front. */
+    @Provides
+    @Singleton
+    fun provideBackgroundHealthRead(reader: HealthConnectReader): BackgroundHealthRead = reader
+
     @Provides
     @Singleton
     fun provideHealthStore(store: RoomHealthStore): HealthStore = store
@@ -310,6 +317,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideHealthRecordCopier(sync: HealthRecordSync): HealthRecordCopier = sync
+
+    /** D99: the weekly letter's copy — the same singleton, so it never overlaps the day screen's. */
+    @Provides
+    @Singleton
+    fun provideBackgroundHealthCopy(sync: HealthRecordSync): BackgroundHealthCopy = sync
 
     /** Whether the app is in the foreground, which Health Connect requires of a read. */
     @Provides

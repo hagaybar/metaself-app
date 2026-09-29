@@ -735,6 +735,61 @@ class HealthRecordSyncTest {
         assertThat(store.recheckDue).isTrue()
     }
 
+    // --- D99: the weekly letter's copy, for a caller that has checked the background-read permission. ---
+
+    @Test
+    fun `the background copy runs a pass even when the app is not in front`() = runTest {
+        grantedAllDone(HealthKind.STEPS)
+        foreground.isForeground.value = false
+
+        sync.copyNow()
+        assertThat(source.calls).isEmpty()
+
+        val done = sync.copyInBackground()
+
+        assertThat(done).isTrue()
+        assertThat(source.calls).contains("changes STEPS t-STEPS")
+        assertThat(problems.logged).isEmpty()
+    }
+
+    @Test
+    fun `a background copy Health Connect refuses returns false, logs nothing, and owes a recheck`() = runTest {
+        grantedAllDone(HealthKind.STEPS)
+        foreground.isForeground.value = false
+        source.refuseInBackground = { it.startsWith("changes") }
+
+        val done = sync.copyInBackground()
+
+        assertThat(done).isFalse()
+        assertThat(problems.logged).isEmpty()
+        assertThat(store.recheckDue).isTrue()
+    }
+
+    @Test
+    fun `a background copy that fails returns false and logs the failure by kind`() = runTest {
+        source.grantedError = IllegalStateException("unavailable")
+
+        val done = sync.copyInBackground()
+
+        assertThat(done).isFalse()
+        assertThat(problems.logged.map { it.detail }).containsExactly("copying stopped: IllegalStateException unavailable")
+    }
+
+    @Test
+    fun `a background copy while another copy runs does nothing and returns false`() = runTest {
+        source.granted = setOf(HealthKind.STEPS)
+        source.gate = CompletableDeferred()
+        val first = launch { sync.copyNow() }
+        runCurrent()
+
+        val done = sync.copyInBackground()
+
+        assertThat(done).isFalse()
+        assertThat(source.grantedAsked).isEqualTo(1)
+        source.gate!!.complete(Unit)
+        first.join()
+    }
+
     /**
      * What a refusal may have left: workouts stored without a figure whose ask was refused, and days
      * whose totals were. The next foreground copy re-asks the gaps of the last [HealthRecordSync.WINDOW_DAYS]

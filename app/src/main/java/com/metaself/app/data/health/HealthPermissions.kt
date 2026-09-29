@@ -52,4 +52,10 @@ object HealthPermissions {
      * for and declined.
      */
     val withoutHistory: Set<String> get() = ALL - HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
+
+    /**
+     * Reading while the app is not in front (D99): asked for on its own, from the Weekly letter setting,
+     * never with [ALL].
+     */
+    val BACKGROUND: String get() = HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
 }

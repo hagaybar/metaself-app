@@ -61,7 +61,7 @@ class HealthRecordSync(
     private val now: Now,
     private val zone: () -> ZoneId,
     private val foreground: AppForeground = AppForeground.ALWAYS,
-) : HealthRecordCopier {
+) : HealthRecordCopier, BackgroundHealthCopy {
 
     @Inject
     constructor(source: HealthSource, store: HealthStore, problems: ProblemLog, now: Now, foreground: AppForeground) :
@@ -101,7 +101,7 @@ class HealthRecordSync(
                 pass.join()
                 watch.cancel()
                 // A pass cancelled from elsewhere rethrows its cancellation from await.
-                if (left) true else pass.await()
+                if (left) true else pass.await() == PassEnd.REFUSED
             }
             if (refused) oweRecheck()
         } finally {
@@ -109,17 +109,37 @@ class HealthRecordSync(
         }
     }
 
-    /** One pass; true when Health Connect refused it for being in the background. Never throws else. */
-    private suspend fun pass(): Boolean = try {
+    /**
+     * D99: one pass with no foreground gate — for the weekly letter, whose caller has checked that the
+     * background-read permission is held. Shares [running] with [copyNow], so the two never overlap: a
+     * copy already under way makes this one return false at once. A refusal is handled as [copyNow]
+     * handles it (no log line, a recheck owed); a failure is already logged by [pass].
+     */
+    override suspend fun copyInBackground(): Boolean {
+        if (!running.tryLock()) return false
+        return try {
+            val end = pass()
+            if (end == PassEnd.REFUSED) oweRecheck()
+            end == PassEnd.DONE
+        } finally {
+            running.unlock()
+        }
+    }
+
+    /** How a pass ended. */
+    private enum class PassEnd { DONE, REFUSED, FAILED }
+
+    /** One pass; [PassEnd.REFUSED] when Health Connect refused it for being in the background. Never throws else. */
+    private suspend fun pass(): PassEnd = try {
         copy()
-        false
+        PassEnd.DONE
     } catch (refused: BackgroundReadRefused) {
-        true
+        PassEnd.REFUSED
     } catch (cancelled: CancellationException) {
         throw cancelled
     } catch (failure: Throwable) {
         note("copying stopped: ${failure::class.java.simpleName} ${failure.message}")
-        false
+        PassEnd.FAILED
     }
 
     /**
