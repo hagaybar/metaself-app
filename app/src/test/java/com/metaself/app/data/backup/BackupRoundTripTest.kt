@@ -51,6 +51,13 @@ import com.metaself.app.data.health.SessionSplitEntity
 import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.data.trainer.TrainerPlanEntity
+import com.metaself.app.domain.trainer.WeeksPlan
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.data.trainer.TrainerProgrammeEntity
+import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.day.Confidence
@@ -720,10 +727,24 @@ class BackupRoundTripTest {
         val second = db.workoutDao().insert(aWalk(startedAt = 2_000))
         val planId = db.trainerDao().insertPlan(TrainerPlanEntity(0, 500, "RUN", 30, "FRESH", "PUSH", null, "{}", "m", true))
         db.trainerDao().insertReview(TrainerReviewEntity(0, second, planId, "HARD", "Invented.", null, null, null))
+        // D98: a weekly plan rides beside them, its id kept. Invented values.
+        val weeksPlan = TrainerResponse.encodeWeeksPlan(
+            WeeksPlan(
+                "Invented",
+                List(4) { PlanWeek("w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))) },
+                "Invented.",
+            ),
+        )
+        db.trainerDao().insertProgramme(
+            TrainerProgrammeEntity(0, 1_000, 4, 3, null, null, weeksPlan, "m", 20_696, "RUNNING", null, null),
+        )
+        val programmes = db.trainerDao().allProgrammes()
 
         val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
         assertThat(file.version).isEqualTo(Backup.CURRENT_VERSION)
         repository().restore(file)
+
+        assertThat(db.trainerDao().allProgrammes()).isEqualTo(programmes)
 
         val walks = db.workoutDao().all()
         val review = db.trainerDao().allReviews().single()
@@ -793,6 +814,7 @@ class BackupRoundTripTest {
         val walk = db.workoutDao().insert(aWalk(startedAt = 1_000))
         val planId = db.trainerDao().insertPlan(TrainerPlanEntity(0, 500, "RUN", 30, "FRESH", "PUSH", null, "{}", "m", true))
         db.trainerDao().insertReview(TrainerReviewEntity(0, walk, planId, "HARD", "Invented.", null, null, null))
+        db.trainerDao().insertProgramme(TrainerProgrammeEntity(0, 1_000, 4, 3, null, null, "{}", "m", null, "OFFERED", null, null))
         val version4 = BackupCodec.decode(
             """{"version": 4, "exported_at": 1000, "workouts": [{"epoch_day": 20699, "started_at": 1000,
                 "duration_minutes": 30, "kind": "WALK", "energy_source": "NONE", "source": "SYNCED"}]}""",
@@ -803,6 +825,7 @@ class BackupRoundTripTest {
         assertThat(db.workoutDao().all()).hasSize(1)
         assertThat(db.trainerDao().allReviews()).isEmpty()
         assertThat(db.trainerDao().allPlans()).isEmpty()
+        assertThat(db.trainerDao().allProgrammes()).isEmpty()
     }
 
     /** D90: the note goes out with the file and comes back with it. Invented words. */

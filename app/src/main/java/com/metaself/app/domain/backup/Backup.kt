@@ -54,6 +54,8 @@ data class Backup(
      * [workouts], counted from 1. Empty in a file from before version 7.
      */
     @SerialName("session_splits") val sessionSplits: List<BackupSessionSplit> = emptyList(),
+    /** D98: the trainer's weekly plans, every row, kept or not. Empty in a file from before version 8. */
+    @SerialName("trainer_programmes") val trainerProgrammes: List<BackupTrainerProgramme> = emptyList(),
 ) {
     companion object {
         /**
@@ -87,8 +89,12 @@ data class Backup(
          * Version 7 adds the owner's session splits (D92), [sessionSplits], each naming its two workouts
          * by their positions in the file, as a review is placed inside its workout. A version 1–6 file
          * has none, and restoring one leaves none — a restore replaces.
+         *
+         * Version 8 adds the trainer's weekly plans (D98), [trainerProgrammes], each row as stored with
+         * its id, which another row's `replaces_id` may name. A version 1–7 file has none, and restoring
+         * one leaves none — a restore replaces.
          */
-        const val CURRENT_VERSION = 7
+        const val CURRENT_VERSION = 8
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -312,6 +318,26 @@ data class BackupTrainerPlan(
     val suggestion: String,
     val model: String,
     val kept: Boolean = false,
+)
+
+/**
+ * One weekly plan (D98), as its row holds it. [evaluation] and [plan] are the answers' own JSON, kept as
+ * text; [status] a `ProgrammeStatus` name, kept verbatim so a later name survives a round trip.
+ */
+@Serializable
+data class BackupTrainerProgramme(
+    val id: Long,
+    @SerialName("created_at") val createdAtMillis: Long,
+    val weeks: Int,
+    @SerialName("per_week") val perWeek: Int,
+    val words: String? = null,
+    val evaluation: String? = null,
+    val plan: String,
+    val model: String,
+    @SerialName("start_epoch_day") val startEpochDay: Long? = null,
+    val status: String,
+    @SerialName("stopped_epoch_day") val stoppedEpochDay: Long? = null,
+    @SerialName("replaces_id") val replacesId: Long? = null,
 )
 
 /**

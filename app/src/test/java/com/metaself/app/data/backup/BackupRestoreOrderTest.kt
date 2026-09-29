@@ -22,6 +22,7 @@ import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.health.SessionSplitEntity
+import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupAi
@@ -40,6 +41,7 @@ import com.metaself.app.domain.backup.BackupSavedMeal
 import com.metaself.app.domain.backup.BackupSleep
 import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupTrainerPlan
+import com.metaself.app.domain.backup.BackupTrainerProgramme
 import com.metaself.app.domain.backup.BackupSessionSplit
 import com.metaself.app.domain.backup.BackupTrainerReview
 import com.metaself.app.domain.backup.BackupWeight
@@ -89,6 +91,7 @@ class BackupRestoreOrderTest {
                 "corrections.deleteAll",
                 "trainer.deleteReviews",
                 "trainer.deletePlans",
+                "trainer.deleteProgrammes",
                 "splits.deleteAll",
                 "bookkeeping.clearSync",
                 "findOrCreate Yoghurt",
@@ -105,6 +108,7 @@ class BackupRestoreOrderTest {
                 "corrections.insertAll",
                 "trainer.insertPlans",
                 "trainer.insertReviews",
+                "trainer.insertProgrammes",
                 "profile.save",
                 "saveRevision",
                 "saveArrival",
@@ -349,7 +353,23 @@ class BackupRestoreOrderTest {
         assertThat(written.getValue("trainer.insertReviews").first() as List<*>).isEmpty()
         assertThat(written.getValue("trainer.insertPlans").first() as List<*>).isEmpty()
         assertThat(result.trainerReviews).isEqualTo(0)
+        assertThat(written.getValue("trainer.insertProgrammes").first() as List<*>).isEmpty()
         assertThat(result.trainerPlans).isEqualTo(0)
+        assertThat(result.trainerProgrammes).isEqualTo(0)
+    }
+
+    /** D98: the weekly plans are replaced inside the transaction, keeping their ids. Invented. */
+    @Test
+    fun `weekly plans are emptied and restored with their ids, and counted`() = runTest {
+        val row = BackupTrainerProgramme(3, 1_000, 4, 3, null, null, "{}", "m", 20_696, "RUNNING", null, null)
+        val file = aFile().copy(trainerProgrammes = listOf(row, row))
+
+        val result = restorer().restore(file)
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = written.getValue("trainer.insertProgrammes").first() as List<TrainerProgrammeEntity>
+        assertThat(rows.map { it.id }).containsExactly(3L)
+        assertThat(result.trainerProgrammes).isEqualTo(1)
     }
 
     /** What [block] threw, which must be a [T]. `assertThrows` takes no suspending block. */

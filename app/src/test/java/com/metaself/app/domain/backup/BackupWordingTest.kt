@@ -127,4 +127,27 @@ class BackupWordingTest {
         assertThat(counted.trainerReviews).isEqualTo(2)
         assertThat(counted.trainerPlans).isEqualTo(1)
     }
+
+    /** D98: weekly plans are named when either side has some, after the trainer's plans and reviews. */
+    @Test
+    fun `the confirmation names weekly plans when either side has some`() {
+        val text = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 4, weights = 6, hasProfile = true, trainerPlans = 3, trainerReviews = 2, trainerProgrammes = 2),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true),
+        )
+
+        assertThat(text).contains("3 trainer plans, 2 session reviews and 2 weekly plans already on this phone")
+        assertThat(text).contains("0 session reviews and 0 weekly plans from the file")
+    }
+
+    @Test
+    fun `a phone holding only weekly plans still has something to lose`() {
+        val text = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 0, weights = 0, hasProfile = false, trainerProgrammes = 1),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true),
+        )
+
+        assertThat(text).contains("1 weekly plan")
+        assertThat(text).doesNotContain("nothing here to lose")
+    }
 }

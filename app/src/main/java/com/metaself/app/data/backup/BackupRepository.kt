@@ -24,6 +24,7 @@ import com.metaself.app.data.reminder.ReminderStore
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerPlanEntity
+import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.data.weight.WeightEntity
@@ -41,6 +42,7 @@ import com.metaself.app.domain.backup.BackupSavedMeal
 import com.metaself.app.domain.backup.BackupSleep
 import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupTrainerPlan
+import com.metaself.app.domain.backup.BackupTrainerProgramme
 import com.metaself.app.domain.backup.BackupWeight
 import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.Confidence
@@ -91,6 +93,8 @@ data class RestoreResult(
     val trainerPlans: Int = 0,
     /** D88: every review, inside a workout or without one. */
     val trainerReviews: Int = 0,
+    /** D98. */
+    val trainerProgrammes: Int = 0,
 ) {
     companion object {
         /** What [backup] holds, counted as a restore would report it: the file saved, or the file offered. */
@@ -106,6 +110,7 @@ data class RestoreResult(
             ),
             trainerPlans = backup.trainerPlans.size,
             trainerReviews = backup.workouts.count { it.trainerReview != null } + backup.trainerReviewsWithoutWorkout.size,
+            trainerProgrammes = backup.trainerProgrammes.size,
         )
     }
 }
@@ -212,6 +217,7 @@ class BackupRepository @Inject constructor(
             trainerReviewsWithoutWorkout = reviews.withoutWorkout,
             aboutMe = aboutMe.note.first(),
             sessionSplits = BackupSplits.toFile(everyWorkout.map { it.id }, splits.all()),
+            trainerProgrammes = trainer.allProgrammes().map { it.toBackup() },
         )
     }
 
@@ -274,6 +280,7 @@ class BackupRepository @Inject constructor(
                 corrections.deleteAll()
                 trainer.deleteReviews()
                 trainer.deletePlans()
+                trainer.deleteProgrammes()
                 splits.deleteAll()
                 // The copying starts again from scratch: a record read again replaces its rows, so
                 // nothing is doubled, and nothing recorded after this file was made is missed.
@@ -296,6 +303,7 @@ class BackupRepository @Inject constructor(
                 corrections.insertAll(prepared.corrections)
                 trainer.insertPlans(prepared.plans)
                 trainer.insertReviews(prepared.reviews)
+                trainer.insertProgrammes(prepared.programmes)
                 // Last, and inside: a throw here is still a throw out of the transaction.
                 restoreSettings(prepared)
             }
@@ -331,6 +339,7 @@ class BackupRepository @Inject constructor(
             ),
             trainerPlans = prepared.plans.size,
             trainerReviews = prepared.reviews.size,
+            trainerProgrammes = prepared.programmes.size,
         )
     }
 
@@ -457,6 +466,7 @@ class BackupRepository @Inject constructor(
             },
             plans = planRows,
             reviews = reviewRows,
+            programmes = backup.trainerProgrammes.distinctBy { it.id }.map { it.toEntity() },
             // D92: by file position, which the kept workouts' new ids 1…n replace.
             splits = BackupSplits.rows(backup.sessionSplits, keptAt.map { it + 1 }),
         )
@@ -615,6 +625,8 @@ class BackupRepository @Inject constructor(
         val plans: List<TrainerPlanEntity>,
         /** Each names the id its workout is inserted with, or a negative one if it has none ([BackupReviews]). */
         val reviews: List<TrainerReviewEntity>,
+        /** D98: every row with its id, which another row's `replacesId` may name. */
+        val programmes: List<TrainerProgrammeEntity>,
         /** D92: each under the ids its two workouts are inserted with ([BackupSplits]). */
         val splits: List<SessionSplitEntity>,
     )
@@ -636,6 +648,7 @@ class BackupRepository @Inject constructor(
             ),
             trainerPlans = trainer.allPlans().size,
             trainerReviews = trainer.allReviews().size,
+            trainerProgrammes = trainer.allProgrammes().size,
         )
     }
 
@@ -772,6 +785,14 @@ private fun WorkoutEntity.toBackup(review: TrainerReviewEntity?) = BackupWorkout
 
 private fun TrainerPlanEntity.toBackup() = BackupTrainerPlan(
     id, createdAtMillis, activity, minutes, feeling, wish, words, suggestion, model, kept,
+)
+
+private fun TrainerProgrammeEntity.toBackup() = BackupTrainerProgramme(
+    id, createdAtMillis, weeks, perWeek, words, evaluation, plan, model, startEpochDay, status, stoppedEpochDay, replacesId,
+)
+
+private fun BackupTrainerProgramme.toEntity() = TrainerProgrammeEntity(
+    id, createdAtMillis, weeks, perWeek, words, evaluation, plan, model, startEpochDay, status, stoppedEpochDay, replacesId,
 )
 
 /** Id 0 here; [BackupRepository]'s prepare numbers the rows 1…n, so a review can name its workout (D88). */

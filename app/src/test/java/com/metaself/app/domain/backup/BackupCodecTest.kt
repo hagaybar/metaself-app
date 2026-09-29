@@ -133,8 +133,24 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 7`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(7)
+    fun `the format is version 8`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(8)
+    }
+
+    /** D98: the weekly plans ride in the file as rows; a version 1–7 file has none. Invented. */
+    @Test
+    fun `weekly plans are written and read back, and an older file has none`() {
+        val programme = BackupTrainerProgramme(
+            id = 3, createdAtMillis = 1_000, weeks = 4, perWeek = 3, words = null, evaluation = null,
+            plan = "{}", model = "m", startEpochDay = 20_696, status = "RUNNING", stoppedEpochDay = null, replacesId = 2,
+        )
+        val text = BackupCodec.encode(full.copy(trainerProgrammes = listOf(programme)))
+
+        assertThat(text).contains("\"trainer_programmes\"")
+        assertThat(BackupCodec.decode(text)!!.trainerProgrammes).containsExactly(programme)
+        // A version 7 file has no block at all: written out by hand, as the version 6 file below is.
+        val version7 = """{"version": 7, "exported_at": 1000, "meals": [], "weights": []}"""
+        assertThat(BackupCodec.decode(version7)!!.trainerProgrammes).isEmpty()
     }
 
     /** D92: the owner's splits go in the file under their own name, and come back as written. */
