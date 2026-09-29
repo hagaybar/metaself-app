@@ -199,7 +199,7 @@ data class TrainerRequest(
         fun reviewQuestion(workout: Workout, review: TrainerReview, plan: TrainerPlan?): TrainerQuestion.Review =
             TrainerQuestion.Review(session(workout, review, plan?.plan))
 
-        private fun session(workout: Workout, review: TrainerReview?, plan: SessionPlan?): SessionFacts = SessionFacts(
+        internal fun session(workout: Workout, review: TrainerReview?, plan: SessionPlan?): SessionFacts = SessionFacts(
             epochDay = workout.epochDay,
             kind = workout.kind,
             minutes = workout.durationMinutes,
