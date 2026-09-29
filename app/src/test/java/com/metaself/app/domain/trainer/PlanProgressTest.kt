@@ -32,10 +32,14 @@ class PlanProgressTest {
     }
 
     @Test
-    fun `a session with nothing of its kind left, or of an unknown kind, ticks nothing`() {
+    fun `a session with nothing of its kind left in the plan ticks nothing`() {
+        // No WorkoutKind.UNRECOGNISED session here: since no PlannedSession is ever of that kind
+        // either (its own init forbids it), such a workout could never match a slot whether or not
+        // `of()`'s explicit UNRECOGNISED filter ran — a case here would look like coverage without
+        // being any.
         val sessions = listOf(
             session(1, start, WorkoutKind.RUN), session(2, start + 1, WorkoutKind.RUN),
-            session(3, start + 2, WorkoutKind.CYCLE), session(4, start + 3, WorkoutKind.UNRECOGNISED),
+            session(3, start + 2, WorkoutKind.CYCLE),
         )
 
         val week = PlanProgress.of(plan, start, sessions, until = start + 6).weeks.first()
@@ -80,6 +84,18 @@ class PlanProgressTest {
         assertThat(latest.id).isEqualTo(2)
         assertThat(Programmes.evaluationOf(adjusted, listOf(first, adjusted))).isEqualTo(eval)
         assertThat(Programmes.lastEvaluated(listOf(offeredEval))).isNull()
+    }
+
+    @Test
+    fun `a row that replaces itself does not loop forever`() {
+        val eval = Evaluation("h", "g", "t", "")
+        val selfReplacing = programme(5, createdAt = 500, evaluation = eval, status = ProgrammeStatus.RUNNING, replacesId = 5)
+
+        val (evaluated, latest) = Programmes.lastEvaluated(listOf(selfReplacing))!!
+
+        assertThat(evaluated.id).isEqualTo(5)
+        assertThat(latest.id).isEqualTo(5)
+        assertThat(Programmes.evaluationOf(selfReplacing, listOf(selfReplacing))).isEqualTo(eval)
     }
 
     @Test

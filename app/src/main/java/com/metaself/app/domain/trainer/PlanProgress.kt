@@ -29,9 +29,11 @@ data class PlanProgress(val weeks: List<WeekProgress>) {
 
     companion object {
         /**
-         * The sessions that count are the visible, counted ones (D74, D81) — a combined session once
-         * (D92) — on or before [until]. Within each week, in start order, each ticks the first unticked
-         * planned session of the same kind; an unrecognised kind never ticks.
+         * The sessions that count are the visible, counted ones (D74, D81), on or before [until].
+         * [workouts] is expected already combined by [com.metaself.app.domain.movement.SessionWitnesses]
+         * (D92) — a session witnessed by several sources arrives once. Within each week, in start order,
+         * each ticks the first unticked planned session of the same kind; an unrecognised kind never
+         * ticks (D95) — defensive, since no [PlannedSession] is ever of that kind either.
          */
         fun of(plan: WeeksPlan, start: Long, workouts: List<Workout>, until: Long): PlanProgress {
             val counted = workouts
@@ -62,11 +64,11 @@ object Programmes {
     fun lastEvaluated(all: List<Programme>): Pair<Programme, Programme>? {
         val kept = all.filter { it.status != ProgrammeStatus.OFFERED }
         val evaluated = kept.filter { it.evaluation != null }.maxByOrNull { it.createdAtMillis } ?: return null
-        var latest = evaluated
-        while (true) {
-            val newer = kept.firstOrNull { it.replacesId == latest.id } ?: break
-            latest = newer
-        }
+        // Bounded the same way as evaluationOf: a self- or mutually-referencing replacesId (a
+        // hand-edited or restored backup) must not loop forever.
+        val latest = generateSequence(evaluated) { current -> kept.firstOrNull { it.replacesId == current.id } }
+            .take(kept.size + 1)
+            .last()
         return evaluated to latest
     }
 
