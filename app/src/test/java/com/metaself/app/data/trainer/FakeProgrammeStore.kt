@@ -1,5 +1,6 @@
 package com.metaself.app.data.trainer
 
+import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import kotlinx.coroutines.flow.Flow
@@ -58,6 +59,24 @@ class FakeProgrammeStore : ProgrammeStore {
         check(rows.value.any { it.id == id && it.status == ProgrammeStatus.RUNNING }) { "the plan being stopped is no longer running" }
         rows.value = rows.value.map { if (it.id == id) it.copy(status = ProgrammeStatus.STOPPED, stoppedEpochDay = today) else it }
     }
+
+    /** D105: the answers, by (programme, workout); the first for a pair stands. */
+    val confirmationRows = MutableStateFlow<List<PlanConfirmation>>(emptyList())
+
+    override fun observeConfirmations(programmeId: Long): Flow<Map<Long, Boolean>> =
+        confirmationRows.map { rows -> answers(rows, programmeId) }
+
+    override suspend fun confirmations(programmeId: Long): Map<Long, Boolean> = answers(confirmationRows.value, programmeId)
+
+    override suspend fun confirm(confirmation: PlanConfirmation) {
+        write()
+        if (confirmationRows.value.none { it.programmeId == confirmation.programmeId && it.workoutId == confirmation.workoutId }) {
+            confirmationRows.value = confirmationRows.value + confirmation
+        }
+    }
+
+    private fun answers(rows: List<PlanConfirmation>, programmeId: Long) =
+        rows.filter { it.programmeId == programmeId }.associate { it.workoutId to it.confirmed }
 
     private fun running(all: List<Programme>) =
         all.filter { it.status == ProgrammeStatus.RUNNING }.maxByOrNull { it.createdAtMillis }

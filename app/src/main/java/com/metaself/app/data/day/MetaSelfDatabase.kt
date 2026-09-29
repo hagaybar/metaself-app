@@ -28,6 +28,7 @@ import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.health.WorkoutEntity
 import com.metaself.app.data.product.ProductDao
 import com.metaself.app.data.product.ProductEntity
+import com.metaself.app.data.trainer.PlanConfirmationEntity
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
@@ -68,8 +69,9 @@ import com.metaself.app.domain.portion.Portions
         TrainerReviewEntity::class,
         SessionSplitEntity::class,
         TrainerProgrammeEntity::class,
+        PlanConfirmationEntity::class,
     ],
-    version = 10,
+    version = 11,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {

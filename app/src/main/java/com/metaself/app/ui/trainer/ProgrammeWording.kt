@@ -66,6 +66,10 @@ object ProgrammeWording {
     fun tickLine(workout: Workout): String =
         "Done ${LocalDate.ofEpochDay(workout.epochDay).format(WEEKDAY)}$SEP${MovementWeekWording.name(workout)}, ${workout.durationMinutes} min"
 
+    /** D105: a shorter session waiting for the owner's answer: "Walking, 20 min — count it for this?" (invented). */
+    fun candidateLine(workout: Workout): String =
+        "${MovementWeekWording.name(workout)}, ${workout.durationMinutes} min — count it for this?"
+
     fun pastWeek(week: WeekProgress): String = "Week ${week.index + 1}: ${week.done} of ${week.planned} done"
 
     fun thisWeekSoFar(week: WeekProgress): String = "Week ${week.index + 1} (this week): ${week.done} of ${week.planned} so far"

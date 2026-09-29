@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -58,7 +59,7 @@ class AdjustPlanScreenRenderTest {
     /** In the plan's last week there is no week after it: the page names this week's rest. */
     @Test
     fun `in the last week the page says this week's rest is rewritten`() {
-        val last = PlanCard.of(RUNNING.programme.copy(startEpochDay = TEST_EPOCH_DAY - 10), emptyList(), TEST_EPOCH_DAY) as PlanCard.Running
+        val last = PlanCard.of(RUNNING.programme.copy(startEpochDay = TEST_EPOCH_DAY - 10), emptyList(), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running
         val texts = draw(AdjustPlanViewModel.State(loading = false, running = last, today = TEST_EPOCH_DAY))
 
         assertThat(texts).containsAtLeast("Week 1: 0 of 2 done", "Week 2 (this week): 0 of 2 so far", "Week 2: the rest to be rewritten").inOrder()
@@ -101,6 +102,7 @@ class AdjustPlanScreenRenderTest {
             ),
             emptyList(),
             TEST_EPOCH_DAY,
+            PlanCounting(1, 0, emptyMap()),
         ) as PlanCard.Running
     }
 }

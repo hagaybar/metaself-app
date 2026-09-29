@@ -266,6 +266,8 @@
     <string name="adjust_stop_no">Keep going</string>
     <string name="plan_tick_done">Done</string>
     <string name="plan_tick_not_yet">Not yet</string>
+    <string name="plan_candidate_yes">Yes</string>
+    <string name="plan_candidate_no">No</string>
     <string name="feedback_done">Done</string>
     <string name="workout_sheet_new">Log a workout</string>
     <string name="workout_sheet_edit">Change this workout</string>

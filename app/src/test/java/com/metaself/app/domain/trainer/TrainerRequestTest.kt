@@ -238,9 +238,13 @@ class TrainerRequestTest {
         assertThat(fieldsOf(TrainerQuestion.Review::class.java)).containsExactly("session", "planned")
         assertThat(fieldsOf(TrainerQuestion.Evaluate::class.java)).containsExactly("ask", "startEpochDay", "last")
         assertThat(fieldsOf(TrainerQuestion.Adjust::class.java)).containsExactly(
-            "ask", "startEpochDay", "plan", "weekIndex", "doneByWeek", "tickedThisWeek", "thisWeekMax", "words",
+            "ask", "startEpochDay", "plan", "weekIndex", "doneByWeek", "tickedThisWeek", "thisWeekMax", "words", "howItWent",
         )
-        assertThat(fieldsOf(LastEvaluation::class.java)).containsExactly("epochDay", "evaluation", "plan", "doneByWeek")
+        assertThat(fieldsOf(LastEvaluation::class.java)).containsExactly("epochDay", "evaluation", "plan", "doneByWeek", "weeks")
+        // D105: how each week went — outcomes and attempts, minutes only.
+        assertThat(fieldsOf(WeekOutcome::class.java)).containsExactly("week", "sessions", "attempts")
+        assertThat(fieldsOf(SessionOutcome::class.java)).containsExactly("planned", "outcome", "minutesDone")
+        assertThat(fieldsOf(AttemptFacts::class.java)).containsExactly("kind", "minutes", "plannedMinutes")
         assertThat(fieldsOf(PlannedSession::class.java)).containsExactly("kind", "minutes", "effort", "what")
     }
 

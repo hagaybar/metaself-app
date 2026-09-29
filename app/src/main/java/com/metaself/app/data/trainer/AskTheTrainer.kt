@@ -12,6 +12,8 @@ import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanConfirmation
+import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanProgress
 import com.metaself.app.domain.trainer.PlanWeek
@@ -148,7 +150,7 @@ class AskTheTrainer @Inject constructor(
     }
 
     /**
-     * D97: the running plan's rest, rewritten. The model returns this week's sessions still to do and
+     * D97, D105: the running plan's rest, rewritten, told how each week so far went. The model returns this week's sessions still to do and
      * the weeks after; the phone composes the version — past weeks unchanged, this week's ticked sessions
      * first — and stores it OFFERED (design questions 4, 5).
      */
@@ -168,6 +170,7 @@ class AskTheTrainer @Inject constructor(
             tickedThisWeek = ticked,
             thisWeekMax = week.planned - ticked.size,
             words = words.trim(),
+            howItWent = running.progress.weeks.take(index + 1).map { it.outcome() },
         )
         return when (val reply = trainer.adjust(request(question, exceptWorkoutId = NO_WORKOUT))) {
             is TrainerReply.Failed -> Adjusted.Failed(reply.failure)
@@ -208,7 +211,26 @@ class AskTheTrainer @Inject constructor(
         val programme = programmes.running() ?: return PlanCard.None
         val start = programme.startEpochDay ?: return PlanCard.None
         val workouts = record.observeWorkouts(start, ProgrammeCalendar.lastDay(start, programme.ask.weeks)).first()
-        return PlanCard.of(programme, workouts, today().toEpochDay())
+        return PlanCard.of(programme, workouts, today().toEpochDay(), counting(programme))
+    }
+
+    /** D105: a version counts from its chain's first keep, with the answers stored under that first version. */
+    private suspend fun counting(programme: Programme): PlanCounting {
+        val root = Programmes.rootOf(programme, programmes.all())
+        return PlanCounting(root.id, root.createdAtMillis, programmes.confirmations(root.id))
+    }
+
+    /**
+     * D105: the owner's answer to "count it for this?", stored under the chain's first version. Refused
+     * (throws) unless [workoutId] is an open candidate in this week of the running plan — a stale screen
+     * or a second tap after the first answer landed; the store keeps the first answer in any case.
+     */
+    suspend fun answerCandidate(workoutId: Long, confirmed: Boolean) {
+        val running = checkNotNull(running()) { "no weekly plan is running" }
+        val week = running.progress.weeks.getOrNull(running.weekIndex)
+        check(week != null && week.ticks.any { it.candidate?.id == workoutId }) { "that session is not waiting for an answer" }
+        val root = Programmes.rootOf(running.programme, programmes.all())
+        programmes.confirm(PlanConfirmation(root.id, workoutId, confirmed, now()))
     }
 
     /** D96: the planned session [workoutId] ticked, which its feedback request sends. Reads only; nothing is sent. */
@@ -227,10 +249,11 @@ class AskTheTrainer @Inject constructor(
         val start = latest.startEpochDay ?: return null
         val until = Programmes.countedUntil(latest, day)
         val workouts = if (until < start) emptyList() else record.observeWorkouts(start, until).first()
-        val progress = PlanProgress.of(latest.plan, start, workouts, until)
+        val progress = PlanProgress.of(latest.plan, start, workouts, until, counting(latest))
         val weeksBegun = (ProgrammeCalendar.weekIndex(start, until) + 1).coerceIn(0, latest.ask.weeks)
         val madeOn = Instant.ofEpochMilli(evaluated.createdAtMillis).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
-        return LastEvaluation(madeOn, evaluation, latest.plan, progress.weeks.take(weeksBegun).map { it.done })
+        val begun = progress.weeks.take(weeksBegun)
+        return LastEvaluation(madeOn, evaluation, latest.plan, begun.map { it.done }, begun.map { it.outcome() })
     }
 
     private suspend fun request(question: TrainerQuestion, exceptWorkoutId: Long): TrainerRequest {

@@ -6,12 +6,14 @@ import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.MonthFacts
 import com.metaself.app.domain.trainer.Origin
+import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.SessionFacts
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.WeekOutcome
 import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -107,13 +109,25 @@ object TrainerPrompt {
         given; question.planned does not change it.
     """.trimIndent()
 
+    /** D105: shared by the evaluate and adjust instructions. */
+    private val HOW_IT_WENT = """
+        how_it_went gives, for each week, counted by the app: each planned session with its kind, its
+        planned_minutes and its outcome — "done" (a session at least as long as planned), "done_short_confirmed"
+        (a shorter session they said counts; minutes_done against planned_minutes) or "not_done" — and the
+        attempts: sessions of a planned kind that ticked nothing (under half as long as planned, one they
+        said does not count, or one still waiting for their answer), each with its minutes against the
+        planned_minutes of the planned session it came nearest to. Attempts are effort: recognise them, and
+        read them as a signal for the plan (for instance, that planned sessions may be too long), never as a
+        failure. Use these counts; never count sessions yourself.
+    """.trimIndent()
+
     private val EVALUATE = """
         They are asking where they stand, and for a plan for the weeks ahead. The question gives how many
         weeks, how many sessions a week they can manage (sessions_a_week), any words of theirs, the date the
         plan starts (starts, a Monday; weeks run Monday to Sunday), and your last evaluation if there is one,
         with the plan that ran with it and how many of its sessions were done each week (done_by_week,
         counted by the app: one number for each week that had begun, so a plan stopped early has
-        fewer numbers than weeks).
+        fewer numbers than weeks) and how each of those weeks went (how_it_went, below).
 
         Reply with an evaluation and a plan. The evaluation: a one-line headline; going_well; to_work_on;
         and since_last, what has changed since the last evaluation, or an empty string when there is none.
@@ -123,13 +137,14 @@ object TrainerPrompt {
         one and sessions_a_week sessions; each session has a kind (walk, run, cycle, swim, strength or
         other), whole minutes from 5 to 180, an effort (easy, steady or push) and one line on what it is.
         Sessions have no day: each can be done on any day of its week. Then one paragraph on why.
-    """.trimIndent()
+    """.trimIndent() + "\n\n" + HOW_IT_WENT
 
     private val ADJUST = """
         They are following your weekly plan and ask you to change what is left of it. The question gives
         the plan, the week they are in (this_week_number, from 1), how many planned sessions were done in
         each week before it (done_by_week, counted by the app), the planned sessions already done this week
-        (done_this_week, counted by the app), and their words.
+        (done_this_week, counted by the app), their words, and how each week so far went, this one included
+        (how_it_went, below).
 
         Reply with a plan in the same shape for this week and the weeks after: a title; one entry per
         remaining week, starting with this one; and one paragraph on why. For this week give only the
@@ -137,7 +152,7 @@ object TrainerPrompt {
         and sessions_a_week. Each session has a kind (walk, run, cycle, swim, strength or other), whole
         minutes from 5 to 180, an effort (easy, steady or push) and one line on what it is. Keep the same
         number of weeks; the end date does not move. Weeks already over are not yours to change.
-    """.trimIndent()
+    """.trimIndent() + "\n\n" + HOW_IT_WENT
 
     fun planBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Plan) { "a plan is asked with a plan question" }
@@ -250,6 +265,7 @@ object TrainerPrompt {
                         put("evaluation", evaluationJson(last.evaluation))
                         put("plan", weeksPlanJson(last.plan))
                         putJsonArray("done_by_week") { last.doneByWeek.forEach { add(it) } }
+                        putJsonArray("how_it_went") { last.weeks.forEach { add(weekOutcome(it)) } }
                     }
                 } ?: JsonNull,
             )
@@ -265,7 +281,42 @@ object TrainerPrompt {
             putJsonArray("done_this_week") { question.tickedThisWeek.forEach { add(plannedJson(it)) } }
             put("max_this_week", question.thisWeekMax)
             put("words", question.words.trim())
+            putJsonArray("how_it_went") { question.howItWent.forEach { add(weekOutcome(it)) } }
         }
+    }
+
+    /** D105: one week as the phone counted it — each planned session's outcome, and the attempts. Minutes only. */
+    private fun weekOutcome(week: WeekOutcome): JsonObject = buildJsonObject {
+        put("week", week.week)
+        putJsonArray("sessions") {
+            week.sessions.forEach { session ->
+                add(
+                    buildJsonObject {
+                        put("kind", kind(session.planned.kind))
+                        put("planned_minutes", session.planned.minutes)
+                        put("outcome", outcome(session.outcome))
+                        put("minutes_done", session.minutesDone?.let(::JsonPrimitive) ?: JsonNull)
+                    },
+                )
+            }
+        }
+        putJsonArray("attempts") {
+            week.attempts.forEach { attempt ->
+                add(
+                    buildJsonObject {
+                        put("kind", kind(attempt.kind))
+                        put("minutes", attempt.minutes)
+                        put("planned_minutes", attempt.plannedMinutes)
+                    },
+                )
+            }
+        }
+    }
+
+    private fun outcome(outcome: PlannedOutcome): String = when (outcome) {
+        PlannedOutcome.DONE -> "done"
+        PlannedOutcome.DONE_SHORT -> "done_short_confirmed"
+        PlannedOutcome.NOT_DONE -> "not_done"
     }
 
     private fun plannedTick(tick: PlannedTick): JsonObject = buildJsonObject {

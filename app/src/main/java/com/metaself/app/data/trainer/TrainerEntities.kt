@@ -65,3 +65,17 @@ data class TrainerProgrammeEntity(
     val stoppedEpochDay: Long?,
     val replacesId: Long?,
 )
+
+/**
+ * The owner's answer to "count it for this?" about one session and a weekly plan (D105): [programmeId] is
+ * always the **first** version of an adjusted chain, so an answer carries to every later version and
+ * nothing is asked twice. One per pair (the key). **No foreign key**, as for a review: a sync that drops a
+ * session must not cascade, and a restore replaces the table whole.
+ */
+@Entity(tableName = "plan_confirmations", primaryKeys = ["programmeId", "workoutId"])
+data class PlanConfirmationEntity(
+    val programmeId: Long,
+    val workoutId: Long,
+    val confirmed: Boolean,
+    val answeredAtMillis: Long,
+)

@@ -10,6 +10,7 @@ import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.profile.Goal
 import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.AttemptFacts
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
@@ -19,15 +20,18 @@ import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeekOutcome
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.domain.weight.WeightReading
@@ -287,7 +291,8 @@ class TrainerPromptTest {
         assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("evaluate")
         assertThat(question.getValue("starts").jsonPrimitive.content).isEqualTo("2026-08-31")
         val last = question.getValue("last_evaluation").jsonObject
-        assertThat(last.keys).containsExactly("date", "evaluation", "plan", "done_by_week")
+        assertThat(last.keys).containsExactly("date", "evaluation", "plan", "done_by_week", "how_it_went")
+        assertThat(last.getValue("how_it_went").jsonArray.map { it.jsonObject.getValue("week").jsonPrimitive.int }).containsExactly(1, 2).inOrder()
         assertThat(last.getValue("done_by_week").jsonArray.map { it.jsonPrimitive.int }).containsExactly(3, 2).inOrder()
         val planned = last.getValue("plan").jsonObject.getValue("weeks").jsonArray.first().jsonObject
             .getValue("sessions").jsonArray.first().jsonObject
@@ -312,7 +317,7 @@ class TrainerPromptTest {
         assertThat(body.toString()).contains("weeks_plan")
         assertThat(question.keys).containsExactly(
             "kind", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "done_by_week", "done_this_week",
-            "max_this_week", "words",
+            "max_this_week", "words", "how_it_went",
         )
         assertThat(question.getValue("this_week_number").jsonPrimitive.int).isEqualTo(2)
         assertThat(question.getValue("done_by_week").jsonArray.map { it.jsonPrimitive.int }).containsExactly(3)
@@ -386,6 +391,42 @@ class TrainerPromptTest {
         assertThat(system).contains("question.planned does not change it")
     }
 
+    /** D105: each week's outcomes and attempts, minutes only — nothing about a session but its kind and minutes. */
+    @Test
+    fun `how each week went is sent as outcomes and attempts, with exactly these keys`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.adjustBody("a-model", adjustRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+        val week = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("question").jsonObject
+            .getValue("how_it_went").jsonArray.first().jsonObject
+
+        assertThat(week.keys).containsExactly("week", "sessions", "attempts")
+        val sessions = week.getValue("sessions").jsonArray.map { it.jsonObject }
+        assertThat(sessions.first().keys).containsExactly("kind", "planned_minutes", "outcome", "minutes_done")
+        assertThat(sessions.map { it.getValue("outcome").jsonPrimitive.content })
+            .containsExactly("done", "done_short_confirmed", "not_done").inOrder()
+        assertThat(sessions[1].getValue("minutes_done").jsonPrimitive.int).isEqualTo(30)
+        assertThat(sessions[2].getValue("minutes_done")).isEqualTo(JsonNull)
+        val attempt = week.getValue("attempts").jsonArray.single().jsonObject
+        assertThat(attempt.keys).containsExactly("kind", "minutes", "planned_minutes")
+        assertThat(attempt.getValue("kind").jsonPrimitive.content).isEqualTo("walk")
+        assertThat(attempt.getValue("minutes").jsonPrimitive.int).isEqualTo(10)
+        assertThat(attempt.getValue("planned_minutes").jsonPrimitive.int).isEqualTo(40)
+    }
+
+    @Test
+    fun `the weekly plan's instructions say attempts are effort and a signal, never a failure`() {
+        listOf(
+            systemContent(TrainerPrompt.evaluateBody("a-model", evaluateRequest())),
+            systemContent(TrainerPrompt.adjustBody("a-model", adjustRequest())),
+        ).forEach { system ->
+            assertThat(system).contains("how_it_went")
+            assertThat(system).contains("done_short_confirmed")
+            assertThat(system).contains("Attempts are effort")
+            assertThat(system).contains("never as a")
+        }
+        assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest()))).doesNotContain("how_it_went")
+        assertThat(systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))).doesNotContain("how_it_went")
+    }
+
     /** Invented: a four-week, three-a-week ask; the plan starts Monday 31 August 2026. */
     private fun evaluateRequest(last: LastEvaluation? = LAST) = request(
         TrainerQuestion.Evaluate(ProgrammeAsk(4, 3, "Invented words."), TEST_EPOCH_DAY - 3, last),
@@ -395,6 +436,7 @@ class TrainerPromptTest {
         TrainerQuestion.Adjust(
             ProgrammeAsk(4, 3), TEST_EPOCH_DAY - 10, WEEKS, weekIndex = 1, doneByWeek = listOf(3),
             tickedThisWeek = listOf(STEADY), thisWeekMax = 2, words = "Invented words.",
+            howItWent = listOf(WEEK_ONE, WEEK_ONE.copy(week = 2)),
         ),
     )
 
@@ -489,6 +531,19 @@ class TrainerPromptTest {
             listOf(PlanWeek("settle in", listOf(STEADY, STEADY, STEADY)), PlanWeek("a little longer", listOf(STEADY, STEADY, STEADY))),
             "Invented reason.",
         )
-        val LAST = LastEvaluation(TEST_EPOCH_DAY - 30, Evaluation("Invented.", "Invented.", "Invented.", ""), WEEKS, listOf(3, 2))
+        /** D105, invented: two done, one done shorter and confirmed; an attempt of ten minutes against forty. */
+        val WEEK_ONE = WeekOutcome(
+            1,
+            listOf(
+                SessionOutcome(STEADY, PlannedOutcome.DONE, 40),
+                SessionOutcome(STEADY, PlannedOutcome.DONE_SHORT, 30),
+                SessionOutcome(STEADY, PlannedOutcome.NOT_DONE, null),
+            ),
+            listOf(AttemptFacts(WorkoutKind.WALK, 10, 40)),
+        )
+        val LAST = LastEvaluation(
+            TEST_EPOCH_DAY - 30, Evaluation("Invented.", "Invented.", "Invented.", ""), WEEKS, listOf(3, 2),
+            listOf(WEEK_ONE, WEEK_ONE.copy(week = 2, attempts = emptyList())),
+        )
     }
 }

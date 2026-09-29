@@ -113,4 +113,24 @@ interface TrainerDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertProgrammes(programmes: List<TrainerProgrammeEntity>)
+
+    // The owner's answers about shorter sessions (D105).
+    /** The first answer for a pair stands: a second is ignored. The row id, or -1 when ignored. */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertConfirmation(confirmation: PlanConfirmationEntity): Long
+
+    @Query("SELECT * FROM plan_confirmations WHERE programmeId = :programmeId")
+    fun observeConfirmations(programmeId: Long): Flow<List<PlanConfirmationEntity>>
+
+    @Query("SELECT * FROM plan_confirmations WHERE programmeId = :programmeId")
+    suspend fun confirmations(programmeId: Long): List<PlanConfirmationEntity>
+
+    @Query("SELECT * FROM plan_confirmations ORDER BY programmeId, workoutId")
+    suspend fun allConfirmations(): List<PlanConfirmationEntity>
+
+    @Query("DELETE FROM plan_confirmations")
+    suspend fun deleteConfirmations()
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertConfirmations(confirmations: List<PlanConfirmationEntity>)
 }

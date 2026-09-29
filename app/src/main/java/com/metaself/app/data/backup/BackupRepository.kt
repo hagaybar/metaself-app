@@ -22,6 +22,7 @@ import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.reminder.ReminderScheduler
 import com.metaself.app.data.reminder.ReminderStore
 import com.metaself.app.data.trainer.AboutMeStore
+import com.metaself.app.data.trainer.PlanConfirmationEntity
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
@@ -219,6 +220,7 @@ class BackupRepository @Inject constructor(
             aboutMe = aboutMe.note.first(),
             sessionSplits = BackupSplits.toFile(everyWorkout.map { it.id }, splits.all()),
             trainerProgrammes = trainer.allProgrammes().map { it.toBackup() },
+            planConfirmations = BackupConfirmations.toFile(everyWorkout.map { it.id }, trainer.allConfirmations()),
         )
     }
 
@@ -282,6 +284,7 @@ class BackupRepository @Inject constructor(
                 trainer.deleteReviews()
                 trainer.deletePlans()
                 trainer.deleteProgrammes()
+                trainer.deleteConfirmations()
                 splits.deleteAll()
                 // The copying starts again from scratch: a record read again replaces its rows, so
                 // nothing is doubled, and nothing recorded after this file was made is missed.
@@ -305,6 +308,7 @@ class BackupRepository @Inject constructor(
                 trainer.insertPlans(prepared.plans)
                 trainer.insertReviews(prepared.reviews)
                 trainer.insertProgrammes(prepared.programmes)
+                trainer.insertConfirmations(prepared.confirmations)
                 // Last, and inside: a throw here is still a throw out of the transaction.
                 restoreSettings(prepared)
             }
@@ -470,6 +474,8 @@ class BackupRepository @Inject constructor(
             programmes = backup.trainerProgrammes.distinctBy { it.id }.map { it.toEntity() },
             // D92: by file position, which the kept workouts' new ids 1…n replace.
             splits = BackupSplits.rows(backup.sessionSplits, keptAt.map { it + 1 }),
+            // D105: by file position too.
+            confirmations = BackupConfirmations.rows(backup.planConfirmations, keptAt.map { it + 1 }),
         )
     }
 
@@ -630,6 +636,8 @@ class BackupRepository @Inject constructor(
         val programmes: List<TrainerProgrammeEntity>,
         /** D92: each under the ids its two workouts are inserted with ([BackupSplits]). */
         val splits: List<SessionSplitEntity>,
+        /** D105: each under the id its session is inserted with ([BackupConfirmations]). */
+        val confirmations: List<PlanConfirmationEntity>,
     )
 
     /** How much a restore would destroy, so the question asked is a real one. */

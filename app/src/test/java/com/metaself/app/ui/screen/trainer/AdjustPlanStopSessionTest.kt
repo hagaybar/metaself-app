@@ -9,6 +9,7 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -77,6 +78,7 @@ class AdjustPlanStopSessionTest {
             ),
             emptyList(),
             TEST_EPOCH_DAY,
+            PlanCounting(1, 0, emptyMap()),
         ) as PlanCard.Running
     }
 }
