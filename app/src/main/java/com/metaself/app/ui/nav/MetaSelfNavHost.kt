@@ -67,6 +67,10 @@ import com.metaself.app.ui.screen.movement.MovementViewModel
 import com.metaself.app.ui.screen.movement.TakeSharedWorkoutFile
 import com.metaself.app.ui.screen.trainer.AboutMeScreen
 import com.metaself.app.ui.screen.trainer.AboutMeViewModel
+import com.metaself.app.ui.screen.trainer.AdjustPlanScreen
+import com.metaself.app.ui.screen.trainer.AdjustPlanViewModel
+import com.metaself.app.ui.screen.trainer.EvaluatePlanScreen
+import com.metaself.app.ui.screen.trainer.EvaluatePlanViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionScreen
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.screen.trainer.ReviewSessionScreen
@@ -101,6 +105,15 @@ sealed class Destination(val route: String) {
         fun form(): String = "trainer/plan?show=" + PlanSessionViewModel.FORM
         fun kept(): String = "trainer/plan?show=" + PlanSessionViewModel.KEPT
     }
+
+    /** D93, D94: evaluate me and plan; or the running plan. */
+    data object EvaluatePlan : Destination("trainer/weeks?show={show}") {
+        fun form(): String = "trainer/weeks?show=" + EvaluatePlanViewModel.FORM
+        fun running(): String = "trainer/weeks?show=" + EvaluatePlanViewModel.RUNNING
+    }
+
+    /** D97. */
+    data object AdjustPlan : Destination("trainer/weeks/adjust")
 
     /** About me (D90): the owner's note for the trainer. */
     data object AboutMe : Destination("trainer/about")
@@ -378,6 +391,9 @@ fun MetaSelfNavHost(
                 onPlan = { navController.navigate(Destination.PlanSession.form()) },
                 onOpenKept = { navController.navigate(Destination.PlanSession.kept()) },
                 onAboutMe = { navController.navigate(Destination.AboutMe.route) },
+                onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
+                onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
+                onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
             )
         }
 
@@ -411,6 +427,44 @@ fun MetaSelfNavHost(
                 onAsk = planViewModel::ask,
                 onKeep = planViewModel::keep,
                 onAskAgain = planViewModel::askAgain,
+            )
+        }
+
+        composable(
+            route = Destination.EvaluatePlan.route,
+            arguments = listOf(
+                navArgument(EvaluatePlanViewModel.SHOW) {
+                    type = NavType.StringType
+                    defaultValue = EvaluatePlanViewModel.FORM
+                },
+            ),
+        ) {
+            val evaluateViewModel: EvaluatePlanViewModel = hiltViewModel()
+            val evaluateState by evaluateViewModel.state.collectAsStateWithLifecycle()
+            EvaluatePlanScreen(
+                state = evaluateState,
+                onBack = { navController.popBackStack() },
+                onChange = evaluateViewModel::change,
+                onAsk = evaluateViewModel::ask,
+                onKeep = evaluateViewModel::keep,
+                onAskAgain = evaluateViewModel::askAgain,
+            )
+        }
+
+        composable(Destination.AdjustPlan.route) {
+            val adjustViewModel: AdjustPlanViewModel = hiltViewModel()
+            val adjustState by adjustViewModel.state.collectAsStateWithLifecycle()
+            AdjustPlanScreen(
+                state = adjustState,
+                onBack = { navController.popBackStack() },
+                onWords = adjustViewModel::words,
+                onAdjust = adjustViewModel::adjust,
+                onKeepNew = adjustViewModel::keepNew,
+                onKeepOld = adjustViewModel::keepOld,
+                onAskStop = adjustViewModel::askStop,
+                onCancelStop = adjustViewModel::cancelStop,
+                onConfirmStop = adjustViewModel::confirmStop,
+                onFinished = { navController.popBackStack() },
             )
         }
 
