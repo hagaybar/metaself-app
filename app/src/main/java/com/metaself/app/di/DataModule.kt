@@ -17,6 +17,8 @@ import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.drive.DriveArchiveDrive
+import com.metaself.app.data.letter.FoodTotals
+import com.metaself.app.data.letter.RoomFoodTotals
 import com.metaself.app.data.lifecycle.AppForeground
 import com.metaself.app.data.lifecycle.ProcessAppForeground
 import com.metaself.app.data.health.ArchiveDrive
@@ -216,6 +218,10 @@ object DataModule {
 
     @Provides
     fun provideMealDao(database: MetaSelfDatabase): MealDao = database.mealDao()
+
+    /** The weekly letter's only read of what was eaten: each day's totals (D100). */
+    @Provides
+    fun provideFoodTotals(totals: RoomFoodTotals): FoodTotals = totals
 
     @Provides
     fun provideFoodDao(database: MetaSelfDatabase): FoodDao = database.foodDao()

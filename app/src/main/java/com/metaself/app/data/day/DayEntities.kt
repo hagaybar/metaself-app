@@ -134,6 +134,9 @@ data class MealWithItems(
 /** One day's total, for the window that measures what a day actually costs (D25). */
 data class DayKcal(val epochDay: Long, val kcal: Int)
 
+/** One day's four totals (D100), summed in the database. */
+data class DayTotalsRow(val epochDay: Long, val kcal: Int, val proteinG: Int, val carbsG: Int, val fatG: Int)
+
 /** What one food is called now, for re-labelling the days it was eaten on. */
 data class CurrentFoodName(val foodId: Long, val displayName: String)
 
