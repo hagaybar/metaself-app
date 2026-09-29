@@ -11,12 +11,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.lifecycleScope
 import com.metaself.app.data.health.SharedWorkoutFiles
+import com.metaself.app.data.letter.WeeklyLetterScheduler
 import com.metaself.app.data.health.inlineWorkoutText
 import com.metaself.app.ui.root.MetaSelfRoot
 import com.metaself.app.ui.theme.MetaSelfTheme
 import com.metaself.app.ui.theme.ProvideSystemMotion
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -26,10 +29,16 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var sharedWorkoutFiles: SharedWorkoutFiles
 
+    @Inject
+    lateinit var letterScheduler: WeeklyLetterScheduler
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Not again on a re-creation: the file was offered the first time, and may be imported already.
         if (savedInstanceState == null) takeSharedFile(intent)
+        // D99: the Sunday run stays queued while the app is open and follows the setting. Here, not in the
+        // Application: every Robolectric test builds the Application, and this reaches WorkManager's database.
+        lifecycleScope.launch { letterScheduler.keepScheduled() }
         enableEdgeToEdge()
         setContent {
             MetaSelfTheme {

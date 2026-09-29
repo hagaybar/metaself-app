@@ -78,26 +78,17 @@ class WriteWeeklyLetter @Inject constructor(
         if (letters.of(weekMonday) != null) return Outcome.AlreadyWritten
 
         val sunday = weekMonday + 6
-        val first = weekMonday - 7L * LetterFigures.WEEKS_BEFORE
-        val foodByDay = food.byDay(first, sunday)
-        val trend = WeightTrend.of(weights.readings.first())
-        val workouts = record.observeWorkouts(first, sunday).first()
-        val days = record.observeDays(first, sunday).first()
-        val allReviews = reviews.observeReviews().first()
-        val all = programmes.all()
-        val kept = all.filter { it.status != ProgrammeStatus.OFFERED && it.startEpochDay != null }
-            .map { it to counting(it, all) }
-
-        fun week(monday: Long) = WeekFigures.of(monday, foodByDay, trend, workouts, allReviews, days, planWeek(kept, workouts, monday))
-        val figuresWeek = week(weekMonday)
+        val counted = count(weekMonday)
+        val figuresWeek = counted.week(weekMonday)
         if (figuresWeek.quiet) return Outcome.Quiet
+        val workouts = counted.workouts
 
         val profile = profiles.profile.first()
         val target = profile?.let {
             CurrentTarget.of(it, profiles.revision.first(), year(), profiles.burnAdjustmentKcal.first()).kcal
         }
-        val figures = LetterFigures(figuresWeek, (1..LetterFigures.WEEKS_BEFORE).map { week(weekMonday - 7L * it) }, target)
-        val running = runningIn(kept, weekMonday)?.first
+        val figures = LetterFigures(figuresWeek, (1..LetterFigures.WEEKS_BEFORE).map { counted.week(weekMonday - 7L * it) }, target)
+        val running = runningIn(counted.kept, weekMonday)?.first
         val request = LetterRequest(
             figures = figures,
             sessions = workouts
@@ -124,6 +115,32 @@ class WriteWeeklyLetter @Inject constructor(
                 letters.add(letter)
                 Outcome.Written(letter)
             }
+        }
+    }
+
+    /**
+     * Whether [weekMonday]'s week still wants a letter: it has none and is not quiet. Reads only — no copy,
+     * no ask. For a run that comes too late to write (design question 6) and for Write it now.
+     */
+    suspend fun wanted(weekMonday: Long): Boolean =
+        letters.of(weekMonday) == null && !count(weekMonday).week(weekMonday).quiet
+
+    /** The record over [weekMonday]'s week and the four before it, read once. */
+    private class Counted(val workouts: List<Workout>, val kept: List<Pair<Programme, PlanCounting>>, val week: (Long) -> WeekFigures)
+
+    private suspend fun count(weekMonday: Long): Counted {
+        val sunday = weekMonday + 6
+        val first = weekMonday - 7L * LetterFigures.WEEKS_BEFORE
+        val foodByDay = food.byDay(first, sunday)
+        val trend = WeightTrend.of(weights.readings.first())
+        val workouts = record.observeWorkouts(first, sunday).first()
+        val days = record.observeDays(first, sunday).first()
+        val allReviews = reviews.observeReviews().first()
+        val all = programmes.all()
+        val kept = all.filter { it.status != ProgrammeStatus.OFFERED && it.startEpochDay != null }
+            .map { it to counting(it, all) }
+        return Counted(workouts, kept) { monday ->
+            WeekFigures.of(monday, foodByDay, trend, workouts, allReviews, days, planWeek(kept, workouts, monday))
         }
     }
 

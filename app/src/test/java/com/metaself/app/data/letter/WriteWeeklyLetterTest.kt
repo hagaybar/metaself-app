@@ -297,6 +297,19 @@ class WriteWeeklyLetterTest {
         assertThat(job()(LETTER_MONDAY)).isInstanceOf(WriteWeeklyLetter.Outcome.Written::class.java)
     }
 
+    @Test
+    fun `a week wants a letter when it has none and is not quiet, and asking that sends and copies nothing`() = runTest {
+        granted = true
+        assertThat(job().wanted(LETTER_MONDAY)).isFalse()
+
+        someFood()
+        assertThat(job().wanted(LETTER_MONDAY)).isTrue()
+
+        letters.add(aWeeklyLetter(LETTER_MONDAY))
+        assertThat(job().wanted(LETTER_MONDAY)).isFalse()
+        assertThat(events).isEmpty()
+    }
+
     private companion object {
         const val DAY = 86_400_000L
         const val NOW = 1_000_000L
