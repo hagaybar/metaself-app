@@ -20,6 +20,9 @@ Scripts carried in version control so they are not only on one machine.
 - `check-migration-10-11.py` — the same for version 11 (D105): the owner's answers' table created
   verbatim from `11.json`, every other table declared identically and every row kept, one answer per
   session and plan.
+- `check-migration-11-12.py` — the same for version 12 (D104): the weekly letters' table and its unique
+  index created verbatim from `12.json`, every other table declared identically and every row kept, one
+  letter a week.
 - `check-impossible-figures.py` — runs the on-open repair of issue #7 (clearing a food's number
   group that holds a figure the food form would refuse) against `sqlite3` from the latest exported
   schema, and reads the result back the way the app reads a food. CI's `RoomFoodRepositoryTest` is

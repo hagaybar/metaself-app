@@ -72,6 +72,7 @@ import com.metaself.app.data.day.MIGRATION_7_8
 import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.day.MIGRATION_9_10
 import com.metaself.app.data.day.MIGRATION_10_11
+import com.metaself.app.data.day.MIGRATION_11_12
 import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.RoomProgrammeStore
 import com.metaself.app.data.trainer.RoomTrainerStore
@@ -166,6 +167,7 @@ object DataModule {
         MIGRATION_8_9,
         MIGRATION_9_10,
         MIGRATION_10_11,
+        MIGRATION_11_12,
     ).build()
 
     @Provides
