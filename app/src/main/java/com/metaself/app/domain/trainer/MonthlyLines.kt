@@ -169,7 +169,7 @@ object MonthlyLines {
      * The trend after the last reading on or before each end; null unless both exist, each rests on a
      * reading at most [TREND_FRESH_DAYS] before its end, and they differ.
      */
-    private fun weightChange(first: Long, last: Long, trend: List<TrendPoint>): Double? {
+    internal fun weightChange(first: Long, last: Long, trend: List<TrendPoint>): Double? {
         val start = trend.lastOrNull { it.reading.epochDay <= first } ?: return null
         val end = trend.lastOrNull { it.reading.epochDay <= last } ?: return null
         val fresh = first - start.reading.epochDay <= TREND_FRESH_DAYS && last - end.reading.epochDay <= TREND_FRESH_DAYS
