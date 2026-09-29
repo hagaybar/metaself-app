@@ -178,6 +178,7 @@ object TrainerPrompt {
             put("kind", "review")
             put("session", session(question.session))
         }
+        is TrainerQuestion.Evaluate, is TrainerQuestion.Adjust -> throw IllegalArgumentException("Task 4")
     }
 
     private fun session(session: SessionFacts): JsonObject = buildJsonObject {

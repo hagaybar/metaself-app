@@ -209,7 +209,9 @@ class TrainerRequestTest {
 
     /**
      * D84's "never sent", as a shape: there is no field for a meal, sleep, a raw reading, a weigh-in, a
-     * target, a name, a title or an origin. D89 adds the monthly lines and D90 the owner's note. A new field fails here before it can leave the phone.
+     * target, a name, a title or an origin. D89 adds the monthly lines and D90 the owner's note. D93 and
+     * D97 add two questions; D96 a planned session on the other two. A new field fails here before it
+     * can leave the phone.
      */
     @Test
     fun `the request has room for exactly what D84 lists`() {
@@ -232,6 +234,14 @@ class TrainerRequestTest {
         assertThat(fieldsOf(FeltCounts::class.java)).containsExactly("easy", "right", "hard")
         assertThat(fieldsOf(GoalFacts::class.java)).containsExactly("direction", "kgPerWeek")
         assertThat(fieldsOf(BodyFacts::class.java)).containsExactly("ageYears", "sex", "heightCm")
+        assertThat(fieldsOf(TrainerQuestion.Plan::class.java)).containsExactly("answers", "planned")
+        assertThat(fieldsOf(TrainerQuestion.Review::class.java)).containsExactly("session", "planned")
+        assertThat(fieldsOf(TrainerQuestion.Evaluate::class.java)).containsExactly("ask", "startEpochDay", "last")
+        assertThat(fieldsOf(TrainerQuestion.Adjust::class.java)).containsExactly(
+            "ask", "startEpochDay", "plan", "weekIndex", "doneByWeek", "tickedThisWeek", "thisWeekMax", "words",
+        )
+        assertThat(fieldsOf(LastEvaluation::class.java)).containsExactly("epochDay", "evaluation", "plan", "doneByWeek")
+        assertThat(fieldsOf(PlannedSession::class.java)).containsExactly("kind", "minutes", "effort", "what")
     }
 
     /** D92: a review on a witness that does not lead is the combined session's; the session is sent once. */

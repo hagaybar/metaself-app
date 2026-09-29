@@ -2,11 +2,13 @@ package com.metaself.app.data.ai
 
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.WeeksPlan
 import okhttp3.OkHttpClient
 
 /**
@@ -36,6 +38,11 @@ class OpenAiTrainer(
 
     override suspend fun feedback(request: TrainerRequest): TrainerReply<Feedback> =
         ask({ model, profile -> TrainerPrompt.feedbackBody(model, request, profile) }, TrainerResponse::parseFeedback)
+
+    // TODO("Task 6"): replaced by the real evaluate/adjust calls in Task 6.
+    override suspend fun evaluate(request: TrainerRequest): TrainerReply<EvaluationAndPlan> = TODO("Task 6")
+
+    override suspend fun adjust(request: TrainerRequest): TrainerReply<WeeksPlan> = TODO("Task 6")
 
     private suspend fun <T> ask(
         build: (String, RequestProfile) -> String,
