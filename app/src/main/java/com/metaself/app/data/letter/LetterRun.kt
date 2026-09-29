@@ -32,6 +32,14 @@ object LetterRun {
     fun weekOf(queued: Long?, now: LocalDateTime, hour: Int): Long? = queued ?: LetterSchedule.weekToWrite(now, hour)
 
     /**
+     * The setting could not be read: try again while the week the run was queued for may still be
+     * written (until Monday noon), else stop — and queue next Sunday — so a run never retries forever and
+     * starves the Sundays after it.
+     */
+    fun afterSettingUnread(queued: Long?, now: LocalDateTime): LetterStep =
+        if (queued != null && LetterSchedule.mayRetry(queued, now)) LetterStep.RETRY else LetterStep.DONE
+
+    /**
      * One run for [weekMonday]'s letter.
      *
      * - Before that week's Sunday (a clock or zone moved under a queued run): not yet — [LetterStep.RETRY].

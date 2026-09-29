@@ -29,19 +29,25 @@ class WeeklyLetterWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val now = LocalDateTime.now()
+        val queued = inputData.getLong(LetterWork.WEEK, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }
         val chosen = try {
             settings.settings.first()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (failure: Exception) {
             problems.record(LetterRun.KIND, "setting not read: ${failure::class.java.simpleName}")
-            return Result.retry()
+            return when (LetterRun.afterSettingUnread(queued, now)) {
+                LetterStep.RETRY -> Result.retry()
+                else -> {
+                    scheduleNext(queued)
+                    Result.success()
+                }
+            }
         }
         if (!chosen.on) return Result.success()
-        val queued = inputData.getLong(LetterWork.WEEK, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }
         val week = LetterRun.weekOf(queued, now, chosen.hour)
         if (week == null) {
-            scheduleNext()
+            scheduleNext(null)
             return Result.success()
         }
         val ran = LetterRun.run(week, now, write = { write(it) }, wanted = { write.wanted(it) }, problems = problems)
@@ -50,18 +56,19 @@ class WeeklyLetterWorker @AssistedInject constructor(
             LetterStep.RETRY -> Result.retry()
             LetterStep.NOTIFY_FAILED -> {
                 LetterNotifications.failed(applicationContext)
-                scheduleNext()
+                scheduleNext(week)
                 Result.success()
             }
             LetterStep.DONE -> {
-                scheduleNext()
+                scheduleNext(week)
                 Result.success()
             }
         }
     }
 
-    private suspend fun scheduleNext() {
-        runCatching { scheduler.schedule() }
+    /** Next Sunday's run; never [handledMonday]'s Sunday again, even if this run started before its hour. */
+    private suspend fun scheduleNext(handledMonday: Long?) {
+        runCatching { scheduler.schedule(handledMonday = handledMonday) }
             .onFailure { problems.record(LetterRun.KIND, "not scheduled: ${it::class.java.simpleName}") }
     }
 }

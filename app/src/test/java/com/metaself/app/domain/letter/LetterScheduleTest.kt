@@ -34,6 +34,18 @@ class LetterScheduleTest {
     }
 
     @Test
+    fun `the run after a Sunday's run is the next Sunday, even when that run started a moment before its hour`() {
+        val monday = java.time.LocalDate.of(2026, 8, 31).toEpochDay()
+        val next = sunday.plusDays(7).withHour(20)
+        assertThat(LetterSchedule.nextRunAfter(sunday.withHour(19).withMinute(59).withSecond(55), monday, 20)).isEqualTo(next)
+        assertThat(LetterSchedule.nextRunAfter(sunday.withHour(20), monday, 20)).isEqualTo(next)
+        assertThat(LetterSchedule.nextRunAfter(sunday.plusDays(1).withHour(11), monday, 20)).isEqualTo(next)
+        assertThat(LetterSchedule.nextRunAfter(sunday.withHour(20), monday, 22)).isEqualTo(sunday.plusDays(7).withHour(22))
+        // Without the week, a run a moment early would name its own Sunday — the case this rules out.
+        assertThat(LetterSchedule.nextRun(sunday.withHour(19).withMinute(59).withSecond(55), 20)).isEqualTo(sunday.withHour(20))
+    }
+
+    @Test
     fun `a failure may be retried until Monday noon after the letter's Sunday`() {
         val monday = java.time.LocalDate.of(2026, 8, 31).toEpochDay()
         assertThat(LetterSchedule.mayRetry(monday, sunday.plusDays(1).withHour(11))).isTrue()

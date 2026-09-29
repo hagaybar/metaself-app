@@ -65,6 +65,14 @@ class LetterRunTest {
     }
 
     @Test
+    fun `a setting that cannot be read is retried until Monday noon, then the run stops`() {
+        assertThat(LetterRun.afterSettingUnread(LETTER_MONDAY, sundayEvening)).isEqualTo(LetterStep.RETRY)
+        assertThat(LetterRun.afterSettingUnread(LETTER_MONDAY, mondayMorning)).isEqualTo(LetterStep.RETRY)
+        assertThat(LetterRun.afterSettingUnread(LETTER_MONDAY, mondayNoon)).isEqualTo(LetterStep.DONE)
+        assertThat(LetterRun.afterSettingUnread(null, sundayEvening)).isEqualTo(LetterStep.DONE)
+    }
+
+    @Test
     fun `a written letter is handed back to be announced`() = runTest {
         val ran = run(sundayEvening)
 

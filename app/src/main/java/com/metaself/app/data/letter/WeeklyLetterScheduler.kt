@@ -65,14 +65,15 @@ class WeeklyLetterScheduler @Inject constructor(
      * cancelled, a run in progress included. The week's uniqueness (design question 7) keeps any overlap
      * to one letter.
      */
-    suspend fun schedule(now: LocalDateTime = LocalDateTime.now()) {
+    /** [handledMonday]: the week of the run calling this, whose Sunday is never queued again ([LetterSchedule.nextRunAfter]). */
+    suspend fun schedule(now: LocalDateTime = LocalDateTime.now(), handledMonday: Long? = null) {
         val manager = WorkManager.getInstance(context)
         val chosen = settings.settings.first()
         if (!chosen.on) {
             LetterWork.NAMES.forEach(manager::cancelUniqueWork)
             return
         }
-        val at = LetterSchedule.nextRun(now, chosen.hour)
+        val at = handledMonday?.let { LetterSchedule.nextRunAfter(now, it, chosen.hour) } ?: LetterSchedule.nextRun(now, chosen.hour)
         val name = LetterWork.nameFor(at.toLocalDate())
         if (manager.getWorkInfosForUniqueWorkFlow(name).first().any { LetterWork.inProgress(it.state, it.runAttemptCount) }) return
         val zone = ZoneId.systemDefault()

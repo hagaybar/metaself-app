@@ -16,6 +16,16 @@ object LetterSchedule {
         return if (thisSunday.isAfter(now)) thisSunday else thisSunday.plusWeeks(1)
     }
 
+    /**
+     * The run after the one that handled [handledMonday]'s week: never that week's Sunday again, even when
+     * the run started a moment before its hour (a clock corrected, a zone crossed) — so it lands on the
+     * next Sunday, whose run has the other name, and a run never finds itself in the way of its successor.
+     */
+    fun nextRunAfter(now: LocalDateTime, handledMonday: Long, hour: Int): LocalDateTime {
+        val handledSunday = LocalDate.ofEpochDay(handledMonday).plusDays(6).atTime(hour, 0)
+        return nextRun(maxOf(now, handledSunday), hour)
+    }
+
     /** The Monday of the week to write at [now], or null outside Sunday [hour]..Monday noon. */
     fun weekToWrite(now: LocalDateTime, hour: Int): Long? {
         val date = now.toLocalDate()
