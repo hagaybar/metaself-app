@@ -63,10 +63,27 @@ class WriteWeeklyLetter @Inject constructor(
         data object Quiet : Outcome
         data object AlreadyWritten : Outcome
         data class Written(val letter: WeeklyLetter) : Outcome
-        /** A failure worth trying again later (network, provider, an unreadable answer). */
+        /** A failure worth trying again later (network, a provider error — 5xx or 429 —, an unreadable answer). */
         data class Retry(val failure: EstimateResult) : Outcome
-        /** A failure no retry mends: no key, a refusal, the day's ceiling. */
+        /** A failure no retry mends: no key, a refusal other than a provider error, the day's ceiling. */
         data class GiveUp(val failure: EstimateResult) : Outcome
+    }
+
+    companion object {
+        /**
+         * D99: no network, a provider error (a 5xx, or 429 — too many requests) or an unreadable answer is
+         * retried until Monday noon; a missing key, the day's ceiling, or any other refusal (a bad key, no
+         * credit, a request refused) no retry mends.
+         */
+        fun failed(reply: LetterReply.Failed): Outcome = when (val failure = reply.failure) {
+            is EstimateResult.NoKey, is EstimateResult.CeilingReached -> Outcome.GiveUp(failure)
+            is EstimateResult.Refused -> if (reply.status.retryable()) Outcome.Retry(failure) else Outcome.GiveUp(failure)
+            else -> Outcome.Retry(failure)
+        }
+
+        private const val TOO_MANY_REQUESTS = 429
+
+        private fun Int?.retryable(): Boolean = this != null && (this == TOO_MANY_REQUESTS || this in 500..599)
     }
 
     /** [copy] false for Write it now: the app is in front and its own copy runs anyway (design question 19). */
@@ -103,10 +120,7 @@ class WriteWeeklyLetter @Inject constructor(
             lastNextWeek = letters.of(weekMonday - 7)?.texts?.nextWeek,
         )
         return when (val reply = writer.write(request)) {
-            is LetterReply.Failed -> when (reply.failure) {
-                is EstimateResult.NoKey, is EstimateResult.Refused, is EstimateResult.CeilingReached -> Outcome.GiveUp(reply.failure)
-                else -> Outcome.Retry(reply.failure)
-            }
+            is LetterReply.Failed -> failed(reply)
             is LetterReply.Written -> {
                 val letter = WeeklyLetter(
                     weekMonday = weekMonday, createdAtMillis = now(), figures = figures, texts = reply.texts,

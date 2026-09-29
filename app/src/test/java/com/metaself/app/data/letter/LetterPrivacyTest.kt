@@ -93,13 +93,27 @@ class LetterPrivacyTest {
     }
 
     @Test
-    fun `a provider error whose body quotes the request is logged by status alone`() = runTest {
-        server.enqueue(MockResponse().setResponseCode(500).setBody("""{"error":{"message":"$NOTE $ANSWER"}}"""))
+    fun `a provider error whose body quotes the request is retried, and logged by status alone`() = runTest {
+        for (status in listOf(500, 503, 429)) {
+            log.problems.clear()
+            server.enqueue(MockResponse().setResponseCode(status).setBody("""{"error":{"message":"$NOTE $ANSWER"}}"""))
+
+            val ran = runOnce(job())
+
+            assertThat(ran.step).isEqualTo(LetterStep.RETRY)
+            assertThat(log.problems).containsExactly(Problem(0, "letter refused", "the provider answered $status"))
+            assertNothingPrivateLogged(ANSWER)
+        }
+    }
+
+    @Test
+    fun `a refusal no retry mends is announced at once, and logged by status alone`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(401).setBody("""{"error":{"message":"$NOTE $ANSWER"}}"""))
 
         val ran = runOnce(job())
 
         assertThat(ran.step).isEqualTo(LetterStep.NOTIFY_FAILED)
-        assertThat(log.problems.map { it.kind }).containsExactly("letter refused")
+        assertThat(log.problems).containsExactly(Problem(0, "letter refused", "the provider answered 401"))
         assertNothingPrivateLogged(ANSWER)
     }
 

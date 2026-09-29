@@ -280,6 +280,21 @@ class WriteWeeklyLetterTest {
     }
 
     @Test
+    fun `a provider error, a 5xx or too many requests, is worth trying again, and any other refusal is not`() = runTest {
+        someFood()
+        val refused = EstimateResult.Refused("Invented.")
+        for (status in listOf(500, 503, 429)) {
+            writer = FakeLetterWriter(LetterReply.Failed(refused, status))
+            assertThat(job()(LETTER_MONDAY)).isEqualTo(WriteWeeklyLetter.Outcome.Retry(refused))
+        }
+        for (status in listOf(400, 401, 403)) {
+            writer = FakeLetterWriter(LetterReply.Failed(refused, status))
+            assertThat(job()(LETTER_MONDAY)).isEqualTo(WriteWeeklyLetter.Outcome.GiveUp(refused))
+        }
+        assertThat(letters.letters.value).isEmpty()
+    }
+
+    @Test
     fun `no network or an unreadable answer is worth trying again, and nothing is stored`() = runTest {
         someFood()
         for (failure in listOf(EstimateResult.Unreachable(), EstimateResult.Unreadable("Invented why.", answer = "Invented answer."))) {

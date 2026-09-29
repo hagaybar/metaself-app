@@ -32,7 +32,7 @@ class OpenAiLetterWriter(
                 }
                 is LetterResponse.Parsed.Failed -> LetterReply.Failed(parsed.failure).also { recorded(it.failure, null) }
             }
-            is OpenAiCall.Outcome.Failed -> LetterReply.Failed(outcome.failure).also { recorded(it.failure, outcome.status) }
+            is OpenAiCall.Outcome.Failed -> LetterReply.Failed(outcome.failure, outcome.status).also { recorded(it.failure, outcome.status) }
         }
 
     /** By kind only: the request holds the owner's note and the figures, and the answer may quote them. */
