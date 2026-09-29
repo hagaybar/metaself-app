@@ -10,18 +10,24 @@ import com.metaself.app.data.ai.DataStoreAiSettingsStore
 import com.metaself.app.data.ai.DataStoreRequestProfileStore
 import com.metaself.app.data.ai.EncryptedApiKeyStore
 import com.metaself.app.data.ai.OpenAiFoodReviewer
+import com.metaself.app.data.ai.OpenAiLetterWriter
 import com.metaself.app.data.ai.OpenAiMealConversation
 import com.metaself.app.data.ai.OpenAiMealEstimator
 import com.metaself.app.data.ai.OpenAiTrainer
 import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.letter.DataStoreLetterNoteStore
+import com.metaself.app.data.letter.DataStoreLetterSettingsStore
+import com.metaself.app.data.letter.LetterNoteStore
+import com.metaself.app.data.letter.LetterSettingsStore
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.DataStoreAboutMeStore
 import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
+import com.metaself.app.domain.letter.LetterWriter
 import com.metaself.app.domain.trainer.Trainer
 import dagger.Module
 import dagger.Provides
@@ -76,6 +82,16 @@ object AiModule {
     @Singleton
     fun provideAboutMeStore(store: DataStore<Preferences>): AboutMeStore = DataStoreAboutMeStore(store)
 
+    /** The weekly letter's switch and hour (D99), beside the AI settings. */
+    @Provides
+    @Singleton
+    fun provideLetterSettingsStore(store: DataStore<Preferences>): LetterSettingsStore = DataStoreLetterSettingsStore(store)
+
+    /** Which week's note on the day was put away (D103), in the same store. */
+    @Provides
+    @Singleton
+    fun provideLetterNoteStore(store: DataStore<Preferences>): LetterNoteStore = DataStoreLetterNoteStore(store)
+
     /** What each model accepts, learned from its refusals (D57), beside the model's name. */
     @Provides
     @Singleton
@@ -129,4 +145,15 @@ object AiModule {
         profiles: RequestProfileStore,
         problems: ProblemLog,
     ): Trainer = OpenAiTrainer(keys, settings, client, profiles, problems)
+
+    /** The weekly letter (D101): the same key, ceiling, client, profiles and log as the estimator. */
+    @Provides
+    @Singleton
+    fun provideLetterWriter(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        profiles: RequestProfileStore,
+        problems: ProblemLog,
+    ): LetterWriter = OpenAiLetterWriter(keys, settings, client, profiles, problems)
 }

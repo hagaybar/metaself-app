@@ -33,6 +33,7 @@ import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
+import com.metaself.app.data.trainer.WeeklyLetterEntity
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.portion.Portions
@@ -70,8 +71,9 @@ import com.metaself.app.domain.portion.Portions
         SessionSplitEntity::class,
         TrainerProgrammeEntity::class,
         PlanConfirmationEntity::class,
+        WeeklyLetterEntity::class,
     ],
-    version = 11,
+    version = 12,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {

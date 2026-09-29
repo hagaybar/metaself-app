@@ -183,7 +183,7 @@ object TrainerPrompt {
         put("question", question(request.question))
         put("today", date(request.today))
         put("about_me", request.aboutMe?.let(::JsonPrimitive) ?: JsonNull)
-        putJsonArray("sessions") { request.sessions.forEach { add(session(it)) } }
+        putJsonArray("sessions") { request.sessions.forEach { add(sessionJson(it)) } }
         putJsonArray("weeks") {
             request.weeks.forEach { week ->
                 add(
@@ -248,7 +248,7 @@ object TrainerPrompt {
         }
         is TrainerQuestion.Review -> buildJsonObject {
             put("kind", "review")
-            put("session", session(question.session))
+            put("session", sessionJson(question.session))
             put("planned", question.planned?.let(::plannedTick) ?: JsonNull)
         }
         is TrainerQuestion.Evaluate -> buildJsonObject {
@@ -324,7 +324,7 @@ object TrainerPrompt {
         plannedJson(tick.session).forEach { (name, value) -> put(name, value) }
     }
 
-    private fun session(session: SessionFacts): JsonObject = buildJsonObject {
+    internal fun sessionJson(session: SessionFacts): JsonObject = buildJsonObject {
         put("date", date(session.epochDay))
         put("kind", kind(session.kind))
         put("minutes", session.minutes)
@@ -481,7 +481,7 @@ object TrainerPrompt {
         EnergySource.NONE -> "unknown"
     }
 
-    private fun date(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).toString()
+    internal fun date(epochDay: Long): String = LocalDate.ofEpochDay(epochDay).toString()
 
     private fun round1(value: Double): Double = Math.round(value * 10) / 10.0
 

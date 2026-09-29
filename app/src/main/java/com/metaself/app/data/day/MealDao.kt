@@ -203,6 +203,19 @@ interface MealDao {
     )
     suspend fun kcalByDaySince(fromEpochDay: Long): List<DayKcal>
 
+    /**
+     * Each day's four totals from [fromEpochDay] to [toEpochDay], for the weekly letter (D100): summed
+     * here, one row per day that holds an item. Nothing about a meal or a food leaves this query.
+     */
+    @Query(
+        "SELECT m.epochDay AS epochDay, SUM(f.kcal) AS kcal, SUM(f.proteinG) AS proteinG, " +
+            "SUM(f.carbsG) AS carbsG, SUM(f.fatG) AS fatG FROM meals m " +
+            "INNER JOIN food_items f ON f.mealId = m.id " +
+            "WHERE m.epochDay BETWEEN :fromEpochDay AND :toEpochDay " +
+            "GROUP BY m.epochDay",
+    )
+    suspend fun totalsByDayBetween(fromEpochDay: Long, toEpochDay: Long): List<DayTotalsRow>
+
     /** Every meal there has ever been, for an export. Not a flow: this is asked once. */
     @androidx.room.Transaction
     @Query("SELECT * FROM meals ORDER BY epochDay ASC, loggedAtMillis ASC, id ASC")

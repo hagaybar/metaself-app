@@ -79,3 +79,19 @@ data class PlanConfirmationEntity(
     val confirmed: Boolean,
     val answeredAtMillis: Long,
 )
+
+/**
+ * One weekly letter (D104): its week (unique — one letter a week), the figures and the texts as JSON,
+ * the model, whether the band's data may be behind, and when it was read.
+ */
+@Entity(tableName = "weekly_letters", indices = [Index(value = ["weekMonday"], unique = true)])
+data class WeeklyLetterEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val weekMonday: Long,
+    val createdAtMillis: Long,
+    val figures: String,
+    val letter: String,
+    val model: String,
+    val bandDataUntil: Long?,
+    val readAtMillis: Long?,
+)

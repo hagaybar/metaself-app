@@ -11,12 +11,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.lifecycleScope
 import com.metaself.app.data.health.SharedWorkoutFiles
 import com.metaself.app.data.health.inlineWorkoutText
+import com.metaself.app.data.letter.LetterNotifications
+import com.metaself.app.data.letter.LetterOpen
+import com.metaself.app.data.letter.OpenedLetters
+import com.metaself.app.data.letter.WeeklyLetterScheduler
+import com.metaself.app.data.letter.letterOpen
 import com.metaself.app.ui.root.MetaSelfRoot
 import com.metaself.app.ui.theme.MetaSelfTheme
 import com.metaself.app.ui.theme.ProvideSystemMotion
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -26,10 +33,23 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var sharedWorkoutFiles: SharedWorkoutFiles
 
+    @Inject
+    lateinit var letterScheduler: WeeklyLetterScheduler
+
+    /** A weekly letter notification's tap (D103) waits here until the navigation opens what it asked for. */
+    @Inject
+    lateinit var openedLetters: OpenedLetters
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Not again on a re-creation: the file was offered the first time, and may be imported already.
-        if (savedInstanceState == null) takeSharedFile(intent)
+        if (savedInstanceState == null) {
+            takeSharedFile(intent)
+            letterOpenOf(intent)?.let(openedLetters::offer)
+        }
+        // D99: the Sunday run stays queued while the app is open and follows the setting. Here, not in the
+        // Application: every Robolectric test builds the Application, and this reaches WorkManager's database.
+        lifecycleScope.launch { letterScheduler.keepScheduled() }
         enableEdgeToEdge()
         setContent {
             MetaSelfTheme {
@@ -75,4 +95,17 @@ internal fun sharedWorkoutFile(intent: Intent?): String? {
     if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
     IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)?.let { return it.toString() }
     return intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.let(::inlineWorkoutText)
+}
+
+/**
+ * What a weekly letter notification's tap asks to open (D103): its letter, or Weekly letters for the
+ * failure's. The notification starts the activity afresh (CLEAR_TOP on the default launch mode), so this
+ * is read in `onCreate`; a launch from Recents replays the tap that started the task, which was opened
+ * then, and opens nothing again.
+ */
+internal fun letterOpenOf(intent: Intent?): LetterOpen? {
+    if (intent == null) return null
+    if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+    val week = intent.getLongExtra(LetterNotifications.EXTRA_WEEK, Long.MIN_VALUE).takeIf { it != Long.MIN_VALUE }
+    return letterOpen(week, intent.getBooleanExtra(LetterNotifications.EXTRA_LIST, false))
 }

@@ -11,6 +11,7 @@ import com.metaself.app.data.day.MIGRATION_7_8
 import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.day.MIGRATION_9_10
 import com.metaself.app.data.day.MIGRATION_10_11
+import com.metaself.app.data.day.MIGRATION_11_12
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -729,6 +730,42 @@ class MigrationTest {
                 assertThat(cursor.moveToFirst()).isTrue()
                 assertThat(cursor.getInt(0)).isEqualTo(rows)
             }
+        }
+        migrated.close()
+    }
+
+    /** D104: one new table, empty, one letter a week; every workout and answer kept. Invented figures. */
+    @Test
+    fun `a version 11 database migrates to version 12 with an empty weekly letters table`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 11).use { db ->
+            db.execSQL(
+                "INSERT INTO workouts (id, epochDay, startedAtMillis, durationMinutes, kind, energySource, source, hidden) " +
+                    "VALUES (1, 20699, 1000, 40, 'WALK', 'NONE', 'SYNCED', 0)",
+            )
+            db.execSQL(
+                "INSERT INTO plan_confirmations (programmeId, workoutId, confirmed, answeredAtMillis) VALUES (1, 1, 1, 1000)",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 12, true, MIGRATION_11_12)
+
+        listOf("weekly_letters" to 0, "workouts" to 1, "plan_confirmations" to 1).forEach { (table, rows) ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(rows)
+            }
+        }
+        migrated.execSQL(
+            "INSERT INTO weekly_letters (weekMonday, createdAtMillis, figures, letter, model) VALUES (20696, 1, '{}', '{}', 'm')",
+        )
+        migrated.execSQL(
+            "INSERT OR IGNORE INTO weekly_letters (weekMonday, createdAtMillis, figures, letter, model) VALUES (20696, 2, '{}', '{}', 'm')",
+        )
+        migrated.query("SELECT COUNT(*) FROM weekly_letters").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(1)
         }
         migrated.close()
     }

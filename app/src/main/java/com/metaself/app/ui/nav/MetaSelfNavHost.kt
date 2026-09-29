@@ -3,9 +3,11 @@ package com.metaself.app.ui.nav
 import android.Manifest
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.health.connect.client.PermissionController
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -65,6 +67,14 @@ import com.metaself.app.ui.screen.weight.WeightViewModel
 import com.metaself.app.ui.screen.movement.MovementScreen
 import com.metaself.app.ui.screen.movement.MovementViewModel
 import com.metaself.app.ui.screen.movement.TakeSharedWorkoutFile
+import com.metaself.app.data.health.HealthPermissions
+import com.metaself.app.data.letter.LetterOpen
+import com.metaself.app.ui.screen.letter.LetterScreen
+import com.metaself.app.ui.screen.letter.LetterSetupViewModel
+import com.metaself.app.ui.screen.letter.LetterViewModel
+import com.metaself.app.ui.screen.letter.LettersScreen
+import com.metaself.app.ui.screen.letter.LettersViewModel
+import com.metaself.app.ui.screen.letter.UnreadLetterViewModel
 import com.metaself.app.ui.screen.trainer.AboutMeScreen
 import com.metaself.app.ui.screen.trainer.AboutMeViewModel
 import com.metaself.app.ui.screen.trainer.AdjustPlanScreen
@@ -117,6 +127,14 @@ sealed class Destination(val route: String) {
 
     /** About me (D90): the owner's note for the trainer. */
     data object AboutMe : Destination("trainer/about")
+
+    /** Weekly letters (D103): every letter, and Write it now. */
+    data object Letters : Destination("trainer/letters")
+
+    /** One weekly letter (D103), by its week's Monday. */
+    data object Letter : Destination("trainer/letter/{week}") {
+        fun of(week: Long): String = "trainer/letter/$week"
+    }
 
     /** How did it go (D87), for one session. */
     data object ReviewSession : Destination("trainer/review/{workoutId}") {
@@ -256,8 +274,23 @@ fun MetaSelfNavHost(
     dayViewModel: DayViewModel = hiltViewModel(),
     weightViewModel: WeightViewModel = hiltViewModel(),
     sharedFileViewModel: SharedFileViewModel = hiltViewModel(),
+    openedLettersViewModel: OpenedLettersViewModel = hiltViewModel(),
+    unreadLetterViewModel: UnreadLetterViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
+
+    // A weekly letter notification's tap (D103) opens its letter, or Weekly letters for the failure's.
+    val openedLetter by openedLettersViewModel.pending.collectAsStateWithLifecycle()
+    LaunchedEffect(openedLetter) {
+        if (openedLetter != null) {
+            when (val open = openedLettersViewModel.take()) {
+                is LetterOpen.Letter -> navController.navigate(Destination.Letter.of(open.weekMonday)) { launchSingleTop = true }
+                LetterOpen.List -> navController.navigate(Destination.Letters.route) { launchSingleTop = true }
+                null -> Unit
+            }
+        }
+    }
+    val unreadLetter by unreadLetterViewModel.unread.collectAsStateWithLifecycle()
 
     // A workout file shared to MetaSelf (D82) opens Movement, which takes and imports it once on screen.
     val sharedFile by sharedFileViewModel.pending.collectAsStateWithLifecycle()
@@ -270,6 +303,31 @@ fun MetaSelfNavHost(
     NavHost(navController = navController, startDestination = Destination.start.route) {
 
         composable(Destination.Today.route) {
+            // D99, D103: the one-time note that sets the weekly letter up. The permissions are read again
+            // whenever the day comes to the front; Set up asks for notifications, then the band's
+            // background read where it is offered, and is then done whatever was chosen.
+            val setupViewModel: LetterSetupViewModel = hiltViewModel()
+            val letterSetup by setupViewModel.note.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(setupViewModel) {
+                setupViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
+            val askBackground = rememberLauncherForActivityResult(
+                PermissionController.createRequestPermissionResultContract(),
+            ) {
+                setupViewModel.done()
+                setupViewModel.lookedAt()
+            }
+            val askNotifications = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) {
+                if (letterSetup?.askBackground == true) {
+                    askBackground.launch(setOf(HealthPermissions.BACKGROUND))
+                } else {
+                    setupViewModel.done()
+                    setupViewModel.lookedAt()
+                }
+            }
             DayPager(
                 viewModel = dayViewModel,
                 onOpenProfile = onEditProfile,
@@ -292,6 +350,21 @@ fun MetaSelfNavHost(
                 onOpenSettings = { navController.navigate(Destination.Settings.route) },
                 onOpenWindowSettings = { navController.navigate(Destination.Settings.atWindow) },
                 onOpenManager = { navController.navigate(Destination.Foods.route) },
+                weeklyLetter = unreadLetter?.headline,
+                onOpenWeeklyLetter = { unreadLetter?.let { navController.navigate(Destination.Letter.of(it.weekMonday)) } },
+                onDismissWeeklyLetter = { unreadLetter?.let { unreadLetterViewModel.dismiss(it.weekMonday) } },
+                letterSetup = letterSetup?.text,
+                onSetUpLetter = {
+                    val note = letterSetup
+                    when {
+                        note == null -> Unit
+                        note.askNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU ->
+                            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        note.askBackground -> askBackground.launch(setOf(HealthPermissions.BACKGROUND))
+                        else -> setupViewModel.done()
+                    }
+                },
+                onDismissLetterSetup = setupViewModel::done,
             )
         }
 
@@ -394,8 +467,36 @@ fun MetaSelfNavHost(
                 onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
                 onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
+                onLetters = { navController.navigate(Destination.Letters.route) },
                 onAnswer = trainerViewModel::answer,
             )
+        }
+
+        composable(Destination.Letters.route) {
+            val lettersViewModel: LettersViewModel = hiltViewModel()
+            val lettersState by lettersViewModel.state.collectAsStateWithLifecycle()
+            // The letter Write it now wrote, or found already written, is opened.
+            LaunchedEffect(lettersState.show) {
+                lettersState.show?.let { week ->
+                    lettersViewModel.shown()
+                    navController.navigate(Destination.Letter.of(week))
+                }
+            }
+            LettersScreen(
+                state = lettersState,
+                onBack = { navController.popBackStack() },
+                onOpen = { navController.navigate(Destination.Letter.of(it)) },
+                onWriteNow = lettersViewModel::writeNow,
+            )
+        }
+
+        composable(
+            route = Destination.Letter.route,
+            arguments = listOf(navArgument(LetterViewModel.WEEK) { type = NavType.LongType }),
+        ) {
+            val letterViewModel: LetterViewModel = hiltViewModel()
+            val letterState by letterViewModel.state.collectAsStateWithLifecycle()
+            LetterScreen(state = letterState, onBack = { navController.popBackStack() })
         }
 
         composable(Destination.AboutMe.route) {

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!--
       The only permission this app has, and the only one it should ever need.
@@ -39,6 +40,8 @@
     <uses-permission android:name="android.permission.health.READ_SLEEP" />
     <!-- D72: history older than 30 days before the first grant, so the catch-up can reach back past it. -->
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+    <!-- D99: the weekly letter copies Sunday's band data before writing. -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <!-- Below Android 14 Health Connect is a separate app, and getSdkStatus can only see it if it is
          declared here (activity spec §1.1). Harmless above. -->
@@ -134,6 +137,21 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
+        <!--
+          D99: WorkManager is configured by MetaSelfApp (Hilt's worker factory), so its own start-up
+          initializer is removed. Without this the default one runs first and the factory is ignored.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
 
     </application>
 

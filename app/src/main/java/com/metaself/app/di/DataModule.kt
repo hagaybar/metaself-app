@@ -17,6 +17,18 @@ import com.metaself.app.data.food.SavedMealDao
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.drive.DriveArchiveDrive
+import com.metaself.app.data.letter.FoodTotals
+import com.metaself.app.data.letter.LetterStore
+import com.metaself.app.data.letter.RoomFoodTotals
+import com.metaself.app.data.letter.RoomLetterStore
+import com.metaself.app.data.letter.AndroidLetterNotifier
+import com.metaself.app.data.letter.AndroidNotificationAccess
+import com.metaself.app.data.letter.NotificationAccess
+import com.metaself.app.data.letter.LetterNotifier
+import com.metaself.app.data.letter.LetterScheduling
+import com.metaself.app.data.letter.WeeklyLetterJob
+import com.metaself.app.data.letter.WeeklyLetterScheduler
+import com.metaself.app.data.letter.WriteWeeklyLetter
 import com.metaself.app.data.lifecycle.AppForeground
 import com.metaself.app.data.lifecycle.ProcessAppForeground
 import com.metaself.app.data.health.ArchiveDrive
@@ -27,6 +39,8 @@ import com.metaself.app.data.health.HealthBookkeepingDao
 import com.metaself.app.data.health.HealthConnectReader
 import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.HealthReadingDao
+import com.metaself.app.data.health.BackgroundHealthCopy
+import com.metaself.app.data.health.BackgroundHealthRead
 import com.metaself.app.data.health.HealthRecordCopier
 import com.metaself.app.data.health.AppLabels
 import com.metaself.app.data.health.BandRecord
@@ -70,6 +84,7 @@ import com.metaself.app.data.day.MIGRATION_7_8
 import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.day.MIGRATION_9_10
 import com.metaself.app.data.day.MIGRATION_10_11
+import com.metaself.app.data.day.MIGRATION_11_12
 import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.RoomProgrammeStore
 import com.metaself.app.data.trainer.RoomTrainerStore
@@ -164,6 +179,7 @@ object DataModule {
         MIGRATION_8_9,
         MIGRATION_9_10,
         MIGRATION_10_11,
+        MIGRATION_11_12,
     ).build()
 
     @Provides
@@ -217,6 +233,10 @@ object DataModule {
     @Provides
     fun provideMealDao(database: MetaSelfDatabase): MealDao = database.mealDao()
 
+    /** The weekly letter's only read of what was eaten: each day's totals (D100). */
+    @Provides
+    fun provideFoodTotals(totals: RoomFoodTotals): FoodTotals = totals
+
     @Provides
     fun provideFoodDao(database: MetaSelfDatabase): FoodDao = database.foodDao()
 
@@ -263,6 +283,24 @@ object DataModule {
     fun provideProgrammeStore(store: RoomProgrammeStore): ProgrammeStore = store
 
     @Provides
+    @Singleton
+    fun provideLetterStore(store: RoomLetterStore): LetterStore = store
+
+    /** The weekly letter's setting re-queues the Sunday run through this (D99). */
+    @Provides
+    fun provideLetterScheduling(scheduler: WeeklyLetterScheduler): LetterScheduling = scheduler
+
+    @Provides
+    fun provideNotificationAccess(access: AndroidNotificationAccess): NotificationAccess = access
+
+    @Provides
+    fun provideLetterNotifier(notifier: AndroidLetterNotifier): LetterNotifier = notifier
+
+    /** Write it now's way to the letter's job (design question 19). */
+    @Provides
+    fun provideWeeklyLetterJob(job: WriteWeeklyLetter): WeeklyLetterJob = job
+
+    @Provides
     fun provideTrainerReviews(store: TrainerStore): TrainerReviews = store
 
     /** The zone the health record files rows under (D68). A lambda, so a travelling phone uses the
@@ -274,6 +312,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideHealthSource(reader: HealthConnectReader): HealthSource = reader
+
+    /** D99: the same reader, asked whether it may read while the app is not in front. */
+    @Provides
+    @Singleton
+    fun provideBackgroundHealthRead(reader: HealthConnectReader): BackgroundHealthRead = reader
 
     @Provides
     @Singleton
@@ -296,6 +339,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideHealthRecordCopier(sync: HealthRecordSync): HealthRecordCopier = sync
+
+    /** D99: the weekly letter's copy — the same singleton, so it never overlaps the day screen's. */
+    @Provides
+    @Singleton
+    fun provideBackgroundHealthCopy(sync: HealthRecordSync): BackgroundHealthCopy = sync
 
     /** Whether the app is in the foreground, which Health Connect requires of a read. */
     @Provides

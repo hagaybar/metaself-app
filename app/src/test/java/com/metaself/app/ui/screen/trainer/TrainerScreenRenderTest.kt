@@ -121,7 +121,7 @@ class TrainerScreenRenderTest {
     @Test
     fun `an unreadable record says so`() {
         val texts = render.texts {
-            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {}, {}, {}, {}, {})
+            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {}, {}, {}, {}, {}, {})
         }
 
         assertThat(texts).contains("The trainer's record could not be read; Recent problems says why.")
@@ -143,6 +143,19 @@ class TrainerScreenRenderTest {
         val written = draw(TrainerHome(null, null, emptyList()), aboutMe = "Invented note.\nSecond invented line.")
         assertThat(written).contains("Invented note.\nSecond invented line.")
         assertThat(written).doesNotContain("Tell the trainer about yourself — injuries, likes, what you're aiming for")
+    }
+
+    /** D103: every weekly letter, from a row under About me. */
+    @Test
+    fun `Weekly letters is a door under About me`() {
+        var opened = false
+        draw(TrainerHome(null, null, emptyList()), onLetters = { opened = true })
+
+        assertThat(render.isDrawnBefore("ABOUT ME", "Weekly letters")).isTrue()
+        assertThat(render.isDrawnBefore("Weekly letters", "Plan my next session")).isTrue()
+        assertThat(render.roleOf("Weekly letters")).isEqualTo(Role.Button)
+        render.click("Weekly letters")
+        assertThat(opened).isTrue()
     }
 
     @Test
@@ -224,6 +237,7 @@ class TrainerScreenRenderTest {
         onEvaluate: () -> Unit = {},
         onSeePlan: () -> Unit = {},
         onAdjust: () -> Unit = {},
+        onLetters: () -> Unit = {},
         aboutMe: String = "",
         onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
         answering: Set<Long> = emptySet(),
@@ -238,6 +252,7 @@ class TrainerScreenRenderTest {
             onEvaluate = onEvaluate,
             onSeePlan = onSeePlan,
             onAdjust = onAdjust,
+            onLetters = onLetters,
             onAnswer = onAnswer,
         )
     }

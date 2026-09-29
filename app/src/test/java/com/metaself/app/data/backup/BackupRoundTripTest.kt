@@ -60,6 +60,8 @@ import com.metaself.app.data.trainer.PlanConfirmationEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.data.trainer.TrainerReviewEntity
+import com.metaself.app.data.trainer.WeeklyLetterEntity
+import com.metaself.app.data.letter.InMemoryLetterSettingsStore
 import com.metaself.app.data.weight.WeightEntity
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
@@ -834,6 +836,25 @@ class BackupRoundTripTest {
         assertThat(db.trainerDao().allProgrammes()).isEmpty()
     }
 
+    /** D104: a letter goes out with the file and comes back equal but for its id; a version 9 file leaves none. */
+    @Test
+    fun `a weekly letter comes back as it was, and an older file leaves none`() = runTest {
+        val letter = WeeklyLetterEntity(0, 20_696, 1_000, "{}", "{}", "m", bandDataUntil = 2_000, readAtMillis = null)
+        db.trainerDao().insertLetter(letter.copy(id = 7))
+        letterSettings.setHour(21)
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        letterSettings.setHour(19)
+        repository().restore(file)
+
+        assertThat(db.trainerDao().allLetters().map { it.copy(id = 0) }).containsExactly(letter)
+        assertThat(letterSettings.settings.value.hour).isEqualTo(21)
+
+        repository().restore(BackupCodec.decode("""{"version": 9, "exported_at": 1000}""")!!)
+        assertThat(db.trainerDao().allLetters()).isEmpty()
+        assertThat(letterSettings.settings.value.hour).isEqualTo(21)
+    }
+
     /** D90: the note goes out with the file and comes back with it. Invented words. */
     @Test
     fun `the note about yourself comes back`() = runTest {
@@ -848,6 +869,7 @@ class BackupRoundTripTest {
     }
 
     private val aboutMe = InMemoryAboutMeStore()
+    private val letterSettings = InMemoryLetterSettingsStore()
 
     /** A synced forty-minute walk starting at [startedAt]. Invented figures. */
     private fun aWalk(startedAt: Long) = WorkoutEntity(
@@ -879,6 +901,7 @@ class BackupRoundTripTest {
         savedMeals = savedMeals,
         transaction = RoomDatabaseTransaction(db),
         snapshot = snapshot,
+        letterSettings = letterSettings,
     )
 
     private suspend fun insert(meal: Meal) {

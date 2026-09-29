@@ -21,7 +21,7 @@ android {
         applicationId = "com.metaself.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 125
+        versionCode = 126
 
         // The barcode reader ships a native model for every processor Android runs on. Only one of
         // them is a phone: arm64 is every Android handset of the last decade, and the x86 pair
@@ -32,7 +32,7 @@ android {
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
-        versionName = "0.69.0"
+        versionName = "0.70.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -211,6 +211,12 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    // D99: the weekly letter is written in the background; Android gives an alarm seconds, and the
+    // letter needs a copy and an AI answer. WorkManager waits for a network, retries and survives a
+    // restart; Hilt's factory lets the worker be injected.
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
+    ksp(libs.androidx.hilt.compiler)
 
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)

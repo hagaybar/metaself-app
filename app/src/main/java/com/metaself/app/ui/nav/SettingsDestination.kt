@@ -19,6 +19,8 @@ import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavController
 import com.metaself.app.data.health.HealthPermissions
 import com.metaself.app.ui.health.BandReportWording
+import com.metaself.app.ui.screen.letter.LetterSettingsSection
+import com.metaself.app.ui.screen.letter.LetterSettingsViewModel
 import com.metaself.app.ui.screen.settings.AiSettingsPage
 import com.metaself.app.ui.screen.settings.BandReportPage
 import com.metaself.app.ui.screen.settings.BandReportViewModel
@@ -187,16 +189,44 @@ internal fun SettingsDestination(
             )
         }
 
-        SettingsPage.AI -> AiSettingsPage(
-            state = settingsState,
-            onSaveKey = settingsViewModel::saveKey,
-            onClearKey = settingsViewModel::clearKey,
-            onSetModel = settingsViewModel::setModel,
-            onSetCeiling = settingsViewModel::setDailyCeiling,
-            onTest = settingsViewModel::test,
-            onDismissFailure = settingsViewModel::dismissFailure,
-            onBack = onBack,
-        )
+        SettingsPage.AI -> {
+            // The weekly letter's setting (D99), on this page's own entry.
+            val letterViewModel: LetterSettingsViewModel = hiltViewModel(here)
+            val letterState by letterViewModel.state.collectAsStateWithLifecycle()
+            LaunchedEffect(Unit) { letterViewModel.lookedAt() }
+            // Health Connect's own screen, for the one permission; whatever was chosen there, the page
+            // looks again rather than assuming. Declining is fine: the ask stays for later.
+            val askBackground = rememberLauncherForActivityResult(
+                PermissionController.createRequestPermissionResultContract(),
+            ) { letterViewModel.lookedAt() }
+            // As the meal reminder: asked when the letter is switched on, the setting saved either way.
+            val askForNotifications = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestPermission(),
+            ) { }
+            AiSettingsPage(
+                state = settingsState,
+                onSaveKey = settingsViewModel::saveKey,
+                onClearKey = settingsViewModel::clearKey,
+                onSetModel = settingsViewModel::setModel,
+                onSetCeiling = settingsViewModel::setDailyCeiling,
+                onTest = settingsViewModel::test,
+                onDismissFailure = settingsViewModel::dismissFailure,
+                onBack = onBack,
+                weeklyLetter = {
+                    LetterSettingsSection(
+                        state = letterState,
+                        onSetOn = { on ->
+                            letterViewModel.setOn(on)
+                            if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                askForNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        onSetHour = letterViewModel::setHour,
+                        onAskBackground = { askBackground.launch(setOf(HealthPermissions.BACKGROUND)) },
+                    )
+                },
+            )
+        }
 
         SettingsPage.FOOD_DATABASE -> FoodDatabaseSettingsPage(
             state = settingsState,

@@ -133,4 +133,26 @@ interface TrainerDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertConfirmations(confirmations: List<PlanConfirmationEntity>)
+
+    // The weekly letter (D104).
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertLetter(letter: WeeklyLetterEntity): Long
+
+    @Query("SELECT * FROM weekly_letters WHERE weekMonday = :weekMonday")
+    suspend fun letterOf(weekMonday: Long): WeeklyLetterEntity?
+
+    @Query("SELECT * FROM weekly_letters ORDER BY weekMonday DESC")
+    fun observeLetters(): Flow<List<WeeklyLetterEntity>>
+
+    @Query("UPDATE weekly_letters SET readAtMillis = :atMillis WHERE weekMonday = :weekMonday AND readAtMillis IS NULL")
+    suspend fun markLetterRead(weekMonday: Long, atMillis: Long)
+
+    @Query("SELECT * FROM weekly_letters ORDER BY id")
+    suspend fun allLetters(): List<WeeklyLetterEntity>
+
+    @Query("DELETE FROM weekly_letters")
+    suspend fun deleteLetters()
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertLetters(letters: List<WeeklyLetterEntity>)
 }

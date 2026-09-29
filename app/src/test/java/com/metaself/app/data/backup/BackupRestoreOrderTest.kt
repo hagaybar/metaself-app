@@ -20,10 +20,13 @@ import com.metaself.app.data.health.HealthDayDao
 import com.metaself.app.data.health.MovementCorrectionDao
 import com.metaself.app.data.health.SleepDao
 import com.metaself.app.data.health.WorkoutDao
+import com.metaself.app.data.letter.LetterSettings
+import com.metaself.app.data.letter.LetterSettingsStore
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.health.SessionSplitEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
+import com.metaself.app.data.trainer.WeeklyLetterEntity
 import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupAi
 import com.metaself.app.domain.backup.BackupArrival
@@ -45,6 +48,7 @@ import com.metaself.app.domain.backup.BackupTrainerProgramme
 import com.metaself.app.domain.backup.BackupSessionSplit
 import com.metaself.app.domain.backup.BackupTrainerReview
 import com.metaself.app.domain.backup.BackupWeight
+import com.metaself.app.domain.backup.BackupWeeklyLetter
 import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.food.FoodFacts
@@ -93,6 +97,7 @@ class BackupRestoreOrderTest {
                 "trainer.deletePlans",
                 "trainer.deleteProgrammes",
                 "trainer.deleteConfirmations",
+                "trainer.deleteLetters",
                 "splits.deleteAll",
                 "bookkeeping.clearSync",
                 "findOrCreate Yoghurt",
@@ -111,11 +116,14 @@ class BackupRestoreOrderTest {
                 "trainer.insertReviews",
                 "trainer.insertProgrammes",
                 "trainer.insertConfirmations",
+                "trainer.insertLetters",
                 "profile.save",
                 "saveRevision",
                 "saveArrival",
                 "ai.setModel",
                 "ai.setDailyCeiling",
+                "letter.setOn",
+                "letter.setHour",
                 "aboutMe.save",
                 "reminders.save",
                 "commit",
@@ -299,6 +307,7 @@ class BackupRestoreOrderTest {
                 savedMeals = SavedMeals(),
                 transaction = Transaction(),
                 snapshot = Snapshot(),
+                letterSettings = Letters(),
             ).restore(aFile())
         }
 
@@ -374,6 +383,35 @@ class BackupRestoreOrderTest {
         assertThat(result.trainerProgrammes).isEqualTo(1)
     }
 
+    /** D104: the letters are replaced inside the transaction, one per week, numbered afresh. Invented. */
+    @Test
+    fun `weekly letters are emptied and restored once a week, and counted`() = runTest {
+        val row = BackupWeeklyLetter(20_696, 1_000, "{}", "{}", "m", bandDataUntil = 2_000, readAtMillis = 3_000)
+        val file = aFile().copy(weeklyLetters = listOf(row, row.copy(createdAtMillis = 2_000), row.copy(weekMonday = 20_689)))
+
+        val result = restorer().restore(file)
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = written.getValue("trainer.insertLetters").first() as List<WeeklyLetterEntity>
+        assertThat(rows).containsExactly(
+            WeeklyLetterEntity(0, 20_696, 1_000, "{}", "{}", "m", 2_000, 3_000),
+            WeeklyLetterEntity(0, 20_689, 1_000, "{}", "{}", "m", 2_000, 3_000),
+        ).inOrder()
+        assertThat(result.weeklyLetters).isEqualTo(2)
+    }
+
+    /** D104: a file from before the letter's setting leaves the phone's switch and hour alone. */
+    @Test
+    fun `a file without the letter's setting leaves it alone, and an older file leaves no letters`() = runTest {
+        val result = restorer().restore(aFile().copy(version = 9, ai = BackupAi("some-model", 30)))
+
+        assertThat(log).containsAtLeast("trainer.deleteLetters", "trainer.insertLetters").inOrder()
+        assertThat(log).doesNotContain("letter.setOn")
+        assertThat(log).doesNotContain("letter.setHour")
+        assertThat(written.getValue("trainer.insertLetters").first() as List<*>).isEmpty()
+        assertThat(result.weeklyLetters).isEqualTo(0)
+    }
+
     /** What [block] threw, which must be a [T]. `assertThrows` takes no suspending block. */
     private inline fun <reified T : Throwable> thrownBy(block: () -> Unit): T {
         val thrown = runCatching(block).exceptionOrNull()
@@ -422,7 +460,7 @@ class BackupRestoreOrderTest {
         revision = BackupRevision(TEST_EPOCH_DAY, 80.0, 2_000, 2_100),
         arrival = BackupArrival(75.0, TEST_EPOCH_DAY),
         reminder = BackupReminder(enabled = true, hour = 20, minute = 0),
-        ai = BackupAi("some-model", 30),
+        ai = BackupAi("some-model", 30, weeklyLetter = false, weeklyLetterHour = 21),
         aboutMe = "Invented note.",
         workouts = listOf(
             BackupWorkout(
@@ -477,6 +515,7 @@ class BackupRestoreOrderTest {
         savedMeals = SavedMeals(),
         transaction = Transaction(),
         snapshot = snapshot,
+        letterSettings = Letters(),
     )
 
     /** Runs the block, and says whether it would have committed or rolled back. */
@@ -605,6 +644,17 @@ class BackupRestoreOrderTest {
         override suspend fun save(note: String) {
             log += "aboutMe.save"
             written["aboutMe.save"] = listOf(note)
+        }
+    }
+
+    private inner class Letters : LetterSettingsStore {
+        override val settings: Flow<LetterSettings> = MutableStateFlow(LetterSettings())
+        override suspend fun setOn(on: Boolean) {
+            log += "letter.setOn"
+        }
+
+        override suspend fun setHour(hour: Int) {
+            log += "letter.setHour"
         }
     }
 

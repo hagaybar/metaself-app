@@ -259,6 +259,26 @@ fun interface HealthRecordCopier {
     }
 }
 
+/** Health Connect's background-read permission (D99): whether this phone offers it, and whether it is held. */
+interface BackgroundHealthRead {
+    /** Never throws; false on anything that goes wrong. */
+    suspend fun offered(): Boolean
+    suspend fun granted(): Boolean
+
+    companion object {
+        val NONE = object : BackgroundHealthRead {
+            override suspend fun offered() = false
+            override suspend fun granted() = false
+        }
+    }
+}
+
+/** One copy pass without the foreground gate (D99), for a caller that has checked [BackgroundHealthRead.granted]. */
+fun interface BackgroundHealthCopy {
+    /** True when the pass ran to the end; false when it was refused or failed (already logged by kind). */
+    suspend fun copyInBackground(): Boolean
+}
+
 /** What Settings shows about the record. */
 data class HealthRecordState(
     val days: Int = 0,
