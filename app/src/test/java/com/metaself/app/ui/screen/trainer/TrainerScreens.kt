@@ -10,7 +10,9 @@ import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AskTheTrainer
+import com.metaself.app.data.trainer.FakeProgrammeStore
 import com.metaself.app.data.trainer.InMemoryAboutMeStore
+import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
@@ -72,8 +74,13 @@ internal object TrainerScreens {
         override fun <T : ViewModel> create(modelClass: Class<T>): T = make() as T
     }
 
-    fun ask(record: FakeMovementRecord, store: TrainerStore, trainer: Trainer) = AskTheTrainer(
-        record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer, InMemoryAboutMeStore(),
+    fun ask(
+        record: FakeMovementRecord,
+        store: TrainerStore,
+        trainer: Trainer,
+        programmes: ProgrammeStore = FakeProgrammeStore(),
+    ) = AskTheTrainer(
+        record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer, InMemoryAboutMeStore(), programmes,
         today, Now { NOW }, CurrentYear { TEST_YEAR },
     )
 }
