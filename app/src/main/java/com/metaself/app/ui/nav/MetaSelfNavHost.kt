@@ -475,6 +475,13 @@ fun MetaSelfNavHost(
         composable(Destination.Letters.route) {
             val lettersViewModel: LettersViewModel = hiltViewModel()
             val lettersState by lettersViewModel.state.collectAsStateWithLifecycle()
+            // The letter Write it now wrote, or found already written, is opened.
+            LaunchedEffect(lettersState.show) {
+                lettersState.show?.let { week ->
+                    lettersViewModel.shown()
+                    navController.navigate(Destination.Letter.of(week))
+                }
+            }
             LettersScreen(
                 state = lettersState,
                 onBack = { navController.popBackStack() },

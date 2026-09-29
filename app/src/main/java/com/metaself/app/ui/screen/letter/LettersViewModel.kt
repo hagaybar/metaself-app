@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.letter.LetterNoteStore
 import com.metaself.app.data.letter.LetterRun
 import com.metaself.app.data.letter.LetterSettingsStore
 import com.metaself.app.data.letter.LetterStore
@@ -46,6 +47,7 @@ class LettersViewModel internal constructor(
     private val store: LetterStore,
     private val job: WeeklyLetterJob,
     settings: LetterSettingsStore,
+    notes: LetterNoteStore,
     ai: AiSettingsStore,
     private val problems: ProblemLog,
     private val outliving: CoroutineScope,
@@ -57,10 +59,11 @@ class LettersViewModel internal constructor(
         store: LetterStore,
         job: WeeklyLetterJob,
         settings: LetterSettingsStore,
+        notes: LetterNoteStore,
         ai: AiSettingsStore,
         problems: ProblemLog,
         @ApplicationScope outliving: CoroutineScope,
-    ) : this(store, job, settings, ai, problems, outliving, { LocalDateTime.now() })
+    ) : this(store, job, settings, notes, ai, problems, outliving, { LocalDateTime.now() })
 
     /** One letter in the list: its week, its headline, and whether it has been opened. */
     data class Row(val weekMonday: Long, val week: String, val headline: String, val new: Boolean)
@@ -69,6 +72,7 @@ class LettersViewModel internal constructor(
      * @property writeWeek the week Write it now writes, when it is offered.
      * @property writing Write it now was tapped and has not finished; a second tap is ignored.
      * @property said what the last Write it now came to, when it was not a letter: a quiet week, or a failure.
+     * @property show the letter Write it now wrote, or found already written, to open; [shown] clears it.
      */
     data class State(
         val loading: Boolean = true,
@@ -79,6 +83,7 @@ class LettersViewModel internal constructor(
         val said: String? = null,
         val refused: ActionRefused? = null,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
+        val show: Long? = null,
     ) {
         val canWriteNow: Boolean get() = writeWeek != null
     }
@@ -88,8 +93,8 @@ class LettersViewModel internal constructor(
     private val local = MutableStateFlow(State())
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val listed = combine(store.observeAll(), settings.settings) { letters, chosen -> letters to chosen.hour }
-        .mapLatest { (letters, hour) -> Listed(letters, offered(hour)) }
+    private val listed = combine(store.observeAll(), settings.settings, notes.gaveUp) { letters, chosen, gaveUp -> Triple(letters, chosen, gaveUp) }
+        .mapLatest { (letters, chosen, gaveUp) -> Listed(letters, offered(chosen.on, chosen.hour, gaveUp)) }
         .catch { failure ->
             if (failure is CancellationException) throw failure
             runCatching { problems.record(LetterRun.KIND, "not listed: ${failure::class.java.simpleName}") }
@@ -106,10 +111,16 @@ class LettersViewModel internal constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
-    /** The week there is to write now (design question 19), if it still wants a letter; read only, never an ask. */
-    private suspend fun offered(hour: Int): Long? {
+    /**
+     * The week there is to write now (design question 19), if it still wants a letter and the Sunday run
+     * will not write it: the run is past its Monday-noon deadline, has given up on the week, or is switched
+     * off. While the run may still retry, a tap here would only race it. Read only, never an ask.
+     */
+    private suspend fun offered(on: Boolean, hour: Int, gaveUp: Long?): Long? {
         val now = clock()
         val week = LetterSchedule.weekToWrite(now, hour) ?: (MovementWeek.mondayOf(now.toLocalDate().toEpochDay()) - 7)
+        val runStillTrying = on && gaveUp != week && LetterSchedule.mayRetry(week, now)
+        if (runStillTrying) return null
         return week.takeIf { LetterRun.guarded(problems, "not checked") { job.wanted(it) } == true }
     }
 
@@ -124,18 +135,33 @@ class LettersViewModel internal constructor(
             onRefused = { local.update { it.copy(writing = false, refused = ActionRefused.NOTHING_CHANGED) } },
             // Through the Sunday run's own guard: a failure is logged by kind, and never reaches the
             // screen's logging, which would write the exception's message.
-            work = { LetterRun.guarded(problems, "not written") { job.write(week, copy = false) } },
+            work = { LetterRun.guarded(problems, "not written") { writeOrFind(week) } },
         ) { outcome ->
             local.update {
                 when (outcome) {
                     null -> it.copy(writing = false, refused = ActionRefused.NOTHING_CHANGED)
-                    is WriteWeeklyLetter.Outcome.Written, WriteWeeklyLetter.Outcome.AlreadyWritten -> it.copy(writing = false)
+                    is WriteWeeklyLetter.Outcome.Written, WriteWeeklyLetter.Outcome.AlreadyWritten -> it.copy(writing = false, show = week)
                     WriteWeeklyLetter.Outcome.Quiet -> it.copy(writing = false, said = LetterWording.QUIET)
                     is WriteWeeklyLetter.Outcome.Retry -> it.copy(writing = false, said = TrainerWording.failure(outcome.failure))
                     is WriteWeeklyLetter.Outcome.GiveUp -> it.copy(writing = false, said = TrainerWording.failure(outcome.failure))
                 }
             }
         }
+    }
+
+    /** The letter Write it now asked to show has been opened. */
+    fun shown() = local.update { it.copy(show = null) }
+
+    /**
+     * The ask; a store refused by the one-letter-a-week rule — the Sunday run stored the week's letter
+     * meanwhile — is the letter already written, never a failure. Anything else is thrown to be logged.
+     */
+    private suspend fun writeOrFind(week: Long): WriteWeeklyLetter.Outcome = try {
+        job.write(week, copy = false)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        if (runCatching { store.of(week) }.getOrNull() != null) WriteWeeklyLetter.Outcome.AlreadyWritten else throw failure
     }
 
     /** The ceiling is only said beside Write it now; a settings store that cannot be read says the default. */

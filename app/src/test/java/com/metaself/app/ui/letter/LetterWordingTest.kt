@@ -136,8 +136,9 @@ class LetterWordingTest {
         assertThat(LetterWording.QUIET).isEqualTo("Nothing was logged that week, so there is nothing to write.")
         assertThat(LetterWording.privacyLetter(20)).isEqualTo(
             "Sends to the AI provider, with your key: your week's food as averages a day, your weight trend, your " +
-                "sessions and steps, your note about yourself, your goal, age, sex and height. Never a meal or a " +
-                "food. One of today's 20 AI requests.",
+                "sessions and steps, your weekly plan's title and this week's planned sessions, your note about " +
+                "yourself, your goal, age, sex and height, and last week's \"for next week\" line. Never a meal or " +
+                "a food. One of today's 20 AI requests.",
         )
     }
 

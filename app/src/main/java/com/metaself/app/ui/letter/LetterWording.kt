@@ -146,8 +146,9 @@ object LetterWording {
     /** What Write it now sends, said beside it (D16, D101). */
     fun privacyLetter(ceiling: Int): String =
         "Sends to the AI provider, with your key: your week's food as averages a day, your weight trend, your " +
-            "sessions and steps, your note about yourself, your goal, age, sex and height. Never a meal or a " +
-            "food. One of today's $ceiling AI requests."
+            "sessions and steps, your weekly plan's title and this week's planned sessions, your note about " +
+            "yourself, your goal, age, sex and height, and last week's \"for next week\" line. Never a meal or " +
+            "a food. One of today's $ceiling AI requests."
 
     private fun Int?.or(format: (Int) -> String): String = this?.let(format) ?: DASH
 

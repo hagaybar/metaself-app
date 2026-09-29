@@ -57,6 +57,13 @@ interface LetterNoteStore {
     /** Whether the one-time "allow notifications" note has been put away or its Set up gone through. */
     val setupDone: Flow<Boolean>
     suspend fun markSetupDone()
+
+    /**
+     * The Monday of the last week the Sunday run gave up on (no key, a refusal, the ceiling), so Write it
+     * now is offered at once rather than after Monday noon; null for none.
+     */
+    val gaveUp: Flow<Long?>
+    suspend fun markGaveUp(weekMonday: Long)
 }
 
 class DataStoreLetterNoteStore(private val store: DataStore<Preferences>) : LetterNoteStore {
@@ -72,7 +79,14 @@ class DataStoreLetterNoteStore(private val store: DataStore<Preferences>) : Lett
         store.edit { it[SETUP_DONE] = true }
     }
 
+    override val gaveUp: Flow<Long?> = store.data.map { it[GAVE_UP] }
+
+    override suspend fun markGaveUp(weekMonday: Long) {
+        store.edit { it[GAVE_UP] = weekMonday }
+    }
+
     private companion object {
+        val GAVE_UP = longPreferencesKey("weekly_letter_gave_up")
         val DISMISSED = longPreferencesKey("weekly_letter_note_dismissed")
         val SETUP_DONE = booleanPreferencesKey("weekly_letter_setup_done")
     }

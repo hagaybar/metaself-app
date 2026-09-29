@@ -5,14 +5,13 @@ import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.letter.FakeLetterStore
 import com.metaself.app.data.letter.LETTER_MONDAY
-import com.metaself.app.data.letter.LetterNoteStore
+import com.metaself.app.data.letter.InMemoryLetterNoteStore
 import com.metaself.app.data.letter.aWeeklyLetter
 import com.metaself.app.data.time.Today
 import com.metaself.app.ui.RecordingProblemLog
 import com.metaself.app.ui.screen.trainer.TrainerScreens
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -31,16 +30,7 @@ class UnreadLetterViewModelTest {
 
     private val dispatcher = StandardTestDispatcher()
     private val store = FakeLetterStore()
-    private val notes = object : LetterNoteStore {
-        override val dismissed = MutableStateFlow<Long?>(null)
-        override suspend fun dismiss(weekMonday: Long) {
-            dismissed.value = weekMonday
-        }
-        override val setupDone = MutableStateFlow(false)
-        override suspend fun markSetupDone() {
-            setupDone.value = true
-        }
-    }
+    private val notes = InMemoryLetterNoteStore()
     private var today = LETTER_MONDAY + 7
 
     @BeforeEach

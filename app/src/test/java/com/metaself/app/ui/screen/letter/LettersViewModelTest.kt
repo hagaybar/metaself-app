@@ -4,7 +4,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.letter.FakeLetterStore
+import com.metaself.app.data.letter.InMemoryLetterNoteStore
 import com.metaself.app.data.letter.InMemoryLetterSettingsStore
+import com.metaself.app.data.letter.LetterSettings
 import com.metaself.app.data.letter.LETTER_MONDAY
 import com.metaself.app.data.letter.WeeklyLetterJob
 import com.metaself.app.data.letter.WriteWeeklyLetter
@@ -46,6 +48,9 @@ class LettersViewModelTest {
     private val problems = RecordingProblemLog()
     private val store = FakeLetterStore()
     private val job = FakeJob()
+    private val settings = InMemoryLetterSettingsStore()
+    private val notes = InMemoryLetterNoteStore()
+    private var now = NOW
 
     @BeforeEach
     fun setUp() = Dispatchers.setMain(dispatcher)
@@ -104,6 +109,7 @@ class LettersViewModelTest {
 
         assertThat(job.written).containsExactly(LETTER_MONDAY to false)
         assertThat(viewModel.state.value.writing).isFalse()
+        assertThat(viewModel.state.value.show).isEqualTo(LETTER_MONDAY)
         assertThat(viewModel.state.value.canWriteNow).isFalse()
         assertThat(store.letters.value.map { it.weekMonday }).containsExactly(LETTER_MONDAY)
     }
@@ -132,6 +138,50 @@ class LettersViewModelTest {
         assertThat(viewModel.state.value.said).isEqualTo("No API key yet. Add one in settings.")
     }
 
+    /** Sunday 21:00 on the week's own Sunday: the Sunday run may still retry until Monday noon, so no race. */
+    @Test
+    fun `while the Sunday run may still write the week, Write it now waits`() = runTest {
+        now = LocalDate.ofEpochDay(LETTER_MONDAY + 6).atTime(21, 0)
+        val viewModel = watched()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.canWriteNow).isFalse()
+    }
+
+    @Test
+    fun `once the Sunday run has given up on the week, or the letter is off, Write it now is offered at once`() = runTest {
+        now = LocalDate.ofEpochDay(LETTER_MONDAY + 6).atTime(21, 0)
+        notes.gaveUp.value = LETTER_MONDAY
+        val gaveUp = watched()
+        advanceUntilIdle()
+        assertThat(gaveUp.state.value.writeWeek).isEqualTo(LETTER_MONDAY)
+
+        notes.gaveUp.value = null
+        settings.settings.value = LetterSettings(on = false)
+        val off = watched()
+        advanceUntilIdle()
+        assertThat(off.state.value.writeWeek).isEqualTo(LETTER_MONDAY)
+    }
+
+    /** The Sunday run stored the week's letter while this ask ran: the store's one-a-week rule is not a failure. */
+    @Test
+    fun `a store refused because the week already has its letter shows that letter`() = runTest {
+        job.outcome = { week ->
+            store.add(aWeeklyLetter(week))
+            store.add(aWeeklyLetter(week))
+            error("unreachable")
+        }
+        val viewModel = watched()
+        advanceUntilIdle()
+
+        viewModel.writeNow()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.refused).isNull()
+        assertThat(viewModel.state.value.show).isEqualTo(LETTER_MONDAY)
+        assertThat(problems.recorded).isEmpty()
+    }
+
     /** D8: as the Sunday run — the failure's kind and class, never its message, which here holds the letter's words. */
     @Test
     fun `a failure with the letter's words in its message is logged by kind alone, and said`() = runTest {
@@ -150,7 +200,7 @@ class LettersViewModelTest {
 
     private fun TestScope.watched(): LettersViewModel {
         val make = {
-            LettersViewModel(store, job, InMemoryLetterSettingsStore(), FakeAiSettings(), problems, outliving) { NOW }
+            LettersViewModel(store, job, settings, notes, FakeAiSettings(), problems, outliving) { now }
         }
         val viewModel = ViewModelProvider(ViewModelStore(), TrainerScreens.factory(make))[LettersViewModel::class.java]
         backgroundScope.launch { viewModel.state.collect {} }

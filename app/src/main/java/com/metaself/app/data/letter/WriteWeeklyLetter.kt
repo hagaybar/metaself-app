@@ -36,14 +36,6 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /**
- * One weekly letter (D99–D102), from the record: copy the band's data if allowed, count the week and the
- * four before it, ask once, store. Used by the worker (Sunday) and by Write it now (a tap). Never throws
- * for a failed ask — it says what happened; a failed read or write throws, and the caller logs it by kind.
- *
- * Nothing here logs: the writer logs a failed ask by its kind, and a failure's details — an
- * [EstimateResult.Unreadable]'s answer above all — never leave the [Outcome].
- */
-/**
  * What Write it now needs of the letter's job (design question 19): [WriteWeeklyLetter] is the one; an
  * interface so the screen's test can stand in for it.
  */
@@ -52,6 +44,14 @@ interface WeeklyLetterJob {
     suspend fun wanted(weekMonday: Long): Boolean
 }
 
+/**
+ * One weekly letter (D99–D102), from the record: copy the band's data if allowed, count the week and the
+ * four before it, ask once, store. Used by the worker (Sunday) and by Write it now (a tap). Never throws
+ * for a failed ask — it says what happened; a failed read or write throws, and the caller logs it by kind.
+ *
+ * Nothing here logs: the writer logs a failed ask by its kind, and a failure's details — an
+ * [EstimateResult.Unreadable]'s answer above all — never leave the [Outcome].
+ */
 class WriteWeeklyLetter @Inject constructor(
     private val food: FoodTotals,
     private val weights: WeightRepository,

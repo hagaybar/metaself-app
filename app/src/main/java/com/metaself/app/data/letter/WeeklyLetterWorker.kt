@@ -24,6 +24,7 @@ class WeeklyLetterWorker @AssistedInject constructor(
     private val write: WriteWeeklyLetter,
     private val settings: LetterSettingsStore,
     private val scheduler: WeeklyLetterScheduler,
+    private val notes: LetterNoteStore,
     private val problems: ProblemLog,
 ) : CoroutineWorker(context, params) {
 
@@ -56,6 +57,8 @@ class WeeklyLetterWorker @AssistedInject constructor(
             LetterStep.RETRY -> Result.retry()
             LetterStep.NOTIFY_FAILED -> {
                 LetterNotifications.failed(applicationContext)
+                // So Write it now is offered at once: this run will not try the week again.
+                LetterRun.guarded(problems, "give-up not kept") { notes.markGaveUp(week) }
                 scheduleNext(week)
                 Result.success()
             }

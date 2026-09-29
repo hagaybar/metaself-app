@@ -21,16 +21,16 @@ import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/**
- * Keeps exactly one Sunday run queued (design question 4); cancels it when the letter is switched off.
- * Called when the app opens and at every change of the setting ([keepScheduled]), and by the worker when
- * it finishes; any number of calls leave the same one run.
- */
 /** Queue the Sunday run as the setting now says; an interface so the setting's view model can be tested. */
 interface LetterScheduling {
     suspend fun schedule()
 }
 
+/**
+ * Keeps exactly one Sunday run queued (design question 4); cancels it when the letter is switched off.
+ * Called when the app opens and at every change of the setting ([keepScheduled]), and by the worker when
+ * it finishes; any number of calls leave the same one run.
+ */
 @Singleton
 class WeeklyLetterScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -73,8 +73,9 @@ class WeeklyLetterScheduler @Inject constructor(
      * trying: that run writes the week, and queues the next Sunday itself). Switched off, both names are
      * cancelled, a run in progress included. The week's uniqueness (design question 7) keeps any overlap
      * to one letter.
+     *
+     * [handledMonday]: the week of the run calling this, whose Sunday is never queued again ([LetterSchedule.nextRunAfter]).
      */
-    /** [handledMonday]: the week of the run calling this, whose Sunday is never queued again ([LetterSchedule.nextRunAfter]). */
     suspend fun schedule(now: LocalDateTime = LocalDateTime.now(), handledMonday: Long? = null) {
         val manager = WorkManager.getInstance(context)
         val chosen = settings.settings.first()
