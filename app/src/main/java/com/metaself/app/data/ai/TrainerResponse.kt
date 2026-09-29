@@ -1,11 +1,19 @@
 package com.metaself.app.data.ai
 
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.Evaluation
+import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanStep
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TrainerReply
+import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
@@ -34,6 +42,17 @@ object TrainerResponse {
 
     fun parseFeedback(body: String, model: String): TrainerReply<Feedback> =
         content(body)?.let(::readFeedback)?.let { TrainerReply.Answered(it, model) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    /** D94: the evaluation and a plan that [fits][WeeksPlan.fits] [ask]; anything else is unreadable. */
+    fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk): TrainerReply<EvaluationAndPlan> =
+        content(body)?.let(::readEvaluationAndPlan)?.takeIf { it.plan.fits(ask) }?.let { TrainerReply.Answered(it, model) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    /** D97: this week and the weeks after, [fitting the rest][WeeksPlan.fitsRest]. */
+    fun parseAdjusted(body: String, model: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): TrainerReply<WeeksPlan> =
+        content(body)?.let(::readWeeksPlan)?.takeIf { it.fitsRest(weeksLeft, perWeek, thisWeekMax) }
+            ?.let { TrainerReply.Answered(it, model) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
     /** A plan in the reply's shape, or null for anything else. */
@@ -71,10 +90,67 @@ object TrainerResponse {
         feedback.takeIf(::usable)
     }.getOrNull()
 
+    fun readEvaluationAndPlan(content: String?): EvaluationAndPlan? = runCatching {
+        val payload = json.parseToJsonElement(content!!).jsonObject
+        EvaluationAndPlan(
+            evaluation(payload.getValue("evaluation").jsonObject)!!,
+            weeksPlan(payload.getValue("plan").jsonObject)!!,
+        )
+    }.getOrNull()
+
+    /** An evaluation in the reply's shape, or null for anything else. */
+    fun readEvaluation(content: String?): Evaluation? =
+        runCatching { evaluation(json.parseToJsonElement(content!!).jsonObject) }.getOrNull()
+
+    /** A plan of weeks in the reply's shape, or null for anything else. A week may be empty (D97). */
+    fun readWeeksPlan(content: String?): WeeksPlan? =
+        runCatching { weeksPlan(json.parseToJsonElement(content!!).jsonObject) }.getOrNull()
+
     /** The same shape [TrainerPrompt] sends an earlier plan in, so stored and sent cannot drift. */
     fun encodePlan(plan: SessionPlan): String = TrainerPrompt.planJson(plan).toString()
 
     fun encodeFeedback(feedback: Feedback): String = TrainerPrompt.feedbackJson(feedback).toString()
+
+    fun encodeEvaluation(evaluation: Evaluation): String = TrainerPrompt.evaluationJson(evaluation).toString()
+
+    fun encodeWeeksPlan(plan: WeeksPlan): String = TrainerPrompt.weeksPlanJson(plan).toString()
+
+    private fun evaluation(payload: JsonObject): Evaluation? = Evaluation(
+        headline = payload.text("headline"),
+        goingWell = payload.text("going_well"),
+        toWorkOn = payload.text("to_work_on"),
+        sinceLast = payload.text("since_last"),
+    ).takeIf { it.headline.isNotEmpty() && it.goingWell.isNotEmpty() && it.toWorkOn.isNotEmpty() }
+
+    private fun weeksPlan(payload: JsonObject): WeeksPlan? {
+        val weeks = payload.getValue("weeks").jsonArray.map { element ->
+            val week = element.jsonObject
+            PlanWeek(week.text("focus"), week.getValue("sessions").jsonArray.map { planned(it.jsonObject) })
+        }
+        return WeeksPlan(payload.text("title"), weeks, payload.text("why"))
+            .takeIf { it.title.isNotEmpty() && it.why.isNotEmpty() && it.weeks.isNotEmpty() }
+    }
+
+    /** Throws on anything unknown; [PlannedSession]'s own checks refuse minutes out of 5..180. */
+    private fun planned(payload: JsonObject): PlannedSession = PlannedSession(
+        kind = when (payload.text("kind")) {
+            "walk" -> WorkoutKind.WALK
+            "run" -> WorkoutKind.RUN
+            "cycle" -> WorkoutKind.CYCLE
+            "swim" -> WorkoutKind.SWIM
+            "strength" -> WorkoutKind.STRENGTH
+            "other" -> WorkoutKind.OTHER
+            else -> null
+        }!!,
+        minutes = payload.minute("minutes"),
+        effort = when (payload.text("effort")) {
+            "easy" -> PlannedEffort.EASY
+            "steady" -> PlannedEffort.STEADY
+            "push" -> PlannedEffort.PUSH
+            else -> null
+        }!!,
+        what = payload.text("what").also { require(it.isNotEmpty()) { "a planned session says what it is" } },
+    )
 
     private fun content(body: String): String? = runCatching {
         json.parseToJsonElement(body).jsonObject["choices"]!!.jsonArray

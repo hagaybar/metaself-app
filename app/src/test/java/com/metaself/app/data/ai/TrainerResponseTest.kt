@@ -2,7 +2,11 @@ package com.metaself.app.data.ai
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.PlanFollowed
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.TrainerReply
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
@@ -110,4 +114,72 @@ class TrainerResponseTest {
 
     private fun reply(content: String): String =
         """{"choices":[{"message":{"content":${JsonPrimitive(content)}}}]}"""
+
+    // --- D94, D97. Every title, focus and line is invented. -----------------------------------------
+
+    private fun session(kind: String = "walk", minutes: Int = 30, effort: String = "easy") =
+        """{"kind":"$kind","minutes":$minutes,"effort":"$effort","what":"Invented line"}"""
+
+    private fun week(vararg sessions: String) = """{"focus":"Invented focus","sessions":[${sessions.joinToString(",")}]}"""
+
+    private fun weeksPlan(vararg weeks: String) = """{"title":"Invented plan","weeks":[${weeks.joinToString(",")}],"why":"Invented reason."}"""
+
+    private val evaluation = """{"headline":"Invented headline","going_well":"Invented.","to_work_on":"Invented.","since_last":""}"""
+
+    private fun evaluated(plan: String) = """{"evaluation":$evaluation,"plan":$plan}"""
+
+    private val twoWeeks = weeksPlan(week(session(), session("run", 20, "push")), week(session(minutes = 40, effort = "steady")))
+
+    @Test
+    fun `an evaluation reply becomes an evaluation and a plan`() {
+        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2)) as TrainerReply.Answered
+
+        assertThat(reply.value.evaluation.headline).isEqualTo("Invented headline")
+        assertThat(reply.value.evaluation.sinceLast).isEmpty()
+        assertThat(reply.value.plan.weeks.map { it.sessions.size }).containsExactly(2, 1).inOrder()
+        assertThat(reply.value.plan.weeks.first().sessions.last())
+            .isEqualTo(PlannedSession(WorkoutKind.RUN, 20, PlannedEffort.PUSH, "Invented line"))
+    }
+
+    @Test
+    fun `a plan with the wrong weeks, too many or no sessions in a week, is unreadable`() {
+        val threeInOneWeek = weeksPlan(week(session(), session(), session()), week(session()))
+        val anEmptyWeek = weeksPlan(week(), week(session()))
+
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(4, 2)))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(threeInOneWeek)), "a-model", ProgrammeAsk(2, 2)))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(anEmptyWeek)), "a-model", ProgrammeAsk(2, 2)))
+    }
+
+    @Test
+    fun `an unknown kind or effort, minutes out of range or as text, or an empty line is unreadable`() {
+        val ask = ProgrammeAsk(2, 2)
+        listOf(
+            session(kind = "dance"), session(effort = "hard"), session(minutes = 4), session(minutes = 181),
+            session().replace("30", "\"30\""), session().replace("Invented line", " "),
+        ).forEach { bad ->
+            assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(weeksPlan(week(bad), week(session())))), "a-model", ask))
+        }
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks).replace("Invented headline", "")), "a-model", ask))
+    }
+
+    @Test
+    fun `an adjusted rest may leave this week empty, but not a later one, and has the weeks left`() {
+        val rest = weeksPlan(week(), week(session()))
+
+        assertThat(TrainerResponse.parseAdjusted(reply(rest), "a-model", weeksLeft = 2, perWeek = 3, thisWeekMax = 1))
+            .isInstanceOf(TrainerReply.Answered::class.java)
+        assertUnreadable(TrainerResponse.parseAdjusted(reply(rest), "a-model", weeksLeft = 3, perWeek = 3, thisWeekMax = 1))
+        assertUnreadable(TrainerResponse.parseAdjusted(reply(weeksPlan(week(session()), week())), "a-model", 2, 3, 1))
+        assertUnreadable(TrainerResponse.parseAdjusted(reply(weeksPlan(week(session(), session()), week(session()))), "a-model", 2, 3, 1))
+    }
+
+    @Test
+    fun `an evaluation and a plan survive being written for storage`() {
+        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2)) as TrainerReply.Answered
+
+        assertThat(TrainerResponse.readEvaluation(TrainerResponse.encodeEvaluation(reply.value.evaluation))).isEqualTo(reply.value.evaluation)
+        assertThat(TrainerResponse.readWeeksPlan(TrainerResponse.encodeWeeksPlan(reply.value.plan))).isEqualTo(reply.value.plan)
+        assertThat(TrainerResponse.readWeeksPlan("not json")).isNull()
+    }
 }
