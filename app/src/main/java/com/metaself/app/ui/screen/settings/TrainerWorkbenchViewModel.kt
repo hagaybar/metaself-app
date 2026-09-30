@@ -30,7 +30,7 @@ import javax.inject.Inject
 
 /**
  * "Test the trainer's instructions" (D106), on the page's own back-stack entry: the loaded text lives in
- * [State.instructions] and goes when the page is left. Nothing is stored; the forms are the trainer screens' own.
+ * [State.instructions] and goes when the page is left. Nothing is written to the record; the forms are the trainer screens' own.
  *
  * The chosen path and its inputs — the session, the plan form, the weeks-ahead form and the change words —
  * are kept in [savedState], so they outlive Android closing the app in the background while a file picker

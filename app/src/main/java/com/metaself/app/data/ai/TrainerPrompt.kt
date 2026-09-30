@@ -216,7 +216,7 @@ object TrainerPrompt {
     }
 
     /**
-     * D106: the whole system message [path] sends today — the shared part and the path's own, joined as
+     * D106: the whole system message [path] sends today — the shared part, the voice paragraph and the path's own, joined as
      * every body joins them. The workbench saves this to a file as the starting point. A model without the
      * strict format is also sent the schema paragraph after it; that is reply shape, which the workbench
      * never sends.
