@@ -10,6 +10,7 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
+import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
@@ -39,6 +40,7 @@ import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
+import com.metaself.app.domain.weight.WeightReading
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -56,8 +58,10 @@ class TrainerWorkbenchTest {
     private val trainer = FakeTrainer()
     private val programmes = FakeProgrammeStore()
     private val sender = RecordingWorkbenchSender()
+    private val weights = InMemoryWeightRepository(listOf(WeightReading(TEST_EPOCH_DAY - 10, 74.0)))
+    private val aboutMe = InMemoryAboutMeStore("Invented note.")
     private val ask = AskTheTrainer(
-        record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer, InMemoryAboutMeStore(), programmes,
+        record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe, programmes,
         Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW }, CurrentYear { TEST_YEAR },
     )
     private val workbench = TrainerWorkbench(ask, store, record, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, sender)
@@ -66,10 +70,11 @@ class TrainerWorkbenchTest {
     fun setUp() {
         store.workouts.value = listOf(walk(id = 1, day = TEST_EPOCH_DAY))
         record.workouts.value = store.workouts.value
+        record.days.value = listOf(HealthDay(TEST_EPOCH_DAY, steps = 8_000, distanceM = 4_000, activeKcal = 300))
     }
 
     @Test
-    fun `feedback's request is the real one, from the stored review, which is not saved again`() = runTest {
+    fun `feedback's request is the real one, from the stored review`() = runTest {
         val planId = storedReview()
         planRunning()
 
@@ -80,6 +85,9 @@ class TrainerWorkbenchTest {
         assertThat(bench).isEqualTo(trainer.asked.single())
         assertThat(TrainerPrompt.userMessage(bench)).isEqualTo(TrainerPrompt.userMessage(trainer.asked.single()))
         assertThat((bench.question as TrainerQuestion.Review).planned).isEqualTo(PlannedTick(1, 2, WALK_30))
+        // The asked session's own earlier feedback is excluded, as the real ask excludes it too (exceptWorkoutId).
+        assertThat(bench.earlierFeedback).contains(OTHER_FEEDBACK)
+        assertThat(bench.earlierFeedback).doesNotContain(OWN_FEEDBACK)
     }
 
     @Test
@@ -128,7 +136,10 @@ class TrainerWorkbenchTest {
         assertThat(sender.sent).isEmpty()
     }
 
-    /** Every write of both stores throws from here on; a workbench write would fail the test. */
+    /**
+     * The real ask (AskTheTrainer) writes only to the trainer store and the programme store; both are
+     * made to fail here, so a workbench write would fail the test.
+     */
     @Test
     fun `a run on every path writes nothing, and sends the given instructions with the real request`() = runTest {
         storedReview()
@@ -153,7 +164,7 @@ class TrainerWorkbenchTest {
         assertThat(programmes.rows.value).isEqualTo(rows)
         assertThat(programmes.confirmationRows.value).isEqualTo(confirmations)
         assertThat(sender.sent.map { it.first }).containsExactly(SYSTEM, SYSTEM, SYSTEM, SYSTEM)
-        assertThat(sender.sent[1].second).isEqualTo(workbench.request(TrainerWorkbench.Inputs.Plan(ANSWERS)))
+        inputs.zip(sender.sent).forEach { (input, sent) -> assertThat(sent.second).isEqualTo(workbench.request(input)) }
     }
 
     @Test
@@ -174,10 +185,36 @@ class TrainerWorkbenchTest {
         TrainerPath.entries.forEach { assertThat(workbench.appInstructions(it)).isEqualTo(TrainerPrompt.instructions(it)) }
     }
 
-    /** A stored review of session 1 naming a stored single-session plan; returns the plan's id. */
+    @Test
+    fun `whether a plan runs`() = runTest {
+        assertThat(workbench.planRuns()).isFalse()
+
+        planRunning()
+
+        assertThat(workbench.planRuns()).isTrue()
+    }
+
+    /**
+     * A stored review of session 1 naming a stored single-session plan, with its own earlier feedback
+     * (which the real ask excludes when asking about session 1 again); a second session's review carries
+     * a different feedback (which the real ask includes). Returns the plan's id.
+     */
     private suspend fun storedReview(): Long {
         val planId = store.addPlan(TrainerPlan(0, NOW - HOUR, ANSWERS, PLAN, "a-model", kept = false))
-        store.putReview(TrainerReview(workoutId = 1, planId = planId, felt = Felt.HARD, words = "Invented words."))
+        store.putReview(
+            TrainerReview(
+                workoutId = 1, planId = planId, felt = Felt.HARD, words = "Invented words.",
+                feedback = OWN_FEEDBACK, feedbackAtMillis = NOW - HOUR,
+            ),
+        )
+        store.workouts.value = store.workouts.value + walk(id = 2, day = TEST_EPOCH_DAY - 1)
+        record.workouts.value = store.workouts.value
+        store.putReview(
+            TrainerReview(
+                workoutId = 2, planId = null, felt = Felt.EASY, words = "Invented words too.",
+                feedback = OTHER_FEEDBACK, feedbackAtMillis = NOW - 2 * HOUR,
+            ),
+        )
         return planId
     }
 
@@ -206,6 +243,8 @@ class TrainerWorkbenchTest {
             "Invented reason.",
         )
         val FEEDBACK = Feedback("Invented headline.", "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.YES)
+        val OWN_FEEDBACK = Feedback("Invented own headline.", "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.YES)
+        val OTHER_FEEDBACK = Feedback("Invented other headline.", "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.PARTLY)
         val WALK_30 = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Easy walk")
         val WEEKS = WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(WALK_30, WALK_30)) }, "Invented reason.")
         val EVALUATION = Evaluation("Invented headline.", "Invented.", "Invented.", "")

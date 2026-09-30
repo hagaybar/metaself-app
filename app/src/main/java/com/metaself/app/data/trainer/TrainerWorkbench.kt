@@ -35,6 +35,7 @@ class TrainerWorkbench @Inject constructor(
         data class Adjust(val words: String) : Inputs
     }
 
+    /** What [send] came to: the reply, or why nothing was sent. */
     sealed interface Run {
         data class Replied(val reply: WorkbenchReply) : Run
 
@@ -53,6 +54,7 @@ class TrainerWorkbench @Inject constructor(
             .sortedByDescending { it.startedAtMillis }
     }
 
+    /** Whether a weekly plan runs right now. Reads only. */
     suspend fun planRuns(): Boolean = ask.running() != null
 
     /** The system message [path] sends today, exactly. */
@@ -61,9 +63,10 @@ class TrainerWorkbench @Inject constructor(
     /** The request the real ask would send for [inputs]; null when adjusting with no plan, or the session is gone. */
     suspend fun request(inputs: Inputs): TrainerRequest? = when (inputs) {
         is Inputs.Feedback -> store.workout(inputs.workoutId)?.let { workout ->
-            // The stored review supplies felt, words and its plan; it is never saved first, as the real ask does.
-            val review = store.reviewOf(workout.id) ?: TrainerReview(workoutId = workout.id, planId = null, felt = null, words = null)
-            ask.request(ask.feedbackQuestion(workout, review), exceptWorkoutId = workout.id)
+            // The stored review supplies felt, words and its plan; unlike the real ask, it is never saved first.
+            val review = store.reviewOf(inputs.workoutId)
+                ?: TrainerReview(workoutId = inputs.workoutId, planId = null, felt = null, words = null)
+            ask.request(ask.feedbackQuestion(workout, review), exceptWorkoutId = inputs.workoutId)
         }
         is Inputs.Plan -> ask.request(ask.planQuestion(inputs.answers))
         is Inputs.Evaluate -> ask.request(ask.evaluateQuestion(inputs.ask))
