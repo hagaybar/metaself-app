@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.settings
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.TrainerPrompt
 import com.metaself.app.data.health.FakeMovementRecord
@@ -362,6 +363,49 @@ class TrainerWorkbenchViewModelTest {
         assertThat(vm.state.value.canSend).isTrue()
     }
 
+    /**
+     * Amends D106: the path and every input outlive Android closing the app in the background (the
+     * file picker open, say); a loaded file's text does not, and the page returns to the app's own.
+     */
+    @Test
+    fun `the path and the inputs survive the app being closed, and a loaded file does not`() = runTest {
+        val saved = SavedStateHandle()
+        val first = opened(savedState = saved)
+        first.pickPath(TrainerPath.ADJUST)
+        first.pickSession(7)
+        first.changePlan(FORM.copy(words = "Invented plan words."))
+        first.changeEvaluate(EvaluatePlanViewModel.Form(weeks = 2, perWeek = 1, words = "Invented ask."))
+        first.changeAdjustWords("Invented change.")
+        first.load("content://invented/one"); advanceUntilIdle()
+        assertThat(first.state.value.fileName).isEqualTo("invented.txt")
+
+        val again = opened(savedState = saved).state.value
+
+        assertThat(again.path).isEqualTo(TrainerPath.ADJUST)
+        assertThat(again.workoutId).isEqualTo(7L)
+        assertThat(again.plan).isEqualTo(FORM.copy(words = "Invented plan words."))
+        assertThat(again.evaluate).isEqualTo(EvaluatePlanViewModel.Form(weeks = 2, perWeek = 1, words = "Invented ask."))
+        assertThat(again.adjustWords).isEqualTo("Invented change.")
+        assertThat(again.fileName).isNull()
+        assertThat(again.instructions).isNull()
+    }
+
+    /** A row the owner emptied stays empty: the preset is only where the page first opens. */
+    @Test
+    fun `an emptied row comes back empty, and a first opening is as before`() = runTest {
+        val saved = SavedStateHandle()
+        val fresh = opened(savedState = saved).state.value
+        assertThat(fresh.path).isEqualTo(TrainerPath.FEEDBACK)
+        assertThat(fresh.workoutId).isNull()
+        assertThat(fresh.plan).isEqualTo(PlanSessionViewModel.Form())
+        assertThat(fresh.evaluate).isEqualTo(EvaluatePlanViewModel.PRESET)
+        assertThat(fresh.adjustWords).isEmpty()
+
+        opened(savedState = saved).changeEvaluate(EvaluatePlanViewModel.Form(weeks = null, perWeek = 3))
+
+        assertThat(opened(savedState = saved).state.value.evaluate).isEqualTo(EvaluatePlanViewModel.Form(weeks = null, perWeek = 3))
+    }
+
     @Test
     fun `saving writes the chosen path's instructions, exactly`() = runTest {
         val vm = opened()
@@ -386,13 +430,14 @@ class TrainerWorkbenchViewModelTest {
     private fun TestScope.opened(
         record: MovementRecord = this@TrainerWorkbenchViewModelTest.record,
         programmes: ProgrammeStore = FakeProgrammeStore(),
+        savedState: SavedStateHandle = SavedStateHandle(),
     ): TrainerWorkbenchViewModel {
         val ask = AskTheTrainer(
             record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), FakeTrainer(), InMemoryAboutMeStore(),
             programmes, today, Now { TEST_EPOCH_DAY * 86_400_000L }, CurrentYear { TEST_YEAR },
         )
         val held = WorkbenchSender { system, request -> sender.send(system, request).also { gate?.await() } }
-        return TrainerWorkbenchViewModel(TrainerWorkbench(ask, store, record, today, held), files, today, problems)
+        return TrainerWorkbenchViewModel(savedState, TrainerWorkbench(ask, store, record, today, held), files, today, problems)
             .also { advanceUntilIdle() }
     }
 

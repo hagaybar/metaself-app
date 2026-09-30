@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.settings
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.diagnostics.ProblemLog
@@ -8,7 +9,11 @@ import com.metaself.app.data.trainer.InstructionFiles
 import com.metaself.app.data.trainer.TrainerWorkbench
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.trainer.Feeling
+import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPath
+import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.domain.trainer.WorkbenchReply
 import com.metaself.app.ui.screen.trainer.EvaluatePlanViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
@@ -26,9 +31,14 @@ import javax.inject.Inject
 /**
  * "Test the trainer's instructions" (D106), on the page's own back-stack entry: the loaded text lives in
  * [State.instructions] and goes when the page is left. Nothing is stored; the forms are the trainer screens' own.
+ *
+ * The chosen path and its inputs — the session, the plan form, the weeks-ahead form and the change words —
+ * are kept in [savedState], so they outlive Android closing the app in the background while a file picker
+ * is open (amends D106). The loaded file's text and name are not: the page comes back on the app's own.
  */
 @HiltViewModel
 class TrainerWorkbenchViewModel @Inject constructor(
+    private val savedState: SavedStateHandle,
     private val workbench: TrainerWorkbench,
     private val files: InstructionFiles,
     private val today: Today,
@@ -75,7 +85,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
         val canSend: Boolean get() = loaded && !sending && inputs != null
     }
 
-    private val _state = MutableStateFlow(State())
+    private val _state = MutableStateFlow(restored())
     val state: StateFlow<State> = _state.asStateFlow()
 
     /** The file being read; a newer load, or Use the app's own, cancels it. */
@@ -106,13 +116,64 @@ class TrainerWorkbenchViewModel @Inject constructor(
     fun pickPath(path: TrainerPath) {
         sendJob?.cancel()
         sendJob = null
+        savedState[PATH] = path.name
         _state.update { it.copy(path = path, sending = false, reply = null, sent = null, failure = null, notice = null) }
     }
 
-    fun pickSession(workoutId: Long) = _state.update { it.copy(workoutId = workoutId) }
-    fun changePlan(form: PlanSessionViewModel.Form) = _state.update { it.copy(plan = form) }
-    fun changeEvaluate(form: EvaluatePlanViewModel.Form) = _state.update { it.copy(evaluate = form) }
-    fun changeAdjustWords(words: String) = _state.update { it.copy(adjustWords = words) }
+    fun pickSession(workoutId: Long) {
+        savedState[WORKOUT_ID] = workoutId
+        _state.update { it.copy(workoutId = workoutId) }
+    }
+
+    fun changePlan(form: PlanSessionViewModel.Form) {
+        savedState[PLAN_ACTIVITY] = form.activity?.name
+        savedState[PLAN_TIME] = form.time?.name
+        savedState[PLAN_FEELING] = form.feeling?.name
+        savedState[PLAN_WISH] = form.wish?.name
+        savedState[PLAN_WORDS] = form.words
+        _state.update { it.copy(plan = form) }
+    }
+
+    fun changeEvaluate(form: EvaluatePlanViewModel.Form) {
+        savedState[EVALUATE_SAVED] = true
+        savedState[EVALUATE_WEEKS] = form.weeks
+        savedState[EVALUATE_PER_WEEK] = form.perWeek
+        savedState[EVALUATE_WORDS] = form.words
+        _state.update { it.copy(evaluate = form) }
+    }
+
+    fun changeAdjustWords(words: String) {
+        savedState[ADJUST_WORDS] = words
+        _state.update { it.copy(adjustWords = words) }
+    }
+
+    /** The page as it was left, from [savedState]; [State]'s own defaults for anything never chosen. */
+    private fun restored(): State {
+        val fresh = State()
+        return fresh.copy(
+            path = savedState.get<String>(PATH)?.let(::pathNamed) ?: fresh.path,
+            workoutId = savedState.get<Long>(WORKOUT_ID),
+            plan = PlanSessionViewModel.Form(
+                activity = savedState.get<String>(PLAN_ACTIVITY)?.let { name -> PlanActivity.entries.firstOrNull { it.name == name } },
+                time = savedState.get<String>(PLAN_TIME)?.let { name -> TimeAvailable.entries.firstOrNull { it.name == name } },
+                feeling = savedState.get<String>(PLAN_FEELING)?.let { name -> Feeling.entries.firstOrNull { it.name == name } },
+                wish = savedState.get<String>(PLAN_WISH)?.let { name -> Wish.entries.firstOrNull { it.name == name } },
+                words = savedState.get<String>(PLAN_WORDS) ?: "",
+            ),
+            evaluate = if (savedState.get<Boolean>(EVALUATE_SAVED) == true) {
+                EvaluatePlanViewModel.Form(
+                    weeks = savedState.get<Int>(EVALUATE_WEEKS),
+                    perWeek = savedState.get<Int>(EVALUATE_PER_WEEK),
+                    words = savedState.get<String>(EVALUATE_WORDS) ?: "",
+                )
+            } else {
+                fresh.evaluate
+            },
+            adjustWords = savedState.get<String>(ADJUST_WORDS) ?: "",
+        )
+    }
+
+    private fun pathNamed(name: String): TrainerPath? = TrainerPath.entries.firstOrNull { it.name == name }
 
     /** Reads the file and its name, then names it and takes its text in one update; a file that cannot be read changes nothing. */
     fun load(uri: String) {
@@ -193,5 +254,19 @@ class TrainerWorkbenchViewModel @Inject constructor(
 
     companion object {
         const val PROBLEM_KIND = "trainer workbench"
+
+        // The saved-state keys: primitives and enum names only.
+        private const val PATH = "workbench_path"
+        private const val WORKOUT_ID = "workbench_workout_id"
+        private const val PLAN_ACTIVITY = "workbench_plan_activity"
+        private const val PLAN_TIME = "workbench_plan_time"
+        private const val PLAN_FEELING = "workbench_plan_feeling"
+        private const val PLAN_WISH = "workbench_plan_wish"
+        private const val PLAN_WORDS = "workbench_plan_words"
+        private const val EVALUATE_SAVED = "workbench_evaluate_saved"
+        private const val EVALUATE_WEEKS = "workbench_evaluate_weeks"
+        private const val EVALUATE_PER_WEEK = "workbench_evaluate_per_week"
+        private const val EVALUATE_WORDS = "workbench_evaluate_words"
+        private const val ADJUST_WORDS = "workbench_adjust_words"
     }
 }
