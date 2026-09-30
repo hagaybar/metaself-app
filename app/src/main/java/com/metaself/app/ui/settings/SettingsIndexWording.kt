@@ -79,6 +79,9 @@ object SettingsIndexWording {
     fun foodDatabase(signedIn: Boolean): String =
         if (signedIn) "Open Food Facts · signed in" else "Not signed in"
 
+    /** D106: nothing to count; what the page is, and that it keeps nothing. */
+    const val TRAINER_INSTRUCTIONS = "A testing tool · stores nothing"
+
     fun problems(count: Int): String = if (count == 0) "None" else "$count recent"
 
     /**
@@ -111,6 +114,7 @@ object SettingsIndexWording {
             SettingsPage.AI -> ai(state.hasKey, state.dailyCeiling)
             SettingsPage.FOOD_DATABASE -> foodDatabase(state.hasOffPassword)
             SettingsPage.PROBLEMS -> problems(state.problems.size)
+            SettingsPage.TRAINER_INSTRUCTIONS -> TRAINER_INSTRUCTIONS
         }
     }
 

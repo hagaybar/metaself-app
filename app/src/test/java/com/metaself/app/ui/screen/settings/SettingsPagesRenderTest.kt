@@ -13,7 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * Four of the six Settings pages (D79) — Eating, Movement and health, Food database, Recent
+ * Four of the seven Settings pages (D79) — Eating, Movement and health, Food database, Recent
  * problems — each drawn on its own: its title bar, its controls in the old order, and the sentence
  * for an action that threw on the page that holds the action. Backups and AI estimates have their
  * own classes. Asserted by order in the drawn tree, which is what a render test here can say about

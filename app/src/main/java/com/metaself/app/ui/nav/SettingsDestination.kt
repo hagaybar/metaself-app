@@ -32,6 +32,9 @@ import com.metaself.app.ui.screen.settings.ProblemsSettingsPage
 import com.metaself.app.ui.screen.settings.SettingsPage
 import com.metaself.app.ui.screen.settings.SettingsScreen
 import com.metaself.app.ui.screen.settings.SettingsViewModel
+import com.metaself.app.ui.screen.settings.TrainerWorkbenchPage
+import com.metaself.app.ui.screen.settings.TrainerWorkbenchViewModel
+import com.metaself.app.ui.trainer.WorkbenchWording
 import java.time.LocalDate
 
 /**
@@ -244,6 +247,36 @@ internal fun SettingsDestination(
                     clipboard.setText(AnnotatedString(settingsViewModel.problemsAsText()))
                 },
                 onClearProblems = settingsViewModel::clearProblems,
+                onBack = onBack,
+            )
+        }
+
+        SettingsPage.TRAINER_INSTRUCTIONS -> {
+            // D106: its own view model on this entry, so a loaded file goes when the page is left.
+            val workbench: TrainerWorkbenchViewModel = hiltViewModel(here)
+            val state by workbench.state.collectAsStateWithLifecycle()
+            val clipboard = LocalClipboardManager.current
+            // Android's own document picker, as Backups' restore opens a file: plain text first, anything
+            // else allowed, since a file on Drive may not say it is text.
+            val chooseInstructions = rememberLauncherForActivityResult(
+                ActivityResultContracts.OpenDocument(),
+            ) { uri -> uri?.let { workbench.load(it.toString()) } }
+            val chooseWhereToSave = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("text/plain"),
+            ) { uri -> uri?.let { workbench.saveAppInstructionsTo(it.toString()) } }
+            TrainerWorkbenchPage(
+                state = state,
+                onPath = workbench::pickPath,
+                onSession = workbench::pickSession,
+                onPlan = workbench::changePlan,
+                onEvaluate = workbench::changeEvaluate,
+                onAdjustWords = workbench::changeAdjustWords,
+                onLoad = { chooseInstructions.launch(arrayOf("text/plain", "*/*")) },
+                onUseAppOwn = workbench::useAppOwn,
+                onSaveAppOwn = { chooseWhereToSave.launch(WorkbenchWording.fileName(state.path)) },
+                onSend = workbench::send,
+                onCopyReply = { state.reply?.let { clipboard.setText(AnnotatedString(it)) } },
+                onCopySent = { state.sent?.let { clipboard.setText(AnnotatedString(it)) } },
                 onBack = onBack,
             )
         }

@@ -16,7 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * The Settings index (D79): six rows in order, each its title with its one status line straight
+ * The Settings index (D79): seven rows in order, each its title with its one status line straight
  * after, each opening its page — and none of any page's controls. Order in the drawn tree is what a
  * render test here can say about position; nothing about size (`CLAUDE.md`). Figures invented.
  *
@@ -51,7 +51,7 @@ class SettingsIndexRenderTest {
     fun tearDown() = render.dispose()
 
     @Test
-    fun `six rows, in order, each with its status line straight after its title`() {
+    fun `seven rows, in order, each with its status line straight after its title`() {
         val texts = draw()
 
         val rows = listOf(
@@ -61,6 +61,7 @@ class SettingsIndexRenderTest {
             "AI estimates" to SettingsIndexWording.ai(true, 20),
             "Food database" to SettingsIndexWording.foodDatabase(true),
             "Recent problems" to SettingsIndexWording.problems(2),
+            "Test the trainer's instructions" to SettingsIndexWording.TRAINER_INSTRUCTIONS,
         )
         assertThat(texts).containsAtLeastElementsIn(rows.flatMap { listOf(it.first, it.second) })
             .inOrder()
@@ -81,6 +82,7 @@ class SettingsIndexRenderTest {
             "Key saved · up to 20 a day",
             "Open Food Facts · signed in",
             "2 recent",
+            "A testing tool · stores nothing",
         ).inOrder()
     }
 
@@ -90,7 +92,7 @@ class SettingsIndexRenderTest {
 
         listOf(
             "Eating", "Movement and health", "Backups", "AI estimates", "Food database",
-            "Recent problems",
+            "Recent problems", "Test the trainer's instructions",
         ).forEach(render::click)
 
         assertThat(opened).containsExactlyElementsIn(SettingsPage.entries).inOrder()
