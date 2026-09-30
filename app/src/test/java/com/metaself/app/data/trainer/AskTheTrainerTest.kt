@@ -592,7 +592,8 @@ class AskTheTrainerTest {
             listOf(PlanStep(0, 10, "Warm up", "easy pace"), PlanStep(10, 35, "Walk", "zone 2"), PlanStep(35, 45, "Cool down", "")),
             "Invented reason.",
         )
-        val FEEDBACK = Feedback("Invented headline.", "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.YES)
+        /** D108: a new reply is a headline and a note; the four parts are empty. */
+        val FEEDBACK = Feedback("Invented headline.", "", "", "", "", PlanFollowed.YES, note = "Invented note.")
         val MONDAY = TEST_EPOCH_DAY - 3
         val WALK_30 = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Easy walk")
         val WALK_20 = PlannedSession(WorkoutKind.WALK, 20, PlannedEffort.EASY, "Short walk")

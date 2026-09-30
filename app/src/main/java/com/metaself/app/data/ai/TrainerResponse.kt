@@ -41,8 +41,9 @@ object TrainerResponse {
         content(body)?.let(::readPlan)?.let { TrainerReply.Answered(it, model) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
+    /** D108: a reply is a headline and a note; the four parts are only ever read from storage. */
     fun parseFeedback(body: String, model: String): TrainerReply<Feedback> =
-        content(body)?.let(::readFeedback)?.let { TrainerReply.Answered(it, model) }
+        content(body)?.let(::readFeedback)?.takeIf { it.note != null }?.let { TrainerReply.Answered(it, model) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
     /**
@@ -82,7 +83,10 @@ object TrainerResponse {
         plan.takeIf(::usable)
     }.getOrNull()
 
-    /** Feedback in the reply's shape, or null for anything else. */
+    /**
+     * Feedback in either shape it is stored in, or null for anything else: with a note (D108), or — stored
+     * before D108 — with four parts (D87). A payload is new-shaped when it has a note.
+     */
     fun readFeedback(content: String?): Feedback? = runCatching {
         val payload = json.parseToJsonElement(content!!).jsonObject
         fun part(name: String) = payload.text(name)
@@ -93,7 +97,11 @@ object TrainerResponse {
             "no_plan" -> PlanFollowed.NO_PLAN
             else -> null
         }!!
-        val feedback = Feedback(part("headline"), part("against_plan"), part("numbers"), part("next_time"), part("this_week"), followed)
+        val feedback = if ("note" in payload) {
+            Feedback(part("headline"), "", "", "", "", followed, note = part("note"))
+        } else {
+            Feedback(part("headline"), part("against_plan"), part("numbers"), part("next_time"), part("this_week"), followed)
+        }
         feedback.takeIf(::usable)
     }.getOrNull()
 
@@ -196,7 +204,11 @@ object TrainerResponse {
             plan.steps.all { it.fromMinute >= 0 && it.toMinute > it.fromMinute && it.what.isNotEmpty() } &&
             plan.steps.zipWithNext().all { (a, b) -> b.fromMinute >= a.fromMinute }
 
-    private fun usable(feedback: Feedback): Boolean =
+    /** D108: a note needs its headline and its text; four parts (D87) keep their old rule. */
+    private fun usable(feedback: Feedback): Boolean = if (feedback.note != null) {
+        feedback.headline.isNotEmpty() && feedback.note.isNotEmpty()
+    } else {
         listOf(feedback.headline, feedback.numbers, feedback.nextTime, feedback.thisWeek).all { it.isNotEmpty() } &&
             (feedback.againstPlan.isNotEmpty() || feedback.followed == PlanFollowed.NO_PLAN)
+    }
 }

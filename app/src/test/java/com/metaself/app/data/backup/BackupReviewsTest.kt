@@ -1,8 +1,12 @@
 package com.metaself.app.data.backup
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.data.trainer.TrainerReviewEntity
+import com.metaself.app.domain.backup.Backup
 import com.metaself.app.domain.backup.BackupTrainerReview
+import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.backup.BackupWorkout
 import org.junit.jupiter.api.Test
 
@@ -65,6 +69,26 @@ class BackupReviewsTest {
 
         assertThat(rows.map { it.workoutId }).containsExactly(-1L, -2L, -3L)
         assertThat(rows.all { it.workoutId < 0 }).isTrue()
+    }
+
+    /** D108: the file carries a feedback as it is stored, so a note comes back as the same note. */
+    @Test
+    fun `a feedback with a note survives the file, as does one with four parts`() {
+        val note = Feedback("Invented headline.", "", "", "", "", PlanFollowed.PARTLY, note = "Invented note.")
+        val parts = Feedback("Invented old headline.", "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.YES)
+        val reviews = listOf(note, parts).mapIndexed { at, feedback ->
+            review(id = at + 1L, workoutId = at + 1L, words = "w$at").copy(feedback = TrainerResponse.encodeFeedback(feedback))
+        }
+        val split = BackupReviews.split(workoutIds = setOf(1L), reviews = reviews)
+        val out = Backup(
+            workouts = listOf(walk(startedAt = 1_000).copy(trainerReview = split.byWorkout.getValue(1L).let { with(BackupReviews) { it.toBackup() } })),
+            trainerReviewsWithoutWorkout = split.withoutWorkout,
+        )
+
+        val back = BackupCodec.decode(BackupCodec.encode(out))!!
+        val rows = BackupReviews.rows(back.workouts, back.trainerReviewsWithoutWorkout, planIds = setOf(7L))
+
+        assertThat(rows.map { TrainerResponse.readFeedback(it.feedback) }).containsExactly(note, parts).inOrder()
     }
 
     private fun review(id: Long, workoutId: Long, words: String) =

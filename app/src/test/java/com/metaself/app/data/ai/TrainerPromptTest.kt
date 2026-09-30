@@ -12,10 +12,12 @@ import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.trainer.AttemptFacts
 import com.metaself.app.domain.trainer.Evaluation
+import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.PlanWeek
@@ -407,6 +409,57 @@ class TrainerPromptTest {
         assertThat(system).contains("question.planned does not change it")
     }
 
+    /**
+     * D108: the feedback task is the note tried on the workbench. COMMON goes with it unchanged except
+     * that "Short sentences." does not; the other three paths still send it.
+     */
+    @Test
+    fun `the feedback task asks for a coach's note, without Short sentences`() {
+        val feedback = TrainerPrompt.instructions(TrainerPath.FEEDBACK)
+
+        assertThat(feedback).contains("They have just done the session in the question and told you how it felt. Write them a note about")
+        assertThat(feedback).contains("Tell them what their band cannot.")
+        assertThat(feedback).contains("Every sentence must be about them.")
+        assertThat(feedback).contains("Write plain English, to them, in the second person. Every figure you mention")
+        assertThat(feedback).doesNotContain("Short sentences.")
+        listOf("against_plan", "numbers (", "next_time", "four short parts").forEach { assertThat(feedback).doesNotContain(it) }
+        listOf(TrainerPath.PLAN, TrainerPath.EVALUATE, TrainerPath.ADJUST).forEach { path ->
+            assertThat(TrainerPrompt.instructions(path)).contains(
+                "Write plain English, to them, in the second person. Short sentences. Every figure you mention\n" +
+                    "must be one given here or one you propose for the next session.",
+            )
+            assertThat(TrainerPrompt.instructions(path)).doesNotContain("Write them a note")
+        }
+    }
+
+    /** D108: the reply is a headline, a note and plan_followed, and nothing else. */
+    @Test
+    fun `a feedback reply is asked for as headline, note and plan_followed`() {
+        val schema = Json.parseToJsonElement(TrainerPrompt.feedbackBody("a-model", reviewRequest(), RequestProfile.DETERMINISTIC))
+            .jsonObject.getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
+
+        assertThat(schema.getValue("properties").jsonObject.keys).containsExactly("headline", "note", "plan_followed").inOrder()
+        assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content })
+            .containsExactly("headline", "note", "plan_followed")
+    }
+
+    /** D108: earlier feedback goes in the shape it was stored — a note as a note, four parts as four parts. */
+    @Test
+    fun `earlier feedback is sent in the shape it was stored`() {
+        val note = Feedback("Invented headline.", "", "", "", "", PlanFollowed.PARTLY, note = "Invented note.")
+        val parts = Feedback("Invented old headline.", "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.YES)
+        val body = Json.parseToJsonElement(
+            TrainerPrompt.planBody("a-model", request(planRequest().question, earlier = listOf(note, parts)), RequestProfile.DETERMINISTIC),
+        ).jsonObject
+        val sent = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("earlier_feedback").jsonArray.map { it.jsonObject }
+
+        assertThat(sent[0].keys).containsExactly("headline", "note", "plan_followed").inOrder()
+        assertThat(sent[0].getValue("note").jsonPrimitive.content).isEqualTo("Invented note.")
+        assertThat(sent[0].getValue("plan_followed").jsonPrimitive.content).isEqualTo("partly")
+        assertThat(sent[1].keys)
+            .containsExactly("headline", "against_plan", "numbers", "next_time", "this_week", "plan_followed").inOrder()
+    }
+
     /** D105: each week's outcomes and attempts, minutes only — nothing about a session but its kind and minutes. */
     @Test
     fun `how each week went is sent as outcomes and attempts, with exactly these keys`() {
@@ -530,7 +583,7 @@ class TrainerPromptTest {
 
     private fun reviewRequest() = request(TrainerRequest.reviewQuestion(walk, review, plan))
 
-    private fun request(question: TrainerQuestion) = TrainerRequest.of(
+    private fun request(question: TrainerQuestion, earlier: List<Feedback> = emptyList()) = TrainerRequest.of(
         question = question, today = TEST_EPOCH_DAY, workouts = listOf(walk, strength), reviews = listOf(review),
         plans = mapOf(9L to plan),
         days = listOf(HealthDay(TEST_EPOCH_DAY, distanceM = 4_000, activeKcal = 300, sleepMinutes = 430, restingHeartRate = 58)),
@@ -538,7 +591,7 @@ class TrainerPromptTest {
             WeightReading(TEST_EPOCH_DAY - 28, 80.4), WeightReading(TEST_EPOCH_DAY - 14, 79.2), WeightReading(TEST_EPOCH_DAY, 78.6),
         ),
         profile = aProfile(weightKg = 83.0, goal = Goal.lose(0.5, targetKg = 71.5)),
-        currentYear = TEST_YEAR, earlierFeedback = emptyList(),
+        currentYear = TEST_YEAR, earlierFeedback = earlier,
     )
 
     /**

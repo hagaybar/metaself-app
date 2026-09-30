@@ -79,10 +79,16 @@ object TrainerPrompt {
 
         When question.planned is given, its week is the week of their weekly plan it falls in, counted
         from 1, and of_weeks is how many weeks that plan has.
+    """.trimIndent()
 
+    /** The last paragraph of the shared part, for the plan, evaluate and adjust paths. */
+    private val VOICE = """
         Write plain English, to them, in the second person. Short sentences. Every figure you mention
         must be one given here or one you propose for the next session.
     """.trimIndent()
+
+    /** D108: [VOICE] without "Short sentences.", for the feedback path, whose note sets its own length. */
+    private val VOICE_NOTE = VOICE.replace(" Short sentences.", "")
 
     private val PLAN = """
         They are asking what to do in their next session. The question gives what they want to do, the
@@ -99,18 +105,46 @@ object TrainerPrompt {
         answers say otherwise.
     """.trimIndent()
 
+    /**
+     * D108: the instructions tried on the workbench (D106) — one short note, the session placed in the
+     * record's story — and plan_followed. Sent with [COMMON] and [VOICE_NOTE], never [VOICE].
+     */
     private val FEEDBACK = """
-        They have done the session in the question and are telling you how it went: how it felt, their words,
-        and the plan it was matched to, if any. Reply with a one-line headline and four short parts:
-        against_plan (how it went against the plan; if there was no plan, say so in a few words),
-        numbers (what its figures say), next_time (one concrete change for the next session), and
-        this_week (the rhythm, from this_week). Give plan_followed: "yes", "partly" or "no" against the
-        plan, or "no_plan" when there was none.
+        They have just done the session in the question and told you how it felt. Write them a note about
+        it, the way a good coach who has followed them for months would: warm, encouraging, natural, in plain
+        English, to them, in the second person. Sound like a person who is glad they went, not like a report.
 
-        When question.planned is given, the session ticked that session of their weekly plan (counted by
-        the app); say how it went against it in against_plan as well. plan_followed still judges only the
-        plan in question.session.plan — "no_plan" when that is null, even though question.planned is
-        given; question.planned does not change it.
+        Tell them what their band cannot. They have already seen this session's figures on their wrist, so do
+        not read them back unless they mean something. Put the session in the story of their record:
+
+        - Where it sits in their weekly plan, when question.planned is given: which week of how many
+          (week and of_weeks), and whether it is the first planned session they have done.
+        - How it compares with their recent weeks and the months before: is it typical for them, a step up,
+          a return after a quiet spell? Say which, plainly.
+        - What it means for their two aims: a steady rhythm of sessions, and their weight goal.
+
+        Doing more than planned, at an effort that felt easy, is a good sign, not a deviation; say so. Only
+        hold them back if the record or their words give a reason (pain, a hard effort, a sharp jump in load).
+
+        Mention where a figure came from, or that it is an estimate, only when that changes your advice. Never
+        add a caveat for its own sake.
+
+        Be honest about what the record shows. A few days is not a trend; one good week is a start, not a
+        habit. Say "a good start" rather than "clearly improving" unless several weeks bear it out.
+
+        Include at least one concrete comparison with a figure from the record: for example the most
+        sessions in a week since a given month, or how this session's minutes compare with their usual
+        length. Take the figure from the data; never estimate one yourself.
+
+        Every sentence must be about them. Leave out any sentence that would fit anyone, such as "a single
+        walk won't decide it" or "keep it relaxed".
+
+        If there is one thing worth trying next time that follows from their record, say it in a sentence;
+        if there is nothing specific, say nothing. Keep the whole note short enough to
+        read in half a minute. Reply with the headline, one line, as headline, and the note as note.
+
+        Also give plan_followed: "yes", "partly" or "no" against the plan in question.session.plan, or "no_plan" when
+        that is null; question.planned does not change it. The note does not mention it.
     """.trimIndent()
 
     /** D105: shared by the evaluate and adjust instructions. */
@@ -185,10 +219,10 @@ object TrainerPrompt {
      * never sends.
      */
     fun instructions(path: TrainerPath): String = COMMON + "\n\n" + when (path) {
-        TrainerPath.FEEDBACK -> FEEDBACK
-        TrainerPath.PLAN -> PLAN
-        TrainerPath.EVALUATE -> EVALUATE
-        TrainerPath.ADJUST -> ADJUST
+        TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
+        TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
+        TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE
+        TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST
     }
 
     /** The user message every body sends: [request], serialised. Shared with the workbench (D106). */
@@ -456,13 +490,20 @@ object TrainerPrompt {
         put("why", plan.why)
     }
 
-    /** Feedback in the reply schema's own shape: sent as earlier feedback, and what `TrainerResponse.encodeFeedback` stores. */
+    /**
+     * Feedback in the shape it was stored: sent as earlier feedback, and what `TrainerResponse.encodeFeedback`
+     * stores. A note (D108) is its reply schema's shape; four parts (D87) are the shape asked for before it.
+     */
     fun feedbackJson(feedback: Feedback): JsonObject = buildJsonObject {
         put("headline", feedback.headline)
-        put("against_plan", feedback.againstPlan)
-        put("numbers", feedback.numbers)
-        put("next_time", feedback.nextTime)
-        put("this_week", feedback.thisWeek)
+        if (feedback.note != null) {
+            put("note", feedback.note)
+        } else {
+            put("against_plan", feedback.againstPlan)
+            put("numbers", feedback.numbers)
+            put("next_time", feedback.nextTime)
+            put("this_week", feedback.thisWeek)
+        }
         put("plan_followed", feedback.followed.name.lowercase())
     }
 
@@ -545,10 +586,7 @@ object TrainerPrompt {
 
     private val FEEDBACK_SCHEMA: JsonObject = strictObject(
         "headline" to string(),
-        "against_plan" to string(),
-        "numbers" to string(),
-        "next_time" to string(),
-        "this_week" to string(),
+        "note" to string(),
         "plan_followed" to buildJsonObject {
             put("type", "string")
             putJsonArray("enum") { add("yes"); add("partly"); add("no"); add("no_plan") }
