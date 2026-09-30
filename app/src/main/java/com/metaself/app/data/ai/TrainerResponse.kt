@@ -158,7 +158,7 @@ object TrainerResponse {
         what = payload.text("what").also { require(it.isNotEmpty()) { "a planned session says what it is" } },
     )
 
-    private fun content(body: String): String? = runCatching {
+    internal fun content(body: String): String? = runCatching {
         json.parseToJsonElement(body).jsonObject["choices"]!!.jsonArray
             .first().jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
     }.getOrNull()
