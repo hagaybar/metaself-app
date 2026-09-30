@@ -75,7 +75,13 @@ class TrainerWorkbench @Inject constructor(
 
     /** Sends [inputs]' real request with [system] as the whole system message. Throws only as the stores' reads do. */
     suspend fun send(inputs: Inputs, system: String): Run {
-        val request = request(inputs) ?: return if (inputs is Inputs.Adjust) Run.NotRunning else Run.SessionGone
-        return Run.Replied(sender.send(system, request))
+        val request = request(inputs) ?: return nothingSent(inputs)
+        return Run.Replied(send(request, system))
     }
+
+    /** Sends an already built [request] with [system] as the whole system message. Reads no store. */
+    suspend fun send(request: TrainerRequest, system: String): WorkbenchReply = sender.send(system, request)
+
+    /** Why [request] built nothing for [inputs]. */
+    fun nothingSent(inputs: Inputs): Run = if (inputs is Inputs.Adjust) Run.NotRunning else Run.SessionGone
 }

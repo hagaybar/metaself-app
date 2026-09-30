@@ -13,13 +13,16 @@ object WorkbenchWording {
     const val SEND = "Send"
     const val SENDING = "Sending…"
     const val PRIVACY = "On Send, what the chosen path sends goes to OpenAI with your key, under the instructions " +
-        "named above. One of today's AI requests. Nothing is kept."
+        "named above. It counts as one of today's AI requests. Nothing is kept."
     const val COPY_REPLY = "Copy reply"
     const val COPY_SENT = "Copy what was sent"
     const val NO_PLAN = "No plan is running."
     const val NO_SESSIONS = "No sessions in the last 42 days."
     const val SESSION_GONE = "That session is no longer in the record."
     const val RECORD_UNREADABLE = "The record could not be read. Nothing was sent."
+
+    /** On opening: the sessions or whether a plan runs could not be read, so the list and the plan line may be wrong. */
+    const val RECORD_NOT_READ = "The record could not be read, so the sessions and the plan shown here may be incomplete."
     const val COULD_NOT_READ = "The file could not be read, or is empty. Nothing changed."
     const val UNNAMED = "the file you picked"
     const val SAVED = "Saved."
