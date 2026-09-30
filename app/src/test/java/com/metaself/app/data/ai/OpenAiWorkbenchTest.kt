@@ -45,8 +45,9 @@ class OpenAiWorkbenchTest {
     fun `the reply is the model's text as written, and the body sent is handed back verbatim`() = runTest {
         server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"content":${JsonPrimitive(PROSE)}}}]}"""))
         val settings = FakeSettings()
+        val profiles = FakeRequestProfileStore()
 
-        val reply = workbench(settings = settings).send(SYSTEM, REQUEST) as WorkbenchReply.Answered
+        val reply = workbench(settings = settings, profiles = profiles).send(SYSTEM, REQUEST) as WorkbenchReply.Answered
 
         val body = server.takeRequest().body.readUtf8()
         assertThat(reply.text).isEqualTo(PROSE)
@@ -54,6 +55,27 @@ class OpenAiWorkbenchTest {
         assertThat(Json.parseToJsonElement(body).jsonObject.keys).doesNotContain("response_format")
         assertThat(body).isEqualTo(TrainerPrompt.workbenchBody(AiSettings().model, SYSTEM, REQUEST, RequestProfile.guess(AiSettings().model)))
         assertThat(settings.calls).isEqualTo(1)
+        assertThat(profiles.writes).isEqualTo(1)
+    }
+
+    @Test
+    fun `a refusal a different profile can answer is retried, and the second body and profile are what is kept`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(400).setBody(Refusals.TEMPERATURE))
+        server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"content":${JsonPrimitive(PROSE)}}}]}"""))
+        val settings = FakeSettings()
+        val profiles = FakeRequestProfileStore()
+
+        val reply = workbench(settings = settings, profiles = profiles).send(SYSTEM, REQUEST) as WorkbenchReply.Answered
+
+        val first = server.takeRequest().body.readUtf8()
+        val second = server.takeRequest().body.readUtf8()
+        assertThat(reply.sent).isEqualTo(second)
+        assertThat(reply.sent).isNotEqualTo(first)
+        assertThat(settings.calls).isEqualTo(2)
+        assertThat(profiles.remembered.value).containsExactly(
+            AiSettings().model,
+            RequestProfile(temperature = false, reasoningEffort = "low"),
+        )
     }
 
     @Test
@@ -77,17 +99,33 @@ class OpenAiWorkbenchTest {
     @Test
     fun `an answer with no message in it is unreadable, not a crash`() = runTest {
         server.enqueue(MockResponse().setBody("""{"choices":[]}"""))
+        val profiles = FakeRequestProfileStore()
+
+        val reply = workbench(profiles = profiles).send(SYSTEM, REQUEST) as WorkbenchReply.Failed
+
+        assertThat(reply.failure).isInstanceOf(EstimateResult.Unreadable::class.java)
+        assertThat(reply.sent).isNotNull()
+        assertThat(profiles.writes).isEqualTo(0)
+    }
+
+    @Test
+    fun `a message whose content is JSON null is unreadable, not the literal word null`() = runTest {
+        server.enqueue(MockResponse().setBody("""{"choices":[{"message":{"content":null}}]}"""))
 
         val reply = workbench().send(SYSTEM, REQUEST) as WorkbenchReply.Failed
 
         assertThat(reply.failure).isInstanceOf(EstimateResult.Unreadable::class.java)
     }
 
-    private fun workbench(key: String? = "a-key", settings: FakeSettings = FakeSettings()) = OpenAiWorkbench(
+    private fun workbench(
+        key: String? = "a-key",
+        settings: FakeSettings = FakeSettings(),
+        profiles: FakeRequestProfileStore = FakeRequestProfileStore(),
+    ) = OpenAiWorkbench(
         keys = FakeKeys(key),
         settings = settings,
         client = OkHttpClient(),
-        profiles = FakeRequestProfileStore(),
+        profiles = profiles,
         baseUrl = server.url("/v1/chat/completions").toString(),
     )
 

@@ -15,6 +15,7 @@ import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -160,7 +161,8 @@ object TrainerResponse {
 
     internal fun content(body: String): String? = runCatching {
         json.parseToJsonElement(body).jsonObject["choices"]!!.jsonArray
-            .first().jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
+            .first().jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive
+            .takeUnless { it is JsonNull }?.content
     }.getOrNull()
 
     /**

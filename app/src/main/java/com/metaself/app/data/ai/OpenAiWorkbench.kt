@@ -13,6 +13,8 @@ import okhttp3.OkHttpClient
  * (the day's count, and the profile that answered — design choice 3 of the plan).
  *
  * The base URL is a parameter so a test can point it at a local server. **No test makes a real network call.**
+ *
+ * A failure is shown on the page it answers; it is deliberately never logged.
  */
 class OpenAiWorkbench(
     keys: ApiKeyStore,
@@ -26,7 +28,9 @@ class OpenAiWorkbench(
 
     override suspend fun send(system: String, request: TrainerRequest): WorkbenchReply {
         var sent: String? = null
-        val outcome = call.send { model, profile -> TrainerPrompt.workbenchBody(model, system, request, profile).also { sent = it } }
+        val outcome = call.send { model, profile ->
+            TrainerPrompt.workbenchBody(model, system, request, profile).also { sent = it }
+        }
         return when (outcome) {
             is OpenAiCall.Outcome.Failed -> WorkbenchReply.Failed(outcome.failure, sent)
             is OpenAiCall.Outcome.Body -> {
