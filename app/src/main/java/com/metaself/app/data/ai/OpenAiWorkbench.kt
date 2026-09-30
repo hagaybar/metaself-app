@@ -9,8 +9,9 @@ import okhttp3.OkHttpClient
 /**
  * The workbench's sender (D106): [TrainerPrompt.workbenchBody] over the shared [OpenAiCall] — the key, the
  * day's ceiling, the counting, the failures and the learning are the trainer's. The reply is the model's
- * text as written; nothing is parsed or checked, and nothing is stored but what [OpenAiCall] itself keeps
- * (the day's count, and the profile that answered — design choice 3 of the plan).
+ * text as written; nothing is parsed or checked beyond telling a bare refusal apart from an unreadable
+ * answer, and nothing is stored but what [OpenAiCall] itself keeps (the day's count, and the profile that
+ * answered — design choice 3 of the plan).
  *
  * The base URL is a parameter so a test can point it at a local server. **No test makes a real network call.**
  *
@@ -36,7 +37,13 @@ class OpenAiWorkbench(
             is OpenAiCall.Outcome.Body -> {
                 val text = TrainerResponse.content(outcome.text)
                 if (text == null) {
-                    WorkbenchReply.Failed(EstimateResult.Unreadable(NO_MESSAGE, outcome.text), sent)
+                    val refusal = TrainerResponse.refusal(outcome.text)
+                    val failure = if (refusal != null) {
+                        EstimateResult.Refused(refusal)
+                    } else {
+                        EstimateResult.Unreadable(NO_MESSAGE, outcome.text)
+                    }
+                    WorkbenchReply.Failed(failure, sent)
                 } else {
                     call.remember(outcome)
                     WorkbenchReply.Answered(text, checkNotNull(sent))

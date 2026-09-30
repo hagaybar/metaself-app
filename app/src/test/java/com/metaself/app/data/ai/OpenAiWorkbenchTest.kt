@@ -117,6 +117,22 @@ class OpenAiWorkbenchTest {
         assertThat(reply.failure).isInstanceOf(EstimateResult.Unreadable::class.java)
     }
 
+    @Test
+    fun `a reply with no content but a refusal is shown in the model's own words, not unreadable`() = runTest {
+        server.enqueue(
+            MockResponse().setBody(
+                """{"choices":[{"message":{"content":null,"refusal":${JsonPrimitive(REFUSAL)}}}]}""",
+            ),
+        )
+        val profiles = FakeRequestProfileStore()
+
+        val reply = workbench(profiles = profiles).send(SYSTEM, REQUEST) as WorkbenchReply.Failed
+
+        assertThat(reply.failure).isEqualTo(EstimateResult.Refused(REFUSAL))
+        assertThat(reply.sent).isNotNull()
+        assertThat(profiles.writes).isEqualTo(0)
+    }
+
     private fun workbench(
         key: String? = "a-key",
         settings: FakeSettings = FakeSettings(),
@@ -151,6 +167,7 @@ class OpenAiWorkbenchTest {
     private companion object {
         const val SYSTEM = "Invented instructions."
         const val PROSE = "Invented reply, in prose, not JSON."
+        const val REFUSAL = "Invented refusal, in the model's own words."
         val REQUEST = TrainerRequest(
             question = TrainerQuestion.Plan(PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE)),
             today = TEST_EPOCH_DAY,

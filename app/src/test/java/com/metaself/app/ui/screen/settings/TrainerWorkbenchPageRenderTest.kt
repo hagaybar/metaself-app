@@ -110,7 +110,7 @@ class TrainerWorkbenchPageRenderTest {
     }
 
     @Test
-    fun `the review path draws its two row labels`() {
+    fun `the weeks-ahead path draws its two row labels`() {
         val texts = page(TrainerWorkbenchViewModel.State(loaded = true, path = TrainerPath.EVALUATE))
 
         assertThat(texts).containsAtLeast("HOW MANY WEEKS", "SESSIONS A WEEK I CAN MANAGE").inOrder()

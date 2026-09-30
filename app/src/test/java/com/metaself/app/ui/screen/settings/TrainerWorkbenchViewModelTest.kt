@@ -353,7 +353,7 @@ class TrainerWorkbenchViewModelTest {
     }
 
     @Test
-    fun `the review path opens on the real screen's own preset`() = runTest {
+    fun `the weeks-ahead path opens on the real screen's own preset`() = runTest {
         val vm = opened()
 
         vm.pickPath(TrainerPath.EVALUATE)

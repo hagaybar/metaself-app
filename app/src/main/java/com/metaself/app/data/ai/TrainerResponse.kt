@@ -165,6 +165,13 @@ object TrainerResponse {
             .takeUnless { it is JsonNull }?.content
     }.getOrNull()
 
+    /** The chat completion's own refusal (`message.refusal`), when the provider sent one instead of content. */
+    internal fun refusal(body: String): String? = runCatching {
+        json.parseToJsonElement(body).jsonObject["choices"]!!.jsonArray
+            .first().jsonObject["message"]!!.jsonObject["refusal"]!!.jsonPrimitive
+            .takeUnless { it is JsonNull }?.content
+    }.getOrNull()
+
     /**
      * A text part, which must be a JSON string: `jsonPrimitive.content` alone would read null as "null"
      * and a number or a boolean as its digits or word. Anything else throws, and so reads as unreadable.
