@@ -11,6 +11,11 @@ shape imposed, and read the reply as plain text, with Copy reply and Copy what w
 nothing. D107 — every planned tick sent to the trainer carries `"of_weeks"` (the plan's length) beside
 `"week"`, and the shared instructions say so. Version 0.71.0.
 
+> **Superseded in places by the code.** Reviews changed Tasks 4, 5, 7 and 8 after this plan was written:
+> the view model holds the loaded text in its state and cancels a load or send in flight (the file-load and
+> late-reply races), failures are recorded in the problem log by kind, the sender's `sent` is the last body
+> built, and the page's wording moved. Do not re-apply those tasks' snippets over the code.
+
 **Decision:** the owner's, 2026-09-29 — `docs/superpowers/specs/2026-09-29-trainer-instructions-workbench-design.md`.
 
 **Architecture:**

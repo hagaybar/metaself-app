@@ -30,7 +30,8 @@ A testing tool, not a feature: it changes nothing the trainer does elsewhere.
    - **Load instructions from a file** — the system file picker (Storage Access Framework), plain text,
      so a file on Drive works. The loaded text lives in memory for this visit only.
    - **Save the app's instructions to a file** — the exact system message the chosen path sends today
-     (the shared part and the path's own, joined as `TrainerPrompt` joins them), as a starting point.
+     (the shared part and the path's own, joined as `TrainerPrompt` joins them — before the schema
+     paragraph a model without the strict format is also sent, which is reply shape), as a starting point.
    - A line always states which will be sent: the file's name, or "the app's own instructions".
    - The file's text replaces the **whole** system message. No shared part is kept.
 3. **Send**, then the reply as plain text, with **Copy reply** and **Copy what was sent** (the request
