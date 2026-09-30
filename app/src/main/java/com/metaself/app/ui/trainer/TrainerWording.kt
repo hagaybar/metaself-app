@@ -159,8 +159,11 @@ object TrainerWording {
         else -> "See feedback"
     }
 
-    /** The four headed parts, in the design's order; a blank part is left out. */
-    fun parts(feedback: Feedback): List<Pair<String, String>> = listOf(
+    /**
+     * Stored four-part feedback's headed parts (D87), in the design's order; a blank part is left out.
+     * None for a note (D108), which is one paragraph.
+     */
+    fun parts(feedback: Feedback): List<Pair<String, String>> = if (feedback.note != null) emptyList() else listOf(
         "AGAINST THE PLAN" to feedback.againstPlan,
         "WHAT THE NUMBERS SAY" to feedback.numbers,
         "FOR NEXT TIME" to feedback.nextTime,

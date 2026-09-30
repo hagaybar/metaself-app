@@ -53,7 +53,11 @@ enum class Felt { EASY, RIGHT, HARD }
 /** Whether the session followed its plan, as the trainer judged it (design question 9). */
 enum class PlanFollowed { YES, PARTLY, NO, NO_PLAN }
 
-/** Feedback (D87): a headline and four short parts. Advice, never a measurement (D4). */
+/**
+ * Feedback: a headline and a coach's [note] (D108), or — stored before D108 — a headline and four short
+ * parts (D87), which keep their shape. A feedback is new-shaped when it carries a note; its four parts are
+ * then empty. Advice, never a measurement (D4).
+ */
 data class Feedback(
     val headline: String,
     val againstPlan: String,
@@ -61,6 +65,7 @@ data class Feedback(
     val nextTime: String,
     val thisWeek: String,
     val followed: PlanFollowed,
+    val note: String? = null,
 )
 
 /** The owner's words on one session (D87, D88). One per workout. */

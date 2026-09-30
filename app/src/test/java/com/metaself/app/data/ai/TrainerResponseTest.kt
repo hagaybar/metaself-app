@@ -3,6 +3,7 @@ package com.metaself.app.data.ai
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -19,8 +20,11 @@ class TrainerResponseTest {
         {"from_minute":10,"to_minute":35,"what":"Two climbs","how":"zone 3"},
         {"from_minute":35,"to_minute":45,"what":"Cool down","how":""}],"why":"Invented reason."}"""
 
-    private val goodFeedback = """{"headline":"A steady session","against_plan":"As planned.","numbers":"Invented.",
-        "next_time":"Invented.","this_week":"Invented.","plan_followed":"yes"}"""
+    private val goodFeedback = """{"headline":"A steady session","note":"Invented note.","plan_followed":"yes"}"""
+
+    /** D87's four parts, as feedback stored before D108 holds them. */
+    private val storedFourParts = """{"headline":"An old headline","against_plan":"As planned.","numbers":"Invented numbers.",
+        "next_time":"Invented next.","this_week":"Invented week.","plan_followed":"yes"}"""
 
     @Test
     fun `a plan reply becomes a plan, with the model that gave it`() {
@@ -55,31 +59,48 @@ class TrainerResponseTest {
     }
 
     @Test
-    fun `a feedback reply becomes feedback`() {
+    fun `a feedback reply becomes a headline and a note`() {
         val reply = TrainerResponse.parseFeedback(reply(goodFeedback), "a-model") as TrainerReply.Answered
 
         assertThat(reply.value.headline).isEqualTo("A steady session")
+        assertThat(reply.value.note).isEqualTo("Invented note.")
         assertThat(reply.value.followed).isEqualTo(PlanFollowed.YES)
+        assertThat(listOf(reply.value.againstPlan, reply.value.numbers, reply.value.nextTime, reply.value.thisWeek)).containsExactly("", "", "", "")
     }
 
+    /** D108: a new reply needs its headline and its note. */
     @Test
-    fun `feedback missing a part, or with an unknown judgement, is unreadable`() {
+    fun `feedback missing its headline or note, or with an unknown judgement, is unreadable`() {
         assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"A steady session\"", "\"\"")), "a-model"))
+        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"Invented note.\"", "\" \"")), "a-model"))
         assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"yes\"", "\"maybe\"")), "a-model"))
         assertUnreadable(TrainerResponse.parseFeedback("not json", "a-model"))
+    }
+
+    /** D108: a reply in the four-part shape was not asked for; only stored feedback is read in it. */
+    @Test
+    fun `a four-part reply is unreadable, but four-part feedback already stored still reads`() {
+        assertUnreadable(TrainerResponse.parseFeedback(reply(storedFourParts), "a-model"))
+
+        val stored = TrainerResponse.readFeedback(storedFourParts)!!
+        assertThat(stored).isEqualTo(
+            Feedback("An old headline", "As planned.", "Invented numbers.", "Invented next.", "Invented week.", PlanFollowed.YES),
+        )
+        assertThat(stored.note).isNull()
     }
 
     /** A text part must be a JSON string: null, a number or a boolean is not "null", "7" or "true". */
     @Test
     fun `a text part that is not a string is unreadable`() {
         assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"A steady session\"", "null")), "a-model"))
-        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"numbers\":\"Invented.\"", "\"numbers\":7")), "a-model"))
-        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"As planned.\"", "true")), "a-model"))
+        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"Invented note.\"", "7")), "a-model"))
+        assertUnreadable(TrainerResponse.parseFeedback(reply(goodFeedback.replace("\"Invented note.\"", "true")), "a-model"))
         assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"Steady walk with two climbs\"", "42")), "a-model"))
         assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"Invented reason.\"", "null")), "a-model"))
         assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"Warm up\"", "false")), "a-model"))
         assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"zone 3\"", "3")), "a-model"))
         assertThat(TrainerResponse.readFeedback(goodFeedback.replace("\"yes\"", "null"))).isNull()
+        assertThat(TrainerResponse.readFeedback(storedFourParts.replace("\"Invented numbers.\"", "7"))).isNull()
     }
 
     /** A minute is a JSON number: "10" in quotes is not one. */
@@ -88,12 +109,12 @@ class TrainerResponseTest {
         assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"to_minute\":10", "\"to_minute\":\"10\"")), "a-model"))
     }
 
-    /** With no plan, "against the plan" may be empty. */
+    /** Stored four-part feedback with no plan may have an empty "against the plan", as it always could. */
     @Test
-    fun `with no plan the against-plan part may be empty`() {
-        val noPlan = goodFeedback.replace("\"As planned.\"", "\"\"").replace("\"yes\"", "\"no_plan\"")
+    fun `stored four-part feedback with no plan may have an empty against-plan part`() {
+        val noPlan = storedFourParts.replace("\"As planned.\"", "\"\"").replace("\"yes\"", "\"no_plan\"")
 
-        assertThat(TrainerResponse.parseFeedback(reply(noPlan), "a-model")).isInstanceOf(TrainerReply.Answered::class.java)
+        assertThat(TrainerResponse.readFeedback(noPlan)).isNotNull()
     }
 
     /** Design question 3: what is stored reads back as exactly what was read. */
@@ -104,6 +125,11 @@ class TrainerResponseTest {
 
         assertThat(TrainerResponse.readPlan(TrainerResponse.encodePlan(plan))).isEqualTo(plan)
         assertThat(TrainerResponse.readFeedback(TrainerResponse.encodeFeedback(feedback))).isEqualTo(feedback)
+        assertThat(TrainerResponse.encodeFeedback(feedback)).isEqualTo(
+            """{"headline":"A steady session","note":"Invented note.","plan_followed":"yes"}""",
+        )
+        val old = TrainerResponse.readFeedback(storedFourParts)!!
+        assertThat(TrainerResponse.readFeedback(TrainerResponse.encodeFeedback(old))).isEqualTo(old)
         assertThat(TrainerResponse.readPlan("garbled")).isNull()
         assertThat(TrainerResponse.readFeedback(null)).isNull()
     }

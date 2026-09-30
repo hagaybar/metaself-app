@@ -54,7 +54,11 @@ internal object TrainerScreens {
         "Invented reason.",
     )
 
+    /** D87's four parts, as feedback stored before D108 holds them. */
     val FEEDBACK = Feedback("Invented headline.", "Invented plan part.", "Invented numbers part.", "Invented next part.", "Invented week part.", PlanFollowed.YES)
+
+    /** D108: a headline and a coach's note. */
+    val NOTE_FEEDBACK = Feedback("Invented headline.", "", "", "", "", PlanFollowed.YES, note = "Invented note, one short paragraph.")
 
     fun storedPlan(createdAt: Long, kept: Boolean = true) = TrainerPlan(0, createdAt, ANSWERS, PLAN, "a-model", kept)
 

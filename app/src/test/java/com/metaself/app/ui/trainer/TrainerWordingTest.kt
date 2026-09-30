@@ -134,6 +134,12 @@ class TrainerWordingTest {
             .doesNotContain("AGAINST THE PLAN")
     }
 
+    /** D108: a note is one paragraph, with no headed parts. */
+    @Test
+    fun `a note has no headed parts`() {
+        assertThat(TrainerWording.parts(aFeedback(PlanFollowed.YES).copy(note = "Invented note."))).isEmpty()
+    }
+
     /** D93, D97 (design question 10): each weekly-plan request names what it adds. */
     @Test
     fun `the weekly plan's privacy lines name what they add`() {

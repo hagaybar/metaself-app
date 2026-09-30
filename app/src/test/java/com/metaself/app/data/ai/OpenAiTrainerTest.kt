@@ -217,8 +217,7 @@ class OpenAiTrainerTest {
             {"from_minute":10,"to_minute":35,"what":"Two climbs","how":"zone 3"},
             {"from_minute":35,"to_minute":45,"what":"Cool down","how":""}],"why":"Invented reason."}"""
 
-        val GOOD_FEEDBACK = """{"headline":"A steady session","against_plan":"As planned.","numbers":"Invented.",
-            "next_time":"Invented.","this_week":"Invented.","plan_followed":"yes"}"""
+        val GOOD_FEEDBACK = """{"headline":"A steady session","note":"Invented note.","plan_followed":"yes"}"""
 
         /** An empty record: six weeks of nothing, no weight, no profile. */
         private fun request(question: TrainerQuestion) = TrainerRequest(

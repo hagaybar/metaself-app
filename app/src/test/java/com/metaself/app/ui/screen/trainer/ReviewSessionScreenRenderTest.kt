@@ -13,6 +13,7 @@ import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.ComposeRender
 import com.metaself.app.ui.screen.trainer.TrainerScreens.FEEDBACK
+import com.metaself.app.ui.screen.trainer.TrainerScreens.NOTE_FEEDBACK
 import com.metaself.app.ui.screen.trainer.TrainerScreens.NOW
 import com.metaself.app.ui.screen.trainer.TrainerScreens.storedPlan
 import com.metaself.app.ui.screen.trainer.TrainerScreens.walk
@@ -172,9 +173,27 @@ class ReviewSessionScreenRenderTest {
         )
     }
 
-    /** D4: feedback is labelled advice, never a measurement. */
+    /** D4, D108: feedback is labelled advice, never a measurement; the note has no headings. */
     @Test
-    fun `feedback shows its headline, its label and its four parts, then two ways on`() {
+    fun `feedback shows its headline, its label and its note, then two ways on`() {
+        var planNext = false
+        val texts = draw(form.copy(felt = Felt.RIGHT, feedback = NOTE_FEEDBACK), onPlanNext = { planNext = true })
+
+        assertThat(texts).containsAtLeast(
+            "Invented headline.",
+            "From the AI trainer · advice, not a measurement",
+            "Invented note, one short paragraph.",
+            "Plan the next one",
+            "Done",
+        ).inOrder()
+        listOf("AGAINST THE PLAN", "WHAT THE NUMBERS SAY", "FOR NEXT TIME", "THIS WEEK").forEach { assertThat(texts).doesNotContain(it) }
+        render.click("Plan the next one")
+        assertThat(planNext).isTrue()
+    }
+
+    /** D108: feedback stored before the note keeps its four headed parts. */
+    @Test
+    fun `stored four-part feedback shows its headline, its label and its four parts, then two ways on`() {
         var planNext = false
         var done = false
         val texts = draw(form.copy(felt = Felt.RIGHT, feedback = FEEDBACK), onPlanNext = { planNext = true }, onDone = { done = true })

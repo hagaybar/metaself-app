@@ -155,6 +155,8 @@ private fun FeedbackView(feedback: Feedback, onPlanNext: () -> Unit, onDone: () 
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        // D108: a note is one paragraph under the headline; feedback stored before it keeps its headed parts.
+        feedback.note?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
         TrainerWording.parts(feedback).forEach { (heading, body) ->
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
                 Text(
