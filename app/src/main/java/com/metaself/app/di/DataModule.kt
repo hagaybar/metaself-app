@@ -91,6 +91,8 @@ import com.metaself.app.data.trainer.RoomTrainerStore
 import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.data.trainer.TrainerStore
+import com.metaself.app.data.trainer.InstructionFiles
+import com.metaself.app.data.trainer.ContentResolverInstructionFiles
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomMealRepository
 import com.metaself.app.data.weight.RoomWeightRepository
@@ -201,6 +203,12 @@ object DataModule {
     fun provideBackupFiles(
         files: ContentResolverBackupFiles,
     ): BackupFiles = files
+
+    @Provides
+    @Singleton
+    fun provideInstructionFiles(
+        files: ContentResolverInstructionFiles,
+    ): InstructionFiles = files
 
     @Provides
     @Singleton
