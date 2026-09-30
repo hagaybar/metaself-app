@@ -60,7 +60,7 @@ sealed interface PlanCard {
         /** This week's first unticked planned session, with its week counted from 1; none before week 1. */
         val next: PlannedTick?
             get() = if (weekIndex in progress.weeks.indices) {
-                progress.weeks[weekIndex].next?.let { PlannedTick(weekIndex + 1, it) }
+                progress.weeks[weekIndex].next?.let { PlannedTick(weekIndex + 1, progress.weeks.size, it) }
             } else {
                 null
             }

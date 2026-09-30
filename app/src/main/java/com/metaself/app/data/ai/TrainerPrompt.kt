@@ -76,6 +76,9 @@ object TrainerPrompt {
         after today (not counting today), counted by the app. Use those numbers;
         never count sessions yourself.
 
+        When the question gives planned, its week is the week of their weekly plan it falls in, counted
+        from 1, and of_weeks is how many weeks that plan has.
+
         Write plain English, to them, in the second person. Short sentences. Every figure you mention
         must be one given here or one you propose for the next session.
     """.trimIndent()
@@ -321,6 +324,7 @@ object TrainerPrompt {
 
     private fun plannedTick(tick: PlannedTick): JsonObject = buildJsonObject {
         put("week", tick.week)
+        put("of_weeks", tick.ofWeeks)
         plannedJson(tick.session).forEach { (name, value) -> put(name, value) }
     }
 

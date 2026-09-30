@@ -72,8 +72,8 @@ data class Programme(
     val replacesId: Long? = null,
 )
 
-/** A planned session with its week, counted from 1 (D96). */
-data class PlannedTick(val week: Int, val session: PlannedSession)
+/** A planned session with its week, counted from 1 (D96), and how many weeks its plan has (D107). */
+data class PlannedTick(val week: Int, val ofWeeks: Int, val session: PlannedSession)
 
 /**
  * D93, D105: the last kept evaluation, the plan that ran with it, how many of its sessions were done each

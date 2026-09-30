@@ -69,7 +69,7 @@ data class PlanProgress(val weeks: List<WeekProgress>) {
 
     /** D96: the planned session [workoutId] ticked, with its week counted from 1; null when it ticked none. */
     fun tickOf(workoutId: Long): PlannedTick? = weeks.firstNotNullOfOrNull { week ->
-        week.ticks.firstOrNull { it.by?.id == workoutId }?.let { PlannedTick(week.index + 1, it.planned) }
+        week.ticks.firstOrNull { it.by?.id == workoutId }?.let { PlannedTick(week.index + 1, weeks.size, it.planned) }
     }
 
     companion object {

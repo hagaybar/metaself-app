@@ -103,7 +103,7 @@ class ReviewSessionViewModelTest {
         val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), null, WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(walk40, walk40)) }, "Invented."), "a-model"))
         programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
 
-        assertThat(opened().state.value.planned).isEqualTo(PlannedTick(1, walk40))
+        assertThat(opened().state.value.planned).isEqualTo(PlannedTick(1, 2, walk40))
     }
 
     @Test

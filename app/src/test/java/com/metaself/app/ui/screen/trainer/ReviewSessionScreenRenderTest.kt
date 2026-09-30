@@ -61,7 +61,7 @@ class ReviewSessionScreenRenderTest {
     /** D96: when the session ticked a planned session, the privacy line names it; otherwise not. */
     @Test
     fun `the privacy line names the planned session the session ticked, only when there is one`() {
-        val planned = PlannedTick(1, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line"))
+        val planned = PlannedTick(1, 2, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line"))
 
         assertThat(draw(form.copy(planned = planned)).any {
             it.startsWith("Sends to OpenAI, with your key: this session and your words, and the session in your weekly plan it ticked; ")

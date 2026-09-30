@@ -325,10 +325,10 @@ class AskTheTrainerTest {
         programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
         trainer.plans += TrainerReply.Answered(PLAN, "a-model")
 
-        assertThat(ask().nextPlanned()).isEqualTo(PlannedTick(1, WALK_30))
+        assertThat(ask().nextPlanned()).isEqualTo(PlannedTick(1, 2, WALK_30))
         ask().suggest(ANSWERS)
 
-        assertThat((trainer.asked.single().question as TrainerQuestion.Plan).planned).isEqualTo(PlannedTick(1, WALK_30))
+        assertThat((trainer.asked.single().question as TrainerQuestion.Plan).planned).isEqualTo(PlannedTick(1, 2, WALK_30))
     }
 
     @Test
@@ -339,7 +339,7 @@ class AskTheTrainerTest {
 
         ask().save(workoutId = 1, felt = Felt.RIGHT, words = "", planId = null, withFeedback = true)
 
-        assertThat((trainer.asked.single().question as TrainerQuestion.Review).planned).isEqualTo(PlannedTick(1, WALK_30))
+        assertThat((trainer.asked.single().question as TrainerQuestion.Review).planned).isEqualTo(PlannedTick(1, 2, WALK_30))
     }
 
     @Test
@@ -398,7 +398,7 @@ class AskTheTrainerTest {
 
         ask().save(workoutId = 1, felt = Felt.RIGHT, words = "", planId = null, withFeedback = true)
 
-        assertThat((trainer.asked.single().question as TrainerQuestion.Review).planned).isEqualTo(PlannedTick(2, WALK_30))
+        assertThat((trainer.asked.single().question as TrainerQuestion.Review).planned).isEqualTo(PlannedTick(2, 2, WALK_30))
     }
 
     /** D94: asked on a Thursday, the plan would start this Monday; kept on the Friday, it starts next Monday. */

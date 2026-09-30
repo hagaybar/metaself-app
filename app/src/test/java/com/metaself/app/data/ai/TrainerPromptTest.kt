@@ -345,7 +345,7 @@ class TrainerPromptTest {
 
     @Test
     fun `a plan question and a review carry the weekly plan's session, or null`() {
-        val tick = PlannedTick(2, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk"))
+        val tick = PlannedTick(2, 4, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk"))
         val withPlanned = request(
             TrainerQuestion.Plan(PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.FRESH, Wish.NOT_SURE), tick),
         )
@@ -356,8 +356,9 @@ class TrainerPromptTest {
             TrainerPrompt.feedbackBody("a-model", reviewRequest(), RequestProfile.DETERMINISTIC),
         ).jsonObject)).jsonObject.getValue("question").jsonObject
 
-        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "kind", "minutes", "effort", "what")
+        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "of_weeks", "kind", "minutes", "effort", "what")
         assertThat(question.getValue("planned").jsonObject.getValue("week").jsonPrimitive.int).isEqualTo(2)
+        assertThat(question.getValue("planned").jsonObject.getValue("of_weeks").jsonPrimitive.int).isEqualTo(4)
         assertThat(review.getValue("planned")).isEqualTo(JsonNull)
         assertThat(systemContent(TrainerPrompt.planBody("a-model", withPlanned))).contains("question.planned")
     }
@@ -370,15 +371,29 @@ class TrainerPromptTest {
 
     @Test
     fun `a review's own weekly-plan tick is sent too, with its keys and week number`() {
-        val tick = PlannedTick(3, PlannedSession(WorkoutKind.RUN, 25, PlannedEffort.PUSH, "Push run"))
+        val tick = PlannedTick(3, 4, PlannedSession(WorkoutKind.RUN, 25, PlannedEffort.PUSH, "Push run"))
         val ticked = request(TrainerQuestion.Review(TrainerRequest.reviewQuestion(walk, review, plan).session, tick))
 
         val question = Json.parseToJsonElement(userContent(Json.parseToJsonElement(
             TrainerPrompt.feedbackBody("a-model", ticked, RequestProfile.DETERMINISTIC),
         ).jsonObject)).jsonObject.getValue("question").jsonObject
 
-        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "kind", "minutes", "effort", "what")
+        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "of_weeks", "kind", "minutes", "effort", "what")
         assertThat(question.getValue("planned").jsonObject.getValue("week").jsonPrimitive.int).isEqualTo(3)
+        assertThat(question.getValue("planned").jsonObject.getValue("of_weeks").jsonPrimitive.int).isEqualTo(4)
+    }
+
+    /** D107: the shared instructions say what of_weeks is, so any instructions can say "the first week of two". */
+    @Test
+    fun `every path's instructions say of_weeks is the plan's length`() {
+        listOf(
+            TrainerPrompt.planBody("a-model", planRequest()),
+            TrainerPrompt.feedbackBody("a-model", reviewRequest()),
+            TrainerPrompt.evaluateBody("a-model", evaluateRequest()),
+            TrainerPrompt.adjustBody("a-model", adjustRequest()),
+        ).forEach { body ->
+            assertThat(systemContent(body)).contains("of_weeks is how many weeks that plan has")
+        }
     }
 
     /** plan_followed judges the matched single-session plan alone; a weekly-plan tick is context for against_plan only. */

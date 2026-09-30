@@ -66,7 +66,7 @@ class PlanProgressTest {
         val progress = PlanProgress.of(plan, start, listOf(session(1, start + 7, WorkoutKind.WALK)), until = start + 13, counting = ALL)
 
         assertThat(progress.weeks.map { it.done }).containsExactly(0, 1).inOrder()
-        assertThat(progress.tickOf(1)).isEqualTo(PlannedTick(2, easyWalk))
+        assertThat(progress.tickOf(1)).isEqualTo(PlannedTick(2, 2, easyWalk))
         assertThat(progress.tickOf(9)).isNull()
     }
 
