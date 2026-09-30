@@ -87,8 +87,11 @@ object TrainerPrompt {
         must be one given here or one you propose for the next session.
     """.trimIndent()
 
-    /** D108: [VOICE] without "Short sentences.", for the feedback path, whose note sets its own length. */
-    private val VOICE_NOTE = VOICE.replace(" Short sentences.", "")
+    /**
+     * D108: [VOICE] as the feedback note was tried on the workbench — its own task sets the voice and the
+     * length, so only the rule on figures is kept.
+     */
+    private val VOICE_NOTE = "Every figure you mention must be one given here or one you propose for the next session."
 
     private val PLAN = """
         They are asking what to do in their next session. The question gives what they want to do, the

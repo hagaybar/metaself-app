@@ -19,7 +19,8 @@
   only when it changes the advice; no trend claimed from a few days; at least one concrete comparison
   with a figure from the record, never an estimated one; no sentence that would fit anyone; a next-time
   line only when it follows from the record. The shared part (COMMON) is unchanged except that its
-  "Short sentences." is not sent with this task.
+  last paragraph is sent, as tried, as the rule on figures alone ("Write plain English, to them, in the
+  second person. Short sentences." is not sent with this task, whose own text sets the voice).
 - **plan_followed is still judged**, only against the session plan the review names (design question 9),
   and still overridden to no_plan when none was sent. The note does not mention it.
 - **The screen** shows the headline and then the note. The headings go.

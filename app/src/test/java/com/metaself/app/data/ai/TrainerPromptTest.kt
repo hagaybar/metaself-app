@@ -411,7 +411,7 @@ class TrainerPromptTest {
 
     /**
      * D108: the feedback task is the note tried on the workbench. COMMON goes with it unchanged except
-     * that "Short sentences." does not; the other three paths still send it.
+     * that its voice paragraph is only the rule on figures, as tried; the other three paths still send it whole.
      */
     @Test
     fun `the feedback task asks for a coach's note, without Short sentences`() {
@@ -420,8 +420,9 @@ class TrainerPromptTest {
         assertThat(feedback).contains("They have just done the session in the question and told you how it felt. Write them a note about")
         assertThat(feedback).contains("Tell them what their band cannot.")
         assertThat(feedback).contains("Every sentence must be about them.")
-        assertThat(feedback).contains("Write plain English, to them, in the second person. Every figure you mention")
+        assertThat(feedback).contains("Every figure you mention must be one given here or one you propose for the next session.")
         assertThat(feedback).doesNotContain("Short sentences.")
+        assertThat(feedback).doesNotContain("Write plain English, to them, in the second person.")
         listOf("against_plan", "numbers (", "next_time", "four short parts").forEach { assertThat(feedback).doesNotContain(it) }
         listOf(TrainerPath.PLAN, TrainerPath.EVALUATE, TrainerPath.ADJUST).forEach { path ->
             assertThat(TrainerPrompt.instructions(path)).contains(
