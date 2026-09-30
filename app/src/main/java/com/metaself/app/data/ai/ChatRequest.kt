@@ -1,6 +1,7 @@
 package com.metaself.app.data.ai
 
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -46,20 +47,7 @@ object ChatRequest {
                 }
             }
         }
-        return buildJsonObject {
-            put("model", model)
-            if (profile.temperature) put("temperature", 0)
-            profile.reasoningEffort?.let { put("reasoning_effort", it) }
-            putJsonArray("messages") {
-                sent.forEach { message ->
-                    add(
-                        buildJsonObject {
-                            put("role", message.role)
-                            put("content", message.content)
-                        },
-                    )
-                }
-            }
+        return assemble(model, profile, sent) {
             putJsonObject("response_format") {
                 if (profile.strictFormat) {
                     put("type", "json_schema")
@@ -72,8 +60,38 @@ object ChatRequest {
                     put("type", "json_object")
                 }
             }
-        }.toString()
+        }
     }
+
+    /**
+     * D106: the same request with no reply shape — no `response_format`, and nothing added to any
+     * message. How it is sent is still the model's [RequestProfile].
+     */
+    fun plainBody(model: String, profile: RequestProfile, messages: List<Message>): String =
+        assemble(model, profile, messages) {}
+
+    /** The one place the parts every request shares are put in order: model, settings, messages, then [rest]. */
+    private fun assemble(
+        model: String,
+        profile: RequestProfile,
+        messages: List<Message>,
+        rest: JsonObjectBuilder.() -> Unit,
+    ): String = buildJsonObject {
+        put("model", model)
+        if (profile.temperature) put("temperature", 0)
+        profile.reasoningEffort?.let { put("reasoning_effort", it) }
+        putJsonArray("messages") {
+            messages.forEach { message ->
+                add(
+                    buildJsonObject {
+                        put("role", message.role)
+                        put("content", message.content)
+                    },
+                )
+            }
+        }
+        rest()
+    }.toString()
 
     /** The schema as an instruction, for a model that takes no strict format. Says "JSON", as that mode requires. */
     private fun schemaInstruction(schema: JsonObject): String =

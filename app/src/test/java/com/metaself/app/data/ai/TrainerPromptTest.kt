@@ -27,6 +27,7 @@ import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
+import com.metaself.app.domain.trainer.TrainerPath
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
@@ -442,6 +443,56 @@ class TrainerPromptTest {
         assertThat(systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))).doesNotContain("how_it_went")
     }
 
+    /** D106: "save the app's instructions" is the system message each real body sends, not a copy of it. */
+    @Test
+    fun `each path's instructions are exactly the system message its body sends`() {
+        val strict = RequestProfile.DETERMINISTIC
+        assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.PLAN))
+        assertThat(systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.FEEDBACK))
+        assertThat(systemContent(TrainerPrompt.evaluateBody("a-model", evaluateRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.EVALUATE))
+        assertThat(systemContent(TrainerPrompt.adjustBody("a-model", adjustRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.ADJUST))
+    }
+
+    @Test
+    fun `each body's user message is userMessage of its request`() {
+        listOf(
+            planRequest() to TrainerPrompt.planBody("a-model", planRequest()),
+            reviewRequest() to TrainerPrompt.feedbackBody("a-model", reviewRequest()),
+            evaluateRequest() to TrainerPrompt.evaluateBody("a-model", evaluateRequest()),
+            adjustRequest() to TrainerPrompt.adjustBody("a-model", adjustRequest()),
+        ).forEach { (request, body) ->
+            assertThat(userContent(Json.parseToJsonElement(body).jsonObject)).isEqualTo(TrainerPrompt.userMessage(request))
+        }
+    }
+
+    /** D106: the loaded text is the whole system message; the reply is not pinned in any way. */
+    @Test
+    fun `a workbench body has the given text as its only system message, the real user message, and no reply shape`() {
+        val body = Json.parseToJsonElement(
+            TrainerPrompt.workbenchBody("a-model", LOADED, planRequest(), RequestProfile.REASONING),
+        ).jsonObject
+
+        val sent = messages(body)
+        assertThat(sent.map { it.getValue("role").jsonPrimitive.content }).containsExactly("system", "user").inOrder()
+        assertThat(sent[0].getValue("content").jsonPrimitive.content).isEqualTo(LOADED)
+        assertThat(sent[1].getValue("content").jsonPrimitive.content).isEqualTo(TrainerPrompt.userMessage(planRequest()))
+        assertThat(body.keys).containsExactly("model", "reasoning_effort", "messages").inOrder()
+        assertThat(body.getValue("reasoning_effort").jsonPrimitive.content).isEqualTo("low")
+    }
+
+    @Test
+    fun `a workbench body keeps the model's settings, and adds no schema even for a model without the strict format`() {
+        val deterministic = Json.parseToJsonElement(
+            TrainerPrompt.workbenchBody("a-model", LOADED, reviewRequest(), RequestProfile.DETERMINISTIC),
+        ).jsonObject
+        val loose = TrainerPrompt.workbenchBody("a-model", LOADED, reviewRequest(), RequestProfile.REASONING.copy(strictFormat = false))
+
+        assertThat(deterministic.keys).containsExactly("model", "temperature", "messages").inOrder()
+        assertThat(deterministic.getValue("temperature").jsonPrimitive.int).isEqualTo(0)
+        assertThat(systemContent(loose)).isEqualTo(LOADED)
+        assertThat(Json.parseToJsonElement(loose).jsonObject.keys).doesNotContain("response_format")
+    }
+
     /** Invented: a four-week, three-a-week ask; the plan starts Monday 31 August 2026. */
     private fun evaluateRequest(last: LastEvaluation? = LAST) = request(
         TrainerQuestion.Evaluate(ProgrammeAsk(4, 3, "Invented words."), TEST_EPOCH_DAY - 3, last),
@@ -538,6 +589,7 @@ class TrainerPromptTest {
     }
 
     private companion object {
+        const val LOADED = "Invented instructions: a short note from a coach."
         val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
         const val NOTE = "Invented note: an old knee injury, so no running downhill.\nWalks before work."
         val STEADY = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk")
