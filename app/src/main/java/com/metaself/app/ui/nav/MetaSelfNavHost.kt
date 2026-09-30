@@ -143,7 +143,7 @@ sealed class Destination(val route: String) {
 
     /**
      * Settings is a nested graph (D79): [route] is the graph's, and opens its [index]; each of the
-     * six pages has its own route under it.
+     * seven pages has its own route under it.
      */
     data object Settings : Destination("settings") {
         const val index: String = "settings/index"
@@ -662,7 +662,7 @@ fun MetaSelfNavHost(
         }
 
         // Settings is a nested graph (D79): the menu's bare route opens the index, and each of the
-        // six pages is its own destination, all sharing the one view model on the graph's entry.
+        // seven pages is its own destination, all sharing the one view model on the graph's entry.
         // "What the band sends" (D80) is one more destination in it, reached from Movement.
         settingsGraph(
             navController,

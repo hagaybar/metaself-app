@@ -141,15 +141,16 @@ class SettingsIndexWordingTest {
         assertThat(SettingsIndexWording.statusOf(SettingsPage.MOVEMENT, state)).isNull()
     }
 
-    /** Backups, AI, Food database and Problems need only [SettingsUiState.loaded]. */
+    /** Backups, AI, Food database, Problems and the trainer's instructions need only [SettingsUiState.loaded]. */
     @Test
-    fun `the other four rows show as soon as the page has loaded`() {
+    fun `the other rows show as soon as the page has loaded`() {
         val state = SettingsUiState(loaded = true, windowRead = false, stepsRead = false, hasKey = true, dailyCeiling = 20)
 
         assertThat(SettingsIndexWording.statusOf(SettingsPage.BACKUPS, state)).isEqualTo("Not set up")
         assertThat(SettingsIndexWording.statusOf(SettingsPage.AI, state)).isEqualTo("Key saved · up to 20 a day")
         assertThat(SettingsIndexWording.statusOf(SettingsPage.FOOD_DATABASE, state)).isEqualTo("Not signed in")
         assertThat(SettingsIndexWording.statusOf(SettingsPage.PROBLEMS, state)).isEqualTo("None")
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.TRAINER_INSTRUCTIONS, state)).isEqualTo("A testing tool · stores nothing")
     }
 
     @Test

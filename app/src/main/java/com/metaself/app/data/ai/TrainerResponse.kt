@@ -15,6 +15,7 @@ import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -158,9 +159,17 @@ object TrainerResponse {
         what = payload.text("what").also { require(it.isNotEmpty()) { "a planned session says what it is" } },
     )
 
-    private fun content(body: String): String? = runCatching {
+    internal fun content(body: String): String? = runCatching {
         json.parseToJsonElement(body).jsonObject["choices"]!!.jsonArray
-            .first().jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive.content
+            .first().jsonObject["message"]!!.jsonObject["content"]!!.jsonPrimitive
+            .takeUnless { it is JsonNull }?.content
+    }.getOrNull()
+
+    /** The chat completion's own refusal (`message.refusal`), when the provider sent one instead of content. */
+    internal fun refusal(body: String): String? = runCatching {
+        json.parseToJsonElement(body).jsonObject["choices"]!!.jsonArray
+            .first().jsonObject["message"]!!.jsonObject["refusal"]!!.jsonPrimitive
+            .takeUnless { it is JsonNull }?.content
     }.getOrNull()
 
     /**

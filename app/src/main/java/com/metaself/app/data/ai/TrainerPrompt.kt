@@ -11,6 +11,7 @@ import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.SessionFacts
 import com.metaself.app.domain.trainer.SessionPlan
+import com.metaself.app.domain.trainer.TrainerPath
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.WeekOutcome
@@ -75,6 +76,9 @@ object TrainerPrompt {
         The rhythm: this_week gives the sessions they have done this week so far and the days left in it
         after today (not counting today), counted by the app. Use those numbers;
         never count sessions yourself.
+
+        When question.planned is given, its week is the week of their weekly plan it falls in, counted
+        from 1, and of_weeks is how many weeks that plan has.
 
         Write plain English, to them, in the second person. Short sentences. Every figure you mention
         must be one given here or one you propose for the next session.
@@ -156,27 +160,58 @@ object TrainerPrompt {
 
     fun planBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Plan) { "a plan is asked with a plan question" }
-        return ChatRequest.body(model, profile, messages(PLAN, request), "session_plan", PLAN_SCHEMA)
+        return ChatRequest.body(model, profile, messages(request), "session_plan", PLAN_SCHEMA)
     }
 
     fun feedbackBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Review) { "feedback is asked with a review question" }
-        return ChatRequest.body(model, profile, messages(FEEDBACK, request), "session_feedback", FEEDBACK_SCHEMA)
+        return ChatRequest.body(model, profile, messages(request), "session_feedback", FEEDBACK_SCHEMA)
     }
 
     fun evaluateBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Evaluate) { "an evaluation is asked with an evaluation question" }
-        return ChatRequest.body(model, profile, messages(EVALUATE, request), "evaluation_and_plan", EVALUATION_SCHEMA)
+        return ChatRequest.body(model, profile, messages(request), "evaluation_and_plan", EVALUATION_SCHEMA)
     }
 
     fun adjustBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Adjust) { "an adjustment is asked with an adjust question" }
-        return ChatRequest.body(model, profile, messages(ADJUST, request), "weeks_plan", WEEKS_PLAN_SCHEMA)
+        return ChatRequest.body(model, profile, messages(request), "weeks_plan", WEEKS_PLAN_SCHEMA)
     }
 
-    private fun messages(task: String, request: TrainerRequest) = listOf(
-        ChatRequest.Message("system", COMMON + "\n\n" + task),
-        ChatRequest.Message("user", user(request).toString()),
+    /**
+     * D106: the whole system message [path] sends today — the shared part and the path's own, joined as
+     * every body joins them. The workbench saves this to a file as the starting point. A model without the
+     * strict format is also sent the schema paragraph after it; that is reply shape, which the workbench
+     * never sends.
+     */
+    fun instructions(path: TrainerPath): String = COMMON + "\n\n" + when (path) {
+        TrainerPath.FEEDBACK -> FEEDBACK
+        TrainerPath.PLAN -> PLAN
+        TrainerPath.EVALUATE -> EVALUATE
+        TrainerPath.ADJUST -> ADJUST
+    }
+
+    /** The user message every body sends: [request], serialised. Shared with the workbench (D106). */
+    fun userMessage(request: TrainerRequest): String = user(request).toString()
+
+    /**
+     * D106: the workbench's body — [system] as the only system message, the real user message, the
+     * model's own settings — and no reply shape: no `response_format`, no schema instruction.
+     */
+    fun workbenchBody(
+        model: String,
+        system: String,
+        request: TrainerRequest,
+        profile: RequestProfile = RequestProfile.guess(model),
+    ): String = ChatRequest.plainBody(
+        model,
+        profile,
+        listOf(ChatRequest.Message("system", system), ChatRequest.Message("user", userMessage(request))),
+    )
+
+    private fun messages(request: TrainerRequest) = listOf(
+        ChatRequest.Message("system", instructions(TrainerPath.of(request.question))),
+        ChatRequest.Message("user", userMessage(request)),
     )
 
     private fun user(request: TrainerRequest): JsonObject = buildJsonObject {
@@ -321,6 +356,7 @@ object TrainerPrompt {
 
     private fun plannedTick(tick: PlannedTick): JsonObject = buildJsonObject {
         put("week", tick.week)
+        put("of_weeks", tick.ofWeeks)
         plannedJson(tick.session).forEach { (name, value) -> put(name, value) }
     }
 

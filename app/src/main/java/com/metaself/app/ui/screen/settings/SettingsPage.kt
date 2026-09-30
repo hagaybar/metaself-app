@@ -4,7 +4,7 @@ import androidx.annotation.StringRes
 import com.metaself.app.R
 
 /**
- * The six pages of Settings (D79), in the order the index lists them. [path] is the last part of
+ * The seven pages of Settings (D79); the last, a testing tool (D106). In the order the index lists them. [path] is the last part of
  * the page's route; [title] is its row on the index and its title bar.
  */
 enum class SettingsPage(val path: String, @StringRes val title: Int) {
@@ -14,4 +14,5 @@ enum class SettingsPage(val path: String, @StringRes val title: Int) {
     AI("ai", R.string.settings_page_ai),
     FOOD_DATABASE("food-database", R.string.settings_page_food),
     PROBLEMS("problems", R.string.settings_problems_title),
+    TRAINER_INSTRUCTIONS("trainer-instructions", R.string.settings_page_trainer_instructions),
 }

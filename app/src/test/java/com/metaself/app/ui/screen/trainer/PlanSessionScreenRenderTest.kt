@@ -49,7 +49,7 @@ class PlanSessionScreenRenderTest {
 
     @Test
     fun `the next planned session is named above the rows, and in the privacy line`() {
-        val next = PlannedTick(1, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line"))
+        val next = PlannedTick(1, 2, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line"))
         val texts = draw(PlanSessionViewModel.State(next = next))
 
         assertThat(texts).containsAtLeast("Next in your plan: steady walk, 40 min", "WHAT").inOrder()

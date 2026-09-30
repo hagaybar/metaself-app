@@ -286,7 +286,7 @@ class PlanSessionViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.state.value
-        assertThat(state.next).isEqualTo(PlannedTick(1, walk40))
+        assertThat(state.next).isEqualTo(PlannedTick(1, 2, walk40))
         assertThat(state.form.time).isEqualTo(TimeAvailable.MIN_45)
         assertThat(state.form.wish).isEqualTo(Wish.NOT_SURE)
         assertThat(state.form.activity).isNull()
@@ -307,7 +307,7 @@ class PlanSessionViewModelTest {
 
         val state = viewModel.state.value
         assertThat(state.shown).isNull()
-        assertThat(state.next).isEqualTo(PlannedTick(1, walk40))
+        assertThat(state.next).isEqualTo(PlannedTick(1, 2, walk40))
         assertThat(state.form).isEqualTo(PlanSessionViewModel.Form())
     }
 

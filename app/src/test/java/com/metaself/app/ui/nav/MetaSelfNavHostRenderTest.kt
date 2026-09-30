@@ -29,12 +29,12 @@ class MetaSelfNavHostRenderTest {
         assertThat(Destination.Movement.route).isEqualTo("movement")
     }
 
-    /** Settings is a nested graph (D79): an index and six pages, each its own route. */
+    /** Settings is a nested graph (D79): an index and seven pages, each its own route. */
     @Test
     fun `every Settings page has its own route, under the Settings graph`() {
         val routes = SettingsPage.entries.map(Destination.Settings::page) + Destination.Settings.index
 
-        assertThat(routes).hasSize(7)
+        assertThat(routes).hasSize(8)
         assertThat(routes).containsNoDuplicates()
         assertThat(routes.all { it.startsWith(Destination.Settings.route + "/") }).isTrue()
     }

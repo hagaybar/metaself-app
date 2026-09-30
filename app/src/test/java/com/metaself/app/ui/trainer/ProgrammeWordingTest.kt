@@ -28,7 +28,7 @@ class ProgrammeWordingTest {
         assertThat(ProgrammeWording.plannedTitle(steady)).isEqualTo("Steady walk, 40 min")
         assertThat(ProgrammeWording.plannedTitle(PlannedSession(WorkoutKind.CYCLE, 60, PlannedEffort.PUSH, "x"))).isEqualTo("Push ride, 60 min")
         assertThat(ProgrammeWording.plannedTitle(PlannedSession(WorkoutKind.OTHER, 20, PlannedEffort.EASY, "x"))).isEqualTo("Easy session, 20 min")
-        assertThat(ProgrammeWording.nextInPlan(PlannedTick(2, steady))).isEqualTo("Next in your plan: steady walk, 40 min")
+        assertThat(ProgrammeWording.nextInPlan(PlannedTick(2, 4, steady))).isEqualTo("Next in your plan: steady walk, 40 min")
     }
 
     @Test

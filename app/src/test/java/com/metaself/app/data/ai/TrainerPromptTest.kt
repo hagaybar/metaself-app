@@ -27,6 +27,7 @@ import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
+import com.metaself.app.domain.trainer.TrainerPath
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
@@ -345,7 +346,7 @@ class TrainerPromptTest {
 
     @Test
     fun `a plan question and a review carry the weekly plan's session, or null`() {
-        val tick = PlannedTick(2, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk"))
+        val tick = PlannedTick(2, 4, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk"))
         val withPlanned = request(
             TrainerQuestion.Plan(PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.FRESH, Wish.NOT_SURE), tick),
         )
@@ -356,8 +357,9 @@ class TrainerPromptTest {
             TrainerPrompt.feedbackBody("a-model", reviewRequest(), RequestProfile.DETERMINISTIC),
         ).jsonObject)).jsonObject.getValue("question").jsonObject
 
-        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "kind", "minutes", "effort", "what")
+        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "of_weeks", "kind", "minutes", "effort", "what")
         assertThat(question.getValue("planned").jsonObject.getValue("week").jsonPrimitive.int).isEqualTo(2)
+        assertThat(question.getValue("planned").jsonObject.getValue("of_weeks").jsonPrimitive.int).isEqualTo(4)
         assertThat(review.getValue("planned")).isEqualTo(JsonNull)
         assertThat(systemContent(TrainerPrompt.planBody("a-model", withPlanned))).contains("question.planned")
     }
@@ -370,15 +372,29 @@ class TrainerPromptTest {
 
     @Test
     fun `a review's own weekly-plan tick is sent too, with its keys and week number`() {
-        val tick = PlannedTick(3, PlannedSession(WorkoutKind.RUN, 25, PlannedEffort.PUSH, "Push run"))
+        val tick = PlannedTick(3, 4, PlannedSession(WorkoutKind.RUN, 25, PlannedEffort.PUSH, "Push run"))
         val ticked = request(TrainerQuestion.Review(TrainerRequest.reviewQuestion(walk, review, plan).session, tick))
 
         val question = Json.parseToJsonElement(userContent(Json.parseToJsonElement(
             TrainerPrompt.feedbackBody("a-model", ticked, RequestProfile.DETERMINISTIC),
         ).jsonObject)).jsonObject.getValue("question").jsonObject
 
-        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "kind", "minutes", "effort", "what")
+        assertThat(question.getValue("planned").jsonObject.keys).containsExactly("week", "of_weeks", "kind", "minutes", "effort", "what")
         assertThat(question.getValue("planned").jsonObject.getValue("week").jsonPrimitive.int).isEqualTo(3)
+        assertThat(question.getValue("planned").jsonObject.getValue("of_weeks").jsonPrimitive.int).isEqualTo(4)
+    }
+
+    /** D107: the shared instructions say what of_weeks is, so any instructions can say "the first week of two". */
+    @Test
+    fun `every path's instructions say of_weeks is the plan's length`() {
+        listOf(
+            TrainerPrompt.planBody("a-model", planRequest()),
+            TrainerPrompt.feedbackBody("a-model", reviewRequest()),
+            TrainerPrompt.evaluateBody("a-model", evaluateRequest()),
+            TrainerPrompt.adjustBody("a-model", adjustRequest()),
+        ).forEach { body ->
+            assertThat(systemContent(body)).contains("of_weeks is how many weeks that plan has")
+        }
     }
 
     /** plan_followed judges the matched single-session plan alone; a weekly-plan tick is context for against_plan only. */
@@ -425,6 +441,56 @@ class TrainerPromptTest {
         }
         assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest()))).doesNotContain("how_it_went")
         assertThat(systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))).doesNotContain("how_it_went")
+    }
+
+    /** D106: "save the app's instructions" is the system message each real body sends, not a copy of it. */
+    @Test
+    fun `each path's instructions are exactly the system message its body sends`() {
+        val strict = RequestProfile.DETERMINISTIC
+        assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.PLAN))
+        assertThat(systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.FEEDBACK))
+        assertThat(systemContent(TrainerPrompt.evaluateBody("a-model", evaluateRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.EVALUATE))
+        assertThat(systemContent(TrainerPrompt.adjustBody("a-model", adjustRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.ADJUST))
+    }
+
+    @Test
+    fun `each body's user message is userMessage of its request`() {
+        listOf(
+            planRequest() to TrainerPrompt.planBody("a-model", planRequest()),
+            reviewRequest() to TrainerPrompt.feedbackBody("a-model", reviewRequest()),
+            evaluateRequest() to TrainerPrompt.evaluateBody("a-model", evaluateRequest()),
+            adjustRequest() to TrainerPrompt.adjustBody("a-model", adjustRequest()),
+        ).forEach { (request, body) ->
+            assertThat(userContent(Json.parseToJsonElement(body).jsonObject)).isEqualTo(TrainerPrompt.userMessage(request))
+        }
+    }
+
+    /** D106: the loaded text is the whole system message; the reply is not pinned in any way. */
+    @Test
+    fun `a workbench body has the given text as its only system message, the real user message, and no reply shape`() {
+        val body = Json.parseToJsonElement(
+            TrainerPrompt.workbenchBody("a-model", LOADED, planRequest(), RequestProfile.REASONING),
+        ).jsonObject
+
+        val sent = messages(body)
+        assertThat(sent.map { it.getValue("role").jsonPrimitive.content }).containsExactly("system", "user").inOrder()
+        assertThat(sent[0].getValue("content").jsonPrimitive.content).isEqualTo(LOADED)
+        assertThat(sent[1].getValue("content").jsonPrimitive.content).isEqualTo(TrainerPrompt.userMessage(planRequest()))
+        assertThat(body.keys).containsExactly("model", "reasoning_effort", "messages").inOrder()
+        assertThat(body.getValue("reasoning_effort").jsonPrimitive.content).isEqualTo("low")
+    }
+
+    @Test
+    fun `a workbench body keeps the model's settings, and adds no schema even for a model without the strict format`() {
+        val deterministic = Json.parseToJsonElement(
+            TrainerPrompt.workbenchBody("a-model", LOADED, reviewRequest(), RequestProfile.DETERMINISTIC),
+        ).jsonObject
+        val loose = TrainerPrompt.workbenchBody("a-model", LOADED, reviewRequest(), RequestProfile.REASONING.copy(strictFormat = false))
+
+        assertThat(deterministic.keys).containsExactly("model", "temperature", "messages").inOrder()
+        assertThat(deterministic.getValue("temperature").jsonPrimitive.int).isEqualTo(0)
+        assertThat(systemContent(loose)).isEqualTo(LOADED)
+        assertThat(Json.parseToJsonElement(loose).jsonObject.keys).doesNotContain("response_format")
     }
 
     /** Invented: a four-week, three-a-week ask; the plan starts Monday 31 August 2026. */
@@ -523,6 +589,7 @@ class TrainerPromptTest {
     }
 
     private companion object {
+        const val LOADED = "Invented instructions: a short note from a coach."
         val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
         const val NOTE = "Invented note: an old knee injury, so no running downhill.\nWalks before work."
         val STEADY = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk")

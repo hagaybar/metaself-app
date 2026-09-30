@@ -14,6 +14,7 @@ import com.metaself.app.data.ai.OpenAiLetterWriter
 import com.metaself.app.data.ai.OpenAiMealConversation
 import com.metaself.app.data.ai.OpenAiMealEstimator
 import com.metaself.app.data.ai.OpenAiTrainer
+import com.metaself.app.data.ai.OpenAiWorkbench
 import com.metaself.app.data.ai.RequestProfileStore
 import com.metaself.app.data.diagnostics.FileProblemLog
 import com.metaself.app.data.diagnostics.ProblemLog
@@ -29,6 +30,7 @@ import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.letter.LetterWriter
 import com.metaself.app.domain.trainer.Trainer
+import com.metaself.app.domain.trainer.WorkbenchSender
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -145,6 +147,16 @@ object AiModule {
         profiles: RequestProfileStore,
         problems: ProblemLog,
     ): Trainer = OpenAiTrainer(keys, settings, client, profiles, problems)
+
+    /** The trainer's instructions workbench (D106): the same key, ceiling, client and profiles as the trainer. */
+    @Provides
+    @Singleton
+    fun provideWorkbenchSender(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        profiles: RequestProfileStore,
+    ): WorkbenchSender = OpenAiWorkbench(keys, settings, client, profiles)
 
     /** The weekly letter (D101): the same key, ceiling, client, profiles and log as the estimator. */
     @Provides

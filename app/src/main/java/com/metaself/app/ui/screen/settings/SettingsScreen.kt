@@ -18,7 +18,7 @@ import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 
 /**
- * Settings: a short list of six rows, each its title and one line saying the current state, each
+ * Settings: a short list of seven rows, each its title and one line saying the current state, each
  * opening its own page (D79). The controls are all on the pages; this screen holds none.
  *
  * One row is one tap target, title and status together, so a screen reader reads a row as one

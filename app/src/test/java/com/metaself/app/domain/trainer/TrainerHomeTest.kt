@@ -80,7 +80,7 @@ class TrainerHomeTest {
 
         assertThat(card.weekIndex).isEqualTo(0)
         assertThat(card.progress.weeks.first().done).isEqualTo(1)
-        assertThat(card.next).isEqualTo(PlannedTick(1, walk40))
+        assertThat(card.next).isEqualTo(PlannedTick(1, 2, walk40))
     }
 
     @Test
@@ -105,7 +105,7 @@ class TrainerHomeTest {
         )
 
         assertThat(home.plan).isInstanceOf(PlanCard.Running::class.java)
-        assertThat(home.next).isEqualTo(PlannedTick(1, walk30))
+        assertThat(home.next).isEqualTo(PlannedTick(1, 2, walk30))
     }
 
     /** A synced thirty-minute walk at 07:00 on [day]. Invented. */

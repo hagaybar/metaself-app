@@ -112,7 +112,7 @@ private fun PlanForm(
 /** One single-choice row: a label and its chips, wrapping as the workout sheet's kinds do. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun <T> ChoiceRow(
+internal fun <T> ChoiceRow(
     @StringRes label: Int,
     choices: List<T>,
     picked: T?,
