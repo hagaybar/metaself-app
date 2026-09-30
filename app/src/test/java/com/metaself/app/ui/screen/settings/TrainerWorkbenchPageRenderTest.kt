@@ -2,8 +2,13 @@ package com.metaself.app.ui.screen.settings
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.trainer.Feeling
+import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPath
+import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.ComposeRender
+import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.trainer.TrainerWording
 import com.metaself.app.ui.trainer.WorkbenchWording
 import org.junit.After
@@ -79,6 +84,67 @@ class TrainerWorkbenchPageRenderTest {
 
         assertThat(texts).contains(TrainerWording.failure(EstimateResult.NoKey))
         assertThat(texts).containsNoneOf(WorkbenchWording.COPY_REPLY, WorkbenchWording.COPY_SENT)
+    }
+
+    @Test
+    fun `before the record is read, neither the empty session list nor the missing plan is claimed`() {
+        assertThat(page(TrainerWorkbenchViewModel.State())).doesNotContain(WorkbenchWording.NO_SESSIONS)
+        assertThat(page(TrainerWorkbenchViewModel.State(path = TrainerPath.ADJUST))).doesNotContain(WorkbenchWording.NO_PLAN)
+    }
+
+    @Test
+    fun `changing the plan asks under the Change-the-plan screen's own label`() {
+        val texts = page(TrainerWorkbenchViewModel.State(loaded = true, path = TrainerPath.ADJUST, planRuns = true))
+
+        assertThat(texts).contains("What should change?")
+        assertThat(texts).doesNotContain(WorkbenchWording.NO_PLAN)
+    }
+
+    @Test
+    fun `the plan path draws its four row labels, and Send is on once all four are answered`() {
+        val answered = PlanSessionViewModel.Form(PlanActivity.RUN, TimeAvailable.MIN_30, Feeling.NORMAL, Wish.EASY)
+        val texts = page(TrainerWorkbenchViewModel.State(loaded = true, path = TrainerPath.PLAN, plan = answered))
+
+        assertThat(texts).containsAtLeast("WHAT TO TEST", "WHAT", "TIME I HAVE", "HOW I FEEL", "TODAY I WANT").inOrder()
+        assertThat(render.isEnabled(WorkbenchWording.SEND)).isTrue()
+    }
+
+    @Test
+    fun `the review path draws its two row labels`() {
+        val texts = page(TrainerWorkbenchViewModel.State(loaded = true, path = TrainerPath.EVALUATE))
+
+        assertThat(texts).containsAtLeast("HOW MANY WEEKS", "SESSIONS A WEEK I CAN MANAGE").inOrder()
+    }
+
+    @Test
+    fun `while sending, the button says so and is off`() {
+        val answered = PlanSessionViewModel.Form(PlanActivity.RUN, TimeAvailable.MIN_30, Feeling.NORMAL, Wish.EASY)
+        val texts = page(TrainerWorkbenchViewModel.State(loaded = true, path = TrainerPath.PLAN, plan = answered, sending = true))
+
+        assertThat(texts).contains(WorkbenchWording.SENDING)
+        assertThat(texts).doesNotContain(WorkbenchWording.SEND)
+        assertThat(render.isEnabled(WorkbenchWording.SENDING)).isFalse()
+    }
+
+    @Test
+    fun `a failure after sending offers what was sent, and no reply to copy`() {
+        val texts = page(
+            TrainerWorkbenchViewModel.State(loaded = true, path = TrainerPath.PLAN, failure = EstimateResult.NoKey, sent = "{}"),
+        )
+
+        assertThat(texts).contains(WorkbenchWording.COPY_SENT)
+        assertThat(texts).doesNotContain(WorkbenchWording.COPY_REPLY)
+    }
+
+    @Test
+    fun `a file message and a notice are drawn`() {
+        val texts = page(
+            TrainerWorkbenchViewModel.State(
+                loaded = true, fileMessage = WorkbenchWording.COULD_NOT_READ, notice = WorkbenchWording.SESSION_GONE,
+            ),
+        )
+
+        assertThat(texts).containsAtLeast(WorkbenchWording.COULD_NOT_READ, WorkbenchWording.SESSION_GONE).inOrder()
     }
 
     private fun page(state: TrainerWorkbenchViewModel.State): List<String> = render.texts(heightPx = TALL) {

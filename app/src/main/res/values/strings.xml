@@ -610,8 +610,8 @@
     <string name="settings_page_ai">AI estimates</string>
     <string name="settings_page_food">Food database</string>
     <string name="settings_page_trainer_instructions">Test the trainer\'s instructions</string>
-    <string name="workbench_row_path">What to test</string>
-    <string name="workbench_row_session">Session</string>
+    <string name="workbench_row_path">WHAT TO TEST</string>
+    <string name="workbench_row_session">SESSION</string>
     <string name="settings_window_title">When you eat</string>
     <string name="settings_window_none">Off. Set the hours you mean to eat between and the app will keep tab, from today onwards.</string>
     <string name="settings_window_set">Your window is %1$s.</string>

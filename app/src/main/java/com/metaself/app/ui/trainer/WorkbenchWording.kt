@@ -12,7 +12,7 @@ object WorkbenchWording {
     const val SAVE_APP_OWN = "Save the app's instructions to a file"
     const val SEND = "Send"
     const val SENDING = "Sending…"
-    const val PRIVACY = "On Send, what the chosen path sends goes to OpenAI with your key, under the instructions " +
+    const val PRIVACY = "On Send, what the chosen test sends goes to OpenAI with your key, under the instructions " +
         "named above. It counts as one of today's AI requests. Nothing is kept."
     const val COPY_REPLY = "Copy reply"
     const val COPY_SENT = "Copy what was sent"
