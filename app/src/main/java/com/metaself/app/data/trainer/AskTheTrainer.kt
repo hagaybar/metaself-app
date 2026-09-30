@@ -7,6 +7,7 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.LastEvaluation
@@ -90,7 +91,7 @@ class AskTheTrainer @Inject constructor(
     }
 
     suspend fun suggest(answers: PlanAnswers): Suggested =
-        when (val reply = trainer.suggest(request(TrainerQuestion.Plan(answers, nextPlanned()), exceptWorkoutId = NO_WORKOUT))) {
+        when (val reply = trainer.suggest(request(planQuestion(answers)))) {
             is TrainerReply.Failed -> Suggested.Failed(reply.failure)
             is TrainerReply.Answered -> {
                 val plan = TrainerPlan(0, now(), answers, reply.value, reply.model, kept = false)
@@ -109,14 +110,13 @@ class AskTheTrainer @Inject constructor(
         if (workout == null) return Reviewed.SessionGone(saved)
         if (!withFeedback) return Reviewed.Saved(saved)
 
-        val plan = planId?.let { store.plans(listOf(it))[it] }
-        val question = TrainerRequest.reviewQuestion(workout, saved, plan).copy(planned = plannedTickOf(workout.id))
+        val question = feedbackQuestion(workout, saved)
         return when (val reply = trainer.feedback(request(question, exceptWorkoutId = workoutId))) {
             is TrainerReply.Failed -> Reviewed.NoFeedback(saved, reply.failure)
             is TrainerReply.Answered -> {
                 // With no plan sent there is nothing to have followed, whatever the model judged
                 // (design question 9); a planId whose plan is gone sends none either.
-                val feedback = if (plan == null) reply.value.copy(followed = PlanFollowed.NO_PLAN) else reply.value
+                val feedback = if (question.session.plan == null) reply.value.copy(followed = PlanFollowed.NO_PLAN) else reply.value
                 val answered = saved.copy(feedback = feedback, feedbackAtMillis = now(), model = reply.model)
                 store.putReview(answered)
                 if (planId != null) store.unkeep(planId)
@@ -126,17 +126,14 @@ class AskTheTrainer @Inject constructor(
     }
 
     /** D93: one ask; the answer is stored OFFERED. The plan would start on the Monday keeping it today gives (D94). */
-    suspend fun evaluate(ask: ProgrammeAsk): Evaluated {
-        val day = today().toEpochDay()
-        val question = TrainerQuestion.Evaluate(ask, ProgrammeCalendar.startFor(day), lastEvaluation(day))
-        return when (val reply = trainer.evaluate(request(question, exceptWorkoutId = NO_WORKOUT))) {
+    suspend fun evaluate(ask: ProgrammeAsk): Evaluated =
+        when (val reply = trainer.evaluate(request(evaluateQuestion(ask)))) {
             is TrainerReply.Failed -> Evaluated.Failed(reply.failure)
             is TrainerReply.Answered -> {
                 val programme = Programme(0, now(), ask, reply.value.evaluation, reply.value.plan, reply.model)
                 Evaluated.Offered(programme.copy(id = programmes.add(programme)))
             }
         }
-    }
 
     /**
      * D94: [id] runs from the Monday keeping it today gives, which is returned; a running plan is replaced.
@@ -157,29 +154,15 @@ class AskTheTrainer @Inject constructor(
     suspend fun adjust(words: String): Adjusted {
         val running = running() ?: return Adjusted.NotRunning
         val programme = running.programme
-        val start = requireNotNull(programme.startEpochDay)
-        val index = running.weekIndex.coerceAtLeast(0)
-        val week = running.progress.weeks[index]
-        val ticked = week.ticks.filter { it.by != null }.map { it.planned }
-        val question = TrainerQuestion.Adjust(
-            ask = programme.ask,
-            startEpochDay = start,
-            plan = programme.plan,
-            weekIndex = index,
-            doneByWeek = running.progress.weeks.take(index).map { it.done },
-            tickedThisWeek = ticked,
-            thisWeekMax = week.planned - ticked.size,
-            words = words.trim(),
-            howItWent = running.progress.weeks.take(index + 1).map { it.outcome() },
-        )
-        return when (val reply = trainer.adjust(request(question, exceptWorkoutId = NO_WORKOUT))) {
+        val question = adjustQuestion(running, words)
+        return when (val reply = trainer.adjust(request(question))) {
             is TrainerReply.Failed -> Adjusted.Failed(reply.failure)
             is TrainerReply.Answered -> {
                 val rest = reply.value
-                val thisWeek = PlanWeek(rest.weeks.first().focus, ticked + rest.weeks.first().sessions)
-                val composed = WeeksPlan(rest.title, programme.plan.weeks.take(index) + thisWeek + rest.weeks.drop(1), rest.why)
+                val thisWeek = PlanWeek(rest.weeks.first().focus, question.tickedThisWeek + rest.weeks.first().sessions)
+                val composed = WeeksPlan(rest.title, programme.plan.weeks.take(question.weekIndex) + thisWeek + rest.weeks.drop(1), rest.why)
                 val version = Programme(
-                    id = 0, createdAtMillis = now(), ask = programme.ask.copy(words = words.trim()), evaluation = null,
+                    id = 0, createdAtMillis = now(), ask = programme.ask.copy(words = question.words), evaluation = null,
                     plan = composed, model = reply.model, replacesId = programme.id,
                 )
                 Adjusted.Offered(version.copy(id = programmes.add(version)))
@@ -242,6 +225,45 @@ class AskTheTrainer @Inject constructor(
     /** D98: the evaluation of the running or last plan — its own, or its chain's (design question 3). */
     suspend fun evaluationOf(programme: Programme): Evaluation? = Programmes.evaluationOf(programme, programmes.all())
 
+    // The question builders. The asks above and the workbench (D106) build their questions here and only
+    // here, so the workbench's request is the real one by construction. Each reads only.
+
+    /** D86, D96: the plan form's answers, with the running plan's next session. */
+    suspend fun planQuestion(answers: PlanAnswers): TrainerQuestion.Plan = TrainerQuestion.Plan(answers, nextPlanned())
+
+    /** D87, D96: [workout] with [review], the single-session plan it names, and the planned session it ticked. */
+    suspend fun feedbackQuestion(workout: Workout, review: TrainerReview): TrainerQuestion.Review {
+        val plan = review.planId?.let { store.plans(listOf(it))[it] }
+        return TrainerRequest.reviewQuestion(workout, review, plan).copy(planned = plannedTickOf(workout.id))
+    }
+
+    /** D93, D94, D98: the form, the Monday keeping it today gives, and the last kept evaluation. */
+    suspend fun evaluateQuestion(ask: ProgrammeAsk): TrainerQuestion.Evaluate {
+        val day = today().toEpochDay()
+        return TrainerQuestion.Evaluate(ask, ProgrammeCalendar.startFor(day), lastEvaluation(day))
+    }
+
+    /** D97, D105: the running plan's rest and how each week went; null when no plan runs. */
+    suspend fun adjustQuestion(words: String): TrainerQuestion.Adjust? = running()?.let { adjustQuestion(it, words) }
+
+    private fun adjustQuestion(running: PlanCard.Running, words: String): TrainerQuestion.Adjust {
+        val programme = running.programme
+        val index = running.weekIndex.coerceAtLeast(0)
+        val week = running.progress.weeks[index]
+        val ticked = week.ticks.filter { it.by != null }.map { it.planned }
+        return TrainerQuestion.Adjust(
+            ask = programme.ask,
+            startEpochDay = requireNotNull(programme.startEpochDay),
+            plan = programme.plan,
+            weekIndex = index,
+            doneByWeek = running.progress.weeks.take(index).map { it.done },
+            tickedThisWeek = ticked,
+            thisWeekMax = week.planned - ticked.size,
+            words = words.trim(),
+            howItWent = running.progress.weeks.take(index + 1).map { it.outcome() },
+        )
+    }
+
     /** D93, D98: the last kept evaluation with the newest kept version of its plan and its done-counts. */
     private suspend fun lastEvaluation(day: Long): LastEvaluation? {
         val (evaluated, latest) = Programmes.lastEvaluated(programmes.all()) ?: return null
@@ -256,7 +278,8 @@ class AskTheTrainer @Inject constructor(
         return LastEvaluation(madeOn, evaluation, latest.plan, begun.map { it.done }, begun.map { it.outcome() })
     }
 
-    private suspend fun request(question: TrainerQuestion, exceptWorkoutId: Long): TrainerRequest {
+    /** Every ask's request (D84), fresh from the stored record. Reads only; shared with the workbench (D106). */
+    suspend fun request(question: TrainerQuestion, exceptWorkoutId: Long = NO_WORKOUT): TrainerRequest {
         val day = today().toEpochDay()
         val reviews = store.observeReviews().first()
         // A year back for the monthly lines (D89); the 42 days and six weeks are within it.
@@ -277,7 +300,7 @@ class AskTheTrainer @Inject constructor(
         )
     }
 
-    private companion object {
+    companion object {
         /**
          * No workout's id, and no review's either: workouts are numbered from 1, and a review without
          * a workout is restored under -1, -2, … (D88), whose feedback must still count as earlier.
