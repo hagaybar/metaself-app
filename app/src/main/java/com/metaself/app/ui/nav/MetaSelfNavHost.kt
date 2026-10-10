@@ -563,6 +563,11 @@ fun MetaSelfNavHost(
         ) {
             val evaluateViewModel: EvaluatePlanViewModel = hiltViewModel()
             val evaluateState by evaluateViewModel.state.collectAsStateWithLifecycle()
+            // D114: back from Adjust the plan, the running plan is read again.
+            LifecycleResumeEffect(evaluateViewModel) {
+                evaluateViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
             EvaluatePlanScreen(
                 state = evaluateState,
                 onBack = { navController.popBackStack() },
@@ -570,6 +575,7 @@ fun MetaSelfNavHost(
                 onAsk = evaluateViewModel::ask,
                 onKeep = evaluateViewModel::keep,
                 onAskAgain = evaluateViewModel::askAgain,
+                onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
             )
         }
 

@@ -126,6 +126,23 @@ class EvaluatePlanViewModelTest {
         assertThat(viewModel.state.value.loading).isFalse()
     }
 
+    /** D114: Adjust the plan opens from here, so an adjustment kept there shows when the plan screen comes back. Invented. */
+    @Test
+    fun `back on the plan screen, the running plan is read again`() = runTest {
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), ANSWER.evaluation, ANSWER.plan, "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        val viewModel = watched(SavedStateHandle(mapOf(EvaluatePlanViewModel.SHOW to EvaluatePlanViewModel.RUNNING)))
+        advanceUntilIdle()
+
+        val adjusted = programmes.add(Programme(0, 1, ProgrammeAsk(2, 2), null, ANSWER.plan, "a-model", replacesId = id))
+        programmes.keepAdjusted(adjusted, id, TEST_EPOCH_DAY)
+        viewModel.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.running!!.programme.id).isEqualTo(adjusted)
+        assertThat(viewModel.state.value.evaluation).isEqualTo(ANSWER.evaluation)
+    }
+
     /** As the approved mock-up: the form opens on 4 weeks and 3 sessions a week, and both still change. */
     @Test
     fun `the form opens ready to ask, and its rows still change`() = runTest {

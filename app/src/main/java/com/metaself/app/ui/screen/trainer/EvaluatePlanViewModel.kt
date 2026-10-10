@@ -88,12 +88,22 @@ class EvaluatePlanViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
     init {
-        if (openedOnRunning) {
-            guarded(problems, onRefused = { local.update { it.copy(loading = false, refused = ActionRefused.COULD_NOT_OPEN) } }) {
-                val running = ask.running()
-                val evaluation = running?.let { ask.evaluationOf(it.programme) }
-                local.update { it.copy(loading = false, running = running, evaluation = evaluation) }
-            }
+        if (openedOnRunning) readRunning()
+    }
+
+    /**
+     * The page came to the front. Opened on the running plan, it is read again: Adjust the plan opens from here
+     * (D114), and the version kept there is the one to show on return — or none, after Stop this plan.
+     */
+    fun lookedAt() {
+        if (openedOnRunning && !local.value.loading) readRunning()
+    }
+
+    private fun readRunning() {
+        guarded(problems, onRefused = { local.update { it.copy(loading = false, refused = ActionRefused.COULD_NOT_OPEN) } }) {
+            val running = ask.running()
+            val evaluation = running?.let { ask.evaluationOf(it.programme) }
+            local.update { it.copy(loading = false, running = running, evaluation = evaluation) }
         }
     }
 

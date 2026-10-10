@@ -25,7 +25,8 @@ import com.metaself.app.ui.trainer.TrainerWording
 
 /**
  * D93, D94: the form, then the evaluation and the plan with Keep this plan and Ask again; or the running
- * plan. Branches only — no early return out of an inline composable (InlineComposableReturnGuardTest).
+ * plan, with Adjust the plan under it (D97, moved here by D114). Branches only — no early return out of an
+ * inline composable (InlineComposableReturnGuardTest).
  */
 @Composable
 fun EvaluatePlanScreen(
@@ -36,6 +37,8 @@ fun EvaluatePlanScreen(
     onKeep: () -> Unit,
     onAskAgain: () -> Unit,
     modifier: Modifier = Modifier,
+    /** D97, D114: Adjust the plan, from the running plan. */
+    onAdjust: () -> Unit = {},
 ) {
     val shown = state.shown
     val running = state.running
@@ -54,6 +57,9 @@ fun EvaluatePlanScreen(
                 FromTrainerLabel()
                 state.evaluation?.let { EvaluationView(it) }
                 WeeksPlanView(running.programme.plan, running.programme.ask, running.programme.startEpochDay ?: 0, running.progress)
+                OutlinedButton(onClick = onAdjust, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.trainer_adjust_plan))
+                }
             }
             shown == null -> EvaluateForm(state, onChange, onAsk)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
