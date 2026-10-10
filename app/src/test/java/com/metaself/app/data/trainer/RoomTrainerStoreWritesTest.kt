@@ -2,8 +2,12 @@ package com.metaself.app.data.trainer
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.day.DatabaseTransaction
+import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.data.health.FakeMovementRecord
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.PlanStep
+import com.metaself.app.domain.trainer.SessionPlan
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerReview
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -18,6 +22,8 @@ class RoomTrainerStoreWritesTest {
     private val log = mutableListOf<String>()
     private val planQueries = mutableListOf<List<Long>>()
     private var existing: TrainerReviewEntity? = null
+    private var kept: List<TrainerPlanEntity> = emptyList()
+    private val rows = mutableMapOf<Long, TrainerPlanEntity>()
 
     /** Read, then insert or update: two statements that must not have another write between them. */
     @Test
@@ -46,6 +52,32 @@ class RoomTrainerStoreWritesTest {
         assertThat(planQueries.flatten()).containsExactlyElementsIn(1L..1_200L)
     }
 
+    /** D122: a planned session holds one set of steps; keeping another replaces them, and nothing else. */
+    @Test
+    fun `keeping steps for a planned session un-keeps only that session's, in one transaction`() = runTest {
+        kept = listOf(row(1, SessionSlot(7, 1, 0)), row(2, SessionSlot(7, 1, 1)), row(3, null))
+        rows[4] = row(4, SessionSlot(7, 1, 0))
+
+        store().keep(4)
+
+        assertThat(log).containsExactly("begin", "plan", "keptPlans", "setKept(1,false)", "setKept(4,true)", "commit").inOrder()
+    }
+
+    @Test
+    fun `keeping an unlinked suggestion un-keeps only the unlinked one`() = runTest {
+        kept = listOf(row(1, SessionSlot(7, 1, 0)), row(3, null))
+        rows[5] = row(5, null)
+
+        store().keep(5)
+
+        assertThat(log).containsExactly("begin", "plan", "keptPlans", "setKept(3,false)", "setKept(5,true)", "commit").inOrder()
+    }
+
+    private fun row(id: Long, slot: SessionSlot?) = TrainerPlanEntity(
+        id = id, createdAtMillis = id * 1_000, activity = "RUN", minutes = 30, feeling = "FRESH", wish = "PUSH", words = null,
+        suggestion = TrainerResponse.encodeStoredPlan(PLAN, slot), model = "a-model", kept = true,
+    )
+
     private fun store() = RoomTrainerStore(dao(), Transaction(), FakeMovementRecord())
 
     private inner class Transaction : DatabaseTransaction {
@@ -67,9 +99,15 @@ class RoomTrainerStoreWritesTest {
                     planQueries += args[0] as List<Long>
                     emptyList<TrainerPlanEntity>()
                 }
+                "setKept" -> {
+                    log += "setKept(${args[0]},${args[1]})"
+                    Unit
+                }
                 else -> {
                     log += method.name
                     when (method.name) {
+                        "plan" -> rows[args[0] as Long]
+                        "keptPlans" -> kept
                         "reviewOf" -> existing
                         "insertReview" -> 1L
                         else -> Unit
@@ -77,4 +115,8 @@ class RoomTrainerStoreWritesTest {
                 }
             }
         } as TrainerDao
+
+    private companion object {
+        val PLAN = SessionPlan("Invented walk", listOf(PlanStep(0, 10, "Warm up", ""), PlanStep(10, 25, "Walk", ""), PlanStep(25, 30, "Cool down", "")), "Invented.")
+    }
 }

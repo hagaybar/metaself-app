@@ -42,6 +42,11 @@ class FakeTrainerStore(var failing: Set<String> = emptySet()) : TrainerStore {
         return plans.value.filter { it.kept }.maxByOrNull { it.createdAtMillis }
     }
 
+    override suspend fun keptPlans(): List<TrainerPlan> {
+        check("keptPlans")
+        return plans.value.filter { it.kept }.sortedByDescending { it.createdAtMillis }
+    }
+
     override suspend fun plans(ids: Collection<Long>): Map<Long, TrainerPlan> {
         check("plans")
         return plans.value.filter { it.id in ids }.associateBy { it.id }
@@ -61,7 +66,15 @@ class FakeTrainerStore(var failing: Set<String> = emptySet()) : TrainerStore {
 
     override suspend fun keep(planId: Long) {
         check("keep")
-        plans.value = plans.value.map { it.copy(kept = it.id == planId) }
+        // D122: one kept per place — the same planned session's, or the unlinked one.
+        val slot = plans.value.firstOrNull { it.id == planId }?.slot
+        plans.value = plans.value.map {
+            when {
+                it.id == planId -> it.copy(kept = true)
+                it.slot == slot -> it.copy(kept = false)
+                else -> it
+            }
+        }
     }
 
     override suspend fun unkeep(planId: Long) {

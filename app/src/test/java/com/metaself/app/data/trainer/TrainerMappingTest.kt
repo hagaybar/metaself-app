@@ -10,6 +10,7 @@ import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.SessionPlan
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.Wish
@@ -30,6 +31,19 @@ class TrainerMappingTest {
         assertThat(plan.answers).isEqualTo(PlanAnswers(PlanActivity.OUTDOOR_WALK, TimeAvailable.MIN_60_OR_MORE, Feeling.TIRED, Wish.EASY, ""))
         assertThat(plan.plan).isEqualTo(PLAN)
         assertThat(plan.toEntity()).isEqualTo(entity)
+    }
+
+    /** D122: a suggestion kept for a planned session carries its place in the stored JSON; an older row carries none. */
+    @Test
+    fun `a plan kept for a planned session reads back with its place, and an older row with none`() {
+        val linked = ENTITY.copy(suggestion = TrainerResponse.encodeStoredPlan(PLAN, SessionSlot(7, 1, 0)))
+
+        assertThat(linked.toPlan()!!.slot).isEqualTo(SessionSlot(7, 1, 0))
+        assertThat(linked.toPlan()!!.plan).isEqualTo(PLAN)
+        assertThat(linked.toPlan()!!.toEntity()).isEqualTo(linked)
+        assertThat(ENTITY.toPlan()!!.slot).isNull()
+        assertThat(TrainerResponse.readPlan(linked.suggestion)).isEqualTo(PLAN)
+        assertThat(TrainerResponse.readSlot("garbled")).isNull()
     }
 
     @Test

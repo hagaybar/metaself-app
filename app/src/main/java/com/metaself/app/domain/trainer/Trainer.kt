@@ -37,7 +37,21 @@ data class PlanStep(val fromMinute: Int, val toMinute: Int, val what: String, va
 /** A suggestion as the model gave it (D86): advice, never a measurement (D4). */
 data class SessionPlan(val title: String, val steps: List<PlanStep>, val why: String)
 
-/** A stored suggestion (D88). At most one is [kept]. */
+/** D122: a session's place in a weekly plan — its week's index from the plan's first Monday, and its index in that week; both from 0. */
+data class PlanPlace(val week: Int, val session: Int)
+
+/**
+ * D122: the planned session a suggestion is for — [chainId] is the plan chain's **first** version's id (as D105's
+ * answers are stored), so an adjusted version keeps it; [week] and [session] are its [PlanPlace].
+ */
+data class SessionSlot(val chainId: Long, val week: Int, val session: Int) {
+    val place: PlanPlace get() = PlanPlace(week, session)
+}
+
+/**
+ * A stored suggestion (D88). At most one is [kept] for each place (D122): one per planned session ([slot]), and
+ * one with no slot — the plan page's Next session.
+ */
 data class TrainerPlan(
     val id: Long,
     val createdAtMillis: Long,
@@ -45,6 +59,7 @@ data class TrainerPlan(
     val plan: SessionPlan,
     val model: String,
     val kept: Boolean,
+    val slot: SessionSlot? = null,
 )
 
 /** "How it felt" (D87). Stored with the review, never over the workout's own `effort` (D77). */
