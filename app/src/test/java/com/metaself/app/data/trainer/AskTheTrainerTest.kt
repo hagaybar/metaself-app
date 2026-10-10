@@ -32,6 +32,7 @@ import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanFollowed
+import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.PlanStanding
 import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.PlanTile
@@ -44,6 +45,7 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.SessionPlan
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TileState
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TimelinePlace
@@ -741,6 +743,111 @@ class AskTheTrainerTest {
         assertThat(question.howItWent[0].sessions.map { it.minutesDone }).containsExactly(40, 20).inOrder()
         assertThat(question.howItWent[1].attempts).containsExactly(AttemptFacts(WorkoutKind.WALK, 10, 30))
         assertThat(question.thisWeekMax).isEqualTo(2)
+    }
+
+    /**
+     * D122: Plan my next session, while a plan runs, is for its next open session — today's walk ticked the
+     * first, so the second — and keeping a second suggestion for it replaces the first.
+     */
+    @Test
+    fun `keeping a suggestion attaches it to the next open session, and keeping another replaces it`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+
+        val first = (ask().suggest(ANSWERS) as AskTheTrainer.Suggested.Planned).plan
+        ask().keep(first.id)
+        val second = (ask().suggest(ANSWERS) as AskTheTrainer.Suggested.Planned).plan
+        ask().keep(second.id)
+
+        assertThat(first.slot).isEqualTo(SessionSlot(id, 0, 1))
+        assertThat(store.keptPlans().map { it.id }).containsExactly(second.id)
+    }
+
+    /** D123: Get the steps names a session of this week or next week; anything else attaches to nothing. */
+    @Test
+    fun `Get the steps attaches to the named session, this week's or next week's, and nothing further`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+
+        assertThat(ask().plannedAt(SessionSlot(id, 1, 1))).isEqualTo(AskTheTrainer.PlannedFor(SessionSlot(id, 1, 1), PlannedTick(2, 2, WALK_30)))
+        assertThat(ask().plannedAt(SessionSlot(id, 0, 0))).isNotNull()
+        assertThat(ask().plannedAt(SessionSlot(id, 2, 0))).isNull()
+        assertThat(ask().plannedAt(SessionSlot(id, 1, 2))).isNull()
+        assertThat(ask().plannedAt(SessionSlot(id + 1, 1, 1))).isNull()
+
+        val plan = (ask().suggest(ANSWERS, SessionSlot(id, 1, 1)) as AskTheTrainer.Suggested.Planned).plan
+
+        assertThat(plan.slot).isEqualTo(SessionSlot(id, 1, 1))
+        assertThat((trainer.asked.single().question as TrainerQuestion.Plan).planned).isEqualTo(PlannedTick(2, 2, WALK_30))
+    }
+
+    /** D122: the steps belong to the planned session; feedback on a session done with them leaves them there. */
+    @Test
+    fun `feedback leaves steps that belong to a planned session`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+        trainer.feedback += TrainerReply.Answered(FEEDBACK, "a-model")
+        val plan = (ask().suggest(ANSWERS) as AskTheTrainer.Suggested.Planned).plan
+        ask().keep(plan.id)
+
+        ask().save(1, Felt.RIGHT, "Invented.", plan.id, withFeedback = true)
+
+        assertThat(store.keptPlans().map { it.id }).containsExactly(plan.id)
+    }
+
+    /** D122: with no planned session named, a kept suggestion is the Next session, for seven days. */
+    @Test
+    fun `the next session is the kept unlinked suggestion of the last seven days`() = runTest {
+        val linked = store.addPlan(aStoredPlan().copy(slot = SessionSlot(9, 0, 0)))
+        store.keep(linked)
+        assertThat(ask().nextSession()).isNull()
+
+        val recent = store.addPlan(aStoredPlan())
+        store.keep(recent)
+        assertThat(ask().nextSession()!!.id).isEqualTo(recent)
+
+        val old = store.addPlan(aStoredPlan().copy(createdAtMillis = NOW - 8 * DAY))
+        store.keep(old)
+        assertThat(ask().nextSession()).isNull()
+        assertThat(store.keptPlans().map { it.id }).containsExactly(linked, old)
+    }
+
+    /** D122, D123: the plan screen carries its own chain's steps by place, and the open tile with steps is ready. */
+    @Test
+    fun `the plan shown carries its chain's steps, and an open tile with steps is ready`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        val steps = store.addPlan(aStoredPlan().copy(slot = SessionSlot(id, 0, 1)))
+        store.keep(steps)
+        val elsewhere = store.addPlan(aStoredPlan().copy(slot = SessionSlot(id + 50, 0, 0)))
+        store.keep(elsewhere)
+
+        val shown = ask().planShown()!!
+
+        assertThat(shown.steps.keys).containsExactly(PlanPlace(0, 1))
+        assertThat(shown.steps.getValue(PlanPlace(0, 1)).id).isEqualTo(steps)
+        val tiles = (shown.timeline.weeks[0].place as TimelinePlace.ThisWeek).tiles
+        assertThat(tiles.map { it.state to it.stepsReady }).containsExactly(TileState.DONE to false, TileState.OPEN to true).inOrder()
+    }
+
+    /** D124: while a plan runs, a new one replaces it from next Monday; the old one stops today, replaced. */
+    @Test
+    fun `while a plan runs, keeping a new one starts it next Monday and the old one stops today`() = runTest {
+        assertThat(ask().replacingFrom()).isNull()
+        val old = programmes.add(offered())
+        programmes.keep(old, MONDAY, TEST_EPOCH_DAY)
+        val new = programmes.add(offered())
+
+        assertThat(ask().replacingFrom()).isEqualTo(MONDAY + 7)
+        assertThat(ask().keepProgramme(new)).isEqualTo(MONDAY + 7)
+
+        val stopped = programmes.rows.value.first { it.id == old }
+        assertThat(stopped.status to stopped.stoppedEpochDay).isEqualTo(ProgrammeStatus.REPLACED to TEST_EPOCH_DAY)
+        assertThat(programmes.running()!!.let { it.id to it.startEpochDay }).isEqualTo(new to MONDAY + 7)
     }
 
     private fun ask() = AskTheTrainer(

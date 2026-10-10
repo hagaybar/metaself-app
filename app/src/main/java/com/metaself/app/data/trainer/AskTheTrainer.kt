@@ -21,6 +21,8 @@ import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanFollowed
+import com.metaself.app.domain.trainer.PlanMatch
+import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.PlanProgress
 import com.metaself.app.domain.trainer.PlanShown
 import com.metaself.app.domain.trainer.PlanTimeline
@@ -31,6 +33,7 @@ import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.Programmes
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
@@ -75,6 +78,9 @@ class AskTheTrainer @Inject constructor(
         data class Failed(val failure: EstimateResult) : Suggested
     }
 
+    /** D122: a planned session of the running plan, with its place — what a suggestion is asked and kept for. */
+    data class PlannedFor(val slot: SessionSlot, val tick: PlannedTick)
+
     sealed interface Evaluated {
         data class Offered(val programme: Programme) : Evaluated
         data class Failed(val failure: EstimateResult) : Evaluated
@@ -106,15 +112,51 @@ class AskTheTrainer @Inject constructor(
         data class SessionGone(override val review: TrainerReview) : Reviewed
     }
 
-    suspend fun suggest(answers: PlanAnswers): Suggested =
-        when (val reply = trainer.suggest(request(planQuestion(answers)))) {
+    /**
+     * D86, D122: one suggestion, stored not kept, for the planned session at [slot] (Get the steps, D123) — or, with
+     * none named, the running plan's next open session (D96); kept, its steps belong to that session. A named place
+     * no longer in the running plan, or no plan, leaves it for no planned session: kept, it is the Next session.
+     */
+    suspend fun suggest(answers: PlanAnswers, slot: SessionSlot? = null): Suggested {
+        val planned = plannedFor(slot)
+        return when (val reply = trainer.suggest(request(planQuestion(answers, planned)))) {
             is TrainerReply.Failed -> Suggested.Failed(reply.failure)
             is TrainerReply.Answered -> {
                 keepNote(reply.weekNote)
-                val plan = TrainerPlan(0, now(), answers, reply.value, reply.model, kept = false)
+                val plan = TrainerPlan(0, now(), answers, reply.value, reply.model, kept = false, slot = planned?.slot)
                 Suggested.Planned(plan.copy(id = store.addPlan(plan)))
             }
         }
+    }
+
+    private suspend fun plannedFor(slot: SessionSlot?): PlannedFor? = if (slot == null) nextFor() else plannedAt(slot)
+
+    /** D96, D122: the running plan's next open session this week, with its place; null when none. Reads only. */
+    suspend fun nextFor(): PlannedFor? {
+        val running = running() ?: return null
+        val week = running.progress.weeks.getOrNull(running.weekIndex) ?: return null
+        val at = week.ticks.indexOfFirst { it.by == null }.takeIf { it >= 0 } ?: return null
+        val root = Programmes.rootOf(running.programme, programmes.all())
+        return PlannedFor(SessionSlot(root.id, running.weekIndex, at), PlannedTick(running.weekIndex + 1, running.progress.weeks.size, week.ticks[at].planned))
+    }
+
+    /**
+     * D123: the running plan's session at [slot], when the chain is the running one's and the week is this week or
+     * next week (Get the steps is offered for no other); null otherwise. Done or open alike (D122). Reads only.
+     */
+    suspend fun plannedAt(slot: SessionSlot): PlannedFor? {
+        val running = running() ?: return null
+        val programme = running.programme
+        val start = programme.startEpochDay ?: return null
+        if (Programmes.rootOf(programme, programmes.all()).id != slot.chainId) return null
+        val thisMonday = MovementWeek.mondayOf(today().toEpochDay())
+        if (ProgrammeCalendar.monday(start, slot.week) !in listOf(thisMonday, thisMonday + 7)) return null
+        val session = programme.plan.weeks.getOrNull(slot.week)?.sessions?.getOrNull(slot.session) ?: return null
+        return PlannedFor(slot, PlannedTick(slot.week + 1, programme.plan.weeks.size, session))
+    }
+
+    /** D122: the kept suggestion for no planned session, made in the last seven days — the plan page's Next session. */
+    suspend fun nextSession(): TrainerPlan? = PlanMatch.offered(store.keptPlans().firstOrNull { it.slot == null }, now())
 
     suspend fun keep(planId: Long) = store.keep(planId)
 
@@ -137,7 +179,8 @@ class AskTheTrainer @Inject constructor(
                 val feedback = if (question.session.plan == null) reply.value.copy(followed = PlanFollowed.NO_PLAN) else reply.value
                 val answered = saved.copy(feedback = feedback, feedbackAtMillis = now(), model = reply.model)
                 store.putReview(answered)
-                if (planId != null) store.unkeep(planId)
+                // D122: steps kept for a planned session stay with it; only the unlinked one is used up.
+                if (planId != null && store.plans(listOf(planId))[planId]?.slot == null) store.unkeep(planId)
                 Reviewed.WithFeedback(answered)
             }
         }
@@ -155,15 +198,18 @@ class AskTheTrainer @Inject constructor(
         }
 
     /**
-     * D94: [id] runs from the Monday keeping it today gives, which is returned; a running plan is replaced.
-     * Refused (throws) when [id] is not an offered answer.
+     * D94, D124: [id] runs from the Monday keeping it today gives, which is returned — next Monday while a plan
+     * runs ([replacingFrom]), which stops today, replaced. Refused (throws) when [id] is not an offered answer.
      */
     suspend fun keepProgramme(id: Long): Long {
         val day = today().toEpochDay()
-        val start = ProgrammeCalendar.startFor(day)
+        val start = replacingFrom() ?: ProgrammeCalendar.startFor(day)
         programmes.keep(id, start, day)
         return start
     }
+
+    /** D124: while a plan runs (before its first week too), the Monday a new one would replace it from; else null. Reads only. */
+    suspend fun replacingFrom(): Long? = running()?.let { MovementWeek.mondayOf(today().toEpochDay()) + 7 }
 
     /**
      * D97, D105: the running plan's rest, rewritten, told how each week so far went. The model returns this week's sessions still to do and
@@ -265,7 +311,16 @@ class AskTheTrainer @Inject constructor(
             PlanCard.None -> recentlyStopped(today().toEpochDay())
         } ?: return null
         val start = programme.startEpochDay ?: return null
-        return PlanShown(timelineOf(programme, start), card as? PlanCard.Running, datedEvaluationOf(programme))
+        val steps = stepsOf(programme)
+        return PlanShown(timelineOf(programme, start).withSteps(steps.keys), card as? PlanCard.Running, datedEvaluationOf(programme), steps)
+    }
+
+    /** D122: the steps kept for [programme]'s chain's planned sessions, by place. */
+    private suspend fun stepsOf(programme: Programme): Map<PlanPlace, TrainerPlan> {
+        val root = Programmes.rootOf(programme, programmes.all())
+        return store.keptPlans().mapNotNull { plan -> plan.slot?.takeIf { it.chainId == root.id }?.let { it.place to plan } }
+            .distinctBy { it.first }
+            .toMap()
     }
 
     /** D118: an answer offered and not yet kept, drawn as it would be from [start], with its chain's evaluation. Reads only. */
@@ -314,7 +369,10 @@ class AskTheTrainer @Inject constructor(
     // here, so the workbench's request is the real one by construction. Each reads only.
 
     /** D86, D96: the plan form's answers, with the running plan's next session. */
-    suspend fun planQuestion(answers: PlanAnswers): TrainerQuestion.Plan = TrainerQuestion.Plan(answers, nextPlanned())
+    suspend fun planQuestion(answers: PlanAnswers): TrainerQuestion.Plan = planQuestion(answers, nextFor())
+
+    /** D122: the plan form's answers, with the planned session they are for. */
+    private fun planQuestion(answers: PlanAnswers, planned: PlannedFor?): TrainerQuestion.Plan = TrainerQuestion.Plan(answers, planned?.tick)
 
     /** D87, D96: [workout] with [review], the single-session plan it names, and the planned session it ticked. */
     suspend fun feedbackQuestion(workout: Workout, review: TrainerReview): TrainerQuestion.Review {
