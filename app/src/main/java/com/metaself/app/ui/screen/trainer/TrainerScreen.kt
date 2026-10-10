@@ -1,6 +1,6 @@
 package com.metaself.app.ui.screen.trainer
 
-import androidx.compose.foundation.border
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,15 +8,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -25,30 +31,51 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.trainer.MainAction
 import com.metaself.app.domain.trainer.PlanCard
-import com.metaself.app.domain.trainer.Tick
+import com.metaself.app.domain.trainer.TrainerHome
+import com.metaself.app.domain.trainer.WeekLedger
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekStrip
+import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.letter.LetterWording
-import com.metaself.app.ui.movement.MovementWeekWording
+import com.metaself.app.ui.theme.MetaSelfTint
 import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.trainer.ProgrammeWording
+import com.metaself.app.ui.trainer.TrainerWeekWording
 import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
+/** The strip's height, as in the approved mockup; the top [TICK_ROOM] of it holds the ticks. */
+private val STRIP_HEIGHT = 140.dp
+private val TICK_ROOM = 22.dp
+
+/** A block is never shorter than this: a short session in a long week is still seen (D114). */
+private val LEAST_BLOCK = 8.dp
+private val BLOCK_GAP = 3.dp
+private val COLUMN_GAP = 6.dp
+
 /**
- * The Trainer screen (D85), top to bottom: About me (D90), the session waiting for words, the weekly
- * plan's card (D95, D97) — an offer to evaluate, the running plan's week, or an ended plan's count —
- * Plan my next session with the plan's next session under it (D96), the kept plan while it is offered,
- * and earlier reviewed sessions. Branches only — no early return out of
- * an inline composable (InlineComposableReturnGuardTest).
+ * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
+ * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116);
+ * one main button; the session waiting for words; the kept single-session plan; and four plain rows — Your plan,
+ * Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
+ * (InlineComposableReturnGuardTest).
  */
 @Composable
 fun TrainerScreen(
@@ -60,77 +87,32 @@ fun TrainerScreen(
     onAboutMe: () -> Unit,
     onEvaluate: () -> Unit,
     onSeePlan: () -> Unit,
-    onAdjust: () -> Unit,
-    /** D103: Weekly letters, under About me. */
+    /** D103: every weekly letter. */
     onLetters: () -> Unit,
+    /** D114: the reviewed sessions, on their own page. */
+    onEarlier: () -> Unit,
+    /** D114: the strip's tap — Movement, at this week. */
+    onMovement: () -> Unit,
     modifier: Modifier = Modifier,
     /** D105: the owner's answer to "count it for this?" — the session's id, and Yes (true) or No. */
     onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
 ) {
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
-        // D90: under the title, the note's first two lines, or an invitation; the whole card opens its page.
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(role = Role.Button, onClick = onAboutMe),
-        ) {
-            Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Text(
-                    stringResource(R.string.trainer_about_me),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    TrainerWording.aboutMePreview(state.aboutMe),
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        // D103: every weekly letter, newest first.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clickable(role = Role.Button, onClick = onLetters),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(LetterWording.LIST_TITLE, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
-        }
         val home = state.home
         when {
             state.unreadable -> Text(stringResource(R.string.trainer_unreadable), color = MaterialTheme.colorScheme.error)
             home == null -> Unit
             else -> {
-                home.waiting?.let { session ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                            Text(
-                                stringResource(R.string.trainer_waiting),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(TrainerWording.sessionTitle(session, state.today, zone), style = MaterialTheme.typography.titleMedium)
-                            Text(TrainerWording.sessionLine(session), style = MaterialTheme.typography.bodyMedium)
-                            Button(onClick = { onReview(session.id) }, modifier = Modifier.padding(top = Spacing.Related)) {
-                                Text(TrainerWording.rowAction(null))
-                            }
-                        }
-                    }
+                state.week?.let { week ->
+                    WeekHeader(week.strip.monday, week.ledger)
+                    StripCard(week.strip, home.plan, state.answering, state.refused, onMovement, onAnswer)
+                    val boxes = TrainerWeekWording.boxes(week.ledger)
+                    if (boxes.isNotEmpty()) Boxes(boxes)
                 }
-                PlanCardView(home.plan, state.answering, onEvaluate, onSeePlan, onAdjust, onAnswer)
-                state.refused?.let { refused ->
-                    Text(stringResource(refused.sentence), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-                }
-                Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(stringResource(R.string.trainer_plan_next))
-                        home.next?.let { Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall) }
-                    }
-                }
-                // D85: a card with its title and Open, drawn as the waiting session's is.
+                state.note?.let { NoteView(it, zone) }
+                MainButton(home, onPlan, onEvaluate)
+                home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
                 home.keptPlan?.let { kept ->
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -144,129 +126,180 @@ fun TrainerScreen(
                         }
                     }
                 }
-                if (home.earlier.isNotEmpty()) {
-                    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                        Text(
-                            stringResource(R.string.trainer_earlier),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        home.earlier.forEach { row ->
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable(role = Role.Button, onClick = { onReview(row.workout.id) })
-                                    .heightIn(min = 48.dp)
-                                    .padding(vertical = Spacing.Related),
-                            ) {
-                                Text(
-                                    MovementWeekWording.name(row.workout) + " · " +
-                                        MovementWeekWording.dayHeading(row.workout.epochDay, state.today),
-                                    style = MaterialTheme.typography.titleSmall,
-                                )
-                                Text(
-                                    TrainerWording.earlierLine(row.review),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
-                }
+                Rows(
+                    listOfNotNull(
+                        TrainerWeekWording.planRow(home.plan)?.let { it to onSeePlan },
+                        LetterWording.LIST_TITLE to onLetters,
+                        TrainerWeekWording.EARLIER to onEarlier,
+                        TrainerWeekWording.ABOUT_ME to onAboutMe,
+                    ),
+                )
             }
         }
     }
 }
 
-/** D95, D97: the weekly plan's card — an offer, the running plan's week, or an ended plan's count. */
-@OptIn(ExperimentalLayoutApi::class)
+/** D114 item 1: "THIS WEEK · MON 5 – SUN 11 OCT", then the verdict in the display face (D115). */
 @Composable
-private fun PlanCardView(
-    card: PlanCard,
-    answering: Set<Long>,
-    onEvaluate: () -> Unit,
-    onSeePlan: () -> Unit,
-    onAdjust: () -> Unit,
-    onAnswer: (Long, Boolean) -> Unit,
-) {
-    when (card) {
-        PlanCard.None -> OutlinedButton(onClick = onEvaluate, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.trainer_evaluate))
-        }
-        is PlanCard.Running -> Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Text(
-                    ProgrammeWording.cardHeading(card.programme.ask.weeks, card.weekIndex, card.programme.startEpochDay ?: 0),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(card.programme.plan.title, style = MaterialTheme.typography.titleMedium)
-                if (card.weekIndex in card.progress.weeks.indices) {
-                    val week = card.progress.weeks[card.weekIndex]
-                    Text(ProgrammeWording.weekDates(week.monday), style = MaterialTheme.typography.bodyMedium)
-                    week.ticks.forEach { tick ->
-                        TickRow(tick)
-                        tick.candidate?.let { candidate -> CandidateRow(candidate, candidate.id !in answering, onAnswer) }
-                    }
-                    card.progress.weeks.take(card.weekIndex).forEach { past ->
-                        Text(ProgrammeWording.pastWeek(past), style = MaterialTheme.typography.bodySmall)
-                    }
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-                    TextButton(onClick = onSeePlan) { Text(stringResource(R.string.trainer_see_plan)) }
-                    TextButton(onClick = onAdjust) { Text(stringResource(R.string.trainer_adjust_plan)) }
-                }
-            }
-        }
-        is PlanCard.Ended -> Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                Text(
-                    ProgrammeWording.endedHeading(card.programme.ask.weeks),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(card.programme.plan.title, style = MaterialTheme.typography.titleMedium)
-                Text(ProgrammeWording.endedLine(card.progress), style = MaterialTheme.typography.bodyMedium)
-                Button(onClick = onEvaluate) { Text(stringResource(R.string.trainer_evaluate_again)) }
-            }
-        }
+private fun WeekHeader(monday: Long, ledger: WeekLedger) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        Text(
+            TrainerWeekWording.header(monday),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(TrainerWeekWording.verdict(ledger), style = MaterialTheme.typography.headlineMedium)
     }
 }
 
 /**
- * D95: one planned session of this week — a filled check for done, an empty circle for not yet, each
- * with its word for a screen reader — then what was planned and, once done, the session that did it.
+ * D114 item 2: the strip, its day letters and legend — one tap target, which opens Movement — then the
+ * shorter-session question (D105) for each planned session this week holding one, with Yes and No.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TickRow(tick: Tick) {
+private fun StripCard(
+    strip: WeekStrip,
+    plan: PlanCard,
+    answering: Set<Long>,
+    refused: ActionRefused?,
+    onMovement: () -> Unit,
+    onAnswer: (Long, Boolean) -> Unit,
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(role = Role.Button, onClickLabel = TrainerWeekWording.OPEN_MOVEMENT, onClick = onMovement)
+                    .semantics { contentDescription = TrainerWeekWording.STRIP },
+                verticalArrangement = Arrangement.spacedBy(Spacing.Related),
+            ) {
+                Strip(strip)
+                DayLetters(strip)
+                FlowRow(
+                    modifier = Modifier.padding(top = Spacing.Tight),
+                    horizontalArrangement = Arrangement.spacedBy(Spacing.Section),
+                    verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+                ) {
+                    TrainerWeekWording.legend(strip.withPlan).forEachIndexed { index, entry ->
+                        LegendEntry(entry, if (strip.withPlan) index else 2)
+                    }
+                }
+            }
+            val running = plan as? PlanCard.Running
+            running?.progress?.weeks?.getOrNull(running.weekIndex)?.ticks.orEmpty().forEach { tick ->
+                tick.candidate?.let { candidate ->
+                    CandidateRow(ProgrammeWording.plannedTitle(tick.planned), candidate, candidate.id !in answering, onAnswer)
+                }
+            }
+            refused?.let { Text(stringResource(it.sentence), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+        }
+    }
+}
+
+/** Seven columns, and "To do" when planned sessions are open; each column's blocks newest on top. */
+@Composable
+private fun Strip(strip: WeekStrip) {
+    val scale = strip.scaleMinutes
+    // Room for the tick and for the gaps of the column with the most blocks, so the tallest column fits.
+    val most = maxOf(strip.days.maxOf { it.blocks.size }, strip.toDo.size)
+    val full = STRIP_HEIGHT - TICK_ROOM - BLOCK_GAP * most
     Row(
         modifier = Modifier
-            .heightIn(min = 44.dp)
-            .semantics(mergeDescendants = true) {},
-        horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
-        verticalAlignment = Alignment.CenterVertically,
+            .fillMaxWidth()
+            .height(STRIP_HEIGHT),
+        horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP),
     ) {
-        if (tick.by != null) {
-            Icon(
-                Icons.Filled.CheckCircle,
-                contentDescription = stringResource(R.string.plan_tick_done),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
-            )
-        } else {
-            val notYet = stringResource(R.string.plan_tick_not_yet)
-            Box(
-                Modifier
-                    .size(24.dp)
-                    .padding(2.dp)
-                    .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                    .semantics { contentDescription = notYet },
+        strip.days.forEach { day ->
+            StripColumn {
+                if (day.ticked) {
+                    Box(Modifier.fillMaxWidth().height(TICK_ROOM), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                    }
+                }
+                day.blocks.asReversed().forEach { block ->
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(blockHeight(block.minutes, scale, full))
+                            .background(
+                                if (block.ticked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
+                                RoundedCornerShape(6.dp),
+                            ),
+                    )
+                }
+                if (day.blocks.isEmpty() && !strip.isAfterToday(day)) {
+                    Box(Modifier.fillMaxWidth().height(2.dp).background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(1.dp)))
+                }
+            }
+        }
+        if (strip.toDo.isNotEmpty()) {
+            StripColumn {
+                strip.toDo.forEach { minutes -> OpenBlock(minutes, blockHeight(minutes, scale, full)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.StripColumn(content: @Composable () -> Unit) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight(),
+        verticalArrangement = Arrangement.spacedBy(BLOCK_GAP, Alignment.Bottom),
+    ) { content() }
+}
+
+/** An open planned session: a dashed outline in the dark green, labelled with its minutes ("40′"). */
+@Composable
+private fun OpenBlock(minutes: Int, height: Dp) {
+    val outline = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(height)
+            .drawBehind {
+                val stroke = 2.dp.toPx()
+                drawRoundRect(
+                    color = outline,
+                    topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = CornerRadius(6.dp.toPx()),
+                    style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        // Ink, not the green: the theme's green on a card is under the text floor; the outline carries the colour.
+        Text(TrainerWeekWording.openMinutes(minutes), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+private fun blockHeight(minutes: Int, scale: Int, full: Dp): Dp =
+    WeekStrip.height(minutes, scale, full.value, LEAST_BLOCK.value).dp
+
+/** M T W T F S S, and "To do": today's letter bold. */
+@Composable
+private fun DayLetters(strip: WeekStrip) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP)) {
+        strip.days.forEach { day ->
+            val today = day.epochDay == strip.today
+            Text(
+                TrainerWeekWording.dayLetter(day.epochDay),
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = if (today) FontWeight.SemiBold else null,
+                color = if (today) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Column {
-            Text(ProgrammeWording.plannedTitle(tick.planned), style = MaterialTheme.typography.titleSmall)
+        if (strip.toDo.isNotEmpty()) {
             Text(
-                tick.by?.let(ProgrammeWording::tickLine) ?: tick.planned.what,
+                TrainerWeekWording.TO_DO,
+                modifier = Modifier.weight(1f),
+                textAlign = TextAlign.Center,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -274,14 +307,38 @@ private fun TickRow(tick: Tick) {
     }
 }
 
+/** [kind]: 0 planned and done, 1 planned and open, 2 beyond the plan (or, with no plan, every session). */
+@Composable
+private fun LegendEntry(text: String, kind: Int) {
+    val green = MaterialTheme.colorScheme.primary
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val swatch = Modifier.size(10.dp)
+        when (kind) {
+            0 -> Box(swatch.background(green, RoundedCornerShape(3.dp)))
+            1 -> Box(
+                swatch.drawBehind {
+                    drawRoundRect(
+                        color = green,
+                        cornerRadius = CornerRadius(3.dp.toPx()),
+                        style = Stroke(width = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 2.dp.toPx()))),
+                    )
+                },
+            )
+            else -> Box(swatch.background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(3.dp)))
+        }
+        Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
 /**
- * D105: under a planned session, a shorter session waiting for the owner's answer — "Walking, 20 min —
- * count it for this?" (invented) — with Yes and No, each at least 48 dp tall, not pressable while an
- * answer is being written.
+ * D105: a shorter session waiting for the owner's answer, under the planned session it may count for —
+ * "Easy walk, 30 min", then "Walking, 20 min — count it for this?" (invented) — with Yes and No, each at
+ * least 48 dp tall, not pressable while an answer is being written.
  */
 @Composable
-private fun CandidateRow(candidate: Workout, enabled: Boolean, onAnswer: (Long, Boolean) -> Unit) {
-    Column(Modifier.padding(start = 32.dp)) {
+private fun CandidateRow(planned: String, candidate: Workout, enabled: Boolean, onAnswer: (Long, Boolean) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        Text(planned, style = MaterialTheme.typography.titleSmall)
         Text(ProgrammeWording.candidateLine(candidate), style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             OutlinedButton(
@@ -295,5 +352,106 @@ private fun CandidateRow(candidate: Workout, enabled: Boolean, onAnswer: (Long, 
                 modifier = Modifier.heightIn(min = 48.dp),
             ) { Text(stringResource(R.string.plan_candidate_no)) }
         }
+    }
+}
+
+/** D114 item 3: steps, sleep and food side by side; the absent ones leave the others the row. */
+@Composable
+private fun Boxes(boxes: List<TrainerWeekWording.Box>) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        boxes.forEach { box ->
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = if (box.under) {
+                    CardDefaults.cardColors(containerColor = MetaSelfTint.caution, contentColor = MaterialTheme.colorScheme.onSurface)
+                } else {
+                    CardDefaults.cardColors()
+                },
+            ) {
+                Column(Modifier.padding(horizontal = 10.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(box.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(box.figure, style = MaterialTheme.typography.titleMedium)
+                    Text(box.line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    box.extra?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+            }
+        }
+    }
+}
+
+/** D116: the coach's note, when it was written, and whose it is (D4). */
+@Composable
+private fun NoteView(note: WeekNote, zone: ZoneId) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(note.text, style = MaterialTheme.typography.bodyLarge)
+            Text(TrainerWeekWording.noteWhen(note, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(TrainerWording.FROM_TRAINER, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/**
+ * D114 item 5: the next thing to do, filled. When it is the evaluation, Plan my next session stays under it,
+ * outlined — the one way to a single session's plan with no weekly plan running.
+ */
+@Composable
+private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onEvaluate: () -> Unit) {
+    when (val main = home.main) {
+        is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(TrainerWeekWording.planOpen(main.kind))
+                home.next?.let { Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall) }
+            }
+        }
+        MainAction.PlanNext -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.trainer_plan_next))
+        }
+        MainAction.Evaluate -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Button(onClick = onEvaluate, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_evaluate)) }
+            OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_plan_next)) }
+        }
+    }
+}
+
+/** D85, D114 item 6: the newest unreviewed session of the last three days, unchanged. */
+@Composable
+private fun WaitingCard(session: Workout, today: Long, zone: ZoneId, onReview: (Long) -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(
+                stringResource(R.string.trainer_waiting),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(TrainerWording.sessionTitle(session, today, zone), style = MaterialTheme.typography.titleMedium)
+            Text(TrainerWording.sessionLine(session), style = MaterialTheme.typography.bodyMedium)
+            Button(onClick = { onReview(session.id) }, modifier = Modifier.padding(top = Spacing.Related)) {
+                Text(TrainerWording.rowAction(null))
+            }
+        }
+    }
+}
+
+/** D114 item 8: plain rows, each opening what it names, with hairlines between. */
+@Composable
+private fun Rows(rows: List<Pair<String, () -> Unit>>) {
+    Column(Modifier.fillMaxWidth()) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        rows.forEach { (label, open) ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 48.dp)
+                    .clickable(role = Role.Button, onClick = open)
+                    .padding(vertical = Spacing.Related),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Text("›", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        }
+        Spacer(Modifier.height(Spacing.Tight))
     }
 }

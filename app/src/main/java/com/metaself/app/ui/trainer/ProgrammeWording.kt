@@ -2,7 +2,6 @@ package com.metaself.app.ui.trainer
 
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
-import com.metaself.app.domain.trainer.PlanProgress
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
@@ -44,16 +43,6 @@ object ProgrammeWording {
     fun nextInPlan(tick: PlannedTick): String =
         "Next in your plan: " + plannedTitle(tick.session).replaceFirstChar { it.lowercase(Locale.US) }
 
-    /** "YOUR 4-WEEK PLAN · WEEK 2 OF 4", or before week 1, "… · STARTS MON 7 SEP" (invented). */
-    fun cardHeading(weeks: Int, weekIndex: Int, start: Long): String =
-        "YOUR $weeks-WEEK PLAN$SEP" + if (weekIndex >= 0) {
-            "WEEK ${weekIndex + 1} OF $weeks"
-        } else {
-            "STARTS " + date(start).uppercase(Locale.US)
-        }
-
-    fun weekDates(monday: Long): String = "This week, ${date(monday)} – ${date(monday + 6)}"
-
     fun span(start: Long, weeks: Int): String = "Starts ${date(start)}, ends ${date(ProgrammeCalendar.lastDay(start, weeks))}"
 
     fun planHeading(ask: ProgrammeAsk): String = "THE PLAN$SEP${ask.weeks} WEEKS$SEP${ask.perWeek} SESSIONS A WEEK"
@@ -73,12 +62,6 @@ object ProgrammeWording {
     fun pastWeek(week: WeekProgress): String = "Week ${week.index + 1}: ${week.done} of ${week.planned} done"
 
     fun thisWeekSoFar(week: WeekProgress): String = "Week ${week.index + 1} (this week): ${week.done} of ${week.planned} so far"
-
-    fun endedHeading(weeks: Int): String = "YOUR $weeks-WEEK PLAN HAS ENDED"
-
-    fun endedLine(progress: PlanProgress): String =
-        "${progress.done} of ${progress.planned} planned sessions done$SEP" +
-            "weeks " + progress.weeks.joinToString(", ") { "${it.done} of ${it.planned}" }
 
     /** Weeks [from] to [to], counted from 1. */
     fun rewritten(from: Int, to: Int): String = when (to - from) {

@@ -79,6 +79,7 @@ import com.metaself.app.ui.screen.trainer.AboutMeScreen
 import com.metaself.app.ui.screen.trainer.AboutMeViewModel
 import com.metaself.app.ui.screen.trainer.AdjustPlanScreen
 import com.metaself.app.ui.screen.trainer.AdjustPlanViewModel
+import com.metaself.app.ui.screen.trainer.EarlierSessionsScreen
 import com.metaself.app.ui.screen.trainer.EvaluatePlanScreen
 import com.metaself.app.ui.screen.trainer.EvaluatePlanViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionScreen
@@ -124,6 +125,9 @@ sealed class Destination(val route: String) {
 
     /** D97. */
     data object AdjustPlan : Destination("trainer/weeks/adjust")
+
+    /** D114: the reviewed sessions, a page of their own. */
+    data object EarlierSessions : Destination("trainer/earlier")
 
     /** About me (D90): the owner's note for the trainer. */
     data object AboutMe : Destination("trainer/about")
@@ -466,9 +470,25 @@ fun MetaSelfNavHost(
                 onAboutMe = { navController.navigate(Destination.AboutMe.route) },
                 onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
-                onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
                 onLetters = { navController.navigate(Destination.Letters.route) },
+                onEarlier = { navController.navigate(Destination.EarlierSessions.route) },
+                // D114: the strip opens Movement, which opens on this week.
+                onMovement = { navController.navigate(Destination.Movement.route) },
                 onAnswer = trainerViewModel::answer,
+            )
+        }
+
+        composable(Destination.EarlierSessions.route) {
+            val earlierViewModel: TrainerViewModel = hiltViewModel()
+            val earlierState by earlierViewModel.state.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(earlierViewModel) {
+                earlierViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
+            EarlierSessionsScreen(
+                state = earlierState,
+                onBack = { navController.popBackStack() },
+                onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
             )
         }
 

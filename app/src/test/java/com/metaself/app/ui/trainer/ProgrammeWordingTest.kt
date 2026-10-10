@@ -32,10 +32,7 @@ class ProgrammeWordingTest {
     }
 
     @Test
-    fun `the card names the plan's length and week, or when it starts`() {
-        assertThat(ProgrammeWording.cardHeading(4, 1, start)).isEqualTo("YOUR 4-WEEK PLAN · WEEK 2 OF 4")
-        assertThat(ProgrammeWording.cardHeading(4, -1, start + 7)).isEqualTo("YOUR 4-WEEK PLAN · STARTS MON 7 SEP")
-        assertThat(ProgrammeWording.weekDates(start)).isEqualTo("This week, Mon 31 Aug – Sun 6 Sep")
+    fun `the plan names its span, its length and its weeks`() {
         assertThat(ProgrammeWording.span(start, 4)).isEqualTo("Starts Mon 31 Aug, ends Sun 27 Sep")
         assertThat(ProgrammeWording.planHeading(ProgrammeAsk(4, 3))).isEqualTo("THE PLAN · 4 WEEKS · 3 SESSIONS A WEEK")
         assertThat(ProgrammeWording.weekTitle(1, "settle in")).isEqualTo("Week 1 · settle in")
@@ -62,11 +59,7 @@ class ProgrammeWordingTest {
     }
 
     @Test
-    fun `an ended plan counts every week, and the adjust page says what is rewritten`() {
-        val progress = PlanProgress.of(plan, start, listOf(session(1, start), session(2, start + 7)), until = start + 27, counting = PlanCounting(1, 0, emptyMap()))
-
-        assertThat(ProgrammeWording.endedHeading(4)).isEqualTo("YOUR 4-WEEK PLAN HAS ENDED")
-        assertThat(ProgrammeWording.endedLine(progress)).isEqualTo("2 of 12 planned sessions done · weeks 1 of 3, 1 of 3, 0 of 3, 0 of 3")
+    fun `the adjust page says what is rewritten`() {
         assertThat(ProgrammeWording.rewritten(3, 4)).isEqualTo("Weeks 3 and 4: to be rewritten")
         assertThat(ProgrammeWording.rewritten(2, 4)).isEqualTo("Weeks 2 to 4: to be rewritten")
         assertThat(ProgrammeWording.rewritten(4, 4)).isEqualTo("Week 4: to be rewritten")

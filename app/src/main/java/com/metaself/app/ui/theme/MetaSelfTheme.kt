@@ -27,6 +27,7 @@ fun MetaSelfTheme(
         // preview or a test that forces this theme dark must get the dark step, and anything
         // reading `isSystemInDarkTheme()` again further down would hand it the light one.
         LocalMetaSelfInkTwo provides if (useDarkTheme) MetaSelfDarkInkTwo else MetaSelfLightInkTwo,
+        LocalMetaSelfCaution provides if (useDarkTheme) MetaSelfDarkCaution else MetaSelfLightCaution,
     ) {
         MaterialTheme(
             colorScheme = if (useDarkTheme) MetaSelfDarkColours else MetaSelfLightColours,
@@ -55,4 +56,13 @@ internal object MetaSelfInk {
         @Composable
         @ReadOnlyComposable
         get() = LocalMetaSelfInkTwo.current
+}
+
+/** Fills Material's colour scheme has no role for. Call sites read `MetaSelfTint.caution`, never a raw value. */
+internal object MetaSelfTint {
+    /** A box whose figure is under its usual (D114): the week's sleep. Text on it is the ink ladder's. */
+    val caution: Color
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalMetaSelfCaution.current
 }
