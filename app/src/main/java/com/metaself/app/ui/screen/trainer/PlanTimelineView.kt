@@ -264,7 +264,7 @@ internal fun PlanButtons(shown: PlanShown, onAdjust: () -> Unit, onPlan: () -> U
                 Text(stringResource(R.string.trainer_adjust_plan), textAlign = TextAlign.Center)
             }
             Button(onClick = onPlan, modifier = Modifier.weight(1f)) {
-                val main = MainAction.of(running, running.next)
+                val main = MainAction.session(running.next)
                 Text(
                     if (main is MainAction.PlanOpen) TrainerWeekWording.planOpen(main.kind) else stringResource(R.string.trainer_plan_next),
                     textAlign = TextAlign.Center,

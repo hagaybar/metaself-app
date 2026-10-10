@@ -52,13 +52,16 @@ object PlanTimelineWording {
     /** "Easy 30′". */
     fun tileTitle(session: PlannedSession): String = "${ProgrammeWording.effort(session.effort)} ${session.minutes}′"
 
-    /** "Done Mon", "Done Mon · 25 min", "Open" (invented). */
+    /** D122: an open session whose steps are kept. */
+    const val STEPS_READY = "Steps ready"
+
+    /** "Done Mon", "Done Mon · 25 min", "Open", or "Steps ready" (invented). */
     fun tileLine(tile: PlanTile): String {
         val day = tile.day?.let { LocalDate.ofEpochDay(it).format(WEEKDAY) }
         return when (tile.state) {
             TileState.DONE -> "Done $day"
             TileState.DONE_SHORT -> "Done $day$SEP${tile.minutes} min"
-            TileState.OPEN -> "Open"
+            TileState.OPEN -> if (tile.stepsReady) STEPS_READY else "Open"
         }
     }
 

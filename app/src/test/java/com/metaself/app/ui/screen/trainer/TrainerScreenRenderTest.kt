@@ -205,7 +205,8 @@ class TrainerScreenRenderTest {
         }
         assertThat(opened).containsExactly("plan", "letters", "earlier", "about").inOrder()
 
-        assertThat(draw(page()).none { it.startsWith("Your plan") }).isTrue()
+        // D124: with no plan the row is still there — the plan screen holds Plan ahead and the Next session.
+        assertThat(draw(page())).contains("Your plan")
     }
 
     @Test

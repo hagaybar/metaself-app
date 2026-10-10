@@ -143,8 +143,9 @@ class TrainerWeekWordingTest {
         assertThat(TrainerWeekWording.planRow(PlanCard.of(later, emptyList(), TEST_EPOCH_DAY, counting))).isEqualTo("Your plan · starts Mon 7 Sep")
         // D117: an ended plan is still drawn on the plan screen, for the fourteen days the card is.
         assertThat(TrainerWeekWording.planRow(PlanCard.of(running, emptyList(), TEST_EPOCH_DAY + 7, counting))).isEqualTo("Your plan · ended Sun 6 Sep")
-        assertThat(TrainerWeekWording.planRow(PlanCard.of(running, emptyList(), TEST_EPOCH_DAY + 30, counting))).isNull()
-        assertThat(TrainerWeekWording.planRow(PlanCard.None)).isNull()
+        // D124: the plan screen is where Plan ahead and the Next session are, so the row is there with no plan too.
+        assertThat(TrainerWeekWording.planRow(PlanCard.of(running, emptyList(), TEST_EPOCH_DAY + 30, counting))).isEqualTo("Your plan")
+        assertThat(TrainerWeekWording.planRow(PlanCard.None)).isEqualTo("Your plan")
     }
 
     /** D116: Saturday 5 September 2026 at 09:12, and Sunday the 6th, in UTC. Invented. */

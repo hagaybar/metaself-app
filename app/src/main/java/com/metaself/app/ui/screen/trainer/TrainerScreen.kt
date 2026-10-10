@@ -128,7 +128,7 @@ fun TrainerScreen(
                 }
                 Rows(
                     listOfNotNull(
-                        TrainerWeekWording.planRow(home.plan)?.let { it to onSeePlan },
+                        TrainerWeekWording.planRow(home.plan) to onSeePlan,
                         LetterWording.LIST_TITLE to onLetters,
                         TrainerWeekWording.EARLIER to onEarlier,
                         TrainerWeekWording.ABOUT_ME to onAboutMe,
@@ -398,7 +398,7 @@ private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onEvaluate: () -> 
         MainAction.PlanNext -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.trainer_plan_next))
         }
-        MainAction.Evaluate -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        MainAction.PlanAhead -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             Button(onClick = onEvaluate, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_evaluate)) }
             OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_plan_next)) }
         }

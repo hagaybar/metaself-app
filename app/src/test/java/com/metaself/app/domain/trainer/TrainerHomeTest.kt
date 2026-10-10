@@ -108,7 +108,7 @@ class TrainerHomeTest {
         assertThat(home.next).isEqualTo(PlannedTick(1, 2, walk30))
     }
 
-    /** D114: the one main button — the open session's kind, the next session, or an evaluation. Invented. */
+    /** D114, D124: the one main button — the open session's kind, the next session, or Plan ahead. Invented. */
     @Test
     fun `the main button is the next thing to do`() {
         val run20 = PlannedSession(WorkoutKind.RUN, 20, PlannedEffort.STEADY, "Short run")
@@ -122,8 +122,10 @@ class TrainerHomeTest {
         assertThat(main(listOf(run, walk(2, start + 1, hour = 7)))).isEqualTo(MainAction.PlanNext)
         // Before week 1 nothing is open yet; after the last day the plan has ended.
         assertThat(main(emptyList(), today = start - 1)).isEqualTo(MainAction.PlanNext)
-        assertThat(main(emptyList(), today = start + 14)).isEqualTo(MainAction.Evaluate)
-        assertThat(home().main).isEqualTo(MainAction.Evaluate)
+        assertThat(main(emptyList(), today = start + 14)).isEqualTo(MainAction.PlanAhead)
+        assertThat(home().main).isEqualTo(MainAction.PlanAhead)
+        // D124: in the plan's last week the next thing to do is the next plan.
+        assertThat(main(emptyList(), today = start + 7)).isEqualTo(MainAction.PlanAhead)
     }
 
     /** D117: the plan screen's main action is the Trainer page's, from the running card alone. Invented. */
@@ -137,7 +139,10 @@ class TrainerHomeTest {
 
         assertThat(MainAction.of(card, card.next)).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
         assertThat(MainAction.of(done, done.next)).isEqualTo(MainAction.PlanNext)
-        assertThat(MainAction.of(PlanCard.None, null)).isEqualTo(MainAction.Evaluate)
+        assertThat(MainAction.of(PlanCard.None, null)).isEqualTo(MainAction.PlanAhead)
+        // The plan screen's session action, whatever the week (D117, D124).
+        assertThat(MainAction.session(card.next)).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
+        assertThat(MainAction.session(null)).isEqualTo(MainAction.PlanNext)
     }
 
     /** A synced thirty-minute walk at 07:00 on [day]. Invented. */

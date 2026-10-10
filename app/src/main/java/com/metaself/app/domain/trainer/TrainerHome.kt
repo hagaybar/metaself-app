@@ -21,7 +21,7 @@ data class TrainerHome(
     /** D96: the running plan's next session this week, for Plan my next session. */
     val next: PlannedTick? = null,
 ) {
-    /** D114: the page's one main button — the open planned session, the next session, or an evaluation. */
+    /** D114, D124: the page's one main button — the open planned session, the next session, or Plan ahead. */
     val main: MainAction get() = MainAction.of(plan, next)
 
     companion object {
@@ -63,13 +63,19 @@ sealed interface MainAction {
     /** A plan runs with nothing open this week, or has not begun: "Plan my next session". */
     data object PlanNext : MainAction
 
-    /** No plan runs, or it has ended: "Evaluate me and plan the weeks ahead". */
-    data object Evaluate : MainAction
+    /** No plan runs, it has ended, or this week is its last: "Plan ahead" (D124). */
+    data object PlanAhead : MainAction
 
     companion object {
-        /** D114, D117: the next thing to do, for [plan] and its running week's [next] open session. */
-        fun of(plan: PlanCard, next: PlannedTick?): MainAction =
-            if (plan is PlanCard.Running) next?.let { PlanOpen(it.session.kind) } ?: PlanNext else Evaluate
+        /** D114, D124: the next thing to do, for [plan] and its running week's [next] open session. */
+        fun of(plan: PlanCard, next: PlannedTick?): MainAction = when {
+            plan !is PlanCard.Running -> PlanAhead
+            plan.weekIndex == plan.progress.weeks.lastIndex -> PlanAhead
+            else -> session(next)
+        }
+
+        /** D117: the session action — the open session's kind, or the next session — the plan screen's, whatever the week. */
+        fun session(next: PlannedTick?): MainAction = next?.let { PlanOpen(it.session.kind) } ?: PlanNext
     }
 }
 
