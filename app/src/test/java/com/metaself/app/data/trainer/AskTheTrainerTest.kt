@@ -834,9 +834,12 @@ class AskTheTrainerTest {
         assertThat(tiles.map { it.state to it.stepsReady }).containsExactly(TileState.DONE to false, TileState.OPEN to true).inOrder()
     }
 
-    /** D124: while a plan runs, a new one replaces it from next Monday; the old one stops today, replaced. */
+    /**
+     * D124, release 1's limit 3: while a plan runs, a new one replaces it from next Monday; the old one stops on its
+     * Sunday, replaced, and is the plan in effect until then.
+     */
     @Test
-    fun `while a plan runs, keeping a new one starts it next Monday and the old one stops today`() = runTest {
+    fun `while a plan runs, keeping a new one starts it next Monday and the old one counts through Sunday`() = runTest {
         assertThat(ask().replacingFrom()).isNull()
         val old = programmes.add(offered())
         programmes.keep(old, MONDAY, TEST_EPOCH_DAY)
@@ -846,8 +849,81 @@ class AskTheTrainerTest {
         assertThat(ask().keepProgramme(new)).isEqualTo(MONDAY + 7)
 
         val stopped = programmes.rows.value.first { it.id == old }
-        assertThat(stopped.status to stopped.stoppedEpochDay).isEqualTo(ProgrammeStatus.REPLACED to TEST_EPOCH_DAY)
+        assertThat(stopped.status to stopped.stoppedEpochDay).isEqualTo(ProgrammeStatus.REPLACED to MONDAY + 6)
         assertThat(programmes.running()!!.let { it.id to it.startEpochDay }).isEqualTo(new to MONDAY + 7)
+        // The rest of the week is the old plan's: its card, its open session, its ticks.
+        val thisWeek = ask().running()!!
+        assertThat(thisWeek.programme.id).isEqualTo(old)
+        assertThat(thisWeek.replacedFrom).isEqualTo(MONDAY + 7)
+        assertThat(thisWeek.next).isEqualTo(PlannedTick(1, 2, WALK_30))
+        assertThat(ask().nextFor()!!.slot).isEqualTo(SessionSlot(old, 0, 1))
+        assertThat(ask().replacingFrom()).isEqualTo(MONDAY + 7)
+        assertThat(ask().adjust("Invented.")).isEqualTo(AskTheTrainer.Adjusted.NotRunning)
+        assertThat(ask().planShown()!!.timeline.weeks.map { it.number }).containsExactly(1)
+
+        day = MONDAY + 5
+        record.workouts.value = record.workouts.value + walk(id = 2, day = MONDAY + 5)
+        assertThat(ask().running()!!.progress.weeks.first().done).isEqualTo(2)
+
+        day = MONDAY + 7
+        val next = ask().running()!!
+        assertThat(next.programme.id to next.weekIndex).isEqualTo(new to 0)
+        assertThat(next.replacedFrom).isNull()
+    }
+
+    /** Release 1's limit 2: an adjustment puts the done session first; the open session's steps go with it. */
+    @Test
+    fun `steps follow their session when an adjustment reorders the week`() = runTest {
+        val steady60 = PlannedSession(WorkoutKind.WALK, 60, PlannedEffort.STEADY, "Long walk")
+        val plan = WeeksPlan("Invented", listOf(PlanWeek("w", listOf(steady60, WALK_30)), PlanWeek("w", listOf(WALK_30))), "Invented.")
+        val id = programmes.add(offered().copy(plan = plan))
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        // The forty-minute walk today ticks the thirty-minute session, the second; the first is open.
+        val steps = store.addPlan(aStoredPlan().copy(slot = SessionSlot(id, 0, 0)))
+        store.keep(steps)
+        trainer.adjustments += TrainerReply.Answered(
+            WeeksPlan("Invented new", listOf(PlanWeek("w", listOf(steady60)), PlanWeek("w", listOf(WALK_20))), "Invented."), "a-model",
+        )
+
+        val version = (ask().adjust("Invented.") as AskTheTrainer.Adjusted.Offered).programme
+        assertThat(version.plan.weeks.first().sessions).containsExactly(WALK_30, steady60).inOrder()
+        ask().keepAdjusted(version)
+
+        assertThat(store.keptPlans().single().slot).isEqualTo(SessionSlot(id, 0, 1))
+        assertThat(ask().planShown()!!.steps.keys).containsExactly(PlanPlace(0, 1))
+    }
+
+    /** Release 1's limit 2: a session the new version no longer has takes its steps with it. */
+    @Test
+    fun `steps whose session an adjustment removed are no longer kept`() = runTest {
+        val swim = PlannedSession(WorkoutKind.SWIM, 30, PlannedEffort.EASY, "Easy swim")
+        val plan = WeeksPlan("Invented", listOf(PlanWeek("w", listOf(WALK_30, swim)), PlanWeek("w", listOf(WALK_30))), "Invented.")
+        val id = programmes.add(offered().copy(plan = plan))
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        val steps = store.addPlan(aStoredPlan().copy(slot = SessionSlot(id, 0, 1)))
+        store.keep(steps)
+        trainer.adjustments += TrainerReply.Answered(
+            WeeksPlan("Invented new", listOf(PlanWeek("w", emptyList()), PlanWeek("w", listOf(WALK_20))), "Invented."), "a-model",
+        )
+
+        ask().keepAdjusted((ask().adjust("Invented.") as AskTheTrainer.Adjusted.Offered).programme)
+
+        assertThat(store.keptPlans()).isEmpty()
+    }
+
+    /** Release 1's limit 1: a review is offered the steps of the planned session its workout ticked. */
+    @Test
+    fun `a review gets the steps kept for the session it ticked, else the newest kept of the seven days`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        val forFirst = store.addPlan(aStoredPlan().copy(createdAtMillis = NOW - 3 * HOUR, slot = SessionSlot(id, 0, 0)))
+        store.keep(forFirst)
+        val forSecond = store.addPlan(aStoredPlan().copy(createdAtMillis = NOW - 2 * HOUR, slot = SessionSlot(id, 0, 1)))
+        store.keep(forSecond)
+        val swim = walk(id = 5, day = TEST_EPOCH_DAY).copy(kind = WorkoutKind.SWIM, startedAtMillis = NOW + HOUR)
+
+        assertThat(ask().stepsFor(walk(id = 1, day = TEST_EPOCH_DAY))!!.id).isEqualTo(forFirst)
+        assertThat(ask().stepsFor(swim)!!.id).isEqualTo(forSecond)
     }
 
     private fun ask() = AskTheTrainer(

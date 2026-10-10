@@ -338,6 +338,8 @@ class TrainerWorkbenchViewModelTest {
         val programmes = FakeProgrammeStore()
         val vm = opened(programmes = object : ProgrammeStore by programmes {
             override suspend fun running(): Programme? = throw IllegalStateException("invented")
+            // The plan in effect is read from every row (release 1's limit 3).
+            override suspend fun all(): List<Programme> = throw IllegalStateException("invented")
         })
 
         assertThat(vm.state.value.unreadable).isTrue()

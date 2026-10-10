@@ -34,6 +34,7 @@ import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.Programmes
 import com.metaself.app.domain.trainer.SessionSlot
+import com.metaself.app.domain.trainer.StepsCarry
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
@@ -223,7 +224,7 @@ class AskTheTrainer @Inject constructor(
      * first — and stores it OFFERED (design questions 4, 5).
      */
     suspend fun adjust(words: String): Adjusted {
-        val running = running() ?: return Adjusted.NotRunning
+        val running = adjustable() ?: return Adjusted.NotRunning
         val programme = running.programme
         val question = adjustQuestion(running, words)
         return when (val reply = trainer.adjust(request(question))) {
@@ -253,15 +254,47 @@ class AskTheTrainer @Inject constructor(
         runCatching { weekNotes.keep(WeekNote(text, now(), monday, WeekNoteSource.TRAINER)) }
     }
 
-    /** D97: Keep this version. Refused (throws) when the plan it adjusts no longer runs (design question 6). */
-    suspend fun keepAdjusted(version: Programme) =
-        programmes.keepAdjusted(version.id, requireNotNull(version.replacesId) { "not an adjusted version" }, today().toEpochDay())
+    /**
+     * D97: Keep this version. Refused (throws) when the plan it adjusts no longer runs (design question 6). The steps
+     * kept for the old version's sessions then follow them (release 1's limit 2).
+     */
+    suspend fun keepAdjusted(version: Programme) {
+        val oldId = requireNotNull(version.replacesId) { "not an adjusted version" }
+        val old = programmes.all().firstOrNull { it.id == oldId }
+        programmes.keepAdjusted(version.id, oldId, today().toEpochDay())
+        if (old != null) carrySteps(old, version)
+    }
+
+    /**
+     * Release 1's limit 2: the steps kept for [old]'s planned sessions move to the same sessions in [new]
+     * ([StepsCarry]); steps whose session [new] no longer has are no longer kept. After the keep, in writes of their
+     * own: a failure leaves the steps where they were, and the version kept.
+     */
+    private suspend fun carrySteps(old: Programme, new: Programme) {
+        val root = Programmes.rootOf(old, programmes.all())
+        val kept = store.keptPlans().filter { it.slot?.chainId == root.id }
+        val moves = StepsCarry.moves(old.plan, new.plan, kept.mapNotNull { it.slot?.place })
+        kept.forEach { plan ->
+            val slot = plan.slot ?: return@forEach
+            when (val to = moves[slot.place]) {
+                null -> store.unkeep(plan.id)
+                slot.place -> Unit
+                else -> store.moveSlot(plan.id, SessionSlot(root.id, to.week, to.session))
+            }
+        }
+    }
 
     /** D97: Stop this plan. Refused (throws) when it no longer runs. */
     suspend fun stop(id: Long) = programmes.stop(id, today().toEpochDay())
 
-    /** The running plan with its ticks, while it runs; null when none runs or it has ended. Reads only. */
+    /**
+     * The plan in effect with its ticks, while it runs — a plan replaced from next Monday until its Sunday (release 1's
+     * limit 3); null when none runs or it has ended. Reads only.
+     */
     suspend fun running(): PlanCard.Running? = card() as? PlanCard.Running
+
+    /** The running plan Adjust may change: not one finishing its week before the plan that replaces it. */
+    private suspend fun adjustable(): PlanCard.Running? = running()?.takeIf { it.replacedFrom == null }
 
     /**
      * D96: the ticks of the plan on the Trainer screen's card, running or ended — a session on the plan's
@@ -274,7 +307,7 @@ class AskTheTrainer @Inject constructor(
     }
 
     private suspend fun card(): PlanCard {
-        val programme = programmes.running() ?: return PlanCard.None
+        val programme = Programmes.inEffect(programmes.all(), today().toEpochDay()) ?: return PlanCard.None
         val start = programme.startEpochDay ?: return PlanCard.None
         val workouts = record.observeWorkouts(start, ProgrammeCalendar.lastDay(start, programme.ask.weeks)).first()
         return PlanCard.of(programme, workouts, today().toEpochDay(), counting(programme))
@@ -297,6 +330,25 @@ class AskTheTrainer @Inject constructor(
         check(week != null && week.ticks.any { it.candidate?.id == workoutId }) { "that session is not waiting for an answer" }
         val root = Programmes.rootOf(running.programme, programmes.all())
         programmes.confirm(PlanConfirmation(root.id, workoutId, confirmed, now()))
+    }
+
+    /**
+     * Release 1's limit 1 (D87, D122): the suggestion a new review of [workout] is offered — the steps kept for the
+     * planned session it ticked, when there are any; else the newest kept suggestion of the seven days before it.
+     * Reads only.
+     */
+    suspend fun stepsFor(workout: Workout): TrainerPlan? {
+        val (programme, progress) = when (val card = card()) {
+            is PlanCard.Running -> card.programme to card.progress
+            is PlanCard.Ended -> card.programme to card.progress
+            PlanCard.None -> null to null
+        }
+        val place = progress?.placeOf(workout.id)
+        if (programme != null && place != null) {
+            val slot = SessionSlot(Programmes.rootOf(programme, programmes.all()).id, place.week, place.session)
+            store.keptPlans().firstOrNull { it.slot == slot }?.let { return it }
+        }
+        return PlanMatch.forSession(store.keptPlan(), workout)
     }
 
     /** D96: the planned session [workoutId] ticked, which its feedback request sends. Reads only; nothing is sent. */
@@ -393,7 +445,7 @@ class AskTheTrainer @Inject constructor(
     }
 
     /** D97, D105: the running plan's rest and how each week went; null when no plan runs. */
-    suspend fun adjustQuestion(words: String): TrainerQuestion.Adjust? = running()?.let { adjustQuestion(it, words) }
+    suspend fun adjustQuestion(words: String): TrainerQuestion.Adjust? = adjustable()?.let { adjustQuestion(it, words) }
 
     private fun adjustQuestion(running: PlanCard.Running, words: String): TrainerQuestion.Adjust {
         val programme = running.programme

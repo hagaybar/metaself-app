@@ -11,6 +11,7 @@ import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.TimeAvailable
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.Wish
@@ -51,6 +52,9 @@ interface TrainerStore : TrainerReviews {
     suspend fun keep(planId: Long)
 
     suspend fun unkeep(planId: Long)
+
+    /** Release 1's limit 2: [planId]'s steps now belong to the planned session at [slot]; nothing else changes. */
+    suspend fun moveSlot(planId: Long, slot: SessionSlot)
     suspend fun reviewOf(workoutId: Long): TrainerReview?
 
     /** Inserts or replaces the one review of its workout; its id. */
@@ -86,6 +90,12 @@ class RoomTrainerStore @Inject constructor(
     }
 
     override suspend fun unkeep(planId: Long) = dao.setKept(planId, false)
+
+    /** A row that no longer reads as a plan is left as it is. */
+    override suspend fun moveSlot(planId: Long, slot: SessionSlot) {
+        val plan = dao.plan(planId)?.toPlan() ?: return
+        dao.setSuggestion(planId, TrainerResponse.encodeStoredPlan(plan.plan, slot))
+    }
     override suspend fun reviewOf(workoutId: Long): TrainerReview? = dao.reviewOf(workoutId)?.toReview()
 
     /** Read and written in one transaction, so no other write of the same workout's review falls between. */

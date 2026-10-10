@@ -26,8 +26,9 @@ interface ProgrammeStore {
     suspend fun add(programme: Programme): Long
 
     /**
-     * D94: [id] runs from [startEpochDay]; any other running plan stops [today], replaced. Refused (throws)
-     * unless [id] is an offered answer never run. One transaction.
+     * D94: [id] runs from [startEpochDay]; any other running plan stops, replaced — on the day before [startEpochDay]
+     * (its Sunday) when that is later than [today], so it counts through its week (release 1's limit 3), else [today].
+     * Refused (throws) unless [id] is an offered answer never run. One transaction.
      */
     suspend fun keep(id: Long, startEpochDay: Long, today: Long)
 
@@ -62,7 +63,7 @@ class RoomProgrammeStore @Inject constructor(
     )
 
     override suspend fun keep(id: Long, startEpochDay: Long, today: Long) = transaction.run {
-        dao.replaceRunning(id, today)
+        dao.replaceRunning(id, maxOf(today, startEpochDay - 1))
         // Only an offered answer starts; otherwise the throw rolls the replacement back.
         check(dao.runProgramme(id, startEpochDay) == 1) { "only an offered plan can be kept" }
     }

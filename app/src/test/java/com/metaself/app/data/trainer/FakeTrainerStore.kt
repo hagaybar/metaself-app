@@ -2,6 +2,7 @@ package com.metaself.app.data.trainer
 
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerReview
 import kotlinx.coroutines.flow.Flow
@@ -71,6 +72,11 @@ class FakeTrainerStore(var failing: Set<String> = emptySet()) : TrainerStore {
                 else -> it
             }
         }
+    }
+
+    override suspend fun moveSlot(planId: Long, slot: SessionSlot) {
+        check("moveSlot")
+        plans.value = plans.value.map { if (it.id == planId) it.copy(slot = slot) else it }
     }
 
     override suspend fun unkeep(planId: Long) {

@@ -72,6 +72,11 @@ data class PlanProgress(val weeks: List<WeekProgress>) {
         week.ticks.firstOrNull { it.by?.id == workoutId }?.let { PlannedTick(week.index + 1, weeks.size, it.planned) }
     }
 
+    /** Release 1's limit 1: the place of the planned session [workoutId] ticked; null when it ticked none. */
+    fun placeOf(workoutId: Long): PlanPlace? = weeks.firstNotNullOfOrNull { week ->
+        week.ticks.indexOfFirst { it.by?.id == workoutId }.takeIf { it >= 0 }?.let { PlanPlace(week.index, it) }
+    }
+
     companion object {
         /**
          * The sessions that count are the visible, counted ones (D74, D81) that started at or after
@@ -182,6 +187,25 @@ object Programmes {
         generateSequence(programme) { current -> current.replacesId?.let { id -> all.firstOrNull { it.id == id } } }
             .take(all.size + 1)
             .last()
+
+    /**
+     * Release 1's limit 3 (D124): the version in effect [today] — the running one once begun; before it begins, a
+     * version it replaced that had begun by today and stops on or after today (its Sunday), which counts to then;
+     * else the running one, not yet begun. Null when none runs.
+     */
+    fun inEffect(all: List<Programme>, today: Long): Programme? {
+        val running = all.filter { it.status == ProgrammeStatus.RUNNING }.maxByOrNull { it.createdAtMillis }
+        val start = running?.startEpochDay
+        if (running != null && start != null && start <= today) return running
+        return all.filter { finishing(it, today) }.maxByOrNull { it.createdAtMillis } ?: running
+    }
+
+    /** A replaced version still counting [today]: begun by it, stopping on or after it. */
+    fun finishing(programme: Programme, today: Long): Boolean {
+        val start = programme.startEpochDay
+        val stopped = programme.stoppedEpochDay
+        return programme.status == ProgrammeStatus.REPLACED && start != null && stopped != null && start <= today && today <= stopped
+    }
 
     /** The last day a kept version's sessions count: the day it stopped, or [today], never past its last day. */
     fun countedUntil(programme: Programme, today: Long): Long {

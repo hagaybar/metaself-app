@@ -136,6 +136,26 @@ class TrainerHomeTest {
         assertThat(MainAction.session(null)).isEqualTo(MainAction.PlanNext)
     }
 
+    /** Release 1's limit 3: replaced mid-week, the old plan's card runs to its Sunday, the session action its main. */
+    @Test
+    fun `a plan replaced from next Monday is still this week's card, with the day the new one takes over`() {
+        val replaced = running.copy(status = ProgrammeStatus.REPLACED, stoppedEpochDay = start + 6)
+        val card = PlanCard.of(replaced, emptyList(), today = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap())) as PlanCard.Running
+
+        assertThat(card.replacedFrom).isEqualTo(start + 7)
+        assertThat(card.next).isEqualTo(PlannedTick(1, 2, walk30))
+        assertThat(MainAction.of(card, card.next)).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
+        assertThat((PlanCard.of(running, emptyList(), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running).replacedFrom).isNull()
+        // In the replaced plan's own last week, still the session action: the next plan is already kept.
+        val lastWeek = running.copy(status = ProgrammeStatus.REPLACED, stoppedEpochDay = start + 13)
+        val late = PlanCard.of(lastWeek, emptyList(), today = start + 8, counting = PlanCounting(1, 0, emptyMap())) as PlanCard.Running
+        assertThat(MainAction.of(late, late.next)).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
+        // Past its stop day, or stopped the old way today, it is no card.
+        assertThat(PlanCard.of(replaced, emptyList(), today = start + 7, counting = PlanCounting(1, 0, emptyMap()))).isEqualTo(PlanCard.None)
+        assertThat(PlanCard.of(replaced.copy(status = ProgrammeStatus.STOPPED), emptyList(), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())))
+            .isEqualTo(PlanCard.None)
+    }
+
     /** A synced thirty-minute walk at 07:00 on [day]. Invented. */
     private fun planSession(id: Long, day: Long) = Workout(
         id = id, epochDay = day, startedAtMillis = day * DAY + 7 * HOUR, durationMinutes = 30,

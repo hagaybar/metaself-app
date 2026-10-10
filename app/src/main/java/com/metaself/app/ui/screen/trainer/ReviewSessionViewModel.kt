@@ -14,7 +14,6 @@ import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Felt
-import com.metaself.app.domain.trainer.PlanMatch
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerReview
@@ -106,11 +105,12 @@ class ReviewSessionViewModel @Inject constructor(
                 local.update { it.copy(gone = true) }
             } else {
                 val review = store.reviewOf(workoutId)
-                // A review keeps the plan it was saved with, kept or not; a new one is offered the kept plan (D87).
+                // A review keeps the plan it was saved with, kept or not; a new one is offered the steps kept for the
+                // planned session it ticked, else the kept plan (D87, D122).
                 val plan = if (review != null) {
                     review.planId?.let { store.plans(listOf(it))[it] }
                 } else {
-                    PlanMatch.forSession(store.keptPlan(), workout)
+                    ask.stepsFor(workout)
                 }
                 local.update {
                     it.copy(workout = workout, plan = plan, felt = review?.felt, words = review?.words.orEmpty(), feedback = review?.feedback)

@@ -93,7 +93,10 @@ data class PlanTimeline(
                 today < start -> PlanStanding.Before(start)
                 else -> PlanStanding.InWeek(current + 1)
             }
-            val weeks = plan.weeks.mapIndexed { index, week ->
+            // Release 1's limit 3: a version replaced from next Monday is drawn to its stop day; the next plan has the rest.
+            val replaced = programme.stoppedEpochDay.takeIf { programme.status == ProgrammeStatus.REPLACED }
+            val drawn = if (replaced == null) plan.weeks else plan.weeks.filterIndexed { index, _ -> ProgrammeCalendar.monday(start, index) <= replaced }
+            val weeks = drawn.mapIndexed { index, week ->
                 val monday = ProgrammeCalendar.monday(start, index)
                 val ticks = progress?.weeks?.getOrNull(index)?.ticks
                 val past = TimelinePlace.Past(

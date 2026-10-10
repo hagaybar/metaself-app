@@ -23,6 +23,7 @@ import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerReview
@@ -104,6 +105,19 @@ class ReviewSessionViewModelTest {
         programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
 
         assertThat(opened().state.value.planned).isEqualTo(PlannedTick(1, 2, walk40))
+    }
+
+    /** Release 1's limit 1: a new review is offered the steps kept for the planned session it ticked. */
+    @Test
+    fun `opening offers the steps kept for the planned session the session ticked`() = runTest {
+        val walk40 = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line")
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), null, WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(walk40, walk40)) }, "Invented."), "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        val forTicked = storedPlan(createdAt = session.startedAtMillis - 3 * HOUR).copy(slot = SessionSlot(id, 0, 0))
+        keep(forTicked)
+        keep(storedPlan(createdAt = session.startedAtMillis - 2 * HOUR).copy(slot = SessionSlot(id, 0, 1)))
+
+        assertThat(opened().state.value.plan!!.slot).isEqualTo(SessionSlot(id, 0, 0))
     }
 
     @Test

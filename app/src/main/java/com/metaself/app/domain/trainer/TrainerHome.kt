@@ -67,6 +67,8 @@ sealed interface MainAction {
         /** D114, D124: the next thing to do, for [plan] and its running week's [next] open session. */
         fun of(plan: PlanCard, next: PlannedTick?): MainAction = when {
             plan !is PlanCard.Running -> PlanAhead
+            // The next plan is already kept; this one's open sessions are what is left to do.
+            plan.replacedFrom != null -> session(next)
             plan.weekIndex == plan.progress.weeks.lastIndex -> PlanAhead
             else -> session(next)
         }
@@ -81,8 +83,16 @@ sealed interface PlanCard {
     /** No plan runs, or one ended more than fourteen days ago: the card offers an evaluation. */
     data object None : PlanCard
 
-    /** [weekIndex] is 0 for week 1, and -1 before it starts (kept Friday to Sunday). */
-    data class Running(val programme: Programme, val progress: PlanProgress, val weekIndex: Int) : PlanCard {
+    /**
+     * [weekIndex] is 0 for week 1, and -1 before it starts (kept Friday to Sunday). [replacedFrom]: a plan replaced
+     * from next Monday still runs this week (release 1's limit 3); the Monday the new one takes over, else null.
+     */
+    data class Running(
+        val programme: Programme,
+        val progress: PlanProgress,
+        val weekIndex: Int,
+        val replacedFrom: Long? = null,
+    ) : PlanCard {
         /** This week's first unticked planned session, with its week counted from 1; none before week 1. */
         val next: PlannedTick?
             get() = if (weekIndex in progress.weeks.indices) {
@@ -99,11 +109,15 @@ sealed interface PlanCard {
         /** [workouts]: the record over the plan's weeks; only its counted sessions after [counting]'s moment tick (D95, D105). */
         fun of(running: Programme?, workouts: List<Workout>, today: Long, counting: PlanCounting): PlanCard {
             val start = running?.startEpochDay
-            if (running == null || start == null || running.status != ProgrammeStatus.RUNNING) return None
+            if (running == null || start == null) return None
+            // Release 1's limit 3: a version replaced from next Monday runs to its stop day, its Sunday.
+            val finishing = Programmes.finishing(running, today)
+            if (running.status != ProgrammeStatus.RUNNING && !finishing) return None
             val last = ProgrammeCalendar.lastDay(start, running.ask.weeks)
             val progress = PlanProgress.of(running.plan, start, workouts, minOf(today, last), counting)
+            val replacedFrom = if (finishing) running.stoppedEpochDay!! + 1 else null
             return when {
-                today <= last -> Running(running, progress, ProgrammeCalendar.weekIndex(start, today).coerceAtLeast(-1))
+                today <= last -> Running(running, progress, ProgrammeCalendar.weekIndex(start, today).coerceAtLeast(-1), replacedFrom)
                 ProgrammeCalendar.endedShown(start, running.ask.weeks, today) -> Ended(running, progress)
                 else -> None
             }

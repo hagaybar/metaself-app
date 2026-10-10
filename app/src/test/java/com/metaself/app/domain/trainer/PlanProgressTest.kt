@@ -70,6 +70,36 @@ class PlanProgressTest {
         assertThat(progress.tickOf(9)).isNull()
     }
 
+    /** Release 1's limit 1: a review finds the steps of the planned session its workout ticked by this place. */
+    @Test
+    fun `a ticked session's place is its week and its index in that week`() {
+        val progress = PlanProgress.of(plan, start, listOf(session(1, start + 7, WorkoutKind.RUN), session(2, start, WorkoutKind.WALK)), until = start + 13, counting = ALL)
+
+        assertThat(progress.placeOf(1)).isEqualTo(PlanPlace(1, 1))
+        assertThat(progress.placeOf(2)).isEqualTo(PlanPlace(0, 0))
+        assertThat(progress.placeOf(9)).isNull()
+    }
+
+    /** Release 1's limit 3: a replaced plan stays in effect to its Sunday; the new one from its Monday. */
+    @Test
+    fun `the plan in effect is the replaced one until its stop day, then the new one`() {
+        val old = Programme(1, 0, ProgrammeAsk(2, 3), null, plan, "a-model", start, ProgrammeStatus.REPLACED, stoppedEpochDay = start + 6)
+        val new = Programme(2, 10, ProgrammeAsk(2, 3), null, plan, "a-model", start + 7, ProgrammeStatus.RUNNING)
+        val offered = Programme(3, 20, ProgrammeAsk(2, 3), null, plan, "a-model")
+        val all = listOf(old, new, offered)
+
+        assertThat(Programmes.inEffect(all, today = start + 3)).isEqualTo(old)
+        assertThat(Programmes.inEffect(all, today = start + 6)).isEqualTo(old)
+        assertThat(Programmes.inEffect(all, today = start + 7)).isEqualTo(new)
+        // Replaced the old way, the same day: the new plan waits, as before.
+        assertThat(Programmes.inEffect(listOf(old.copy(stoppedEpochDay = start + 2), new), today = start + 3)).isEqualTo(new)
+        // A plan replaced before it began is never in effect.
+        assertThat(Programmes.inEffect(listOf(old.copy(startEpochDay = start + 7), new.copy(startEpochDay = start + 14)), today = start + 3))
+            .isEqualTo(new.copy(startEpochDay = start + 14))
+        assertThat(Programmes.inEffect(listOf(new), today = start + 3)).isEqualTo(new)
+        assertThat(Programmes.inEffect(listOf(offered), today = start + 3)).isNull()
+    }
+
     @Test
     fun `the last evaluation is the newest kept one, with the newest kept version of its plan`() {
         val eval = Evaluation("h", "g", "t", "")

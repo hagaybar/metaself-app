@@ -30,6 +30,10 @@ interface TrainerDao {
     @Query("UPDATE trainer_plans SET kept = :kept WHERE id = :id")
     suspend fun setKept(id: Long, kept: Boolean)
 
+    /** Release 1's limit 2: a suggestion's stored JSON rewritten, its place moved. No schema change. */
+    @Query("UPDATE trainer_plans SET suggestion = :suggestion WHERE id = :id")
+    suspend fun setSuggestion(id: Long, suggestion: String)
+
     @Query("SELECT * FROM trainer_reviews WHERE workoutId = :workoutId")
     suspend fun reviewOf(workoutId: Long): TrainerReviewEntity?
 
@@ -66,9 +70,9 @@ interface TrainerDao {
     @Query("SELECT * FROM trainer_programmes WHERE status = 'RUNNING' ORDER BY createdAtMillis DESC LIMIT 1")
     suspend fun running(): TrainerProgrammeEntity?
 
-    /** Every running plan but [exceptId] stops today, replaced (D98). */
-    @Query("UPDATE trainer_programmes SET status = 'REPLACED', stoppedEpochDay = :today WHERE status = 'RUNNING' AND id != :exceptId")
-    suspend fun replaceRunning(exceptId: Long, today: Long)
+    /** Every running plan but [exceptId] stops on [day], replaced (D98) — today, or the Sunday before the new plan (D124). */
+    @Query("UPDATE trainer_programmes SET status = 'REPLACED', stoppedEpochDay = :day WHERE status = 'RUNNING' AND id != :exceptId")
+    suspend fun replaceRunning(exceptId: Long, day: Long)
 
     @Query("UPDATE trainer_programmes SET status = :status, stoppedEpochDay = :day WHERE id = :id")
     suspend fun endProgramme(id: Long, status: String, day: Long)

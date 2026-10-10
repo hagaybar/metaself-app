@@ -39,6 +39,14 @@ class RoomProgrammeStoreWritesTest {
         assertThat(log).containsExactly("begin", "replaceRunning(4, 20699)", "runProgramme(4, 20696)", "commit").inOrder()
     }
 
+    /** Release 1's limit 3: kept from next Monday, the running plan stops on the Sunday before it, not today. */
+    @Test
+    fun `keeping a plan from next Monday stops the running one on its Sunday`() = runTest {
+        store().keep(4, startEpochDay = 20_703, today = 20_699)
+
+        assertThat(log).containsExactly("begin", "replaceRunning(4, 20702)", "runProgramme(4, 20703)", "commit").inOrder()
+    }
+
     @Test
     fun `keeping a row that is not an offered answer is refused, and the replacement rolls back`() = runTest {
         changed = 0
