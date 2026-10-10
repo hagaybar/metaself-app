@@ -13,6 +13,10 @@ import com.metaself.app.domain.letter.LetterTexts
 import com.metaself.app.domain.letter.MovementFigures
 import com.metaself.app.domain.letter.WeekFigures
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.trainer.BeyondPlan
+import com.metaself.app.domain.trainer.FoodContext
+import com.metaself.app.domain.trainer.Recovery
+import com.metaself.app.domain.trainer.WeekLedger
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -153,6 +157,10 @@ class OpenAiLetterWriterTest {
 
         val REQUEST = LetterRequest(
             figures = LetterFigures(week(MONDAY), List(4) { week(MONDAY - 7L * (it + 1)) }, 2_100),
+            ledger = WeekLedger(
+                monday = MONDAY, current = true, practice = null, beyond = BeyondPlan(emptyList(), null, null),
+                food = FoodContext(0, null, null, 2_100), recovery = Recovery(null, null, null, null, null, null),
+            ),
             sessions = emptyList(), aboutMe = NOTE, goal = null, body = null,
             planTitle = null, planWeek = null, lastNextWeek = LAST_LINE,
         )

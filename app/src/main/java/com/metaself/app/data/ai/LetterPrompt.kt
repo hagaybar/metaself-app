@@ -14,7 +14,8 @@ import kotlinx.serialization.json.putJsonObject
 /**
  * What leaves the phone for the weekly letter (D101) — the fourth thing this app sends. Pure, with its
  * own "nothing else is sent" test. Food goes only as a week's averages of daily totals and a count of
- * days logged; the tone rules (D102) are written into the instructions verbatim, not left to chance.
+ * days logged; sleep, resting heart rate and HRV only as the week's averages beside their usuals (D111);
+ * the tone rules (D102) are written into the instructions verbatim, not left to chance.
  */
 object LetterPrompt {
 
@@ -26,8 +27,8 @@ object LetterPrompt {
         sessions with minutes, distance and how they felt, active energy and steps a day, and their weekly
         plan's planned and ticked sessions when one ran. Also this week's sessions, their standing note
         about themselves (about_me), their goal's direction and weekly rate, their age, sex and height,
-        today's daily calorie target, and the "for next week" line of last week's letter. A null is a
-        figure not recorded.
+        today's daily calorie target, the "for next week" line of last week's letter, and this week's
+        ledger (below). A null is a figure not recorded.
 
         How to write. He asked for recognition of effort, and for encouragement without blame when a week
         goes badly — a trainer, not a new friend:
@@ -39,7 +40,8 @@ object LetterPrompt {
         - Nothing medical is diagnosed. If the note mentions an injury, plan around it.
         - Keep the letter consistent with last week's "for next week" line, and say how it went when the
           figures show it.
-
+    """.trimIndent() + "\n\n" + "ledger is this week's ledger." + "\n\n" + TrainerPrompt.LEDGER + "\n\n" +
+        TrainerPrompt.WEEK_RULES + "\n\n" + """
         Reply with: headline (one line, about the week), effort (what he put in), progress (where it is
         taking him, against his earlier weeks), look_at (one thing, as above), next_week (one concrete
         step), and close (as above).
@@ -54,6 +56,7 @@ object LetterPrompt {
 
     private fun user(request: LetterRequest): JsonObject = buildJsonObject {
         put("week", week(request.figures.week))
+        put("ledger", TrainerPrompt.ledgerJson(request.ledger, withSoFar = false))
         putJsonArray("earlier_weeks") { request.figures.earlier.forEach { add(week(it)) } }
         put("target_kcal", request.figures.targetKcal?.let(::JsonPrimitive) ?: JsonNull)
         putJsonArray("sessions") { request.sessions.forEach { add(TrainerPrompt.sessionJson(it)) } }

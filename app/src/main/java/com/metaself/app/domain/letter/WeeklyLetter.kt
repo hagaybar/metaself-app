@@ -4,6 +4,7 @@ import com.metaself.app.domain.trainer.BodyFacts
 import com.metaself.app.domain.trainer.GoalFacts
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.SessionFacts
+import com.metaself.app.domain.trainer.WeekLedger
 
 /** The six texts of a letter (D102), all non-empty. Advice, never a measurement (D4). */
 data class LetterTexts(
@@ -28,16 +29,18 @@ data class WeeklyLetter(
 )
 
 /**
- * Everything one letter request holds (D101) — built fresh from the record. There is deliberately no
- * field for a meal, a food, an amount, a time of eating, a single weigh-in, sleep or the owner's words;
- * `LetterPromptTest` fails if one is added.
+ * Everything one letter request holds (D101, amended by D111) — built fresh from the record. There is
+ * deliberately no field for a meal, a food, an amount, a time of eating, a single weigh-in, a single
+ * night's sleep or a single day's heart rate, or the owner's words; `LetterPromptTest` fails if one is added.
  *
+ * @property ledger the week's ledger (D110), counted to its Sunday.
  * @property sessions this week's sessions as D84 sends them, with `words`, `felt` and `plan` always null.
  * @property lastNextWeek last week's letter's "for next week" line, when there is one.
  * @property planWeek this week of the weekly plan, when one ran.
  */
 data class LetterRequest(
     val figures: LetterFigures,
+    val ledger: WeekLedger,
     val sessions: List<SessionFacts>,
     val aboutMe: String?,
     val goal: GoalFacts?,
