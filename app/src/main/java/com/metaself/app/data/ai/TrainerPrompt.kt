@@ -131,6 +131,17 @@ object TrainerPrompt {
           are given; you may compare two of them, but never estimate one.
     """.trimIndent()
 
+    /**
+     * D116: the week's note, asked last on every path and in the letter, in the same request — never in a
+     * request of its own. Shared, word for word, with the letter's instructions.
+     */
+    internal val WEEK_NOTE = """
+        Also give week_note: at most two sentences about this week as a whole, as its ledger shows it,
+        following the rules above for using a week's ledger: both parts, what matters most first, recovery
+        shaping intensity, food as context, and no figure the app did not count. It is shown on its own,
+        apart from the rest of your reply, so it must make sense without it.
+    """.trimIndent()
+
     /** The last paragraph of the shared part, for the plan, evaluate and adjust paths. */
     private val VOICE = """
         Write plain English, to them, in the second person. Short sentences. Every figure you mention
@@ -262,12 +273,12 @@ object TrainerPrompt {
 
     fun adjustBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Adjust) { "an adjustment is asked with an adjust question" }
-        return ChatRequest.body(model, profile, messages(request), "weeks_plan", WEEKS_PLAN_SCHEMA)
+        return ChatRequest.body(model, profile, messages(request), "weeks_plan", ADJUST_SCHEMA)
     }
 
     /**
      * D106: the whole system message [path] sends today — the shared part, the six ledgers and D112's
-     * rules, the voice paragraph and the path's own, joined as every body joins them. The workbench saves this to a file as the starting point. A model without the
+     * rules, the voice paragraph and the path's own, and the week's note (D116), joined as every body joins them. The workbench saves this to a file as the starting point. A model without the
      * strict format is also sent the schema paragraph after it; that is reply shape, which the workbench
      * never sends.
      */
@@ -277,7 +288,7 @@ object TrainerPrompt {
             TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
             TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE
             TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST
-        }
+        } + "\n\n" + WEEK_NOTE
 
     /** The user message every body sends: [request], serialised. Shared with the workbench (D106). */
     fun userMessage(request: TrainerRequest): String = user(request).toString()
@@ -687,6 +698,7 @@ object TrainerPrompt {
             put("items", strictObject("from_minute" to integer(), "to_minute" to integer(), "what" to string(), "how" to string()))
         },
         "why" to string(),
+        "week_note" to string(),
     )
 
     private val FEEDBACK_SCHEMA: JsonObject = strictObject(
@@ -696,6 +708,7 @@ object TrainerPrompt {
             put("type", "string")
             putJsonArray("enum") { add("yes"); add("partly"); add("no"); add("no_plan") }
         },
+        "week_note" to string(),
     )
 
     private fun enumOf(vararg values: String) = buildJsonObject {
@@ -726,5 +739,14 @@ object TrainerPrompt {
             "headline" to string(), "going_well" to string(), "to_work_on" to string(), "since_last" to string(),
         ),
         "plan" to WEEKS_PLAN_SCHEMA,
+        "week_note" to string(),
+    )
+
+    /** D97's reply: the plan of weeks, and the week's note (D116). The plan inside an evaluation keeps [WEEKS_PLAN_SCHEMA]. */
+    private val ADJUST_SCHEMA: JsonObject = strictObject(
+        "title" to string(),
+        "weeks" to arraySchema(strictObject("focus" to string(), "sessions" to arraySchema(PLANNED_SCHEMA))),
+        "why" to string(),
+        "week_note" to string(),
     )
 }

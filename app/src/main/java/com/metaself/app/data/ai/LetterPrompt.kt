@@ -45,7 +45,7 @@ object LetterPrompt {
         Reply with: headline (one line, about the week), effort (what he put in), progress (where it is
         taking him, against his earlier weeks), look_at (one thing, as above), next_week (one concrete
         step), and close (as above).
-    """.trimIndent()
+    """.trimIndent() + "\n\n" + TrainerPrompt.WEEK_NOTE
 
     fun body(model: String, request: LetterRequest, profile: RequestProfile = RequestProfile.guess(model)): String =
         ChatRequest.body(
@@ -110,10 +110,13 @@ object LetterPrompt {
     /** The reply's six texts, in the order shown (D102). */
     val NAMES = listOf("headline", "effort", "progress", "look_at", "next_week", "close")
 
+    /** The six texts, then the week's note (D116), which is not one of the letter's texts. */
     private val SCHEMA: JsonObject = buildJsonObject {
         put("type", "object")
         put("additionalProperties", false)
-        putJsonObject("properties") { NAMES.forEach { put(it, text()) } }
-        putJsonArray("required") { NAMES.forEach { add(it) } }
+        putJsonObject("properties") { (NAMES + WEEK_NOTE).forEach { put(it, text()) } }
+        putJsonArray("required") { (NAMES + WEEK_NOTE).forEach { add(it) } }
     }
+
+    private const val WEEK_NOTE = "week_note"
 }

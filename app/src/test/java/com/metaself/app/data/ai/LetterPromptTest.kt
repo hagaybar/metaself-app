@@ -224,6 +224,18 @@ class LetterPromptTest {
         LetterPrompt.NAMES.forEach { assertThat(system(strictless)).contains(it) }
     }
 
+    /** D116: the letter also gives the week's note, asked last, required beside the six texts. */
+    @Test
+    fun `the letter asks for week_note too`() {
+        val body = Json.parseToJsonElement(body()).jsonObject
+        val schema = body.getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
+
+        assertThat(system(body())).endsWith(TrainerPrompt.WEEK_NOTE)
+        assertThat(schema.getValue("properties").jsonObject.keys).containsExactlyElementsIn(LetterPrompt.NAMES + "week_note").inOrder()
+        assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).containsExactlyElementsIn(LetterPrompt.NAMES + "week_note")
+        assertThat(LetterPrompt.NAMES).hasSize(6)
+    }
+
     private fun fieldsOf(type: Class<*>): List<String> =
         type.declaredFields.filterNot { java.lang.reflect.Modifier.isStatic(it.modifiers) }.map { it.name }
 }

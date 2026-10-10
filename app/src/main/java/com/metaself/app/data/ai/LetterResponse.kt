@@ -16,12 +16,13 @@ object LetterResponse {
     private const val NOT_THE_SHAPE = "the reply was not in the shape this app asked for"
 
     sealed interface Parsed {
-        data class Written(val texts: LetterTexts, val model: String) : Parsed
+        /** [weekNote]: the letter's week_note (D116), null when left out; the letter stands without it. */
+        data class Written(val texts: LetterTexts, val model: String, val weekNote: String? = null) : Parsed
         data class Failed(val failure: EstimateResult) : Parsed
     }
 
     fun parse(body: String, model: String): Parsed =
-        content(body)?.let(::read)?.let { Parsed.Written(it, model) }
+        content(body)?.let(::read)?.let { Parsed.Written(it, model, TrainerResponse.readWeekNote(content(body))) }
             ?: Parsed.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
     /** Six non-empty strings, or null. */

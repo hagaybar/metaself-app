@@ -53,6 +53,18 @@ class LetterResponseTest {
         }
     }
 
+    /** D116: the letter's week_note is read beside its six texts; a letter without one is still a letter. */
+    @Test
+    fun `the letter's week_note is read, and a letter without one is still written`() {
+        val noted = LetterResponse.parse(reply(content(full + ("week_note" to " Invented week note. "))), "a-model")
+        val without = LetterResponse.parse(reply(content(full)), "a-model")
+        val wrong = LetterResponse.parse(reply(content(full + ("week_note" to 7))), "a-model")
+
+        assertThat((noted as LetterResponse.Parsed.Written).weekNote).isEqualTo("Invented week note.")
+        assertThat((without as LetterResponse.Parsed.Written).weekNote).isNull()
+        assertThat((wrong as LetterResponse.Parsed.Written).weekNote).isNull()
+    }
+
     @Test
     fun `a reply that is not a chat answer is unreadable`() {
         assertThat(LetterResponse.parse("not json", "a-model")).isInstanceOf(LetterResponse.Parsed.Failed::class.java)

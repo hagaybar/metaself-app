@@ -474,6 +474,26 @@ class TrainerPromptTest {
         }
     }
 
+    /** D116: every path asks for the week's note last, in the same request, and every reply schema requires it. */
+    @Test
+    fun `every path asks for week_note last, and its schema requires it`() {
+        TrainerPath.entries.forEach { path -> assertThat(TrainerPrompt.instructions(path)).endsWith("\n\n" + TrainerPrompt.WEEK_NOTE) }
+        assertThat(TrainerPrompt.WEEK_NOTE).contains("at most two sentences about this week as a whole")
+        assertThat(TrainerPrompt.WEEK_NOTE).contains("no figure the app did not count")
+        listOf(
+            TrainerPrompt.planBody("a-model", planRequest(), RequestProfile.DETERMINISTIC),
+            TrainerPrompt.feedbackBody("a-model", reviewRequest(), RequestProfile.DETERMINISTIC),
+            TrainerPrompt.evaluateBody("a-model", evaluateRequest(), RequestProfile.DETERMINISTIC),
+            TrainerPrompt.adjustBody("a-model", adjustRequest(), RequestProfile.DETERMINISTIC),
+        ).forEach { body ->
+            val schema = Json.parseToJsonElement(body).jsonObject.getValue("response_format").jsonObject
+                .getValue("json_schema").jsonObject.getValue("schema").jsonObject
+            assertThat(schema.getValue("properties").jsonObject.getValue("week_note").jsonObject.getValue("type").jsonPrimitive.content)
+                .isEqualTo("string")
+            assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).contains("week_note")
+        }
+    }
+
     /** D110: the ledger's own words for what is never added up, and what a null is. */
     @Test
     fun `the ledger says everyday movement is never split, and a null is not zero`() {
@@ -516,15 +536,15 @@ class TrainerPromptTest {
         }
     }
 
-    /** D108: the reply is a headline, a note and plan_followed, and nothing else. */
+    /** D108, D116: the reply is a headline, a note, plan_followed and the week's note, and nothing else. */
     @Test
-    fun `a feedback reply is asked for as headline, note and plan_followed`() {
+    fun `a feedback reply is asked for as headline, note, plan_followed and week_note`() {
         val schema = Json.parseToJsonElement(TrainerPrompt.feedbackBody("a-model", reviewRequest(), RequestProfile.DETERMINISTIC))
             .jsonObject.getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
 
-        assertThat(schema.getValue("properties").jsonObject.keys).containsExactly("headline", "note", "plan_followed").inOrder()
+        assertThat(schema.getValue("properties").jsonObject.keys).containsExactly("headline", "note", "plan_followed", "week_note").inOrder()
         assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content })
-            .containsExactly("headline", "note", "plan_followed")
+            .containsExactly("headline", "note", "plan_followed", "week_note")
     }
 
     /** D108: earlier feedback goes in the shape it was stored — a note as a note, four parts as four parts. */

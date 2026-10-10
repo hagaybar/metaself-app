@@ -85,7 +85,8 @@ data class TrainerReview(
  * — [EstimateResult]'s closed set, so the screens word them as the meal estimator does (D86).
  */
 sealed interface TrainerReply<out T> {
-    data class Answered<T>(val value: T, val model: String) : TrainerReply<T>
+    /** [weekNote]: the reply's week_note (D116), null when the model left it out — the answer stands without it. */
+    data class Answered<T>(val value: T, val model: String, val weekNote: String? = null) : TrainerReply<T>
 
     data class Failed(val failure: EstimateResult) : TrainerReply<Nothing> {
         init {

@@ -134,6 +134,38 @@ class TrainerResponseTest {
         assertThat(TrainerResponse.readFeedback(null)).isNull()
     }
 
+    /** D116: every path's reply may carry a week_note, read beside the answer. */
+    @Test
+    fun `every path's reply carries its week_note`() {
+        val note = "\"week_note\":\"  Invented week note.  \""
+        val plan = TrainerResponse.parsePlan(reply(withNote(goodPlan, note)), "a-model") as TrainerReply.Answered
+        val feedback = TrainerResponse.parseFeedback(reply(withNote(goodFeedback, note)), "a-model") as TrainerReply.Answered
+        val evaluated = TrainerResponse.parseEvaluation(reply(withNote(evaluated(twoWeeks), note)), "a-model", ProgrammeAsk(2, 2), hadLast = true)
+            as TrainerReply.Answered
+        val adjusted = TrainerResponse.parseAdjusted(
+            reply(withNote(weeksPlan(week(session()), week(session())), note)), "a-model", weeksLeft = 2, perWeek = 3, thisWeekMax = 1,
+        ) as TrainerReply.Answered
+
+        listOf(plan, feedback, evaluated, adjusted).forEach { assertThat(it.weekNote).isEqualTo("Invented week note.") }
+    }
+
+    /** D116: a model that leaves week_note out, or gives it in the wrong shape, loses only the note. */
+    @Test
+    fun `a reply without week_note is still a reply`() {
+        listOf(goodFeedback, withNote(goodFeedback, "\"week_note\":7"), withNote(goodFeedback, "\"week_note\":\"  \""), withNote(goodFeedback, "\"week_note\":null"))
+            .forEach { content ->
+                val reply = TrainerResponse.parseFeedback(reply(content), "a-model") as TrainerReply.Answered
+                assertThat(reply.weekNote).isNull()
+                assertThat(reply.value.note).isEqualTo("Invented note.")
+            }
+        assertThat((TrainerResponse.parsePlan(reply(goodPlan), "a-model") as TrainerReply.Answered).weekNote).isNull()
+        assertThat(TrainerResponse.readWeekNote(null)).isNull()
+        assertThat(TrainerResponse.readWeekNote("not json")).isNull()
+    }
+
+    /** [content], a JSON object, with [member] added as its last member. */
+    private fun withNote(content: String, member: String): String = content.trimEnd().removeSuffix("}") + ",$member}"
+
     private fun assertUnreadable(reply: TrainerReply<*>) {
         assertThat((reply as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreadable::class.java)
     }
