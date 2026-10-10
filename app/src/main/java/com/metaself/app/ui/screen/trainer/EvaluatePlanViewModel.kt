@@ -15,13 +15,20 @@ import com.metaself.app.domain.trainer.PlanSessions
 import com.metaself.app.domain.trainer.PlanShown
 import com.metaself.app.domain.trainer.PlanTimeline
 import com.metaself.app.domain.trainer.Programme
-import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.PlanAheadAsk
+import com.metaself.app.domain.trainer.PlanFilling
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.PlanMonth
+import com.metaself.app.domain.trainer.PlanOffer
 import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.outlived
+import com.metaself.app.ui.trainer.GoalWording
+import com.metaself.app.ui.trainer.PlanPageWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,10 +58,53 @@ class EvaluatePlanViewModel @Inject constructor(
     /** D123: the plan page's three views. */
     enum class PlanView { MONTH, WEEK, SESSION }
 
-    /** The form's two rows and its words; a row is null until answered. The page opens on [PRESET]. */
-    data class Form(val weeks: Int? = null, val perWeek: Int? = null, val words: String = "") {
-        fun ask(): ProgrammeAsk? {
-            return ProgrammeAsk(weeks ?: return null, perWeek ?: return null, words)
+    /** D119: the form's two goals. */
+    enum class GoalChoice { STEADY, DISTANCE }
+
+    /**
+     * D124: Plan ahead's form — the goal (for a distance: the sport, km as typed, and the date as whole weeks after
+     * this one), sessions a week (null until answered) and words. The page opens on [PRESET].
+     */
+    data class Form(
+        val goal: GoalChoice = GoalChoice.STEADY,
+        val sport: GoalSport = GoalSport.RUN,
+        val km: String = "",
+        val weeksAhead: Int = DEFAULT_WEEKS_AHEAD,
+        val perWeek: Int? = null,
+        val words: String = "",
+    ) {
+        /** The ask, with the goal's date counted from [today]; null until every row it needs reads. */
+        fun ask(today: Long): PlanAheadAsk? {
+            val perWeek = perWeek ?: return null
+            val goal = when (goal) {
+                GoalChoice.STEADY -> PlanGoal.Steady
+                GoalChoice.DISTANCE -> {
+                    val km = kmOf(km) ?: return null
+                    if (weeksAhead !in WEEKS_AHEAD) return null
+                    PlanGoal.Distance(sport, km, GoalWording.byDay(today, weeksAhead))
+                }
+            }
+            return PlanAheadAsk(goal, perWeek, words)
+        }
+
+        /** Release 2's choice 14: the workbench's ask — a steady rhythm, whatever the goal row says. */
+        fun steady(): PlanAheadAsk? = perWeek?.let { PlanAheadAsk(PlanGoal.Steady, it, words) }
+
+        fun earlier(): Form = copy(weeksAhead = (weeksAhead - 1).coerceIn(WEEKS_AHEAD))
+        fun later(): Form = copy(weeksAhead = (weeksAhead + 1).coerceIn(WEEKS_AHEAD))
+
+        companion object {
+            /** D119: a distance's date is 6 to 30 weeks ahead. */
+            val WEEKS_AHEAD = 6..30
+
+            /** Where the date row opens — a starting point, not a recommendation. */
+            const val DEFAULT_WEEKS_AHEAD = 12
+
+            private val KM = Regex("""\d{1,4}([.,]\d)?""")
+
+            /** Km as typed: digits, one decimal at most, more than 0 and at most [PlanGoal.Distance.MAX_KM]. */
+            fun kmOf(text: String): Double? = text.trim().takeIf { KM.matches(it) }?.replace(',', '.')?.toDoubleOrNull()
+                ?.takeIf { it > 0.0 && it <= PlanGoal.Distance.MAX_KM }
         }
     }
 
@@ -85,8 +135,16 @@ class EvaluatePlanViewModel @Inject constructor(
         val nextSession: TrainerPlan? = null,
         val replacingFrom: Long? = null,
         val confirming: Boolean = false,
+        /** D121: Fill in next week, Plan this week or Plan the next block was tapped and its answer has not landed. */
+        val filling: Boolean = false,
+        val fillFailure: EstimateResult? = null,
+        /** D121: "Filled in." or "Next block planned." with the trainer's sentence, once one landed. */
+        val filledLine: String? = null,
     ) {
-        val canAsk: Boolean get() = form.ask() != null && !asking
+        val canAsk: Boolean get() = form.ask(today) != null && !asking
+
+        /** D121: what the running plan offers to fill in today; null when nothing. */
+        val offer: PlanOffer? get() = planShown?.running?.let { PlanFilling.offer(it, today) }
 
         /** The Monday keeping the answer today would start it on (D94) — next Monday while a plan runs (D124). */
         val startIfKept: Long get() = shown?.startEpochDay ?: replacingFrom ?: ProgrammeCalendar.startFor(today)
@@ -104,6 +162,9 @@ class EvaluatePlanViewModel @Inject constructor(
                     PlanTimeline.of(programme, startIfKept, today, null, emptyMap()),
                     null,
                     programme.evaluation?.let { DatedEvaluation(it, today) },
+                    goal = programme.ask.goal,
+                    // D124: the Month view's outline above the weeks; nothing is done yet.
+                    month = PlanMonth.of(programme, startIfKept, today, emptyList()),
                 )
             }
     }
@@ -150,18 +211,49 @@ class EvaluatePlanViewModel @Inject constructor(
     fun change(form: Form) = local.update { if (it.asking) it else it.copy(form = form, failure = null) }
 
     fun ask() {
-        val answers = local.value.form.ask() ?: return
+        val answers = local.value.form.ask(local.value.today) ?: return
         if (local.value.asking) return
         local.update { it.copy(asking = true, failure = null, refused = null) }
         outlived(
             outliving,
             problems,
             onRefused = { local.update { it.copy(asking = false, refused = ActionRefused.NOTHING_CHANGED) } },
-            work = { ask.evaluate(answers) },
+            work = { ask.planAhead(answers) },
         ) { outcome ->
             when (outcome) {
                 is AskTheTrainer.Evaluated.Offered -> local.update { it.copy(asking = false, shown = outcome.programme, kept = false) }
                 is AskTheTrainer.Evaluated.Failed -> local.update { it.copy(asking = false, failure = outcome.failure) }
+            }
+        }
+    }
+
+    /** D121: Fill in next week, or Plan this week — once; the answer is kept by the trainer and the page read again. */
+    fun fill() = filled(PlanPageWording::filled) { ask.fillWeek() }
+
+    /** D121: Plan the next block — once; as [fill]. */
+    fun nextBlock() = filled(PlanPageWording::blockPlanned) { ask.nextBlock() }
+
+    /** Runs in [outliving]: a paid answer is kept even if the page is left. Not while another runs. */
+    private fun filled(line: (String) -> String, work: suspend () -> AskTheTrainer.Filled) {
+        if (local.value.filling) return
+        local.update { it.copy(filling = true, fillFailure = null, filledLine = null, refused = null) }
+        outlived(
+            outliving,
+            problems,
+            onRefused = { local.update { it.copy(filling = false, refused = ActionRefused.NOTHING_CHANGED) } },
+            work = work,
+        ) { outcome ->
+            when (outcome) {
+                is AskTheTrainer.Filled.Done -> {
+                    local.update { it.copy(filling = false, filledLine = line(outcome.why)) }
+                    readRunning()
+                }
+                is AskTheTrainer.Filled.Failed -> local.update { it.copy(filling = false, fillFailure = outcome.failure) }
+                // The day moved on, or another screen filled it: the page is read again and says what is true now.
+                AskTheTrainer.Filled.NotOffered -> {
+                    local.update { it.copy(filling = false) }
+                    readRunning()
+                }
             }
         }
     }
@@ -200,7 +292,7 @@ class EvaluatePlanViewModel @Inject constructor(
         const val FORM = "form"
         const val RUNNING = "running"
 
-        /** The approved mock-up's pre-selection: 4 weeks, 3 sessions a week — Ask is ready at once, and both rows still change. */
-        val PRESET = Form(weeks = 4, perWeek = 3)
+        /** D124: a steady rhythm, 3 sessions a week — Ask is ready at once, and every row still changes. */
+        val PRESET = Form(perWeek = 3)
     }
 }

@@ -48,22 +48,39 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
         assertThat(texts).contains("Plan ahead")
-        assertThat(texts).containsAtLeast("HOW MANY WEEKS", "2 weeks", "4 weeks", "6 weeks", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
+        assertThat(texts).containsAtLeast("GOAL", "Keep a steady rhythm", "A distance by a date", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
+        assertThat(texts).doesNotContain("HOW MANY WEEKS")
+        assertThat(texts).doesNotContain("DISTANCE (KM)")
         assertThat(texts.any { it.contains("your last evaluation and how its plan went") && it.endsWith("Never meals.") }).isTrue()
     }
 
-    /** As the approved mock-up: 4 weeks and 3 sessions a week are chosen, so Ask is ready at once. */
+    /** D124: a steady rhythm and 3 sessions a week are chosen, so Ask is ready at once. */
     @Test
-    fun `the form opens on 4 weeks and 3 sessions a week, ready to ask`() {
+    fun `the form opens on a steady rhythm and 3 sessions a week, ready to ask`() {
         draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
-        assertThat(render.isSelected("4 weeks")).isTrue()
-        assertThat(render.isSelected("2 weeks")).isFalse()
+        assertThat(render.isSelected("Keep a steady rhythm")).isTrue()
+        assertThat(render.isSelected("A distance by a date")).isFalse()
         assertThat(render.isSelected("3")).isTrue()
         assertThat(render.isEnabled("Ask the trainer")).isTrue()
 
-        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = EvaluatePlanViewModel.Form(weeks = 4)))
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = EvaluatePlanViewModel.Form()))
         assertThat(render.isEnabled("Ask the trainer")).isFalse()
+    }
+
+    /** D119: a distance asks what, how far and by when; Ask waits for the km. */
+    @Test
+    fun `a distance goal draws its rows, and its date in words`() {
+        val distance = EvaluatePlanViewModel.Form(goal = EvaluatePlanViewModel.GoalChoice.DISTANCE, perWeek = 3, weeksAhead = 14)
+        val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance))
+
+        assertThat(texts).containsAtLeast("GOAL", "WHAT", "Run", "Walk", "Swim", "Ride", "BY", "Sun 13 Dec · 14 weeks", "A week earlier", "A week later").inOrder()
+        assertThat(render.isEnabled("Ask the trainer")).isFalse()
+
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance.copy(km = "15")))
+        assertThat(render.isEnabled("Ask the trainer")).isTrue()
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance.copy(km = "15", weeksAhead = 30)))
+        assertThat(render.isEnabled("A week later")).isFalse()
     }
 
     @Test

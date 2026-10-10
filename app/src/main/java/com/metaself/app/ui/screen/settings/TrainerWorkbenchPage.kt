@@ -27,6 +27,7 @@ import com.metaself.app.ui.screen.trainer.ChoiceRow
 import com.metaself.app.ui.screen.trainer.EvaluatePlanViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.GoalWording
 import com.metaself.app.ui.trainer.TrainerWording
 import com.metaself.app.ui.trainer.WorkbenchWording
 import java.time.ZoneId
@@ -119,7 +120,8 @@ private fun PathInputs(
 
         TrainerPath.EVALUATE -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
             val form = state.evaluate
-            ChoiceRow(R.string.weeks_row_weeks, ProgrammeAsk.WEEKS, form.weeks, { "$it weeks" }, open) { onEvaluate(form.copy(weeks = it)) }
+            // Release 2's choice 14: the workbench tries a steady rhythm only.
+            Text("${GoalWording.ROW_GOAL}: ${GoalWording.STEADY}", style = MaterialTheme.typography.labelMedium)
             ChoiceRow(R.string.weeks_row_per_week, ProgrammeAsk.PER_WEEK.toList(), form.perWeek, { "$it" }, open) { onEvaluate(form.copy(perWeek = it)) }
             Words(R.string.plan_words, form.words, open) { onEvaluate(form.copy(words = it)) }
         }

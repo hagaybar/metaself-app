@@ -78,7 +78,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
             get() = when (path) {
                 TrainerPath.FEEDBACK -> workoutId?.let { TrainerWorkbench.Inputs.Feedback(it) }
                 TrainerPath.PLAN -> plan.answers()?.let { TrainerWorkbench.Inputs.Plan(it) }
-                TrainerPath.EVALUATE -> evaluate.ask()?.let { TrainerWorkbench.Inputs.Evaluate(it) }
+                TrainerPath.EVALUATE -> evaluate.steady()?.let { TrainerWorkbench.Inputs.Evaluate(it) }
                 TrainerPath.ADJUST -> if (planRuns) TrainerWorkbench.Inputs.Adjust(adjustWords) else null
                 TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK -> null
             }
@@ -137,7 +137,6 @@ class TrainerWorkbenchViewModel @Inject constructor(
 
     fun changeEvaluate(form: EvaluatePlanViewModel.Form) {
         savedState[EVALUATE_SAVED] = true
-        savedState[EVALUATE_WEEKS] = form.weeks
         savedState[EVALUATE_PER_WEEK] = form.perWeek
         savedState[EVALUATE_WORDS] = form.words
         _state.update { it.copy(evaluate = form) }
@@ -163,7 +162,6 @@ class TrainerWorkbenchViewModel @Inject constructor(
             ),
             evaluate = if (savedState.get<Boolean>(EVALUATE_SAVED) == true) {
                 EvaluatePlanViewModel.Form(
-                    weeks = savedState.get<Int>(EVALUATE_WEEKS),
                     perWeek = savedState.get<Int>(EVALUATE_PER_WEEK),
                     words = savedState.get<String>(EVALUATE_WORDS) ?: "",
                 )
@@ -265,7 +263,6 @@ class TrainerWorkbenchViewModel @Inject constructor(
         private const val PLAN_WISH = "workbench_plan_wish"
         private const val PLAN_WORDS = "workbench_plan_words"
         private const val EVALUATE_SAVED = "workbench_evaluate_saved"
-        private const val EVALUATE_WEEKS = "workbench_evaluate_weeks"
         private const val EVALUATE_PER_WEEK = "workbench_evaluate_per_week"
         private const val EVALUATE_WORDS = "workbench_evaluate_words"
         private const val ADJUST_WORDS = "workbench_adjust_words"

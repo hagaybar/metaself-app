@@ -5,7 +5,7 @@ import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.PlanAnswers
-import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.PlanAheadAsk
 import com.metaself.app.domain.trainer.TrainerPath
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.TrainerReview
@@ -31,7 +31,7 @@ class TrainerWorkbench @Inject constructor(
     sealed interface Inputs {
         data class Feedback(val workoutId: Long) : Inputs
         data class Plan(val answers: PlanAnswers) : Inputs
-        data class Evaluate(val ask: ProgrammeAsk) : Inputs
+        data class Evaluate(val ask: PlanAheadAsk) : Inputs
         data class Adjust(val words: String) : Inputs
     }
 
@@ -69,7 +69,7 @@ class TrainerWorkbench @Inject constructor(
             ask.request(ask.feedbackQuestion(workout, review), exceptWorkoutId = inputs.workoutId)
         }
         is Inputs.Plan -> ask.request(ask.planQuestion(inputs.answers))
-        is Inputs.Evaluate -> ask.request(ask.evaluateQuestion(inputs.ask))
+        is Inputs.Evaluate -> ask.request(ask.planAheadQuestion(inputs.ask))
         is Inputs.Adjust -> ask.adjustQuestion(inputs.words)?.let { ask.request(it) }
     }
 
