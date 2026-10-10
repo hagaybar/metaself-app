@@ -25,15 +25,6 @@ class TrainerHomeTest {
     }
 
     @Test
-    fun `the kept plan is offered for seven days only`() {
-        val kept = aPlan(createdAt = NOW - 6 * DAY)
-
-        assertThat(home(kept = kept).keptPlan).isEqualTo(kept)
-        assertThat(home(kept = aPlan(createdAt = NOW - 8 * DAY)).keptPlan).isNull()
-        assertThat(home(kept = null).keptPlan).isNull()
-    }
-
-    @Test
     fun `earlier sessions are the reviewed ones, newest first`() {
         val older = walk(1, TEST_EPOCH_DAY - 10, hour = 7)
         val newer = walk(2, TEST_EPOCH_DAY - 2, hour = 7)
@@ -100,8 +91,8 @@ class TrainerHomeTest {
     @Test
     fun `the home carries the card and the next session`() {
         val home = TrainerHome.of(
-            today = TEST_EPOCH_DAY, nowMillis = 0, recent = emptyList(), reviewed = emptyList(), reviews = emptyList(),
-            kept = null, running = running, planWorkouts = emptyList(), counting = PlanCounting(1, 0, emptyMap()),
+            today = TEST_EPOCH_DAY, recent = emptyList(), reviewed = emptyList(), reviews = emptyList(),
+            running = running, planWorkouts = emptyList(), counting = PlanCounting(1, 0, emptyMap()),
         )
 
         assertThat(home.plan).isInstanceOf(PlanCard.Running::class.java)
@@ -114,7 +105,7 @@ class TrainerHomeTest {
         val run20 = PlannedSession(WorkoutKind.RUN, 20, PlannedEffort.STEADY, "Short run")
         val plan = running.copy(plan = WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(run20, walk30)) }, "Invented."))
         fun main(workouts: List<Workout>, today: Long = TEST_EPOCH_DAY) =
-            TrainerHome.of(today, NOW, emptyList(), emptyList(), emptyList(), null, plan, workouts, PlanCounting(1, 0, emptyMap())).main
+            TrainerHome.of(today, emptyList(), emptyList(), emptyList(), plan, workouts, PlanCounting(1, 0, emptyMap())).main
         val run = walk(1, start, hour = 7).copy(kind = WorkoutKind.RUN, durationMinutes = 20)
 
         assertThat(main(emptyList())).isEqualTo(MainAction.PlanOpen(WorkoutKind.RUN))
@@ -156,8 +147,7 @@ class TrainerHomeTest {
         recent: List<Workout> = emptyList(),
         reviewed: List<Workout> = emptyList(),
         reviews: List<TrainerReview> = emptyList(),
-        kept: TrainerPlan? = null,
-    ) = TrainerHome.of(TEST_EPOCH_DAY, NOW, recent, reviewed, reviews, kept)
+    ) = TrainerHome.of(TEST_EPOCH_DAY, recent, reviewed, reviews)
 
     private fun reviewOf(workoutId: Long) = TrainerReview(workoutId = workoutId, planId = null, felt = Felt.RIGHT, words = "Invented.")
 
@@ -168,16 +158,8 @@ class TrainerHomeTest {
         energySource = EnergySource.NONE, effort = null, source = WorkoutSource.SYNCED, hidden = false, note = null,
     )
 
-    private fun aPlan(createdAt: Long) = TrainerPlan(
-        id = 1, createdAtMillis = createdAt,
-        answers = PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE),
-        plan = SessionPlan("Steady walk", listOf(PlanStep(0, 45, "Walk", "")), "Invented."),
-        model = "a-model", kept = true,
-    )
-
     private companion object {
         const val HOUR = 3_600_000L
         const val DAY = 86_400_000L
-        const val NOW = TEST_EPOCH_DAY * DAY + 15 * HOUR
     }
 }

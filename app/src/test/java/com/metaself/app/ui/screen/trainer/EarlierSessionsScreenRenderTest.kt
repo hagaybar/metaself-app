@@ -57,7 +57,7 @@ class EarlierSessionsScreenRenderTest {
 
     private fun draw(earlier: List<ReviewedSession>, onReview: (Long) -> Unit = {}): List<String> = render.texts {
         EarlierSessionsScreen(
-            state = TrainerViewModel.State(home = TrainerHome(null, null, earlier), today = TEST_EPOCH_DAY),
+            state = TrainerViewModel.State(home = TrainerHome(null, earlier), today = TEST_EPOCH_DAY),
             onBack = {},
             onReview = onReview,
         )

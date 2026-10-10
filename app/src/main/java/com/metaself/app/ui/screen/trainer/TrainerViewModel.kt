@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.MovementRecord
-import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.AskTheTrainer
@@ -42,7 +41,7 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 /**
- * The Trainer screen (D85, D114), observed: a review saved or a plan kept elsewhere shows at once, and so
+ * The Trainer screen (D85, D114), observed: a review saved elsewhere shows at once, and so
  * do the weekly plan with its ticks (D95) and this week's ledger and strip (D114) — read again whenever this
  * week's sessions or days change, a plan is kept or answered, or the screen comes to the front (food is logged
  * elsewhere). The coach's note is the newest week_note about this week (D116). Its one write is the owner's
@@ -59,7 +58,6 @@ class TrainerViewModel @Inject constructor(
     programmes: ProgrammeStore,
     aboutMe: AboutMeStore,
     private val today: Today,
-    now: Now,
     private val problems: ProblemLog,
     private val ask: AskTheTrainer,
     weekNotes: WeekNoteStore,
@@ -137,10 +135,9 @@ class TrainerViewModel @Inject constructor(
                     record.observeWorkouts(day - (TrainerHome.WAITING_DAYS - 1), day),
                     store.observeReviewedWorkouts(),
                     store.observeReviews(),
-                    store.observeKeptPlan(),
                     plan,
-                ) { recent, reviewed, reviews, kept, running ->
-                    TrainerHome.of(day, now(), recent, reviewed, reviews, kept, running.programme, running.workouts, running.counting)
+                ) { recent, reviewed, reviews, running ->
+                    TrainerHome.of(day, recent, reviewed, reviews, running.programme, running.workouts, running.counting)
                 },
                 week(day),
             ) { home, week -> State(home, day, week = week) }

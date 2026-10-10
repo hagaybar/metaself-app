@@ -55,6 +55,7 @@ import com.metaself.app.domain.trainer.TileState
 import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TimelineWeek
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.PlanTimelineWording
 import com.metaself.app.ui.trainer.TrainerWeekWording
 import com.metaself.app.ui.trainer.TrainerWording
@@ -251,25 +252,30 @@ private fun LabelledPart(@StringRes label: Int, text: String) {
 }
 
 /**
- * D117 item 4: a plan ended or stopped has one filled "Evaluate me and plan again"; a running one, Adjust the
- * plan (outlined) beside the Trainer page's main action (D114).
+ * D117 item 4, D124: under every view of the plan page. A running plan: Adjust the plan (outlined) beside the
+ * session action — Plan the open walk, or Plan my next session — and under them Plan ahead, outlined. Ended,
+ * stopped, or no plan: one filled Plan ahead.
  */
 @Composable
-internal fun PlanButtons(shown: PlanShown, onAdjust: () -> Unit, onPlan: () -> Unit, onEvaluate: () -> Unit) {
-    val running = shown.running
-    when {
-        shown.timeline.over -> Button(onClick = onEvaluate, modifier = Modifier.fillMaxWidth()) { Text(PlanTimelineWording.EVALUATE_AGAIN) }
-        running != null -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            OutlinedButton(onClick = onAdjust, modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.trainer_adjust_plan), textAlign = TextAlign.Center)
+internal fun PlanButtons(shown: PlanShown?, onAdjust: () -> Unit, onPlan: () -> Unit, onPlanAhead: () -> Unit) {
+    val running = shown?.running
+    if (shown == null || shown.timeline.over || running == null) {
+        Button(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.PLAN_AHEAD) }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                OutlinedButton(onClick = onAdjust, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(R.string.trainer_adjust_plan), textAlign = TextAlign.Center)
+                }
+                Button(onClick = onPlan, modifier = Modifier.weight(1f)) {
+                    val main = MainAction.session(running.next)
+                    Text(
+                        if (main is MainAction.PlanOpen) TrainerWeekWording.planOpen(main.kind) else stringResource(R.string.trainer_plan_next),
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
-            Button(onClick = onPlan, modifier = Modifier.weight(1f)) {
-                val main = MainAction.session(running.next)
-                Text(
-                    if (main is MainAction.PlanOpen) TrainerWeekWording.planOpen(main.kind) else stringResource(R.string.trainer_plan_next),
-                    textAlign = TextAlign.Center,
-                )
-            }
+            OutlinedButton(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.PLAN_AHEAD) }
         }
     }
 }

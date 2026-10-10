@@ -37,7 +37,7 @@ class TrainerWorkbenchPageRenderTest {
         assertThat(texts).contains("Test the trainer's instructions")
         assertThat(texts).containsAtLeast(
             WorkbenchWording.INTRO,
-            "Feedback on a session", "Plan my next session", "Review and plan the weeks ahead", "Change the rest of my plan",
+            "Feedback on a session", "Plan my next session", "Plan ahead", "Change the rest of my plan",
             "Will send: the app's own instructions", WorkbenchWording.LOAD, WorkbenchWording.SAVE_APP_OWN,
             WorkbenchWording.SEND, WorkbenchWording.PRIVACY,
         ).inOrder()

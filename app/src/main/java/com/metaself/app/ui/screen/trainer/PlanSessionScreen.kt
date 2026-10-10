@@ -23,11 +23,13 @@ import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.ProgrammeWording
 import com.metaself.app.ui.trainer.TrainerWording
 
@@ -67,7 +69,10 @@ private fun PlanForm(
 ) {
     val form = state.form
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
-        state.next?.let { Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.titleSmall) }
+        state.next?.let {
+            // D123: opened by Get the steps, the form names the session it is for; otherwise the next one (D96).
+            Text(if (state.chosen) PlanPageWording.forPlanned(it) else ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.titleSmall)
+        }
         // What the trainer is asked is what is on screen: nothing changes while it is asked.
         val open = !state.asking
         ChoiceRow(R.string.plan_row_what, PlanActivity.entries, form.activity, TrainerWording::activity, open) {
@@ -147,24 +152,7 @@ private fun Suggestion(plan: TrainerPlan, kept: Boolean, onKeep: () -> Unit, onA
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            plan.plan.steps.forEach { step ->
-                Row {
-                    Text(
-                        TrainerWording.minutes(step),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(56.dp),
-                    )
-                    Column {
-                        Text(step.what, style = MaterialTheme.typography.titleSmall)
-                        if (step.how.isNotBlank()) {
-                            Text(step.how, style = MaterialTheme.typography.bodyMedium)
-                        }
-                    }
-                }
-            }
-        }
+        StepsList(plan.plan)
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             Text(
                 stringResource(R.string.plan_why),
@@ -175,11 +163,34 @@ private fun Suggestion(plan: TrainerPlan, kept: Boolean, onKeep: () -> Unit, onA
         }
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             if (kept) {
-                Text(stringResource(R.string.plan_kept), style = MaterialTheme.typography.bodyMedium)
+                Text(PlanPageWording.kept(plan.slot), style = MaterialTheme.typography.bodyMedium)
             } else {
                 Button(onClick = onKeep, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.plan_keep)) }
             }
             OutlinedButton(onClick = onAskAgain, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.plan_again)) }
+        }
+    }
+}
+
+/** D86, D122: a suggestion's steps — minutes, then what and how — on the form's answer and on the plan page. */
+@Composable
+internal fun StepsList(plan: SessionPlan) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        plan.steps.forEach { step ->
+            Row {
+                Text(
+                    TrainerWording.minutes(step),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(56.dp),
+                )
+                Column {
+                    Text(step.what, style = MaterialTheme.typography.titleSmall)
+                    if (step.how.isNotBlank()) {
+                        Text(step.how, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
         }
     }
 }

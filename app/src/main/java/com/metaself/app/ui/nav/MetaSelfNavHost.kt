@@ -120,7 +120,7 @@ sealed class Destination(val route: String) {
             "trainer/plan?${PlanSessionViewModel.WEEK}=$week&${PlanSessionViewModel.SESSION}=$session"
     }
 
-    /** D93, D94: evaluate me and plan; or the running plan. */
+    /** D93, D94, D124: Plan ahead's form; or the plan page (D117, D123). */
     data object EvaluatePlan : Destination("trainer/weeks?show={show}") {
         fun form(): String = "trainer/weeks?show=" + EvaluatePlanViewModel.FORM
         fun running(): String = "trainer/weeks?show=" + EvaluatePlanViewModel.RUNNING
@@ -470,9 +470,8 @@ fun MetaSelfNavHost(
                 onBack = { navController.popBackStack() },
                 onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
                 onPlan = { navController.navigate(Destination.PlanSession.form()) },
-                onOpenKept = { navController.navigate(Destination.EvaluatePlan.running()) },
                 onAboutMe = { navController.navigate(Destination.AboutMe.route) },
-                onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
+                onPlanAhead = { navController.navigate(Destination.EvaluatePlan.form()) },
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
                 onLetters = { navController.navigate(Destination.Letters.route) },
                 onEarlier = { navController.navigate(Destination.EarlierSessions.route) },
@@ -584,10 +583,14 @@ fun MetaSelfNavHost(
                 onKeep = evaluateViewModel::keep,
                 onAskAgain = evaluateViewModel::askAgain,
                 onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
-                // D117: the plan's main action opens the single-session form, as on the Trainer page; an ended or
-                // stopped plan's Evaluate me and plan again opens the evaluate form.
+                // D117: the plan's session action opens the single-session form, as on the Trainer page; Plan ahead,
+                // always on the plan page (D124), opens the weekly plan's form.
                 onPlan = { navController.navigate(Destination.PlanSession.form()) },
-                onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
+                onPlanAhead = { navController.navigate(Destination.EvaluatePlan.form()) },
+                onChoose = evaluateViewModel::choose,
+                // D123: Get the steps — the single-session form, for that planned session.
+                onGetSteps = { navController.navigate(Destination.PlanSession.forSession(it.week, it.session)) },
+                onCancelKeep = evaluateViewModel::cancelKeep,
             )
         }
 

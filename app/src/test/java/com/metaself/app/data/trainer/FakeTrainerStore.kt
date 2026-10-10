@@ -7,7 +7,6 @@ import com.metaself.app.domain.trainer.TrainerReview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 
 /**
  * An in-memory [TrainerStore]. Ids are assigned from 1; [workouts] is set by the test. Any method
@@ -27,9 +26,6 @@ class FakeTrainerStore(var failing: Set<String> = emptySet()) : TrainerStore {
     }
 
     override fun observeReviews(): Flow<List<TrainerReview>> = reviews
-
-    override fun observeKeptPlan(): Flow<TrainerPlan?> =
-        plans.map { all -> all.filter { it.kept }.maxByOrNull { it.createdAtMillis } }
 
     override fun observeReviewedWorkouts(): Flow<List<Workout>> =
         combine(workouts, reviews) { all, reviewed ->

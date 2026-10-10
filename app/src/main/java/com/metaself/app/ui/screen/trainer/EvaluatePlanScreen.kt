@@ -18,15 +18,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import com.metaself.app.R
+import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.TrainerWording
 
 /**
- * D93, D94: the form, then the answer drawn as its weeks (D118) with Keep this plan and Ask again; or the
- * plan "See the plan" opens, drawn as its weeks with its two buttons (D117). Branches only — no early return out of an
- * inline composable (InlineComposableReturnGuardTest).
+ * D93, D94, D124: Plan ahead's form, then the answer drawn as its weeks (D118) with Keep this plan — which, while a
+ * plan runs, first says what it replaces — and Ask again; or the plan page: Month · Week · Session (D123), then
+ * its buttons, Plan ahead always among them. Branches only — no early return out of an inline composable
+ * (InlineComposableReturnGuardTest).
  */
 @Composable
 fun EvaluatePlanScreen(
@@ -39,10 +42,16 @@ fun EvaluatePlanScreen(
     modifier: Modifier = Modifier,
     /** D97, D114: Adjust the plan, from the running plan. */
     onAdjust: () -> Unit = {},
-    /** D117: the plan's main action — Plan the open walk, or Plan my next session — the single-session form. */
+    /** D117: the plan's session action — Plan the open walk, or Plan my next session — the single-session form. */
     onPlan: () -> Unit = {},
-    /** D117: Evaluate me and plan again, for a plan ended or stopped. */
-    onEvaluate: () -> Unit = {},
+    /** D124: Plan ahead, on the plan page always. */
+    onPlanAhead: () -> Unit = {},
+    /** D123: the switch. */
+    onChoose: (EvaluatePlanViewModel.PlanView) -> Unit = {},
+    /** D123: Get the steps, for the planned session at that place. */
+    onGetSteps: (PlanPlace) -> Unit = {},
+    /** D124: Not now, under the replace sentence. */
+    onCancelKeep: () -> Unit = {},
 ) {
     val shown = state.shown
     val planShown = state.planShown
@@ -56,20 +65,45 @@ fun EvaluatePlanScreen(
     MetaSelfScreen(title = title, modifier = modifier, onBack = onBack) {
         when {
             state.loading -> Unit
-            state.onRunning && planShown == null -> Text(stringResource(R.string.weeks_not_running))
-            state.onRunning && planShown != null -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
-                FromTrainerLabel()
-                PlanShownView(planShown)
-                PlanButtons(planShown, onAdjust, onPlan, onEvaluate)
+            state.onRunning -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+                PlanSwitch(state.view, onChoose)
+                when (state.view) {
+                    EvaluatePlanViewModel.PlanView.WEEK -> if (planShown != null) {
+                        FromTrainerLabel()
+                        PlanShownView(planShown)
+                    } else {
+                        Text(stringResource(R.string.weeks_not_running))
+                        // D122: with no plan, the kept single session is not one view further away.
+                        state.nextSession?.let {
+                            FromTrainerLabel()
+                            NextSessionCard(it)
+                        }
+                    }
+                    EvaluatePlanViewModel.PlanView.SESSION -> SessionView(state.sessions, onGetSteps)
+                    EvaluatePlanViewModel.PlanView.MONTH -> Text(
+                        if (planShown != null) PlanPageWording.NO_OUTLINE else stringResource(R.string.weeks_not_running),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+                PlanButtons(planShown, onAdjust, onPlan, onPlanAhead)
             }
             shown == null -> EvaluateForm(state, onChange, onAsk)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
                 state.offered?.let { PlanShownView(it) }
-                if (state.kept) {
-                    Text(stringResource(R.string.weeks_kept), style = MaterialTheme.typography.bodyMedium)
-                } else {
-                    Button(onClick = onKeep, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                when {
+                    state.kept -> Text(stringResource(R.string.weeks_kept), style = MaterialTheme.typography.bodyMedium)
+                    // D124: drawn in place, not as a dialog, so what it says is on the page.
+                    state.confirming -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                        Text(PlanPageWording.replaces(state.startIfKept), style = MaterialTheme.typography.bodyLarge)
+                        Button(onClick = onKeep, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                            Text(PlanPageWording.REPLACE)
+                        }
+                        OutlinedButton(onClick = onCancelKeep, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                            Text(PlanPageWording.NOT_NOW)
+                        }
+                    }
+                    else -> Button(onClick = onKeep, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
                         Text(stringResource(R.string.weeks_keep))
                     }
                 }

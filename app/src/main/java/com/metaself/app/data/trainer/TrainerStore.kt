@@ -32,7 +32,6 @@ interface TrainerReviews {
 
 /** The trainer's plans and the owner's reviews (D88). */
 interface TrainerStore : TrainerReviews {
-    fun observeKeptPlan(): Flow<TrainerPlan?>
     fun observeReviewedWorkouts(): Flow<List<Workout>>
     /** The newest kept suggestion, whatever it is for: what a review is matched against (D87). */
     suspend fun keptPlan(): TrainerPlan?
@@ -68,7 +67,6 @@ class RoomTrainerStore @Inject constructor(
 ) : TrainerStore {
 
     override fun observeReviews(): Flow<List<TrainerReview>> = dao.observeReviews().map { rows -> rows.map { it.toReview() } }
-    override fun observeKeptPlan(): Flow<TrainerPlan?> = dao.observeKept().map { it?.toPlan() }
     override fun observeReviewedWorkouts(): Flow<List<Workout>> = dao.observeReviewedWorkouts().map { rows -> rows.map { it.toWorkout() } }
     override suspend fun keptPlan(): TrainerPlan? = dao.kept()?.toPlan()
     override suspend fun keptPlans(): List<TrainerPlan> = dao.keptPlans().mapNotNull { it.toPlan() }

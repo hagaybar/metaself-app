@@ -7,14 +7,13 @@ import com.metaself.app.domain.movement.WorkoutKind
 data class ReviewedSession(val workout: Workout, val review: TrainerReview)
 
 /**
- * What the Trainer screen shows beside the week (D85, D114): the session waiting for words, the kept plan still
- * offered, the weekly plan (D95, D97) behind the main button and the plan's row, and earlier reviewed sessions,
+ * What the Trainer screen shows beside the week (D85, D114): the session waiting for words, the weekly plan (D95,
+ * D97) behind the main button and the plan's row, and earlier reviewed sessions,
  * newest first, for their own page. A review is shown only beside its own session, so one whose session left the
  * record (a negative workout id, D88) is shown nowhere.
  */
 data class TrainerHome(
     val waiting: Workout?,
-    val keptPlan: TrainerPlan?,
     val earlier: List<ReviewedSession>,
     /** D95, D97: the weekly plan's card. */
     val plan: PlanCard = PlanCard.None,
@@ -30,11 +29,9 @@ data class TrainerHome(
 
         fun of(
             today: Long,
-            nowMillis: Long,
             recent: List<Workout>,
             reviewed: List<Workout>,
             reviews: List<TrainerReview>,
-            kept: TrainerPlan?,
             running: Programme? = null,
             planWorkouts: List<Workout> = emptyList(),
             /** D105: what the running plan counts from, and the owner's answers; no card without it. */
@@ -50,7 +47,7 @@ data class TrainerHome(
                 .mapNotNull { workout -> byWorkout[workout.id]?.let { ReviewedSession(workout, it) } }
                 .sortedByDescending { it.workout.startedAtMillis }
             val plan = if (counting == null) PlanCard.None else PlanCard.of(running, planWorkouts, today, counting)
-            return TrainerHome(waiting, PlanMatch.offered(kept, nowMillis), earlier, plan, (plan as? PlanCard.Running)?.next)
+            return TrainerHome(waiting, earlier, plan, (plan as? PlanCard.Running)?.next)
         }
     }
 }

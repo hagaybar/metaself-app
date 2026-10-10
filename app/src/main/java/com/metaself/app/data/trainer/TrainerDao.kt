@@ -21,9 +21,6 @@ interface TrainerDao {
     suspend fun plans(ids: List<Long>): List<TrainerPlanEntity>
 
     @Query("SELECT * FROM trainer_plans WHERE kept = 1 ORDER BY createdAtMillis DESC LIMIT 1")
-    fun observeKept(): Flow<TrainerPlanEntity?>
-
-    @Query("SELECT * FROM trainer_plans WHERE kept = 1 ORDER BY createdAtMillis DESC LIMIT 1")
     suspend fun kept(): TrainerPlanEntity?
 
     /** D122: every kept suggestion, newest first — one per planned session, and the unlinked one. */

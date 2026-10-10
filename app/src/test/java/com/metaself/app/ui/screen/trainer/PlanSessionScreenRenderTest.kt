@@ -9,6 +9,7 @@ import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.ActionRefused
@@ -118,9 +119,21 @@ class PlanSessionScreenRenderTest {
     fun `a kept plan says so and offers no Keep`() {
         val texts = draw(PlanSessionViewModel.State(shown = SHOWN.copy(kept = true), kept = true))
 
-        assertThat(texts).contains("Kept. It is on the Trainer screen for seven days.")
+        assertThat(texts).contains("Kept. It is on your plan for seven days, under Session.")
         assertThat(texts).doesNotContain("Keep this plan")
         assertThat(texts).contains("Ask again")
+
+        // D122: kept for a planned session, its steps went to that session.
+        val linked = SHOWN.copy(kept = true, slot = SessionSlot(1, 0, 1))
+        assertThat(draw(PlanSessionViewModel.State(shown = linked, kept = true))).contains("Kept. Its steps are on your plan, with that session.")
+    }
+
+    /** D123: opened by Get the steps, the form names the session it is for. */
+    @Test
+    fun `opened for a planned session, the form names it`() {
+        val next = PlannedTick(2, 4, PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented line"))
+
+        assertThat(draw(PlanSessionViewModel.State(next = next, chosen = true))).contains("For week 2 of your plan: steady walk, 40 min")
     }
 
     @Test

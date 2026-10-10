@@ -25,9 +25,6 @@ object PlanTimelineWording {
     const val READ_FULL = "Read the trainer's full evaluation"
     const val HIDE_FULL = "Hide the trainer's full evaluation"
 
-    /** D117: an ended or stopped plan's one button. */
-    const val EVALUATE_AGAIN = "Evaluate me and plan again"
-
     /** "4 weeks · 28 Sep – 25 Oct · you're in week 2"; "starts Mon 12 Oct", "ended Sun 25 Oct", "stopped Wed 14 Oct" (invented). */
     fun subtitle(timeline: PlanTimeline): String {
         val where = when (val standing = timeline.standing) {
