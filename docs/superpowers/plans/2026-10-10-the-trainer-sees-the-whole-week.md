@@ -72,6 +72,8 @@ imports as they are).
 7. **"This week so far"**: a ledger is counted to `min(today, Sunday)`; `current` is true for the
    calendar's week. The trainer sends it as `so_far`. The letter's ledger is counted with `today = Sunday`
    and sent **without** `so_far` (the letter's week is the whole week).
+8a. **A week's recovery average needs at least 2 recorded days** (`WEEK_LEAST_DAYS = 2`), else null:
+   an average of one night is that night, which D111 never sends.
 8. **The recovery usual window** is the 28 days `monday − 28 .. monday − 1`; at least 7 days recording the
    figure, else null. Each figure is separate: a week can have a sleep usual and no HRV usual.
 9. **Averages** are rounded to whole numbers (HRV to whole ms). Sleep is sent in minutes a night.
@@ -351,6 +353,14 @@ class WeekLedgersTest {
         assertThat(ledger(days = week + before).recovery).isEqualTo(Recovery(450, 400, 61, 58, 45, 30))
     }
 
+    /** One recorded night is never sent as the week's average: that average IS the night (D110). */
+    @Test
+    fun `a recovery figure recorded on one day of the week has no weekly average`() {
+        val one = listOf(HealthDay(monday, sleepMinutes = 420, restingHeartRate = 60, hrvMs = 40.0))
+
+        assertThat(ledger(days = one).recovery).isEqualTo(Recovery(null, null, null, null, null, null))
+    }
+
     /** A usual of six nights is not a usual (D110). */
     @Test
     fun `there is no usual under seven recorded days`() {
@@ -520,6 +530,9 @@ object WeekLedgers {
     /** Fewer recorded days than this in [USUAL_DAYS] and there is no usual. */
     const val USUAL_LEAST_DAYS = 7
 
+    /** Fewest days a week must record a recovery figure for its average to go (D110: one night is never sent). */
+    const val WEEK_LEAST_DAYS = 2
+
     /**
      * @param monday the week; a Monday, never after this one.
      * @param today the calendar's today; this week is counted to it.
@@ -577,11 +590,11 @@ object WeekLedgers {
                 targetKcal = targetKcal,
             ),
             recovery = Recovery(
-                sleepMinutes = weekDays.mapNotNull { it.sleepMinutes }.roundedMean(),
+                sleepMinutes = weekly(weekDays) { it.sleepMinutes },
                 usualSleepMinutes = usual(before) { it.sleepMinutes },
-                restingHeartRate = weekDays.mapNotNull { it.restingHeartRate }.roundedMean(),
+                restingHeartRate = weekly(weekDays) { it.restingHeartRate },
                 usualRestingHeartRate = usual(before) { it.restingHeartRate },
-                hrvMs = weekDays.mapNotNull { it.hrvMs }.roundedMean(),
+                hrvMs = weekly(weekDays) { it.hrvMs },
                 usualHrvMs = usual(before) { it.hrvMs },
             ),
         )
@@ -613,6 +626,10 @@ object WeekLedgers {
 
     private fun usual(before: List<HealthDay>, pick: (HealthDay) -> Number?): Int? =
         before.mapNotNull(pick).takeIf { it.size >= USUAL_LEAST_DAYS }?.roundedMean()
+
+    /** A week's recovery average needs two recorded days: an average of one night IS that night (D110). */
+    private fun weekly(weekDays: List<HealthDay>, pick: (HealthDay) -> Number?): Int? =
+        weekDays.mapNotNull(pick).takeIf { it.size >= WEEK_LEAST_DAYS }?.roundedMean()
 
     private fun List<Number>.roundedMean(): Int? = if (isEmpty()) null else map { it.toDouble() }.average().roundToInt()
 }

@@ -47,7 +47,8 @@ it today. **A planned session not done stays not done**; nothing from the other 
 - **Recovery**: average sleep a night, average resting heart rate and average HRV, each over the days
   that record it, and each with **its usual**: the same average over the 28 days before the week's
   Monday. Fewer than 7 recorded days in those 28 and there is no usual — a usual of three nights is not
-  a usual. The phone states both figures; it never says "worse" or "better".
+  a usual. **A week recording a figure on fewer than 2 days has no average for it**: an average of
+  one night is that night, which D111 never sends. The phone states both figures; it never says "worse" or "better".
 
 A week with no practice ledger simply has none. A figure no day recorded is absent, never zero.
 
