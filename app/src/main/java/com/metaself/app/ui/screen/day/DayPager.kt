@@ -19,11 +19,11 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -93,6 +93,8 @@ fun DayPager(
     letterSetup: String? = null,
     onSetUpLetter: () -> Unit = {},
     onDismissLetterSetup: () -> Unit = {},
+    /** D113: the Trainer, from the word in the bar and from the menu. */
+    onOpenTrainer: () -> Unit = {},
 ) {
     // Today's sentence under a ratio changes with the clock alone — "next meal from 12:00" becomes
     // "your 14 hours were up" at 12:00, and "Good morning." goes at noon — so the moment it is said
@@ -128,6 +130,7 @@ fun DayPager(
             letterSetup = letterSetup,
             onSetUpLetter = onSetUpLetter,
             onDismissLetterSetup = onDismissLetterSetup,
+            onOpenTrainer = onOpenTrainer,
         )
     }
 }
@@ -156,6 +159,7 @@ private fun DayPagerOn(
     letterSetup: String?,
     onSetUpLetter: () -> Unit,
     onDismissLetterSetup: () -> Unit,
+    onOpenTrainer: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
@@ -164,7 +168,6 @@ private fun DayPagerOn(
     val scope = rememberCoroutineScope()
 
     var picking by remember { mutableStateOf(false) }
-    var showingMenu by remember { mutableStateOf(false) }
 
     // The pager settles on a page; the view model is told which day that is.
     LaunchedEffect(pagerState, range) {
@@ -196,52 +199,14 @@ private fun DayPagerOn(
             // It goes to the record screen's own action bar, beside the two things that can be done
             // with a choice, where what it selects is on the screen it is pressed from.
             // `DayViewModel.chooseAll` is untouched and still tested; only this way in has moved.
-            IconButton(onClick = { showingMenu = true }) {
-                Icon(
-                    imageVector = Icons.Filled.MoreVert,
-                    contentDescription = stringResource(R.string.today_more),
-                )
-            }
-            DropdownMenu(expanded = showingMenu, onDismissRequest = { showingMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.weight_open)) },
-                    onClick = {
-                        showingMenu = false
-                        onOpenWeight()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.movement_open)) },
-                    onClick = {
-                        showingMenu = false
-                        onOpenMovement()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.today_profile)) },
-                    onClick = {
-                        showingMenu = false
-                        onOpenProfile()
-                    },
-                )
-                // Looking after the food list and the meals is a job of its own, done well after
-                // the meal that produced the duplicate — so it belongs here rather than only behind
-                // the button whose purpose is the thing the app is for.
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.manager_open)) },
-                    onClick = {
-                        showingMenu = false
-                        onOpenManager()
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.settings_open)) },
-                    onClick = {
-                        showingMenu = false
-                        onOpenSettings()
-                    },
-                )
-            }
+            TodayActions(
+                onOpenTrainer = onOpenTrainer,
+                onOpenWeight = onOpenWeight,
+                onOpenMovement = onOpenMovement,
+                onOpenProfile = onOpenProfile,
+                onOpenManager = onOpenManager,
+                onOpenSettings = onOpenSettings,
+            )
         },
         hasFloatingButton = true,
         floatingActionButton = {
@@ -378,5 +343,100 @@ internal fun AddSomethingButton(onClick: () -> Unit) {
         modifier = Modifier.semantics { contentDescription = said },
         icon = { Icon(Icons.Filled.Add, contentDescription = null) },
         text = { Text(said) },
+    )
+}
+
+/**
+ * Today's bar (D113): the word "Trainer" — a word, not an icon, for the reason the bar already gives — then the
+ * menu. Its own composable so a render test can draw it without a day's view model.
+ */
+@Composable
+internal fun TodayActions(
+    onOpenTrainer: () -> Unit,
+    onOpenWeight: () -> Unit,
+    onOpenMovement: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenManager: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    var showingMenu by remember { mutableStateOf(false) }
+    TextButton(onClick = onOpenTrainer) { Text(stringResource(R.string.trainer_open)) }
+    IconButton(onClick = { showingMenu = true }) {
+        Icon(
+            imageVector = Icons.Filled.MoreVert,
+            contentDescription = stringResource(R.string.today_more),
+        )
+    }
+    DropdownMenu(expanded = showingMenu, onDismissRequest = { showingMenu = false }) {
+        TodayMenuItems(
+            onChosen = { showingMenu = false },
+            onOpenTrainer = onOpenTrainer,
+            onOpenWeight = onOpenWeight,
+            onOpenMovement = onOpenMovement,
+            onOpenProfile = onOpenProfile,
+            onOpenManager = onOpenManager,
+            onOpenSettings = onOpenSettings,
+        )
+    }
+}
+
+/**
+ * The menu's items, in order: Weight, Movement, Trainer (D113), Your numbers, Foods & meals, Settings. Each
+ * calls [onChosen] — which closes the menu — before it opens its page.
+ */
+@Composable
+internal fun TodayMenuItems(
+    onChosen: () -> Unit,
+    onOpenTrainer: () -> Unit,
+    onOpenWeight: () -> Unit,
+    onOpenMovement: () -> Unit,
+    onOpenProfile: () -> Unit,
+    onOpenManager: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.weight_open)) },
+        onClick = {
+            onChosen()
+            onOpenWeight()
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.movement_open)) },
+        onClick = {
+            onChosen()
+            onOpenMovement()
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.trainer_open)) },
+        onClick = {
+            onChosen()
+            onOpenTrainer()
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.today_profile)) },
+        onClick = {
+            onChosen()
+            onOpenProfile()
+        },
+    )
+    // Looking after the food list and the meals is a job of its own, done well after
+    // the meal that produced the duplicate — so it belongs here rather than only behind
+    // the button whose purpose is the thing the app is for.
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.manager_open)) },
+        onClick = {
+            onChosen()
+            onOpenManager()
+        },
+    )
+    DropdownMenuItem(
+        text = { Text(stringResource(R.string.settings_open)) },
+        onClick = {
+            onChosen()
+            onOpenSettings()
+        },
     )
 }

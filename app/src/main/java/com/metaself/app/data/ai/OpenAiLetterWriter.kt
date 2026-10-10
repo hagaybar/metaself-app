@@ -28,7 +28,7 @@ class OpenAiLetterWriter(
             is OpenAiCall.Outcome.Body -> when (val parsed = LetterResponse.parse(outcome.text, outcome.model)) {
                 is LetterResponse.Parsed.Written -> {
                     call.remember(outcome)
-                    LetterReply.Written(parsed.texts, parsed.model)
+                    LetterReply.Written(parsed.texts, parsed.model, parsed.weekNote)
                 }
                 is LetterResponse.Parsed.Failed -> LetterReply.Failed(parsed.failure).also { recorded(it.failure, null) }
             }

@@ -1,14 +1,16 @@
 package com.metaself.app.domain.trainer
 
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.movement.WorkoutKind
 
 /** A session with its review, for "Earlier sessions" (D85). */
 data class ReviewedSession(val workout: Workout, val review: TrainerReview)
 
 /**
- * The Trainer screen, top to bottom (D85): the session waiting for words, the kept plan still offered,
- * the weekly plan's card (D95, D97), and earlier reviewed sessions, newest first. A review is shown only beside its own session, so one
- * whose session left the record (a negative workout id, D88) is shown nowhere.
+ * What the Trainer screen shows beside the week (D85, D114): the session waiting for words, the kept plan still
+ * offered, the weekly plan (D95, D97) behind the main button and the plan's row, and earlier reviewed sessions,
+ * newest first, for their own page. A review is shown only beside its own session, so one whose session left the
+ * record (a negative workout id, D88) is shown nowhere.
  */
 data class TrainerHome(
     val waiting: Workout?,
@@ -19,6 +21,10 @@ data class TrainerHome(
     /** D96: the running plan's next session this week, for Plan my next session. */
     val next: PlannedTick? = null,
 ) {
+    /** D114: the page's one main button — the open planned session, the next session, or an evaluation. */
+    val main: MainAction
+        get() = if (plan is PlanCard.Running) next?.let { MainAction.PlanOpen(it.session.kind) } ?: MainAction.PlanNext else MainAction.Evaluate
+
     companion object {
         /** Today, yesterday and the day before (design question 10). */
         const val WAITING_DAYS = 3
@@ -48,6 +54,18 @@ data class TrainerHome(
             return TrainerHome(waiting, PlanMatch.offered(kept, nowMillis), earlier, plan, (plan as? PlanCard.Running)?.next)
         }
     }
+}
+
+/** D114: the Trainer page's one main button, the next thing to do. */
+sealed interface MainAction {
+    /** A plan runs and this week's first open planned session is of [kind]: "Plan the open walk". */
+    data class PlanOpen(val kind: WorkoutKind) : MainAction
+
+    /** A plan runs with nothing open this week, or has not begun: "Plan my next session". */
+    data object PlanNext : MainAction
+
+    /** No plan runs, or it has ended: "Evaluate me and plan the weeks ahead". */
+    data object Evaluate : MainAction
 }
 
 /** D95, D97: what the Trainer screen shows of the weekly plan. */

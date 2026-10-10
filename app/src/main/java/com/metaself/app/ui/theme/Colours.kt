@@ -172,3 +172,15 @@ internal val MetaSelfDarkColours = darkColorScheme(
  * the theme, and [MetaSelfTheme] is what supplies the right one for the scheme in force.
  */
 internal val LocalMetaSelfInkTwo = staticCompositionLocalOf { MetaSelfLightInkTwo }
+
+/**
+ * The caution tint (D114): a box's fill when a figure is under its usual — the week's sleep. Not the error
+ * red, which means something to put right; this is information. The light value is the approved mockup's;
+ * the dark one is its twin for the dark page. Every text step is measured on both by `InkLadderTest`.
+ * Never text itself.
+ */
+internal val MetaSelfLightCaution = Color(0xFFFBEFD9)
+internal val MetaSelfDarkCaution = Color(0xFF4A3B1F)
+
+/** The caution tint for the scheme in force; read it through [MetaSelfTint], never here. */
+internal val LocalMetaSelfCaution = staticCompositionLocalOf { MetaSelfLightCaution }

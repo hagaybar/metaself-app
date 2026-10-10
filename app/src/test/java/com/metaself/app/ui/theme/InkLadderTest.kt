@@ -159,6 +159,13 @@ class InkLadderTest {
             .isEqualTo(MetaSelfDarkColours.onBackground)
     }
 
+    /** D114: the caution tint is a box's fill, and every text step lands on it — in both schemes. */
+    @Test
+    fun `every ink step that carries text is legible on the caution tint`() {
+        assertLegible(lightTextSteps, MetaSelfLightCaution, "light caution tint")
+        assertLegible(darkTextSteps, MetaSelfDarkCaution, "dark caution tint")
+    }
+
     /**
      * A box the review wrote into and he has not accepted (D54 §12.6) is drawn with a `tertiaryContainer`
      * fill, a `tertiary` border and a `tertiary` label, and its figure in the body's ink. The label

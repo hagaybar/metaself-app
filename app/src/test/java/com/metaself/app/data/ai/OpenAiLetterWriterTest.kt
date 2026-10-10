@@ -64,6 +64,16 @@ class OpenAiLetterWriterTest {
         assertThat(sent.body.readUtf8()).contains("weekly_letter")
     }
 
+    /** D116: the week's note comes back beside the letter. */
+    @Test
+    fun `a letter's week_note comes back with it`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_LETTER.trimEnd().removeSuffix("}") + ",\"week_note\":\"Invented week note.\"}")))
+
+        val reply = writer().write(REQUEST)
+
+        assertThat((reply as LetterReply.Written).weekNote).isEqualTo("Invented week note.")
+    }
+
     @Test
     fun `a provider error is a refusal, logged by its status and never the request's words`() = runTest {
         val log = RecordingLog()

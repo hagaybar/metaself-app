@@ -38,12 +38,12 @@ object TrainerResponse {
     private const val NOT_THE_SHAPE = "the reply was not in the shape this app asked for"
 
     fun parsePlan(body: String, model: String): TrainerReply<SessionPlan> =
-        content(body)?.let(::readPlan)?.let { TrainerReply.Answered(it, model) }
+        content(body)?.let(::readPlan)?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
     /** D108: a reply is a headline and a note; the four parts are only ever read from storage. */
     fun parseFeedback(body: String, model: String): TrainerReply<Feedback> =
-        content(body)?.let(::readFeedback)?.takeIf { it.note != null }?.let { TrainerReply.Answered(it, model) }
+        content(body)?.let(::readFeedback)?.takeIf { it.note != null }?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
     /**
@@ -54,14 +54,23 @@ object TrainerResponse {
     fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk, hadLast: Boolean): TrainerReply<EvaluationAndPlan> =
         content(body)?.let(::readEvaluationAndPlan)?.takeIf { it.plan.fits(ask) }
             ?.let { if (hadLast) it else it.copy(evaluation = it.evaluation.copy(sinceLast = "")) }
-            ?.let { TrainerReply.Answered(it, model) }
+            ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
     /** D97: this week and the weeks after, [fitting the rest][WeeksPlan.fitsRest]. */
     fun parseAdjusted(body: String, model: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): TrainerReply<WeeksPlan> =
         content(body)?.let(::readWeeksPlan)?.takeIf { it.fitsRest(weeksLeft, perWeek, thisWeekMax) }
-            ?.let { TrainerReply.Answered(it, model) }
+            ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    /**
+     * D116: a reply's week_note, trimmed — read leniently, unlike the answer: absent, not a string, or blank is
+     * no note, and the reply it came in stands. Shared with the letter's reply.
+     */
+    fun readWeekNote(content: String?): String? = runCatching {
+        json.parseToJsonElement(content!!).jsonObject["week_note"]?.jsonPrimitive
+            ?.takeIf { it.isString }?.content?.trim()?.ifEmpty { null }
+    }.getOrNull()
 
     /** A plan in the reply's shape, or null for anything else. */
     fun readPlan(content: String?): SessionPlan? = runCatching {

@@ -108,6 +108,24 @@ class TrainerHomeTest {
         assertThat(home.next).isEqualTo(PlannedTick(1, 2, walk30))
     }
 
+    /** D114: the one main button — the open session's kind, the next session, or an evaluation. Invented. */
+    @Test
+    fun `the main button is the next thing to do`() {
+        val run20 = PlannedSession(WorkoutKind.RUN, 20, PlannedEffort.STEADY, "Short run")
+        val plan = running.copy(plan = WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(run20, walk30)) }, "Invented."))
+        fun main(workouts: List<Workout>, today: Long = TEST_EPOCH_DAY) =
+            TrainerHome.of(today, NOW, emptyList(), emptyList(), emptyList(), null, plan, workouts, PlanCounting(1, 0, emptyMap())).main
+        val run = walk(1, start, hour = 7).copy(kind = WorkoutKind.RUN, durationMinutes = 20)
+
+        assertThat(main(emptyList())).isEqualTo(MainAction.PlanOpen(WorkoutKind.RUN))
+        assertThat(main(listOf(run))).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
+        assertThat(main(listOf(run, walk(2, start + 1, hour = 7)))).isEqualTo(MainAction.PlanNext)
+        // Before week 1 nothing is open yet; after the last day the plan has ended.
+        assertThat(main(emptyList(), today = start - 1)).isEqualTo(MainAction.PlanNext)
+        assertThat(main(emptyList(), today = start + 14)).isEqualTo(MainAction.Evaluate)
+        assertThat(home().main).isEqualTo(MainAction.Evaluate)
+    }
+
     /** A synced thirty-minute walk at 07:00 on [day]. Invented. */
     private fun planSession(id: Long, day: Long) = Workout(
         id = id, epochDay = day, startedAtMillis = day * DAY + 7 * HOUR, durationMinutes = 30,

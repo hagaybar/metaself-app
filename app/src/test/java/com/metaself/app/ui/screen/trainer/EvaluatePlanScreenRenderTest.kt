@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.trainer
 
+import androidx.compose.ui.semantics.Role
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
@@ -85,6 +86,22 @@ class EvaluatePlanScreenRenderTest {
         assertThat(texts).doesNotContain("Keep this plan")
     }
 
+    /** D114: Adjust the plan moved here from the Trainer page's old card — on the running plan only. */
+    @Test
+    fun `the running plan offers Adjust the plan`() {
+        var adjusted = false
+        val running = PlanCard.of(SHOWN.copy(startEpochDay = TEST_EPOCH_DAY - 3, status = ProgrammeStatus.RUNNING), emptyList(), TEST_EPOCH_DAY, PlanCounting(1, 0, emptyMap())) as PlanCard.Running
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, onRunning = true, running = running, evaluation = SHOWN.evaluation), onAdjust = { adjusted = true })
+
+        assertThat(render.roleOf("Adjust the plan")).isEqualTo(Role.Button)
+        render.click("Adjust the plan")
+        assertThat(adjusted).isTrue()
+
+        assertThat(draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))).doesNotContain("Adjust the plan")
+        assertThat(draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = SHOWN))).doesNotContain("Adjust the plan")
+        assertThat(draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, onRunning = true))).doesNotContain("Adjust the plan")
+    }
+
     /** A tap on Keep is not taken twice: while it writes, Keep and Ask again cannot be pressed. */
     @Test
     fun `while Keep is writing, Keep and Ask again cannot be pressed`() {
@@ -97,8 +114,9 @@ class EvaluatePlanScreenRenderTest {
     private fun draw(
         state: EvaluatePlanViewModel.State,
         onKeep: () -> Unit = {},
+        onAdjust: () -> Unit = {},
     ): List<String> = render.texts {
-        EvaluatePlanScreen(state = state, onBack = {}, onChange = {}, onAsk = {}, onKeep = onKeep, onAskAgain = {})
+        EvaluatePlanScreen(state = state, onBack = {}, onChange = {}, onAsk = {}, onKeep = onKeep, onAskAgain = {}, onAdjust = onAdjust)
     }
 
     private companion object {

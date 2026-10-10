@@ -11,8 +11,11 @@ import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.data.trainer.FakeProgrammeStore
 import com.metaself.app.data.trainer.FakeTrainer
 import com.metaself.app.data.trainer.FakeTrainerStore
+import com.metaself.app.data.letter.FakeFoodTotals
 import com.metaself.app.data.trainer.InMemoryAboutMeStore
+import com.metaself.app.data.trainer.InMemoryWeekNoteStore
 import com.metaself.app.data.weight.InMemoryWeightRepository
+import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
@@ -30,6 +33,8 @@ import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
@@ -59,6 +64,8 @@ class TrainerViewModelTest {
     private val programmes = FakeProgrammeStore()
     private val problems = RecordingProblemLog()
     private val aboutMe = InMemoryAboutMeStore()
+    private val weekNotes = InMemoryWeekNoteStore()
+    private val food = FakeFoodTotals()
 
     @BeforeEach
     fun setUp() = Dispatchers.setMain(dispatcher)
@@ -100,8 +107,9 @@ class TrainerViewModelTest {
         assertThat(viewModel.state.value.aboutMe).isEqualTo("Invented note.")
     }
 
+    /** The waiting card reads the last three days; the week (D114) reads this week, Monday to today. */
     @Test
-    fun `the recent sessions are read for the last three days`() = runTest {
+    fun `the recent sessions are read for the last three days, and this week for the week`() = runTest {
         val asked = mutableListOf<Pair<Long, Long>>()
         val watching = object : MovementRecord by record {
             override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> {
@@ -112,7 +120,7 @@ class TrainerViewModelTest {
 
         viewModel(watching).state.first { it.home != null }
 
-        assertThat(asked).containsExactly((TEST_EPOCH_DAY - 2) to TEST_EPOCH_DAY)
+        assertThat(asked).containsExactly((TEST_EPOCH_DAY - 2) to TEST_EPOCH_DAY, (TEST_EPOCH_DAY - 3) to TEST_EPOCH_DAY)
     }
 
     @Test
@@ -242,14 +250,78 @@ class TrainerViewModelTest {
         assertThat(programmes.confirmationRows.value).containsExactly(PlanConfirmation(id, 1, false, NOW))
     }
 
+    /** D114: this week's ledger and strip, from the record, following a session synced while the page is open. Invented. */
+    @Test
+    fun `this week is counted from the record`() = runTest {
+        record.workouts.value = listOf(walk(1, TEST_EPOCH_DAY))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+
+        val week = viewModel.state.value.week!!
+        assertThat(week.ledger.minutes).isEqualTo(40)
+        assertThat(week.strip.days[3].blocks.map { it.workoutId }).containsExactly(1L)
+
+        record.workouts.value = record.workouts.value + walk(2, TEST_EPOCH_DAY - 1)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.week!!.ledger.minutes).isEqualTo(80)
+    }
+
+    /** D114: a plan kept elsewhere ticks its session on the strip and leaves the other open. Invented. */
+    @Test
+    fun `the plan's week ticks on the strip`() = runTest {
+        record.workouts.value = listOf(walk(1, TEST_EPOCH_DAY))
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        val id = programmes.add(RUNNING_PLAN)
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        advanceUntilIdle()
+
+        val strip = viewModel.state.value.week!!.strip
+        assertThat(strip.days[3].blocks.single().ticked).isTrue()
+        assertThat(strip.toDo).containsExactly(30)
+    }
+
+    /** Food is logged on another screen: the week is read again when the page comes back to the front. Invented. */
+    @Test
+    fun `food logged elsewhere shows when the page comes back`() = runTest {
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.week!!.ledger.food.daysLogged).isEqualTo(0)
+
+        food.days = mapOf(TEST_EPOCH_DAY to DayTotals(1_500, 80, 150, 50))
+        viewModel.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.week!!.ledger.food.kcalADay).isEqualTo(1_500)
+    }
+
+    /** D116: the coach's note is shown in its own week only. Invented. */
+    @Test
+    fun `only this week's note is shown`() = runTest {
+        weekNotes.note.value = WeekNote("Invented week note.", NOW, TEST_EPOCH_DAY - 3, WeekNoteSource.TRAINER)
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.note?.text).isEqualTo("Invented week note.")
+
+        weekNotes.note.value = WeekNote("Invented old note.", NOW, TEST_EPOCH_DAY - 10, WeekNoteSource.LETTER)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.note).isNull()
+    }
+
     private var date: LocalDate = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
 
     private fun viewModel(movement: MovementRecord = record) = TrainerViewModel(
         movement, store, programmes, aboutMe, Today { date }, Now { NOW }, problems,
         AskTheTrainer(
             movement, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), FakeTrainer(), aboutMe, programmes,
-            Today { date }, Now { NOW }, CurrentYear { TEST_YEAR },
+            Today { date }, Now { NOW }, CurrentYear { TEST_YEAR }, food,
         ),
+        weekNotes,
     )
 
     /** A synced forty-minute walk at 07:00 on [day]. Invented. */

@@ -79,7 +79,15 @@ data class WeekLedger(
     val beyond: BeyondPlan,
     val food: FoodContext,
     val recovery: Recovery,
-)
+) {
+    /** D115: every counted session of the week — those that ticked a planned session, and every one beyond the plan. */
+    val sessions: Int
+        get() = practice?.sessions.orEmpty().count { it.outcome != PlannedOutcome.NOT_DONE } + beyond.kinds.sumOf { it.sessions }
+
+    /** D115: the week's minutes, summed over [sessions]. */
+    val minutes: Int
+        get() = practice?.sessions.orEmpty().sumOf { it.minutesDone ?: 0 } + beyond.kinds.sumOf { it.minutes }
+}
 
 /**
  * D110: a week's ledger, counted afresh from the record every time, like [PlanProgress] (D95): only stored
@@ -163,6 +171,10 @@ object WeekLedgers {
             ),
         )
     }
+
+    /** D114: the week's practice as [of] counts it — the covering plan's week, to today; null when none covers it. */
+    fun practiceOf(monday: Long, today: Long, workouts: List<Workout>, plans: List<CountedPlan>): WeekProgress? =
+        practiceWeek(plans, monday, minOf(today, monday + 6), workouts)?.second
 
     /** The plan covering the week and the week's progress in it, counted to [last]; null when none covers it. */
     private fun practiceWeek(plans: List<CountedPlan>, monday: Long, last: Long, workouts: List<Workout>): Pair<CountedPlan, WeekProgress>? {
