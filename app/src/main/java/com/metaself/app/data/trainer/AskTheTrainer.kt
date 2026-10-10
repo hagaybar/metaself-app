@@ -1,6 +1,7 @@
 package com.metaself.app.data.trainer
 
 import com.metaself.app.data.health.MovementRecord
+import com.metaself.app.data.letter.FoodTotals
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
@@ -8,6 +9,8 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.target.CurrentTarget
+import com.metaself.app.domain.trainer.CountedPlan
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.LastEvaluation
@@ -22,6 +25,7 @@ import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeCalendar
+import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.Programmes
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerPlan
@@ -37,8 +41,8 @@ import javax.inject.Inject
 
 /**
  * The trainer's uses (D86, D87, D93, D97): every request is built here, fresh, from the stored record (a
- * year of it, for the monthly lines, D89) and the owner's note (D90), and only when a screen asks —
- * never in the background (D84). Writes throw — a weekly plan's store refuses a row in the wrong
+ * year of it, for the monthly lines, D89), the owner's note (D90), each day's food totals and the kept
+ * weekly plans (D110), and only when a screen asks — never in the background (D84). Writes throw — a weekly plan's store refuses a row in the wrong
  * state by throwing too, and nothing here swallows it; the screens catch them (`guarded`) and say so.
  */
 class AskTheTrainer @Inject constructor(
@@ -52,6 +56,8 @@ class AskTheTrainer @Inject constructor(
     private val today: Today,
     private val now: Now,
     private val year: CurrentYear,
+    /** Each day's food totals (D110), the letter's reader; never a meal. Defaulted for tests that send no food. */
+    private val food: FoodTotals = FoodTotals { _, _ -> emptyMap() },
 ) {
 
     sealed interface Suggested {
@@ -282,25 +288,38 @@ class AskTheTrainer @Inject constructor(
     suspend fun request(question: TrainerQuestion, exceptWorkoutId: Long = NO_WORKOUT): TrainerRequest {
         val day = today().toEpochDay()
         val reviews = store.observeReviews().first()
-        // A year back for the monthly lines (D89); the 42 days and six weeks are within it.
-        val first = TrainerRequest.firstRecordDay(day)
+        // A year back for the monthly lines (D89); the 42 days, the six weeks and the 28 days before them
+        // for the usuals (D110) are within it — the minOf says so rather than assuming it.
+        val first = minOf(TrainerRequest.firstRecordDay(day), TrainerRequest.firstLedgerDay(day))
+        val profile = profiles.profile.first()
         return TrainerRequest.of(
             question = question,
             today = day,
             workouts = record.observeWorkouts(first, day).first(),
             reviews = reviews,
             plans = store.plans(reviews.mapNotNull { it.planId }),
-            days = record.observeDays(minOf(first, TrainerRequest.firstSummaryDay(day)), day).first(),
-            food = emptyMap(),
-            targetKcal = null,
-            weeklyPlans = emptyList(),
+            days = record.observeDays(first, day).first(),
+            food = food.byDay(TrainerRequest.firstSummaryDay(day), day),
+            targetKcal = profile?.let {
+                CurrentTarget.of(it, profiles.revision.first(), year(), profiles.burnAdjustmentKcal.first()).kcal
+            },
+            weeklyPlans = countedPlans(),
             readings = weights.readings.first(),
-            profile = profiles.profile.first(),
+            profile = profile,
             currentYear = year(),
             earlierFeedback = store.latestFeedback(TrainerRequest.FEEDBACK_COUNT, exceptWorkoutId),
             earliestDay = record.observeEarliestDay().first(),
             aboutMe = aboutMe.note.first(),
         )
+    }
+
+    /** D110: every kept version of a weekly plan, each counted from its chain's first keep (D105). */
+    private suspend fun countedPlans(): List<CountedPlan> {
+        val all = programmes.all()
+        return all.filter { it.status != ProgrammeStatus.OFFERED && it.startEpochDay != null }.map { programme ->
+            val root = Programmes.rootOf(programme, all)
+            CountedPlan(programme, PlanCounting(root.id, root.createdAtMillis, programmes.confirmations(root.id)))
+        }
     }
 
     companion object {
