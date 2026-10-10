@@ -18,6 +18,10 @@ import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.WeekLedger
 import com.metaself.app.domain.trainer.WeekOutcome
 import com.metaself.app.domain.trainer.WeeksPlan
+import com.metaself.app.domain.trainer.Block
+import com.metaself.app.domain.trainer.Outline
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.WeekTarget
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -631,7 +635,11 @@ object TrainerPrompt {
         put("what", session.what)
     }
 
-    /** A plan of weeks in the reply schema's own shape: sent back, and what `TrainerResponse.encodeWeeksPlan` stores. */
+    /**
+     * A plan of weeks in the reply schema's own shape: sent back, and what `TrainerResponse.encodeWeeksPlan` stores.
+     * Its outline (D120), when it has one, goes with it under `outline` — so what the trainer is sent back is what is
+     * stored (D125); a plan made before outlines is written exactly as it always was.
+     */
     fun weeksPlanJson(plan: WeeksPlan): JsonObject = buildJsonObject {
         put("title", plan.title)
         putJsonArray("weeks") {
@@ -645,6 +653,39 @@ object TrainerPrompt {
             }
         }
         put("why", plan.why)
+        plan.outline?.let { put("outline", outlineJson(it)) }
+    }
+
+    /** D120: an outline, in the reply schema's own shape. */
+    fun outlineJson(outline: Outline): JsonObject = buildJsonObject {
+        putJsonArray("blocks") { outline.blocks.forEach { add(blockJson(it)) } }
+    }
+
+    /** D120: one block — its phase by name, its focus, and each week's target. */
+    fun blockJson(block: Block): JsonObject = buildJsonObject {
+        put("phase", block.phase.name.lowercase())
+        put("focus", block.focus)
+        putJsonArray("weeks") { block.weeks.forEach { add(targetJson(it)) } }
+    }
+
+    /** D120: one week's target. */
+    fun targetJson(target: WeekTarget): JsonObject = buildJsonObject {
+        put("minutes", target.minutes)
+        put("longest_minutes", target.longest)
+        put("easier", target.easier)
+    }
+
+    /** D119: a goal as stored beside its plan, and as sent (with `weeks_to_go` added for a distance, D125). */
+    fun goalJson(goal: PlanGoal): JsonObject = buildJsonObject {
+        when (goal) {
+            PlanGoal.Steady -> put("kind", "steady")
+            is PlanGoal.Distance -> {
+                put("kind", "distance")
+                put("sport", goal.sport.name.lowercase())
+                put("km", goal.km)
+                put("by", date(goal.byEpochDay))
+            }
+        }
     }
 
     /** An evaluation in the reply schema's own shape: sent as the last one, and what `TrainerResponse.encodeEvaluation` stores. */

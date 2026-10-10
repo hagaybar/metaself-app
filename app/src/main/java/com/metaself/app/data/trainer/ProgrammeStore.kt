@@ -101,7 +101,12 @@ class RoomProgrammeStore @Inject constructor(
 
 /** Null when this version cannot read the row: such a plan is offered nowhere and sent nowhere. */
 fun TrainerProgrammeEntity.toProgramme(): Programme? {
-    val ask = runCatching { ProgrammeAsk(weeks, perWeek, words.orEmpty()) }.getOrNull() ?: return null
+    val goal = when (val stored = TrainerResponse.readGoal(plan)) {
+        TrainerResponse.StoredGoal.None -> null
+        TrainerResponse.StoredGoal.Unreadable -> return null
+        is TrainerResponse.StoredGoal.Read -> stored.goal
+    }
+    val ask = runCatching { ProgrammeAsk(weeks, perWeek, words.orEmpty(), goal) }.getOrNull() ?: return null
     val readPlan = TrainerResponse.readWeeksPlan(plan) ?: return null
     val readEvaluation = if (evaluation == null) null else TrainerResponse.readEvaluation(evaluation) ?: return null
     val readStatus = ProgrammeStatus.entries.firstOrNull { it.name == status } ?: return null
@@ -111,6 +116,6 @@ fun TrainerProgrammeEntity.toProgramme(): Programme? {
 fun Programme.toEntity(): TrainerProgrammeEntity = TrainerProgrammeEntity(
     id = id, createdAtMillis = createdAtMillis, weeks = ask.weeks, perWeek = ask.perWeek,
     words = ask.words.trim().ifEmpty { null }, evaluation = evaluation?.let(TrainerResponse::encodeEvaluation),
-    plan = TrainerResponse.encodeWeeksPlan(plan), model = model, startEpochDay = startEpochDay,
+    plan = TrainerResponse.encodeStoredWeeksPlan(plan, ask.goal), model = model, startEpochDay = startEpochDay,
     status = status.name, stoppedEpochDay = stoppedEpochDay, replacesId = replacesId,
 )

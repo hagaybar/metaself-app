@@ -15,10 +15,19 @@ import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WeeksPlan
+import com.metaself.app.domain.trainer.Block
+import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.Outline
+import com.metaself.app.domain.trainer.Phase
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.WeekTarget
+import java.time.LocalDate
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
@@ -178,8 +187,70 @@ object TrainerResponse {
             val week = element.jsonObject
             PlanWeek(week.text("focus"), week.getValue("sessions").jsonArray.map { planned(it.jsonObject) })
         }
-        return WeeksPlan(payload.text("title"), weeks, payload.text("why"))
+        // D120: an outline present must read; absent, the plan was made before outlines.
+        val outline = payload["outline"]?.let { outline(it.jsonObject) }
+        return WeeksPlan(payload.text("title"), weeks, payload.text("why"), outline)
             .takeIf { it.title.isNotEmpty() && it.why.isNotEmpty() && it.weeks.isNotEmpty() }
+    }
+
+    /** D120: an outline in the reply's shape; throws on anything else. Its coverage and bounds are the caller's. */
+    private fun outline(payload: JsonObject): Outline = Outline(payload.getValue("blocks").jsonArray.map { block(it.jsonObject) })
+
+    private fun block(payload: JsonObject): Block = Block(
+        phase = Phase.entries.first { it.name.lowercase() == payload.text("phase") },
+        focus = payload.text("focus"),
+        weeks = payload.getValue("weeks").jsonArray.map { target(it.jsonObject) },
+    )
+
+    private fun target(payload: JsonObject): WeekTarget = WeekTarget(
+        minutes = payload.minute("minutes"),
+        longest = payload.minute("longest_minutes"),
+        easier = payload.flag("easier"),
+    )
+
+    /** A JSON boolean: "true" in quotes is text. */
+    private fun JsonObject.flag(name: String): Boolean {
+        val value = getValue(name).jsonPrimitive
+        require(!value.isString) { "$name is not a boolean" }
+        return value.boolean
+    }
+
+    /**
+     * D119: a plan's row as stored — the plan's own shape ([encodeWeeksPlan]) and, when it has a goal, the goal
+     * under [GOAL]. [readWeeksPlan] ignores the extra key.
+     */
+    fun encodeStoredWeeksPlan(plan: WeeksPlan, goal: PlanGoal?): String {
+        val shape = TrainerPrompt.weeksPlanJson(plan)
+        if (goal == null) return shape.toString()
+        return JsonObject(shape + (GOAL to TrainerPrompt.goalJson(goal))).toString()
+    }
+
+    /**
+     * D119: the goal stored beside a plan — [StoredGoal.None] when there is none (a plan made before goals), and
+     * [StoredGoal.Unreadable] when the key is there but does not read, which makes the row unreadable.
+     */
+    fun readGoal(content: String?): StoredGoal = runCatching {
+        val payload = json.parseToJsonElement(content!!).jsonObject[GOAL]?.jsonObject ?: return@runCatching StoredGoal.None
+        StoredGoal.Read(goal(payload))
+    }.getOrDefault(StoredGoal.Unreadable)
+
+    /** What [readGoal] found. */
+    sealed interface StoredGoal {
+        data object None : StoredGoal
+        data object Unreadable : StoredGoal
+        data class Read(val goal: PlanGoal) : StoredGoal
+    }
+
+    private const val GOAL = "goal"
+
+    private fun goal(payload: JsonObject): PlanGoal = when (payload.text("kind")) {
+        "steady" -> PlanGoal.Steady
+        "distance" -> PlanGoal.Distance(
+            sport = GoalSport.entries.first { it.name.lowercase() == payload.text("sport") },
+            km = payload.getValue("km").jsonPrimitive.also { require(!it.isString) { "km is not a number" } }.double,
+            byEpochDay = LocalDate.parse(payload.text("by")).toEpochDay(),
+        )
+        else -> throw IllegalArgumentException("not a goal")
     }
 
     /** Throws on anything unknown; [PlannedSession]'s own checks refuse minutes out of 5..180. */
