@@ -316,7 +316,7 @@ class TrainerViewModelTest {
     private var date: LocalDate = LocalDate.ofEpochDay(TEST_EPOCH_DAY)
 
     private fun viewModel(movement: MovementRecord = record) = TrainerViewModel(
-        movement, store, programmes, aboutMe, Today { date }, Now { NOW }, problems,
+        movement, store, programmes, aboutMe, Today { date }, problems,
         AskTheTrainer(
             movement, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), FakeTrainer(), aboutMe, programmes,
             Today { date }, Now { NOW }, CurrentYear { TEST_YEAR }, food,

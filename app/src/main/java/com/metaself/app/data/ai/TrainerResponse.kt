@@ -12,12 +12,16 @@ import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.SessionPlan
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.long
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -132,6 +136,29 @@ object TrainerResponse {
 
     /** The same shape [TrainerPrompt] sends an earlier plan in, so stored and sent cannot drift. */
     fun encodePlan(plan: SessionPlan): String = TrainerPrompt.planJson(plan).toString()
+
+    /**
+     * D122: a suggestion as stored — the plan's own shape, and, when it was kept for a planned session, that
+     * session's place under [FOR_PLANNED]. [readPlan] ignores the extra key, so the plan reads the same either way.
+     */
+    fun encodeStoredPlan(plan: SessionPlan, slot: SessionSlot?): String {
+        val shape = TrainerPrompt.planJson(plan)
+        if (slot == null) return shape.toString()
+        val place = buildJsonObject {
+            put("chain", slot.chainId)
+            put("week", slot.week)
+            put("session", slot.session)
+        }
+        return JsonObject(shape + (FOR_PLANNED to place)).toString()
+    }
+
+    /** D122: the planned session a stored suggestion was kept for; null when none, or unreadable. */
+    fun readSlot(content: String?): SessionSlot? = runCatching {
+        val place = json.parseToJsonElement(content!!).jsonObject[FOR_PLANNED]?.jsonObject ?: return@runCatching null
+        SessionSlot(place.getValue("chain").jsonPrimitive.long, place.getValue("week").jsonPrimitive.int, place.getValue("session").jsonPrimitive.int)
+    }.getOrNull()
+
+    private const val FOR_PLANNED = "for_planned"
 
     fun encodeFeedback(feedback: Feedback): String = TrainerPrompt.feedbackJson(feedback).toString()
 

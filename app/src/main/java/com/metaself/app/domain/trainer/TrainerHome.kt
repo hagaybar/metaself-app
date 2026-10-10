@@ -7,21 +7,20 @@ import com.metaself.app.domain.movement.WorkoutKind
 data class ReviewedSession(val workout: Workout, val review: TrainerReview)
 
 /**
- * What the Trainer screen shows beside the week (D85, D114): the session waiting for words, the kept plan still
- * offered, the weekly plan (D95, D97) behind the main button and the plan's row, and earlier reviewed sessions,
+ * What the Trainer screen shows beside the week (D85, D114): the session waiting for words, the weekly plan (D95,
+ * D97) behind the main button and the plan's row, and earlier reviewed sessions,
  * newest first, for their own page. A review is shown only beside its own session, so one whose session left the
  * record (a negative workout id, D88) is shown nowhere.
  */
 data class TrainerHome(
     val waiting: Workout?,
-    val keptPlan: TrainerPlan?,
     val earlier: List<ReviewedSession>,
     /** D95, D97: the weekly plan's card. */
     val plan: PlanCard = PlanCard.None,
     /** D96: the running plan's next session this week, for Plan my next session. */
     val next: PlannedTick? = null,
 ) {
-    /** D114: the page's one main button — the open planned session, the next session, or an evaluation. */
+    /** D114, D124: the page's one main button — the open planned session, the next session, or Plan ahead. */
     val main: MainAction get() = MainAction.of(plan, next)
 
     companion object {
@@ -30,11 +29,9 @@ data class TrainerHome(
 
         fun of(
             today: Long,
-            nowMillis: Long,
             recent: List<Workout>,
             reviewed: List<Workout>,
             reviews: List<TrainerReview>,
-            kept: TrainerPlan?,
             running: Programme? = null,
             planWorkouts: List<Workout> = emptyList(),
             /** D105: what the running plan counts from, and the owner's answers; no card without it. */
@@ -50,7 +47,7 @@ data class TrainerHome(
                 .mapNotNull { workout -> byWorkout[workout.id]?.let { ReviewedSession(workout, it) } }
                 .sortedByDescending { it.workout.startedAtMillis }
             val plan = if (counting == null) PlanCard.None else PlanCard.of(running, planWorkouts, today, counting)
-            return TrainerHome(waiting, PlanMatch.offered(kept, nowMillis), earlier, plan, (plan as? PlanCard.Running)?.next)
+            return TrainerHome(waiting, earlier, plan, (plan as? PlanCard.Running)?.next)
         }
     }
 }
@@ -63,13 +60,19 @@ sealed interface MainAction {
     /** A plan runs with nothing open this week, or has not begun: "Plan my next session". */
     data object PlanNext : MainAction
 
-    /** No plan runs, or it has ended: "Evaluate me and plan the weeks ahead". */
-    data object Evaluate : MainAction
+    /** No plan runs, it has ended, or this week is its last: "Plan ahead" (D124). */
+    data object PlanAhead : MainAction
 
     companion object {
-        /** D114, D117: the next thing to do, for [plan] and its running week's [next] open session. */
-        fun of(plan: PlanCard, next: PlannedTick?): MainAction =
-            if (plan is PlanCard.Running) next?.let { PlanOpen(it.session.kind) } ?: PlanNext else Evaluate
+        /** D114, D124: the next thing to do, for [plan] and its running week's [next] open session. */
+        fun of(plan: PlanCard, next: PlannedTick?): MainAction = when {
+            plan !is PlanCard.Running -> PlanAhead
+            plan.weekIndex == plan.progress.weeks.lastIndex -> PlanAhead
+            else -> session(next)
+        }
+
+        /** D117: the session action — the open session's kind, or the next session — the plan screen's, whatever the week. */
+        fun session(next: PlannedTick?): MainAction = next?.let { PlanOpen(it.session.kind) } ?: PlanNext
     }
 }
 

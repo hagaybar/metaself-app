@@ -31,7 +31,7 @@ object WorkbenchWording {
     fun path(path: TrainerPath): String = when (path) {
         TrainerPath.FEEDBACK -> "Feedback on a session"
         TrainerPath.PLAN -> "Plan my next session"
-        TrainerPath.EVALUATE -> "Review and plan the weeks ahead"
+        TrainerPath.EVALUATE -> "Plan ahead"
         TrainerPath.ADJUST -> "Change the rest of my plan"
     }
 

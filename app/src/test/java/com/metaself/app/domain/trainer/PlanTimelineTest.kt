@@ -131,6 +131,17 @@ class PlanTimelineTest {
         assertThat(timeline.weeks.drop(1).all { it.place is TimelinePlace.Ahead }).isTrue()
     }
 
+    /** D122: an open tile of this week with steps reads "Steps ready"; a week ahead is unchanged. */
+    @Test
+    fun `an open tile with steps is ready, and only that one`() {
+        val marked = timeline().withSteps(setOf(PlanPlace(1, 1), PlanPlace(2, 0)))
+
+        val tiles = (marked.weeks[1].place as TimelinePlace.ThisWeek).tiles
+        assertThat(tiles.map { it.stepsReady }).containsExactly(false, true, false).inOrder()
+        assertThat(marked.weeks[2]).isEqualTo(timeline().weeks[2])
+        assertThat(marked.weeks[0]).isEqualTo(timeline().weeks[0])
+    }
+
     private fun timeline(today: Long = TEST_EPOCH_DAY) = PlanTimeline.of(kept, start, today, progress(kept, emptyList(), today), emptyMap())
 
     private fun progress(programme: Programme, sessions: List<Workout>, today: Long = TEST_EPOCH_DAY) =

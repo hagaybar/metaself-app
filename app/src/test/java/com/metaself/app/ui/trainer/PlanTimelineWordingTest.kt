@@ -55,6 +55,9 @@ class PlanTimelineWordingTest {
         assertThat(PlanTimelineWording.tileLine(PlanTile(walk30, TileState.DONE, monday, 30))).isEqualTo("Done Mon")
         assertThat(PlanTimelineWording.tileLine(PlanTile(walk30, TileState.DONE_SHORT, monday + 2, 25))).isEqualTo("Done Wed · 25 min")
         assertThat(PlanTimelineWording.tileLine(PlanTile(walk30, TileState.OPEN))).isEqualTo("Open")
+        // D122: an open session with its steps kept.
+        assertThat(PlanTimelineWording.tileLine(PlanTile(walk30, TileState.OPEN, stepsReady = true))).isEqualTo("Steps ready")
+        assertThat(PlanTimelineWording.tileLine(PlanTile(walk30, TileState.DONE, monday, 30, stepsReady = true))).isEqualTo("Done Mon")
     }
 
     @Test

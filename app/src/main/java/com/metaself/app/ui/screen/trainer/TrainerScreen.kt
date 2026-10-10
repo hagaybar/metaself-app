@@ -27,7 +27,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -73,7 +72,7 @@ private val COLUMN_GAP = 6.dp
 /**
  * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
  * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116);
- * one main button; the session waiting for words; the kept single-session plan; and four plain rows — Your plan,
+ * one main button; the session waiting for words; and four plain rows — Your plan,
  * Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
  * (InlineComposableReturnGuardTest).
  */
@@ -83,9 +82,9 @@ fun TrainerScreen(
     onBack: () -> Unit,
     onReview: (Long) -> Unit,
     onPlan: () -> Unit,
-    onOpenKept: () -> Unit,
     onAboutMe: () -> Unit,
-    onEvaluate: () -> Unit,
+    /** D124: Plan ahead — the weekly plan's form. */
+    onPlanAhead: () -> Unit,
     onSeePlan: () -> Unit,
     /** D103: every weekly letter. */
     onLetters: () -> Unit,
@@ -111,24 +110,12 @@ fun TrainerScreen(
                     if (boxes.isNotEmpty()) Boxes(boxes)
                 }
                 state.note?.let { NoteView(it, zone) }
-                MainButton(home, onPlan, onEvaluate)
+                MainButton(home, onPlan, onPlanAhead)
                 home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
-                home.keptPlan?.let { kept ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(Spacing.Section), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-                            Text(
-                                stringResource(R.string.trainer_kept_plan),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(kept.plan.title, style = MaterialTheme.typography.titleSmall)
-                            TextButton(onClick = onOpenKept) { Text(stringResource(R.string.trainer_open_plan)) }
-                        }
-                    }
-                }
+                // D122: the kept single session is on the plan page now (Your plan → Session), not here.
                 Rows(
                     listOfNotNull(
-                        TrainerWeekWording.planRow(home.plan)?.let { it to onSeePlan },
+                        TrainerWeekWording.planRow(home.plan) to onSeePlan,
                         LetterWording.LIST_TITLE to onLetters,
                         TrainerWeekWording.EARLIER to onEarlier,
                         TrainerWeekWording.ABOUT_ME to onAboutMe,
@@ -383,11 +370,12 @@ private fun NoteView(note: WeekNote, zone: ZoneId) {
 }
 
 /**
- * D114 item 5: the next thing to do, filled. When it is the evaluation, Plan my next session stays under it,
- * outlined — the one way to a single session's plan with no weekly plan running.
+ * D114 item 5, D124: the next thing to do, filled. When it is Plan ahead, the session action stays under it,
+ * outlined — "Plan the open walk" in a plan's last week, else Plan my next session, the one way to a single
+ * session's plan with no weekly plan running.
  */
 @Composable
-private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onEvaluate: () -> Unit) {
+private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onPlanAhead: () -> Unit) {
     when (val main = home.main) {
         is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -398,9 +386,12 @@ private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onEvaluate: () -> 
         MainAction.PlanNext -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.trainer_plan_next))
         }
-        MainAction.Evaluate -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-            Button(onClick = onEvaluate, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_evaluate)) }
-            OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_plan_next)) }
+        MainAction.PlanAhead -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Button(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_evaluate)) }
+            OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
+                val session = MainAction.session(home.next)
+                Text(if (session is MainAction.PlanOpen) TrainerWeekWording.planOpen(session.kind) else stringResource(R.string.trainer_plan_next))
+            }
         }
     }
 }

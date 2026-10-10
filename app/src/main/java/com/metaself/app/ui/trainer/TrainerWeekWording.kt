@@ -127,9 +127,10 @@ object TrainerWeekWording {
 
     /**
      * "Your plan · week 2 of 2"; before week 1, "Your plan · starts Mon 7 Sep"; ended, "Your plan · ended Sun 20 Sep"
-     * (invented) — the plan screen draws an ended plan too (D117). Null without a plan.
+     * (invented) — the plan screen draws an ended plan too (D117). "Your plan" without one: the plan screen is
+     * where Plan ahead and the Next session are (D122, D124).
      */
-    fun planRow(card: PlanCard): String? = when (card) {
+    fun planRow(card: PlanCard): String = when (card) {
         is PlanCard.Running -> "Your plan$SEP" + if (card.weekIndex >= 0) {
             "week ${card.weekIndex + 1} of ${card.programme.ask.weeks}"
         } else {
@@ -139,7 +140,7 @@ object TrainerWeekWording {
             val programme = card.programme
             "Your plan${SEP}ended " + LocalDate.ofEpochDay(ProgrammeCalendar.lastDay(programme.startEpochDay ?: 0, programme.ask.weeks)).format(DAY_MONTH)
         }
-        PlanCard.None -> null
+        PlanCard.None -> "Your plan"
     }
 
     /** D116: "Written Sat 09:12", or "From Sunday's letter" — the weekday it was written (invented). */

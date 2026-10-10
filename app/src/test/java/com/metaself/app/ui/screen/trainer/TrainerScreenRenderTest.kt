@@ -10,27 +10,19 @@ import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.trainer.CountedPlan
-import com.metaself.app.domain.trainer.Feeling
-import com.metaself.app.domain.trainer.PlanActivity
-import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlanCounting
-import com.metaself.app.domain.trainer.PlanStep
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
-import com.metaself.app.domain.trainer.SessionPlan
-import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerHome
-import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerWeek
 import com.metaself.app.domain.trainer.WeekNote
 import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
-import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.ui.ComposeRender
 import com.metaself.app.ui.trainer.TrainerWeekWording
 import com.metaself.app.ui.trainer.TrainerWording
@@ -69,20 +61,22 @@ class TrainerScreenRenderTest {
         // The forty-minute walk ticks the first planned walk; the shorter one, a day later, is asked about.
         val texts = draw(
             page(
-                workouts = listOf(walk(1, MONDAY), walk(6, MONDAY + 1, minutes = 20)), running = RUNNING, waiting = walk(5, TEST_EPOCH_DAY), kept = KEPT,
+                workouts = listOf(walk(1, MONDAY), walk(6, MONDAY + 1, minutes = 20)), running = RUNNING, waiting = walk(5, TEST_EPOCH_DAY),
                 days = sleepAndSteps(), food = mapOf(MONDAY to DayTotals(1_300, 80, 150, 40)), note = NOTE,
             ),
         )
 
         val order = listOf(
             "THIS WEEK · MON 31 AUG – SUN 6 SEP", "60 minutes moving this week.", "Planned, done", "Walking, 20 min — count it for this?",
-            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Plan the open walk", "WAITING FOR YOUR WORDS", "YOUR KEPT PLAN",
+            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Plan the open walk", "WAITING FOR YOUR WORDS",
             "Your plan · week 1 of 2", "Weekly letters", "Earlier sessions", "About me",
         )
         order.zipWithNext().forEach { (first, second) ->
             assertThat(render.isDrawnBefore(first, second)).isTrue()
         }
         assertThat(texts).containsNoneOf("ABOUT ME", "EARLIER SESSIONS", "Adjust the plan", "See the plan", "YOUR 2-WEEK PLAN · WEEK 1 OF 2")
+        // D122: the kept single session lives on the plan page now.
+        assertThat(texts).doesNotContain("YOUR KEPT PLAN")
     }
 
     @Test
@@ -93,7 +87,7 @@ class TrainerScreenRenderTest {
         assertThat(draw(page())).contains("Nothing recorded yet this week.")
     }
 
-    /** D114 item 5: a planned session open, nothing open, or no plan — each its own main button. */
+    /** D114 item 5, D124: a planned session open, nothing open, or no plan — each its own main button. */
     @Test
     fun `the main button's three cases`() {
         var planned = 0
@@ -102,23 +96,29 @@ class TrainerScreenRenderTest {
         val open = draw(page(running = RUNNING), onPlan = { planned++ })
         assertThat(open).contains("Plan the open walk")
         assertThat(open).contains("Next in your plan: easy walk, 30 min")
-        assertThat(open).doesNotContain("Evaluate me and plan the weeks ahead")
+        assertThat(open).doesNotContain("Plan ahead")
         render.click("Plan the open walk")
         assertThat(planned).isEqualTo(1)
 
         val done = draw(page(workouts = listOf(walk(1, MONDAY), walk(2, MONDAY + 1)), running = RUNNING), onPlan = { planned++ })
         assertThat(done).contains("Plan my next session")
-        assertThat(done).doesNotContain("Evaluate me and plan the weeks ahead")
+        assertThat(done).doesNotContain("Plan ahead")
         render.click("Plan my next session")
         assertThat(planned).isEqualTo(2)
 
-        val none = draw(page(), onPlan = { planned++ }, onEvaluate = { evaluated++ })
-        assertThat(none).containsAtLeast("Evaluate me and plan the weeks ahead", "Plan my next session").inOrder()
-        assertThat(render.roleOf("Evaluate me and plan the weeks ahead")).isEqualTo(Role.Button)
-        render.click("Evaluate me and plan the weeks ahead")
+        val none = draw(page(), onPlan = { planned++ }, onPlanAhead = { evaluated++ })
+        assertThat(none).containsAtLeast("Plan ahead", "Plan my next session").inOrder()
+        assertThat(render.roleOf("Plan ahead")).isEqualTo(Role.Button)
+        render.click("Plan ahead")
         render.click("Plan my next session")
         assertThat(evaluated).isEqualTo(1)
         assertThat(planned).isEqualTo(3)
+
+        // D124: in the plan's last week, Plan ahead — and the open session's action under it.
+        val last = draw(page(running = RUNNING.copy(startEpochDay = MONDAY - 7)), onPlan = { planned++ }, onPlanAhead = { evaluated++ })
+        assertThat(last).containsAtLeast("Plan ahead", "Plan the open walk").inOrder()
+        render.click("Plan the open walk")
+        assertThat(planned).isEqualTo(4)
     }
 
     /** D105: a twenty-minute walk under a thirty-minute place is still asked about, now under the strip. Invented. */
@@ -205,7 +205,8 @@ class TrainerScreenRenderTest {
         }
         assertThat(opened).containsExactly("plan", "letters", "earlier", "about").inOrder()
 
-        assertThat(draw(page()).none { it.startsWith("Your plan") }).isTrue()
+        // D124: with no plan the row is still there — the plan screen holds Plan ahead and the Next session.
+        assertThat(draw(page())).contains("Your plan")
     }
 
     @Test
@@ -221,20 +222,9 @@ class TrainerScreenRenderTest {
     }
 
     @Test
-    fun `the kept plan shows its title and opens`() {
-        var opened = false
-        val texts = draw(page(kept = KEPT), onOpenKept = { opened = true })
-
-        assertThat(texts).contains("YOUR KEPT PLAN")
-        assertThat(texts).contains("Steady walk")
-        render.click("Open")
-        assertThat(opened).isTrue()
-    }
-
-    @Test
     fun `an unreadable record says so`() {
         val texts = render.texts {
-            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {}, {}, {}, {}, {}, {}, {})
+            TrainerScreen(TrainerViewModel.State(today = TEST_EPOCH_DAY, unreadable = true), {}, {}, {}, {}, {}, {}, {}, {}, {})
         }
 
         assertThat(texts).contains("The trainer's record could not be read; Recent problems says why.")
@@ -245,9 +235,8 @@ class TrainerScreenRenderTest {
         state: TrainerViewModel.State,
         onReview: (Long) -> Unit = {},
         onPlan: () -> Unit = {},
-        onOpenKept: () -> Unit = {},
         onAboutMe: () -> Unit = {},
-        onEvaluate: () -> Unit = {},
+        onPlanAhead: () -> Unit = {},
         onSeePlan: () -> Unit = {},
         onLetters: () -> Unit = {},
         onEarlier: () -> Unit = {},
@@ -259,9 +248,8 @@ class TrainerScreenRenderTest {
             onBack = {},
             onReview = onReview,
             onPlan = onPlan,
-            onOpenKept = onOpenKept,
             onAboutMe = onAboutMe,
-            onEvaluate = onEvaluate,
+            onPlanAhead = onPlanAhead,
             onSeePlan = onSeePlan,
             onLetters = onLetters,
             onEarlier = onEarlier,
@@ -275,7 +263,6 @@ class TrainerScreenRenderTest {
         workouts: List<Workout> = emptyList(),
         running: Programme? = null,
         waiting: Workout? = null,
-        kept: TrainerPlan? = null,
         days: List<HealthDay> = emptyList(),
         food: Map<Long, DayTotals> = emptyMap(),
         note: WeekNote? = null,
@@ -283,7 +270,7 @@ class TrainerScreenRenderTest {
     ): TrainerViewModel.State {
         val counting = PlanCounting(1, 0, emptyMap())
         val card = running?.let { PlanCard.of(it, workouts, TEST_EPOCH_DAY, counting) } ?: PlanCard.None
-        val home = TrainerHome(waiting, kept, emptyList(), card, (card as? PlanCard.Running)?.next)
+        val home = TrainerHome(waiting, emptyList(), card, (card as? PlanCard.Running)?.next)
         val plans = listOfNotNull(running?.let { CountedPlan(it, counting) })
         val week = TrainerWeek.of(MONDAY, TEST_EPOCH_DAY, workouts, days, food, 1_650, plans)
         return TrainerViewModel.State(home = home, today = TEST_EPOCH_DAY, week = week, note = note, answering = answering)
@@ -308,13 +295,6 @@ class TrainerScreenRenderTest {
             kind = WorkoutKind.WALK, title = null, distanceM = 3_000, energyKcal = null,
             energySource = EnergySource.NONE, effort = null, source = WorkoutSource.SYNCED, hidden = false, note = null,
             avgHeartRate = 110,
-        )
-
-        val KEPT = TrainerPlan(
-            id = 1, createdAtMillis = TEST_EPOCH_DAY * DAY,
-            answers = PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE),
-            plan = SessionPlan("Steady walk", listOf(PlanStep(0, 45, "Walk", "")), "Invented."),
-            model = "a-model", kept = true,
         )
 
         val EASY_30 = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Invented line")

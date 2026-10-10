@@ -32,16 +32,22 @@ interface TrainerReviews {
 
 /** The trainer's plans and the owner's reviews (D88). */
 interface TrainerStore : TrainerReviews {
-    fun observeKeptPlan(): Flow<TrainerPlan?>
     fun observeReviewedWorkouts(): Flow<List<Workout>>
+    /** The newest kept suggestion, whatever it is for: what a review is matched against (D87). */
     suspend fun keptPlan(): TrainerPlan?
+
+    /** D122: every kept suggestion, newest first — one per planned session, and the unlinked one. */
+    suspend fun keptPlans(): List<TrainerPlan>
     suspend fun plans(ids: Collection<Long>): Map<Long, TrainerPlan>
     suspend fun workout(id: Long): Workout?
 
     /** Stores a new suggestion, not kept; its id. */
     suspend fun addPlan(plan: TrainerPlan): Long
 
-    /** Keeps [planId] and no other, in one transaction (D86). */
+    /**
+     * Keeps [planId], in one transaction (D86): the one kept before for the same planned session — or, with
+     * none named, the kept unlinked one — is no longer kept (D122). Other places' are left.
+     */
     suspend fun keep(planId: Long)
 
     suspend fun unkeep(planId: Long)
@@ -61,9 +67,9 @@ class RoomTrainerStore @Inject constructor(
 ) : TrainerStore {
 
     override fun observeReviews(): Flow<List<TrainerReview>> = dao.observeReviews().map { rows -> rows.map { it.toReview() } }
-    override fun observeKeptPlan(): Flow<TrainerPlan?> = dao.observeKept().map { it?.toPlan() }
     override fun observeReviewedWorkouts(): Flow<List<Workout>> = dao.observeReviewedWorkouts().map { rows -> rows.map { it.toWorkout() } }
     override suspend fun keptPlan(): TrainerPlan? = dao.kept()?.toPlan()
+    override suspend fun keptPlans(): List<TrainerPlan> = dao.keptPlans().mapNotNull { it.toPlan() }
     /** A few hundred ids per query: an older SQLite allows 999 parameters in one statement. */
     override suspend fun plans(ids: Collection<Long>): Map<Long, TrainerPlan> =
         ids.distinct().chunked(IDS_PER_QUERY).flatMap { dao.plans(it) }.mapNotNull { it.toPlan() }.associateBy { it.id }
@@ -72,7 +78,10 @@ class RoomTrainerStore @Inject constructor(
     override suspend fun addPlan(plan: TrainerPlan): Long = dao.insertPlan(plan.copy(id = 0, kept = false).toEntity())
 
     override suspend fun keep(planId: Long) = transaction.run {
-        dao.unkeepAll()
+        val slot = dao.plan(planId)?.let { TrainerResponse.readSlot(it.suggestion) }
+        dao.keptPlans()
+            .filter { it.id != planId && TrainerResponse.readSlot(it.suggestion) == slot }
+            .forEach { dao.setKept(it.id, false) }
         dao.setKept(planId, true)
     }
 
@@ -112,13 +121,13 @@ fun TrainerPlanEntity.toPlan(): TrainerPlan? {
         words = words.orEmpty(),
     )
     val plan = TrainerResponse.readPlan(suggestion) ?: return null
-    return TrainerPlan(id, createdAtMillis, answers, plan, model, kept)
+    return TrainerPlan(id, createdAtMillis, answers, plan, model, kept, TrainerResponse.readSlot(suggestion))
 }
 
 fun TrainerPlan.toEntity(): TrainerPlanEntity = TrainerPlanEntity(
     id = id, createdAtMillis = createdAtMillis, activity = answers.activity.name, minutes = answers.time.minutes,
     feeling = answers.feeling.name, wish = answers.wish.name, words = answers.words.trim().ifEmpty { null },
-    suggestion = TrainerResponse.encodePlan(plan), model = model, kept = kept,
+    suggestion = TrainerResponse.encodeStoredPlan(plan, slot), model = model, kept = kept,
 )
 
 fun TrainerReviewEntity.toReview(): TrainerReview = TrainerReview(

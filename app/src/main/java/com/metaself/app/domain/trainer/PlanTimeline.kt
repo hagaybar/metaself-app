@@ -18,8 +18,17 @@ sealed interface PlanStanding {
 /** D117: how one planned session of this week stands, as its tile shows it. */
 enum class TileState { DONE, DONE_SHORT, OPEN }
 
-/** D117: a planned session of this week; [day] and [minutes] are the session that ticked it, null while open. */
-data class PlanTile(val planned: PlannedSession, val state: TileState, val day: Long? = null, val minutes: Int? = null)
+/**
+ * D117: a planned session of this week; [day] and [minutes] are the session that ticked it, null while open.
+ * [stepsReady]: kept steps belong to it (D122).
+ */
+data class PlanTile(
+    val planned: PlannedSession,
+    val state: TileState,
+    val day: Long? = null,
+    val minutes: Int? = null,
+    val stepsReady: Boolean = false,
+)
 
 /** D117: a week's place on the timeline. */
 sealed interface TimelinePlace {
@@ -49,8 +58,17 @@ data class PlanTimeline(
 ) {
     val lastDay: Long get() = ProgrammeCalendar.lastDay(start, weeks.size)
 
-    /** Ended or stopped: the screen offers one thing, an evaluation (D117). */
+    /** Ended or stopped: the screen offers one thing, Plan ahead (D117, D124). */
     val over: Boolean get() = standing is PlanStanding.Ended || standing is PlanStanding.Stopped
+
+    /** D122: this week's tiles at [places] have steps. Other weeks are drawn without tiles, so are left as they are. */
+    fun withSteps(places: Set<PlanPlace>): PlanTimeline = copy(
+        weeks = weeks.map { week ->
+            val place = week.place as? TimelinePlace.ThisWeek ?: return@map week
+            val tiles = place.tiles.mapIndexed { at, tile -> tile.copy(stepsReady = PlanPlace(week.number - 1, at) in places) }
+            week.copy(place = TimelinePlace.ThisWeek(tiles))
+        },
+    )
 
     companion object {
         /**
@@ -106,6 +124,12 @@ data class DatedEvaluation(val evaluation: Evaluation, val epochDay: Long)
 
 /**
  * D117: what the plan screen draws — the plan as its weeks, the running plan's card behind its buttons (null
- * when the plan has ended or stopped, or is an answer not yet kept), and the evaluation it carries.
+ * when the plan has ended or stopped, or is an answer not yet kept), the evaluation it carries, and the steps
+ * kept for its planned sessions, by place (D122).
  */
-data class PlanShown(val timeline: PlanTimeline, val running: PlanCard.Running?, val evaluation: DatedEvaluation?)
+data class PlanShown(
+    val timeline: PlanTimeline,
+    val running: PlanCard.Running?,
+    val evaluation: DatedEvaluation?,
+    val steps: Map<PlanPlace, TrainerPlan> = emptyMap(),
+)

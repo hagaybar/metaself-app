@@ -25,9 +25,6 @@ object PlanTimelineWording {
     const val READ_FULL = "Read the trainer's full evaluation"
     const val HIDE_FULL = "Hide the trainer's full evaluation"
 
-    /** D117: an ended or stopped plan's one button. */
-    const val EVALUATE_AGAIN = "Evaluate me and plan again"
-
     /** "4 weeks · 28 Sep – 25 Oct · you're in week 2"; "starts Mon 12 Oct", "ended Sun 25 Oct", "stopped Wed 14 Oct" (invented). */
     fun subtitle(timeline: PlanTimeline): String {
         val where = when (val standing = timeline.standing) {
@@ -52,13 +49,16 @@ object PlanTimelineWording {
     /** "Easy 30′". */
     fun tileTitle(session: PlannedSession): String = "${ProgrammeWording.effort(session.effort)} ${session.minutes}′"
 
-    /** "Done Mon", "Done Mon · 25 min", "Open" (invented). */
+    /** D122: an open session whose steps are kept. */
+    const val STEPS_READY = "Steps ready"
+
+    /** "Done Mon", "Done Mon · 25 min", "Open", or "Steps ready" (invented). */
     fun tileLine(tile: PlanTile): String {
         val day = tile.day?.let { LocalDate.ofEpochDay(it).format(WEEKDAY) }
         return when (tile.state) {
             TileState.DONE -> "Done $day"
             TileState.DONE_SHORT -> "Done $day$SEP${tile.minutes} min"
-            TileState.OPEN -> "Open"
+            TileState.OPEN -> if (tile.stepsReady) STEPS_READY else "Open"
         }
     }
 

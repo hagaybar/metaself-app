@@ -198,8 +198,6 @@
     <string name="trainer_open">Trainer</string>
     <string name="trainer_waiting">WAITING FOR YOUR WORDS</string>
     <string name="trainer_plan_next">Plan my next session</string>
-    <string name="trainer_kept_plan">YOUR KEPT PLAN</string>
-    <string name="trainer_open_plan">Open</string>
     <string name="about_me_title">About me</string>
     <string name="about_me_help">What the trainer should always know: injuries, likes and dislikes, equipment, what the training is for. It is sent, as written, with every question to the trainer.</string>
     <string name="about_me_field">About you</string>
@@ -217,7 +215,6 @@
     <string name="plan_result_title">Your next session</string>
     <string name="plan_why">WHY THIS ONE</string>
     <string name="plan_keep">Keep this plan</string>
-    <string name="plan_kept">Kept. It is on the Trainer screen for seven days.</string>
     <string name="plan_again">Ask again</string>
     <string name="review_title">How did it go?</string>
     <string name="review_felt">HOW IT FELT</string>
@@ -233,9 +230,10 @@
     <string name="review_gone_saved">Your words are saved, but this session is no longer in the record, so no feedback was asked for.</string>
     <string name="feedback_title">Feedback</string>
     <string name="feedback_plan_next">Plan the next one</string>
-    <string name="trainer_evaluate">Evaluate me and plan the weeks ahead</string>
+    <!-- D124: was "Evaluate me and plan the weeks ahead". -->
+    <string name="trainer_evaluate">Plan ahead</string>
     <string name="trainer_adjust_plan">Adjust the plan</string>
-    <string name="weeks_title">Evaluate me and plan</string>
+    <string name="weeks_title">Plan ahead</string>
     <string name="weeks_intro">The trainer reads your record — a year of monthly lines, six weeks of sessions, your note — says where you stand, then plans the weeks ahead.</string>
     <string name="weeks_row_weeks">HOW MANY WEEKS</string>
     <string name="weeks_row_per_week">SESSIONS A WEEK I CAN MANAGE</string>

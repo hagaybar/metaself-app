@@ -7,7 +7,6 @@ import com.metaself.app.domain.trainer.TrainerReview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
 
 /**
  * An in-memory [TrainerStore]. Ids are assigned from 1; [workouts] is set by the test. Any method
@@ -28,9 +27,6 @@ class FakeTrainerStore(var failing: Set<String> = emptySet()) : TrainerStore {
 
     override fun observeReviews(): Flow<List<TrainerReview>> = reviews
 
-    override fun observeKeptPlan(): Flow<TrainerPlan?> =
-        plans.map { all -> all.filter { it.kept }.maxByOrNull { it.createdAtMillis } }
-
     override fun observeReviewedWorkouts(): Flow<List<Workout>> =
         combine(workouts, reviews) { all, reviewed ->
             val ids = reviewed.map { it.workoutId }.toSet()
@@ -40,6 +36,11 @@ class FakeTrainerStore(var failing: Set<String> = emptySet()) : TrainerStore {
     override suspend fun keptPlan(): TrainerPlan? {
         check("keptPlan")
         return plans.value.filter { it.kept }.maxByOrNull { it.createdAtMillis }
+    }
+
+    override suspend fun keptPlans(): List<TrainerPlan> {
+        check("keptPlans")
+        return plans.value.filter { it.kept }.sortedByDescending { it.createdAtMillis }
     }
 
     override suspend fun plans(ids: Collection<Long>): Map<Long, TrainerPlan> {
@@ -61,7 +62,15 @@ class FakeTrainerStore(var failing: Set<String> = emptySet()) : TrainerStore {
 
     override suspend fun keep(planId: Long) {
         check("keep")
-        plans.value = plans.value.map { it.copy(kept = it.id == planId) }
+        // D122: one kept per place — the same planned session's, or the unlinked one.
+        val slot = plans.value.firstOrNull { it.id == planId }?.slot
+        plans.value = plans.value.map {
+            when {
+                it.id == planId -> it.copy(kept = true)
+                it.slot == slot -> it.copy(kept = false)
+                else -> it
+            }
+        }
     }
 
     override suspend fun unkeep(planId: Long) {

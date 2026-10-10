@@ -22,6 +22,7 @@ import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TileState
 import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TrainerReply
@@ -234,6 +235,81 @@ class EvaluatePlanViewModelTest {
         assertThat(viewModel.state.value.kept).isFalse()
     }
 
+    /** D123: the plan page opens on Week; the switch changes the view. */
+    @Test
+    fun `the plan page opens on Week, and the switch changes the view`() = runTest {
+        val viewModel = watched(ON_PLAN)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.view).isEqualTo(EvaluatePlanViewModel.PlanView.WEEK)
+
+        viewModel.choose(EvaluatePlanViewModel.PlanView.SESSION)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.view).isEqualTo(EvaluatePlanViewModel.PlanView.SESSION)
+    }
+
+    /** D122: with no plan running, the kept single session is the plan page's Next session. */
+    @Test
+    fun `with no plan, the plan page reads the next session`() = runTest {
+        val kept = store.addPlan(TrainerScreens.storedPlan(TrainerScreens.NOW - TrainerScreens.HOUR))
+        store.keep(kept)
+
+        val viewModel = watched(ON_PLAN)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.planShown).isNull()
+        assertThat(viewModel.state.value.nextSession!!.id).isEqualTo(kept)
+        assertThat(viewModel.state.value.sessions.next!!.id).isEqualTo(kept)
+    }
+
+    /** D122, D123: the Session view's cards carry the steps kept for their places. */
+    @Test
+    fun `the sessions carry the steps kept for them`() = runTest {
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), ANSWER.evaluation, ANSWER.plan, "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        val steps = store.addPlan(TrainerScreens.storedPlan(TrainerScreens.NOW - TrainerScreens.HOUR).copy(slot = SessionSlot(id, 0, 1)))
+        store.keep(steps)
+
+        val viewModel = watched(ON_PLAN)
+        advanceUntilIdle()
+
+        val sessions = viewModel.state.value.sessions
+        assertThat(sessions.thisWeek.map { it.steps?.id }).containsExactly(null, steps).inOrder()
+        assertThat(sessions.nextWeek).hasSize(2)
+        assertThat(sessions.next).isNull()
+    }
+
+    /** D124: while a plan runs, Keep asks first; the answer is drawn from, and starts, next Monday. */
+    @Test
+    fun `while a plan runs, keeping asks first and the new plan starts next Monday`() = runTest {
+        val old = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), ANSWER.evaluation, ANSWER.plan, "a-model"))
+        programmes.keep(old, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
+        val viewModel = watched()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.replacingFrom).isEqualTo(TEST_EPOCH_DAY + 4)
+        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.ask()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.startIfKept).isEqualTo(TEST_EPOCH_DAY + 4)
+
+        viewModel.keep()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.confirming).isTrue()
+        assertThat(programmes.running()!!.id).isEqualTo(old)
+        viewModel.cancelKeep()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.confirming).isFalse()
+
+        viewModel.keep()
+        viewModel.keep()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.kept).isTrue()
+        assertThat(viewModel.state.value.confirming).isFalse()
+        assertThat(programmes.running()!!.let { it.id to it.startEpochDay }).isEqualTo(viewModel.state.value.shown!!.id to TEST_EPOCH_DAY + 4)
+    }
+
     private fun TestScope.watched(saved: SavedStateHandle = SavedStateHandle()): EvaluatePlanViewModel {
         val make = {
             EvaluatePlanViewModel(saved, TrainerScreens.ask(record, store, trainer, programmes), settings, TrainerScreens.today, problems, outliving)
@@ -244,6 +320,7 @@ class EvaluatePlanViewModelTest {
     }
 
     private companion object {
+        val ON_PLAN: SavedStateHandle get() = SavedStateHandle(mapOf(EvaluatePlanViewModel.SHOW to EvaluatePlanViewModel.RUNNING))
         val WALK = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Invented line")
         val ANSWER = EvaluationAndPlan(
             Evaluation("Invented headline.", "Invented.", "Invented.", ""),
