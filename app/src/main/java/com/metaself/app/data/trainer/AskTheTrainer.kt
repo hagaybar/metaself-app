@@ -8,6 +8,7 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.target.CurrentTarget
@@ -34,6 +35,7 @@ import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.TrainerWeek
 import com.metaself.app.domain.trainer.WeekNote
 import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
@@ -320,9 +322,7 @@ class AskTheTrainer @Inject constructor(
             plans = store.plans(reviews.mapNotNull { it.planId }),
             days = record.observeDays(first, day).first(),
             food = food.byDay(TrainerRequest.firstSummaryDay(day), day),
-            targetKcal = profile?.let {
-                CurrentTarget.of(it, profiles.revision.first(), year(), profiles.burnAdjustmentKcal.first()).kcal
-            },
+            targetKcal = targetKcal(),
             weeklyPlans = countedPlans(),
             readings = weights.readings.first(),
             profile = profile,
@@ -331,6 +331,22 @@ class AskTheTrainer @Inject constructor(
             earliestDay = record.observeEarliestDay().first(),
             aboutMe = aboutMe.note.first(),
         )
+    }
+
+    /**
+     * D114: this week for the Trainer page — its ledger and strip, counted exactly as the trainer's request
+     * counts this week's ledger — from [workouts] and [days] as the page observes them (this week's sessions,
+     * and its days with the 28 before them). Reads each day's food, today's target and the kept plans; sends
+     * nothing.
+     */
+    suspend fun thisWeek(day: Long, workouts: List<Workout>, days: List<HealthDay>): TrainerWeek {
+        val monday = MovementWeek.mondayOf(day)
+        return TrainerWeek.of(monday, day, workouts, days, food.byDay(monday, day), targetKcal(), countedPlans())
+    }
+
+    /** Today's calorie target (D110), the letter's; null with no profile. */
+    private suspend fun targetKcal(): Int? = profiles.profile.first()?.let {
+        CurrentTarget.of(it, profiles.revision.first(), year(), profiles.burnAdjustmentKcal.first()).kcal
     }
 
     /** D110: every kept version of a weekly plan, each counted from its chain's first keep (D105). */

@@ -10,6 +10,8 @@ import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.TrainerStore
+import com.metaself.app.data.trainer.WeekNoteStore
+import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlanCounting
@@ -17,6 +19,10 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.Programmes
 import com.metaself.app.domain.trainer.TrainerHome
+import com.metaself.app.domain.trainer.TrainerWeek
+import com.metaself.app.domain.trainer.WeekLedgers
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNotes
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -30,22 +36,25 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 /**
- * The Trainer screen (D85), observed: a review saved or a plan kept elsewhere shows at once, and so
- * does the weekly plan with its ticks (D95). Its one write is the owner's answer about a shorter session
- * (D105); nothing here asks the trainer (D84).
+ * The Trainer screen (D85, D114), observed: a review saved or a plan kept elsewhere shows at once, and so
+ * do the weekly plan with its ticks (D95) and this week's ledger and strip (D114) — read again whenever this
+ * week's sessions or days change, a plan is kept or answered, or the screen comes to the front (food is logged
+ * elsewhere). The coach's note is the newest week_note about this week (D116). Its one write is the owner's
+ * answer about a shorter session (D105); nothing here asks the trainer (D84).
  *
  * Today is read again each time the screen comes to the front ([lookedAt]), so a screen left open past
- * midnight moves its last three days with the calendar, as the Movement screen does.
+ * midnight moves its last three days and its week with the calendar, as the Movement screen does.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class TrainerViewModel @Inject constructor(
-    record: MovementRecord,
+    private val record: MovementRecord,
     store: TrainerStore,
     programmes: ProgrammeStore,
     aboutMe: AboutMeStore,
@@ -53,11 +62,13 @@ class TrainerViewModel @Inject constructor(
     now: Now,
     private val problems: ProblemLog,
     private val ask: AskTheTrainer,
+    weekNotes: WeekNoteStore,
 ) : ViewModel() {
 
     /**
      * [aboutMe] is the owner's note (D90), "" when none. [answering]: the sessions whose answer to "count it
-     * for this?" is being written (D105); [refused] says an answer could not be stored.
+     * for this?" is being written (D105); [refused] says an answer could not be stored. [week] is this week's
+     * ledger and strip (D114); [note] the coach's note, only when it is about this week (D116).
      */
     data class State(
         val home: TrainerHome? = null,
@@ -66,6 +77,8 @@ class TrainerViewModel @Inject constructor(
         val aboutMe: String = "",
         val answering: Set<Long> = emptySet(),
         val refused: ActionRefused? = null,
+        val week: TrainerWeek? = null,
+        val note: WeekNote? = null,
     )
 
     /**
@@ -83,6 +96,9 @@ class TrainerViewModel @Inject constructor(
     private val answering = MutableStateFlow(Answering())
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
+
+    /** Counts the times the screen came to the front: the week is read again each time (food is logged elsewhere). */
+    private val looked = MutableStateFlow(0)
 
     /** The running plan, the record over its weeks, and what it counts from (D105). */
     private data class RunningPlan(val programme: Programme?, val workouts: List<Workout>, val counting: PlanCounting?)
@@ -102,17 +118,32 @@ class TrainerViewModel @Inject constructor(
         }
     }
 
+    /** D114: this week to [day] — a failure here is the page's, said and logged once with the rest. */
+    private fun week(day: Long): Flow<TrainerWeek> {
+        val monday = MovementWeek.mondayOf(day)
+        return combine(
+            record.observeWorkouts(monday, day),
+            record.observeDays(monday - WeekLedgers.USUAL_DAYS, day),
+            plan,
+            looked,
+        ) { workouts, days, _, _ -> workouts to days }
+            .mapLatest { (workouts, days) -> ask.thisWeek(day, workouts, days) }
+    }
+
     val state: StateFlow<State> = calendarToday
         .flatMapLatest { day ->
             combine(
-                record.observeWorkouts(day - (TrainerHome.WAITING_DAYS - 1), day),
-                store.observeReviewedWorkouts(),
-                store.observeReviews(),
-                store.observeKeptPlan(),
-                plan,
-            ) { recent, reviewed, reviews, kept, running ->
-                State(TrainerHome.of(day, now(), recent, reviewed, reviews, kept, running.programme, running.workouts, running.counting), day)
-            }
+                combine(
+                    record.observeWorkouts(day - (TrainerHome.WAITING_DAYS - 1), day),
+                    store.observeReviewedWorkouts(),
+                    store.observeReviews(),
+                    store.observeKeptPlan(),
+                    plan,
+                ) { recent, reviewed, reviews, kept, running ->
+                    TrainerHome.of(day, now(), recent, reviewed, reviews, kept, running.programme, running.workouts, running.counting)
+                },
+                week(day),
+            ) { home, week -> State(home, day, week = week) }
                 .catch { failure ->
                     problems.record(PROBLEM_KIND, failure.message ?: failure::class.java.simpleName)
                     emit(State(today = day, unreadable = true))
@@ -124,6 +155,12 @@ class TrainerViewModel @Inject constructor(
                 emit("")
             },
         ) { state, note -> state.copy(aboutMe = note) }
+        .combine(
+            weekNotes.note.catch { failure ->
+                problems.record(PROBLEM_KIND, "week note not read: " + (failure.message ?: failure::class.java.simpleName))
+                emit(null)
+            },
+        ) { state, note -> state.copy(note = WeekNotes.shown(note, MovementWeek.mondayOf(state.today))) }
         .combine(answering) { state, now ->
             val card = state.home?.plan
             val shown = (card as? PlanCard.Running)?.let { running ->
@@ -139,6 +176,7 @@ class TrainerViewModel @Inject constructor(
     /** The screen came to the front: on a new day, the last three days are read again from it. */
     fun lookedAt() {
         calendarToday.value = today().toEpochDay()
+        looked.update { it + 1 }
     }
 
     /**
