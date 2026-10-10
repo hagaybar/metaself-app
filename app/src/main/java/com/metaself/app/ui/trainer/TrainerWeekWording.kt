@@ -4,6 +4,7 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PracticeLedger
+import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.WeekLedger
 import com.metaself.app.domain.trainer.WeekNote
 import com.metaself.app.domain.trainer.WeekNoteSource
@@ -124,13 +125,21 @@ object TrainerWeekWording {
     fun legend(withPlan: Boolean): List<String> =
         if (withPlan) listOf("Planned, done", "Planned, open", "Beyond the plan") else listOf("Sessions")
 
-    /** "Your plan · week 2 of 2"; before week 1, "Your plan · starts Mon 7 Sep" (invented); null without a running plan. */
-    fun planRow(card: PlanCard): String? = (card as? PlanCard.Running)?.let { running ->
-        "Your plan$SEP" + if (running.weekIndex >= 0) {
-            "week ${running.weekIndex + 1} of ${running.programme.ask.weeks}"
+    /**
+     * "Your plan · week 2 of 2"; before week 1, "Your plan · starts Mon 7 Sep"; ended, "Your plan · ended Sun 20 Sep"
+     * (invented) — the plan screen draws an ended plan too (D117). Null without a plan.
+     */
+    fun planRow(card: PlanCard): String? = when (card) {
+        is PlanCard.Running -> "Your plan$SEP" + if (card.weekIndex >= 0) {
+            "week ${card.weekIndex + 1} of ${card.programme.ask.weeks}"
         } else {
-            "starts " + LocalDate.ofEpochDay(running.programme.startEpochDay ?: 0).format(DAY_MONTH)
+            "starts " + LocalDate.ofEpochDay(card.programme.startEpochDay ?: 0).format(DAY_MONTH)
         }
+        is PlanCard.Ended -> {
+            val programme = card.programme
+            "Your plan${SEP}ended " + LocalDate.ofEpochDay(ProgrammeCalendar.lastDay(programme.startEpochDay ?: 0, programme.ask.weeks)).format(DAY_MONTH)
+        }
+        PlanCard.None -> null
     }
 
     /** D116: "Written Sat 09:12", or "From Sunday's letter" — the weekday it was written (invented). */

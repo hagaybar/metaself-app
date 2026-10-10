@@ -83,6 +83,8 @@ class PlanProgressTest {
         assertThat(evaluated.id).isEqualTo(1)
         assertThat(latest.id).isEqualTo(2)
         assertThat(Programmes.evaluationOf(adjusted, listOf(first, adjusted))).isEqualTo(eval)
+        assertThat(Programmes.evaluatedOf(adjusted, listOf(first, adjusted))!!.id).isEqualTo(first.id)
+        assertThat(Programmes.evaluatedOf(first, listOf(first, adjusted))!!.id).isEqualTo(first.id)
         assertThat(Programmes.lastEvaluated(listOf(offeredEval))).isNull()
     }
 

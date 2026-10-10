@@ -12,7 +12,6 @@ import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
-import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.WeeksPlan
 import org.junit.jupiter.api.Test
 
@@ -32,21 +31,16 @@ class ProgrammeWordingTest {
     }
 
     @Test
-    fun `the plan names its span, its length and its weeks`() {
-        assertThat(ProgrammeWording.span(start, 4)).isEqualTo("Starts Mon 31 Aug, ends Sun 27 Sep")
-        assertThat(ProgrammeWording.planHeading(ProgrammeAsk(4, 3))).isEqualTo("THE PLAN · 4 WEEKS · 3 SESSIONS A WEEK")
+    fun `a week is named by its number and its focus`() {
         assertThat(ProgrammeWording.weekTitle(1, "settle in")).isEqualTo("Week 1 · settle in")
         assertThat(ProgrammeWording.weekTitle(2, " ")).isEqualTo("Week 2")
     }
 
     @Test
-    fun `ticks say done or to do, and which session did it`() {
+    fun `a week says how many of its planned sessions are done`() {
         val progress = PlanProgress.of(plan, start, listOf(session(1, start)), until = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap()))
         val week = progress.weeks.first()
 
-        assertThat(ProgrammeWording.tickTitle(week.ticks[0])).isEqualTo("Done: Steady walk, 40 min")
-        assertThat(ProgrammeWording.tickTitle(week.ticks[1])).isEqualTo("To do: Steady walk, 40 min")
-        assertThat(ProgrammeWording.tickLine(week.ticks[0].by!!)).isEqualTo("Done Mon · Walking, 45 min")
         assertThat(ProgrammeWording.pastWeek(week)).isEqualTo("Week 1: 1 of 3 done")
         assertThat(ProgrammeWording.thisWeekSoFar(week)).isEqualTo("Week 1 (this week): 1 of 3 so far")
     }

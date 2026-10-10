@@ -11,14 +11,19 @@ import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.DatedEvaluation
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.EvaluationAndPlan
+import com.metaself.app.domain.trainer.PlanStanding
+import com.metaself.app.domain.trainer.PlanTile
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
+import com.metaself.app.domain.trainer.TileState
+import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.ui.ActionRefused
@@ -114,15 +119,17 @@ class EvaluatePlanViewModelTest {
     }
 
     @Test
-    fun `opened on the running plan, it shows the plan with its chain's evaluation`() = runTest {
+    fun `opened on the running plan, it shows the plan as its weeks with its chain's evaluation`() = runTest {
         val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), ANSWER.evaluation, ANSWER.plan, "a-model"))
         programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
 
         val viewModel = watched(SavedStateHandle(mapOf(EvaluatePlanViewModel.SHOW to EvaluatePlanViewModel.RUNNING)))
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.running!!.programme.id).isEqualTo(id)
-        assertThat(viewModel.state.value.evaluation).isEqualTo(ANSWER.evaluation)
+        val shown = viewModel.state.value.planShown!!
+        assertThat(shown.running!!.programme.id).isEqualTo(id)
+        assertThat(shown.timeline.standing).isEqualTo(PlanStanding.InWeek(1))
+        assertThat(shown.evaluation!!.evaluation).isEqualTo(ANSWER.evaluation)
         assertThat(viewModel.state.value.loading).isFalse()
     }
 
@@ -139,8 +146,44 @@ class EvaluatePlanViewModelTest {
         viewModel.lookedAt()
         advanceUntilIdle()
 
-        assertThat(viewModel.state.value.running!!.programme.id).isEqualTo(adjusted)
-        assertThat(viewModel.state.value.evaluation).isEqualTo(ANSWER.evaluation)
+        assertThat(viewModel.state.value.planShown!!.running!!.programme.id).isEqualTo(adjusted)
+        assertThat(viewModel.state.value.planShown!!.evaluation!!.evaluation).isEqualTo(ANSWER.evaluation)
+    }
+
+    /** D117: Stop this plan returns here; the plan is drawn stopped, with no running card. */
+    @Test
+    fun `back from Stop this plan, the plan is shown stopped`() = runTest {
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(2, 2), ANSWER.evaluation, ANSWER.plan, "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        val viewModel = watched(SavedStateHandle(mapOf(EvaluatePlanViewModel.SHOW to EvaluatePlanViewModel.RUNNING)))
+        advanceUntilIdle()
+
+        programmes.stop(id, TEST_EPOCH_DAY)
+        viewModel.lookedAt()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.planShown!!.timeline.standing).isEqualTo(PlanStanding.Stopped(TEST_EPOCH_DAY))
+        assertThat(viewModel.state.value.planShown!!.running).isNull()
+    }
+
+    /** D118: asked on a Thursday, the answer would start this Monday — week 1 is this week, every session open. */
+    @Test
+    fun `an answer is drawn as its weeks before it is kept`() = runTest {
+        trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
+        val viewModel = watched()
+        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.ask()
+        advanceUntilIdle()
+
+        val offered = viewModel.state.value.offered!!
+        assertThat(offered.timeline.standing).isEqualTo(PlanStanding.InWeek(1))
+        assertThat(offered.timeline.weeks[0].place).isEqualTo(TimelinePlace.ThisWeek(listOf(PlanTile(WALK, TileState.OPEN), PlanTile(WALK, TileState.OPEN))))
+        assertThat(offered.evaluation).isEqualTo(DatedEvaluation(ANSWER.evaluation, TEST_EPOCH_DAY))
+        assertThat(offered.running).isNull()
+
+        viewModel.askAgain()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.offered).isNull()
     }
 
     /** As the approved mock-up: the form opens on 4 weeks and 3 sessions a week, and both still change. */

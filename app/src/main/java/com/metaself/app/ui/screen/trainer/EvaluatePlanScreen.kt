@@ -24,8 +24,8 @@ import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.trainer.TrainerWording
 
 /**
- * D93, D94: the form, then the evaluation and the plan with Keep this plan and Ask again; or the running
- * plan, with Adjust the plan under it (D97, moved here by D114). Branches only — no early return out of an
+ * D93, D94: the form, then the answer drawn as its weeks (D118) with Keep this plan and Ask again; or the
+ * plan "See the plan" opens, drawn as its weeks with its two buttons (D117). Branches only — no early return out of an
  * inline composable (InlineComposableReturnGuardTest).
  */
 @Composable
@@ -39,9 +39,13 @@ fun EvaluatePlanScreen(
     modifier: Modifier = Modifier,
     /** D97, D114: Adjust the plan, from the running plan. */
     onAdjust: () -> Unit = {},
+    /** D117: the plan's main action — Plan the open walk, or Plan my next session — the single-session form. */
+    onPlan: () -> Unit = {},
+    /** D117: Evaluate me and plan again, for a plan ended or stopped. */
+    onEvaluate: () -> Unit = {},
 ) {
     val shown = state.shown
-    val running = state.running
+    val planShown = state.planShown
     val title = stringResource(
         when {
             state.onRunning -> R.string.weeks_running_title
@@ -52,20 +56,16 @@ fun EvaluatePlanScreen(
     MetaSelfScreen(title = title, modifier = modifier, onBack = onBack) {
         when {
             state.loading -> Unit
-            state.onRunning && running == null -> Text(stringResource(R.string.weeks_not_running))
-            state.onRunning && running != null -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
+            state.onRunning && planShown == null -> Text(stringResource(R.string.weeks_not_running))
+            state.onRunning && planShown != null -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
-                state.evaluation?.let { EvaluationView(it) }
-                WeeksPlanView(running.programme.plan, running.programme.ask, running.programme.startEpochDay ?: 0, running.progress)
-                OutlinedButton(onClick = onAdjust, modifier = Modifier.fillMaxWidth()) {
-                    Text(stringResource(R.string.trainer_adjust_plan))
-                }
+                PlanShownView(planShown)
+                PlanButtons(planShown, onAdjust, onPlan, onEvaluate)
             }
             shown == null -> EvaluateForm(state, onChange, onAsk)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
-                shown.evaluation?.let { EvaluationView(it) }
-                WeeksPlanView(shown.plan, shown.ask, state.startIfKept, null)
+                state.offered?.let { PlanShownView(it) }
                 if (state.kept) {
                     Text(stringResource(R.string.weeks_kept), style = MaterialTheme.typography.bodyMedium)
                 } else {

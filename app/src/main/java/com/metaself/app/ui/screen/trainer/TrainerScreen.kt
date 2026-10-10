@@ -260,16 +260,7 @@ private fun OpenBlock(minutes: Int, height: Dp) {
         modifier = Modifier
             .fillMaxWidth()
             .height(height)
-            .drawBehind {
-                val stroke = 2.dp.toPx()
-                drawRoundRect(
-                    color = outline,
-                    topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
-                    size = androidx.compose.ui.geometry.Size(size.width - stroke, size.height - stroke),
-                    cornerRadius = CornerRadius(6.dp.toPx()),
-                    style = Stroke(width = stroke, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx()))),
-                )
-            },
+            .dashedOutline(outline, corner = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
         // Ink, not the green: the theme's green on a card is under the text floor; the outline carries the colour.

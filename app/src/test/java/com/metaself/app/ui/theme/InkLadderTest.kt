@@ -184,4 +184,11 @@ class InkLadderTest {
             assertLegible(mapOf("the teal label" to scheme.tertiary), scheme.surfaceVariant, "$name card")
         }
     }
+
+    /** D117: a done tile and a past week's tick are drawn in `onPrimary` on `primary`, in both schemes. */
+    @Test
+    fun `a done tile's text is legible on the green`() {
+        assertLegible(mapOf("onPrimary" to MetaSelfLightColours.onPrimary), MetaSelfLightColours.primary, "light green tile")
+        assertLegible(mapOf("onPrimary" to MetaSelfDarkColours.onPrimary), MetaSelfDarkColours.primary, "dark green tile")
+    }
 }

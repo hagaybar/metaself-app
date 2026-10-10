@@ -20,6 +20,7 @@ import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.AttemptFacts
+import com.metaself.app.domain.trainer.DatedEvaluation
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.Feedback
@@ -31,7 +32,9 @@ import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanFollowed
+import com.metaself.app.domain.trainer.PlanStanding
 import com.metaself.app.domain.trainer.PlanStep
+import com.metaself.app.domain.trainer.PlanTile
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedOutcome
@@ -41,7 +44,9 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.SessionPlan
+import com.metaself.app.domain.trainer.TileState
 import com.metaself.app.domain.trainer.TimeAvailable
+import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
@@ -547,6 +552,89 @@ class AskTheTrainerTest {
         assertThat(last.epochDay).isEqualTo(MONDAY - 8)
         assertThat(last.evaluation).isEqualTo(EVALUATION)
         assertThat(last.doneByWeek).containsExactly(1, 1).inOrder()
+    }
+
+    // --- D117, D118 ------------------------------------------------------------------------------
+
+    /**
+     * Kept from the Monday a week ago: week 1 is past — two walks ticked its two planned walks, the third is
+     * the week's own — and week 2 is this week, its first walk done Monday. The evaluation was made the Sunday
+     * fifteen days before this Monday, at noon (in any zone within eleven hours of UTC, that Sunday).
+     */
+    @Test
+    fun `the plan shown is the running one, drawn as its weeks, with its evaluation's day`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY - 7, MONDAY - 7)
+        record.workouts.value = listOf(walk(1, MONDAY - 7), walk(2, MONDAY - 6), walk(3, MONDAY - 5), walk(4, MONDAY))
+
+        val shown = ask().planShown()!!
+
+        assertThat(shown.timeline.standing).isEqualTo(PlanStanding.InWeek(2))
+        assertThat(shown.timeline.weeks[0].place).isEqualTo(TimelinePlace.Past(done = 2, planned = 2, own = 1))
+        assertThat(shown.timeline.weeks[1].place).isEqualTo(
+            TimelinePlace.ThisWeek(listOf(PlanTile(WALK_30, TileState.DONE, MONDAY, 40), PlanTile(WALK_30, TileState.OPEN))),
+        )
+        assertThat(shown.running!!.programme.id).isEqualTo(id)
+        assertThat(shown.evaluation).isEqualTo(DatedEvaluation(EVALUATION, MONDAY - 15))
+    }
+
+    @Test
+    fun `with nothing kept there is no plan to show, and a stopped plan is shown stopped for fourteen days`() = runTest {
+        assertThat(ask().planShown()).isNull()
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY - 7, MONDAY - 7)
+        programmes.stop(id, MONDAY + 1)
+
+        val shown = ask().planShown()!!
+        assertThat(shown.timeline.standing).isEqualTo(PlanStanding.Stopped(MONDAY + 1))
+        assertThat(shown.running).isNull()
+        assertThat(shown.timeline.weeks.all { it.place is TimelinePlace.Past }).isTrue()
+
+        day = MONDAY + 1 + 15
+        assertThat(ask().planShown()).isNull()
+    }
+
+    @Test
+    fun `an ended plan is shown, ended, with no running card`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY - 14, MONDAY - 14)
+
+        val shown = ask().planShown()!!
+
+        assertThat(shown.timeline.standing).isEqualTo(PlanStanding.Ended(MONDAY - 1))
+        assertThat(shown.running).isNull()
+    }
+
+    /** D118: the adjusted version offered keeps the weeks already past, and this week's done walk shows done. */
+    @Test
+    fun `an adjusted version not yet kept is drawn as it would be counted, with its chain's evaluation`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY - 7, MONDAY - 7)
+        record.workouts.value = listOf(walk(1, MONDAY - 7), walk(2, MONDAY))
+        val adjusted = WeeksPlan("Invented adjusted", listOf(PlanWeek("w", listOf(WALK_30, WALK_30)), PlanWeek("x", listOf(WALK_30, WALK_20))), "Invented.")
+        val version = programmes.add(offered().copy(evaluation = null, plan = adjusted, replacesId = id))
+
+        val shown = ask().planShownOf(programmes.rows.value.first { it.id == version }, MONDAY - 7)
+
+        assertThat(shown.timeline.title).isEqualTo("Invented adjusted")
+        assertThat(shown.timeline.weeks[0].place).isEqualTo(TimelinePlace.Past(done = 1, planned = 2, own = 0))
+        assertThat(shown.timeline.weeks[1].place).isEqualTo(
+            TimelinePlace.ThisWeek(listOf(PlanTile(WALK_30, TileState.DONE, MONDAY, 40), PlanTile(WALK_20, TileState.OPEN))),
+        )
+        assertThat(shown.running).isNull()
+        assertThat(shown.evaluation).isEqualTo(DatedEvaluation(EVALUATION, MONDAY - 15))
+    }
+
+    /** D118: an evaluation's answer, never kept, counts nothing — this Monday's walk ticks no tile. */
+    @Test
+    fun `an answer never kept has every session open`() = runTest {
+        record.workouts.value = listOf(walk(1, MONDAY))
+        val id = programmes.add(offered())
+        val programme = programmes.rows.value.first { it.id == id }
+
+        val timeline = ask().timelineOf(programme, MONDAY)
+
+        assertThat(timeline.weeks[0].place).isEqualTo(TimelinePlace.ThisWeek(listOf(PlanTile(WALK_30, TileState.OPEN), PlanTile(WALK_30, TileState.OPEN))))
     }
 
     // --- D105 -------------------------------------------------------------------------------------

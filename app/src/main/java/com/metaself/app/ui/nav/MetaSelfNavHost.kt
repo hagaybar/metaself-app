@@ -577,6 +577,10 @@ fun MetaSelfNavHost(
                 onKeep = evaluateViewModel::keep,
                 onAskAgain = evaluateViewModel::askAgain,
                 onAdjust = { navController.navigate(Destination.AdjustPlan.route) },
+                // D117: the plan's main action opens the single-session form, as on the Trainer page; an ended or
+                // stopped plan's Evaluate me and plan again opens the evaluate form.
+                onPlan = { navController.navigate(Destination.PlanSession.form()) },
+                onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
             )
         }
 

@@ -10,8 +10,9 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
-import com.metaself.app.domain.trainer.Evaluation
-import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.DatedEvaluation
+import com.metaself.app.domain.trainer.PlanShown
+import com.metaself.app.domain.trainer.PlanTimeline
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeCalendar
@@ -31,7 +32,7 @@ import javax.inject.Inject
 
 /**
  * D93, D94: the form, one ask, the evaluation with its plan, Keep and Ask again — or, opened with
- * [RUNNING], the running plan with its ticks and its evaluation (design question 3). The trainer is asked
+ * [RUNNING], the plan "See the plan" shows, as its weeks, with its evaluation (D117). The trainer is asked
  * only from [ask], a tap (D84); the ask and the storing of its answer run in [outliving], so leaving the
  * page mid-request does not throw away a paid answer.
  */
@@ -56,8 +57,7 @@ class EvaluatePlanViewModel @Inject constructor(
      * @property shown the answer just arrived: OFFERED until kept.
      * @property writing Keep this plan was tapped and its write has not finished; a second tap is
      *   ignored, so it cannot refuse the first one's work as "nothing changed".
-     * @property onRunning opened on the running plan; [running] is it (null when none runs) and
-     *   [evaluation] its chain's.
+     * @property onRunning opened on the plan "See the plan" shows (D117); [planShown] is it, null when there is none.
      */
     data class State(
         val loading: Boolean = false,
@@ -67,8 +67,7 @@ class EvaluatePlanViewModel @Inject constructor(
         val shown: Programme? = null,
         val kept: Boolean = false,
         val onRunning: Boolean = false,
-        val running: PlanCard.Running? = null,
-        val evaluation: Evaluation? = null,
+        val planShown: PlanShown? = null,
         val today: Long = 0,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
         val refused: ActionRefused? = null,
@@ -78,6 +77,19 @@ class EvaluatePlanViewModel @Inject constructor(
 
         /** The Monday keeping the answer today would start it on (D94). */
         val startIfKept: Long get() = shown?.startEpochDay ?: ProgrammeCalendar.startFor(today)
+
+        /**
+         * D118: the answer drawn as its weeks before it is kept, from the Monday keeping it today would give.
+         * Nothing is counted for an answer, so nothing is read; an answer just asked for was made today.
+         */
+        val offered: PlanShown?
+            get() = shown?.let { programme ->
+                PlanShown(
+                    PlanTimeline.of(programme, startIfKept, today, null, emptyMap()),
+                    null,
+                    programme.evaluation?.let { DatedEvaluation(it, today) },
+                )
+            }
     }
 
     private val openedOnRunning = savedState.get<String>(SHOW) == RUNNING
@@ -101,9 +113,8 @@ class EvaluatePlanViewModel @Inject constructor(
 
     private fun readRunning() {
         guarded(problems, onRefused = { local.update { it.copy(loading = false, refused = ActionRefused.COULD_NOT_OPEN) } }) {
-            val running = ask.running()
-            val evaluation = running?.let { ask.evaluationOf(it.programme) }
-            local.update { it.copy(loading = false, running = running, evaluation = evaluation) }
+            val shown = ask.planShown()
+            local.update { it.copy(loading = false, planShown = shown) }
         }
     }
 
