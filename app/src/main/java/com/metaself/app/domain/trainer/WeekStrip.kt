@@ -1,0 +1,69 @@
+package com.metaself.app.domain.trainer
+
+import com.metaself.app.domain.day.DayTotals
+import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.Workout
+
+/** D114: one counted session on the week strip; [ticked] when it ticked a planned session (the ledger's practice). */
+data class StripBlock(val workoutId: Long, val minutes: Int, val ticked: Boolean)
+
+/** D114: one day's column, its sessions oldest first — drawn from the bottom up. */
+data class StripDay(val epochDay: Long, val blocks: List<StripBlock>) {
+    val minutes: Int get() = blocks.sumOf { it.minutes }
+
+    /** A tick above the column: some session of the day ticked a planned session. */
+    val ticked: Boolean get() = blocks.any { it.ticked }
+}
+
+/**
+ * D114: the week strip — seven columns, Monday to Sunday — and the open planned sessions' minutes for the
+ * "To do" column, which planned sessions are drawn in because they have no day (D94). [withPlan] is whether a
+ * kept plan covers the week. Counted from the same partition as the week's ledger (D110). Pure.
+ */
+data class WeekStrip(val monday: Long, val today: Long, val days: List<StripDay>, val toDo: List<Int>, val withPlan: Boolean) {
+
+    /** The tallest column's minutes, "To do" included: the strip's full height. 0 for an empty week. */
+    val scaleMinutes: Int get() = maxOf(days.maxOf { it.minutes }, toDo.sum())
+
+    fun isAfterToday(day: StripDay): Boolean = day.epochDay > today
+
+    companion object {
+        /** [practice] is [WeekLedgers.practiceOf]'s: a block is ticked exactly when its session is some tick's `by`. */
+        fun of(monday: Long, today: Long, workouts: List<Workout>, practice: WeekProgress?): WeekStrip {
+            require(MovementWeek.mondayOf(monday) == monday) { "not a Monday: $monday" }
+            val ticked = practice?.ticks.orEmpty().mapNotNull { it.by?.id }.toSet()
+            val sessions = workouts
+                .filter { !it.hidden && it.counted && it.epochDay in monday..minOf(today, monday + 6) }
+                .sortedBy { it.startedAtMillis }
+            val days = (0..6).map { offset ->
+                val day = monday + offset
+                StripDay(day, sessions.filter { it.epochDay == day }.map { StripBlock(it.id, it.durationMinutes, it.id in ticked) })
+            }
+            return WeekStrip(monday, today, days, practice?.ticks.orEmpty().filter { it.by == null }.map { it.planned.minutes }, practice != null)
+        }
+
+        /** A block's height: its share of [full] as its minutes are of [scaleMinutes], never under [least]. */
+        fun height(minutes: Int, scaleMinutes: Int, full: Float, least: Float): Float =
+            if (scaleMinutes <= 0) least else maxOf(least, full * minutes / scaleMinutes)
+    }
+}
+
+/** D114: this week as the Trainer page shows it — its ledger (D110) and its strip, counted from one read. */
+data class TrainerWeek(val ledger: WeekLedger, val strip: WeekStrip) {
+    companion object {
+        /** [WeekLedgers.of]'s arguments; the strip is counted from the same practice. */
+        fun of(
+            monday: Long,
+            today: Long,
+            workouts: List<Workout>,
+            days: List<HealthDay>,
+            food: Map<Long, DayTotals>,
+            targetKcal: Int?,
+            plans: List<CountedPlan>,
+        ): TrainerWeek = TrainerWeek(
+            WeekLedgers.of(monday, today, workouts, days, food, targetKcal, plans),
+            WeekStrip.of(monday, today, workouts, WeekLedgers.practiceOf(monday, today, workouts, plans)),
+        )
+    }
+}
