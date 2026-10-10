@@ -111,10 +111,13 @@ sealed class Destination(val route: String) {
     /** The trainer (D85). */
     data object Trainer : Destination("trainer")
 
-    /** Plan my next session (D86); `show=kept` opens the kept plan. */
-    data object PlanSession : Destination("trainer/plan?show={show}") {
-        fun form(): String = "trainer/plan?show=" + PlanSessionViewModel.FORM
-        fun kept(): String = "trainer/plan?show=" + PlanSessionViewModel.KEPT
+    /** Plan my next session (D86); with a week and a session, for that planned session — Get the steps (D123). */
+    data object PlanSession : Destination(
+        "trainer/plan?${PlanSessionViewModel.WEEK}={${PlanSessionViewModel.WEEK}}&${PlanSessionViewModel.SESSION}={${PlanSessionViewModel.SESSION}}",
+    ) {
+        fun form(): String = "trainer/plan"
+        fun forSession(week: Int, session: Int): String =
+            "trainer/plan?${PlanSessionViewModel.WEEK}=$week&${PlanSessionViewModel.SESSION}=$session"
     }
 
     /** D93, D94: evaluate me and plan; or the running plan. */
@@ -467,7 +470,7 @@ fun MetaSelfNavHost(
                 onBack = { navController.popBackStack() },
                 onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
                 onPlan = { navController.navigate(Destination.PlanSession.form()) },
-                onOpenKept = { navController.navigate(Destination.PlanSession.kept()) },
+                onOpenKept = { navController.navigate(Destination.EvaluatePlan.running()) },
                 onAboutMe = { navController.navigate(Destination.AboutMe.route) },
                 onEvaluate = { navController.navigate(Destination.EvaluatePlan.form()) },
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
@@ -535,9 +538,13 @@ fun MetaSelfNavHost(
         composable(
             route = Destination.PlanSession.route,
             arguments = listOf(
-                navArgument(PlanSessionViewModel.SHOW) {
-                    type = NavType.StringType
-                    defaultValue = PlanSessionViewModel.FORM
+                navArgument(PlanSessionViewModel.WEEK) {
+                    type = NavType.IntType
+                    defaultValue = PlanSessionViewModel.NONE
+                },
+                navArgument(PlanSessionViewModel.SESSION) {
+                    type = NavType.IntType
+                    defaultValue = PlanSessionViewModel.NONE
                 },
             ),
         ) {

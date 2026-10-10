@@ -11,12 +11,14 @@ import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.trainer.DatedEvaluation
+import com.metaself.app.domain.trainer.PlanSessions
 import com.metaself.app.domain.trainer.PlanShown
 import com.metaself.app.domain.trainer.PlanTimeline
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.ProgrammeStatus
+import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
 import com.metaself.app.ui.outlived
@@ -31,10 +33,10 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 /**
- * D93, D94: the form, one ask, the evaluation with its plan, Keep and Ask again — or, opened with
- * [RUNNING], the plan "See the plan" shows, as its weeks, with its evaluation (D117). The trainer is asked
- * only from [ask], a tap (D84); the ask and the storing of its answer run in [outliving], so leaving the
- * page mid-request does not throw away a paid answer.
+ * D93, D94, D124: Plan ahead's form, one ask, the evaluation with its plan, Keep and Ask again — Keep asking first
+ * while a plan runs — or, opened with [RUNNING], the plan page: the plan "See the plan" shows, in three views
+ * (D123), with the Next session (D122). The trainer is asked only from [ask], a tap (D84); the ask and the
+ * storing of its answer run in [outliving], so leaving the page mid-request does not throw away a paid answer.
  */
 @HiltViewModel
 class EvaluatePlanViewModel @Inject constructor(
@@ -45,6 +47,9 @@ class EvaluatePlanViewModel @Inject constructor(
     private val problems: ProblemLog,
     @ApplicationScope private val outliving: CoroutineScope,
 ) : ViewModel() {
+
+    /** D123: the plan page's three views. */
+    enum class PlanView { MONTH, WEEK, SESSION }
 
     /** The form's two rows and its words; a row is null until answered. The page opens on [PRESET]. */
     data class Form(val weeks: Int? = null, val perWeek: Int? = null, val words: String = "") {
@@ -58,6 +63,10 @@ class EvaluatePlanViewModel @Inject constructor(
      * @property writing Keep this plan was tapped and its write has not finished; a second tap is
      *   ignored, so it cannot refuse the first one's work as "nothing changed".
      * @property onRunning opened on the plan "See the plan" shows (D117); [planShown] is it, null when there is none.
+     * @property view the plan page's view (D123), Week first.
+     * @property nextSession the kept suggestion for no planned session, of the last seven days (D122).
+     * @property replacingFrom while a plan runs, the Monday a kept answer would replace it from (D124); null when none runs.
+     * @property confirming Keep this plan was tapped while a plan runs: the replace sentence is shown, nothing written.
      */
     data class State(
         val loading: Boolean = false,
@@ -72,11 +81,18 @@ class EvaluatePlanViewModel @Inject constructor(
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
         val refused: ActionRefused? = null,
         val writing: Boolean = false,
+        val view: PlanView = PlanView.WEEK,
+        val nextSession: TrainerPlan? = null,
+        val replacingFrom: Long? = null,
+        val confirming: Boolean = false,
     ) {
         val canAsk: Boolean get() = form.ask() != null && !asking
 
-        /** The Monday keeping the answer today would start it on (D94). */
-        val startIfKept: Long get() = shown?.startEpochDay ?: ProgrammeCalendar.startFor(today)
+        /** The Monday keeping the answer today would start it on (D94) — next Monday while a plan runs (D124). */
+        val startIfKept: Long get() = shown?.startEpochDay ?: replacingFrom ?: ProgrammeCalendar.startFor(today)
+
+        /** D123: the Session view's cards. */
+        val sessions: PlanSessions get() = PlanSessions.of(planShown, today, nextSession)
 
         /**
          * D118: the answer drawn as its weeks before it is kept, from the Monday keeping it today would give.
@@ -100,7 +116,19 @@ class EvaluatePlanViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
     init {
-        if (openedOnRunning) readRunning()
+        if (openedOnRunning) readRunning() else readReplacing()
+    }
+
+    /**
+     * D124: whether keeping would replace a running plan, read once as the form opens. A failed read is logged and
+     * leaves it null: no confirmation, and the answer drawn from D94's Monday — keeping still starts it next Monday,
+     * because the trainer decides that, not this screen.
+     */
+    private fun readReplacing() {
+        guarded(problems, onRefused = {}) {
+            val from = ask.replacingFrom()
+            local.update { it.copy(replacingFrom = from) }
+        }
     }
 
     /**
@@ -114,7 +142,8 @@ class EvaluatePlanViewModel @Inject constructor(
     private fun readRunning() {
         guarded(problems, onRefused = { local.update { it.copy(loading = false, refused = ActionRefused.COULD_NOT_OPEN) } }) {
             val shown = ask.planShown()
-            local.update { it.copy(loading = false, planShown = shown) }
+            val next = ask.nextSession()
+            local.update { it.copy(loading = false, planShown = shown, nextSession = next) }
         }
     }
 
@@ -137,10 +166,18 @@ class EvaluatePlanViewModel @Inject constructor(
         }
     }
 
+    /** D123: the switch. */
+    fun choose(view: PlanView) = local.update { it.copy(view = view) }
+
+    /** D124: while a plan runs the first tap asks ([State.confirming]); Replace it — a second keep — writes. */
     fun keep() {
         val shown = local.value.shown ?: return
         if (local.value.kept || local.value.writing) return
-        local.update { it.copy(refused = null, writing = true) }
+        if (local.value.replacingFrom != null && !local.value.confirming) {
+            local.update { it.copy(confirming = true, refused = null) }
+            return
+        }
+        local.update { it.copy(refused = null, writing = true, confirming = false) }
         guarded(problems, onRefused = { local.update { it.copy(writing = false, refused = ActionRefused.NOTHING_CHANGED) } }) {
             val start = ask.keepProgramme(shown.id)
             local.update {
@@ -149,8 +186,13 @@ class EvaluatePlanViewModel @Inject constructor(
         }
     }
 
+    /** D124: Not now — the replace sentence goes, nothing written. */
+    fun cancelKeep() = local.update { it.copy(confirming = false) }
+
     /** Back to the form, the answers kept (D94); the answer stays stored, offered. Not while Keep is writing. */
-    fun askAgain() = local.update { if (it.writing) it else it.copy(shown = null, kept = false, failure = null, refused = null) }
+    fun askAgain() = local.update {
+        if (it.writing) it else it.copy(shown = null, kept = false, failure = null, refused = null, confirming = false)
+    }
 
     companion object {
         /** The navigation argument: [RUNNING] opens on the running plan; anything else on the form. */

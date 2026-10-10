@@ -147,15 +147,6 @@ class PlanSessionScreenRenderTest {
         assertThat(render.isEnabled("Anything else?")).isTrue()
     }
 
-    /** Opened for the kept plan, the form is not drawn while the plan is read. */
-    @Test
-    fun `loading draws neither the form nor a plan`() {
-        val texts = draw(PlanSessionViewModel.State(loading = true))
-
-        assertThat(texts).doesNotContain("WHAT")
-        assertThat(texts).doesNotContain("Ask the trainer")
-    }
-
     private fun draw(
         state: PlanSessionViewModel.State,
         onChange: (PlanSessionViewModel.Form) -> Unit = {},

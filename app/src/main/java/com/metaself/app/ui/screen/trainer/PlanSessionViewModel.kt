@@ -7,7 +7,6 @@ import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.trainer.AskTheTrainer
-import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.trainer.Feeling
@@ -15,6 +14,7 @@ import com.metaself.app.domain.trainer.NextInPlan
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlannedTick
+import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.Wish
@@ -33,7 +33,8 @@ import javax.inject.Inject
 
 /**
  * D86: the form, one ask, the suggestion, Keep and Ask again. The trainer is asked only from [ask] —
- * a tap — never from `init` (D84).
+ * a tap — never from `init` (D84). Opened with [WEEK] and [SESSION] (Get the steps, D123) it is for that planned
+ * session; otherwise for the running plan's next open one (D96); kept, its steps belong to it (D122).
  *
  * The ask, and the storing of its suggestion, runs in [outliving]: leaving the screen mid-request does
  * not throw away a paid answer. While it is asked the form cannot be changed.
@@ -42,7 +43,6 @@ import javax.inject.Inject
 class PlanSessionViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val ask: AskTheTrainer,
-    private val store: TrainerStore,
     settings: AiSettingsStore,
     private val problems: ProblemLog,
     @ApplicationScope private val outliving: CoroutineScope,
@@ -62,9 +62,11 @@ class PlanSessionViewModel @Inject constructor(
         }
     }
 
-    /** @property loading opened for the kept plan, which is still being read; nothing is drawn yet. */
+    /**
+     * @property next the planned session the form is for: the one Get the steps named ([chosen]), else the running
+     *   plan's next open one (D96); the form was pre-filled from it. [slot] is its place (D122).
+     */
     data class State(
-        val loading: Boolean = false,
         val form: Form = Form(),
         val asking: Boolean = false,
         val failure: EstimateResult? = null,
@@ -72,42 +74,38 @@ class PlanSessionViewModel @Inject constructor(
         val kept: Boolean = false,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
         val refused: ActionRefused? = null,
-        /** D96: the running plan's next session; the form was pre-filled from it. */
         val next: PlannedTick? = null,
+        val slot: SessionSlot? = null,
+        val chosen: Boolean = false,
     ) {
         val canAsk: Boolean get() = form.answers() != null && !asking
     }
 
-    private val openedOnKept = savedState.get<String>(SHOW) == KEPT
+    /** D123: the place Get the steps named; null opened from anywhere else. */
+    private val named: Pair<Int, Int>? = run {
+        val week = savedState.get<Int>(WEEK) ?: NONE
+        val session = savedState.get<Int>(SESSION) ?: NONE
+        if (week >= 0 && session >= 0) week to session else null
+    }
 
-    private val local = MutableStateFlow(State(loading = openedOnKept))
+    private val local = MutableStateFlow(State(chosen = named != null))
 
     val state: StateFlow<State> = combine(local, settings.settings) { s, ai -> s.copy(ceiling = ai.dailyCeiling) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), local.value)
 
     init {
-        if (openedOnKept) {
-            guarded(problems, onRefused = { local.update { it.copy(loading = false, refused = ActionRefused.COULD_NOT_OPEN) } }) {
-                // No kept plan any more (it lapsed, or feedback used it): the form, as Ask again would.
-                val kept = store.keptPlan()
-                local.update { it.copy(loading = false, shown = kept, kept = kept != null) }
-            }
-        }
-        // D96: the next planned session is read however the screen opened — Ask again from a kept plan
-        // shows the form, and its request sends it. The form is pre-filled only when opened on the form,
-        // once, and only while untouched. A convenience: a failed read leaves the form empty (and is
-        // logged), nothing more.
+        // D96, D122: the planned session the form is for is read once; the form is pre-filled from it while
+        // untouched. A convenience: a failed read leaves the form empty and for no planned session (and is logged).
         guarded(problems, onRefused = {}) {
-            val next = ask.nextPlanned() ?: return@guarded
+            val planned = if (named != null) ask.plannedAt(named.first, named.second) else ask.nextFor()
+            planned ?: return@guarded
             local.update { now ->
-                if (openedOnKept || now.form != Form() || now.asking) {
-                    now.copy(next = next)
+                val filled = if (now.form != Form() || now.asking) {
+                    now.form
                 } else {
-                    now.copy(
-                        next = next,
-                        form = Form(time = NextInPlan.time(next.session.minutes), wish = NextInPlan.wish(next.session.effort)),
-                    )
+                    Form(time = NextInPlan.time(planned.tick.session.minutes), wish = NextInPlan.wish(planned.tick.session.effort))
                 }
+                now.copy(next = planned.tick, slot = planned.slot, form = filled)
             }
         }
     }
@@ -122,7 +120,9 @@ class PlanSessionViewModel @Inject constructor(
             outliving,
             problems,
             onRefused = { local.update { it.copy(asking = false, refused = ActionRefused.NOTHING_CHANGED) } },
-            work = { ask.suggest(answers) },
+            // Opened for a named session, the ask is for it (a stale place attaches to nothing); otherwise the
+            // trainer's own reading of the next open session at the moment of asking.
+            work = { ask.suggest(answers, local.value.slot.takeIf { local.value.chosen }) },
         ) { outcome ->
             when (outcome) {
                 is AskTheTrainer.Suggested.Planned -> local.update { it.copy(asking = false, shown = outcome.plan, kept = false) }
@@ -140,13 +140,13 @@ class PlanSessionViewModel @Inject constructor(
         }
     }
 
-    /** Back to the form, the answers kept (D86); from a kept plan opened on its own, the form is empty. */
+    /** Back to the form, the answers kept (D86). */
     fun askAgain() = local.update { it.copy(shown = null, kept = false, failure = null, refused = null) }
 
     companion object {
-        /** The navigation argument: [KEPT] opens on the kept plan (design question 19); anything else on the form. */
-        const val SHOW = "show"
-        const val FORM = "form"
-        const val KEPT = "kept"
+        /** D123: the navigation arguments naming a planned session's place; [NONE] names none. */
+        const val WEEK = "week"
+        const val SESSION = "session"
+        const val NONE = -1
     }
 }

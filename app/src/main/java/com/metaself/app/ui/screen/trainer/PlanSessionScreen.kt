@@ -50,8 +50,6 @@ fun PlanSessionScreen(
     val title = stringResource(if (shown == null) R.string.plan_title else R.string.plan_result_title)
     MetaSelfScreen(title = title, modifier = modifier, onBack = onBack) {
         when {
-            // Opened for the kept plan: nothing until it is read, never the empty form first.
-            state.loading -> Unit
             shown == null -> PlanForm(state, onChange, onAsk)
             else -> Suggestion(shown, state.kept, onKeep, onAskAgain)
         }

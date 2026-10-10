@@ -155,6 +155,12 @@ class AskTheTrainer @Inject constructor(
         return PlannedFor(slot, PlannedTick(slot.week + 1, programme.plan.weeks.size, session))
     }
 
+    /** D123: the running plan's session at [week] and [session] of its chain, as [plannedAt] reads it. Reads only. */
+    suspend fun plannedAt(week: Int, session: Int): PlannedFor? {
+        val running = running() ?: return null
+        return plannedAt(SessionSlot(Programmes.rootOf(running.programme, programmes.all()).id, week, session))
+    }
+
     /** D122: the kept suggestion for no planned session, made in the last seven days — the plan page's Next session. */
     suspend fun nextSession(): TrainerPlan? = PlanMatch.offered(store.keptPlans().firstOrNull { it.slot == null }, now())
 
