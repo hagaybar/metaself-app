@@ -1,6 +1,7 @@
 package com.metaself.app.domain.trainer
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
@@ -51,11 +52,14 @@ class TrainerRequestTest {
         workouts: List<Workout> = all,
         earliest: Long? = null,
         aboutMe: String? = null,
+        food: Map<Long, DayTotals> = emptyMap(),
+        weeklyPlans: List<CountedPlan> = emptyList(),
     ) = TrainerRequest.of(
         question = question, today = TEST_EPOCH_DAY, workouts = workouts, reviews = listOf(review),
         plans = mapOf(9L to plan),
         days = listOf(HealthDay(20_699, distanceM = 4_000, activeKcal = 300), HealthDay(20_698, distanceM = 2_000, activeKcal = 100),
             HealthDay(20_690, distanceM = 5_000)),
+        food = food, targetKcal = 2_000, weeklyPlans = weeklyPlans,
         readings = readings, profile = profile, currentYear = TEST_YEAR, earlierFeedback = feedback,
         earliestDay = earliest, aboutMe = aboutMe,
     )
@@ -102,19 +106,52 @@ class TrainerRequestTest {
         assertThat(request().sessions.first().felt).isNull()
     }
 
-    /** D74's figures, per Monday-based week, newest first; no meals. */
+    /** D110, D111: six ledgers, newest first, this one so far. No plan: every session is beyond it. */
     @Test
-    fun `six weeks of totals, this one first and so far`() {
+    fun `six week ledgers, this one first and so far`() {
         val weeks = request().weeks
 
         assertThat(weeks.map { it.monday }).containsExactly(20_696L, 20_689L, 20_682L, 20_675L, 20_668L, 20_661L).inOrder()
         assertThat(weeks.first().current).isTrue()
         assertThat(weeks.drop(1).none { it.current }).isTrue()
-        assertThat(weeks[0].distanceM).isEqualTo(6_000)
-        assertThat(weeks[0].averageActiveKcal).isEqualTo(200)
-        assertThat(weeks[0].sessions).isEqualTo(2) // the walk and the strength session; hidden and uncounted left out
-        assertThat(weeks[1].distanceM).isEqualTo(5_000)
-        assertThat(weeks[1].sessions).isEqualTo(0)
+        assertThat(weeks.none { it.practice != null }).isTrue()
+        // The walk and the strength session; the hidden and the uncounted ones left out.
+        assertThat(weeks[0].beyond.kinds.map { it.kind to it.sessions })
+            .containsExactly(WorkoutKind.WALK to 1, WorkoutKind.STRENGTH to 1).inOrder()
+        assertThat(weeks[0].beyond.distanceMADay).isEqualTo(3_000)
+        assertThat(weeks[1].beyond.kinds).isEmpty()
+        assertThat(weeks[1].beyond.distanceMADay).isEqualTo(5_000)
+    }
+
+    /** D110: a kept plan of two weeks of two 30-minute walks, begun the Monday before this one. Invented. */
+    @Test
+    fun `a week a kept plan covers carries its practice`() {
+        val planned = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Invented walk")
+        val weeksPlan = WeeksPlan("Invented plan", List(2) { PlanWeek("Invented focus", listOf(planned, planned)) }, "Invented.")
+        val kept = CountedPlan(
+            Programme(1, 0, ProgrammeAsk(2, 2), null, weeksPlan, "a-model", 20_689, ProgrammeStatus.RUNNING),
+            PlanCounting(1, 0, emptyMap()),
+        )
+
+        val weeks = request(weeklyPlans = listOf(kept)).weeks
+
+        assertThat(weeks[0].practice!!.week).isEqualTo(2)
+        assertThat(weeks[0].practice!!.ofWeeks).isEqualTo(2)
+        assertThat(weeks[0].practice!!.sessions.map { it.outcome }).containsExactly(PlannedOutcome.DONE, PlannedOutcome.NOT_DONE).inOrder()
+        assertThat(weeks[0].beyond.kinds.map { it.kind }).containsExactly(WorkoutKind.STRENGTH)
+        assertThat(weeks[1].practice!!.week).isEqualTo(1)
+        assertThat(weeks[2].practice).isNull()
+    }
+
+    /** D110: each week's food, over the days logged, with today's target. Invented totals. */
+    @Test
+    fun `each week carries its food and the target`() {
+        val food = mapOf(20_697L to DayTotals(2_000, 100, 200, 70), 20_698L to DayTotals(2_400, 140, 200, 70))
+
+        val weeks = request(food = food).weeks
+
+        assertThat(weeks[0].food).isEqualTo(FoodContext(2, 2_200, 120, 2_000))
+        assertThat(weeks[1].food).isEqualTo(FoodContext(0, null, null, 2_000))
     }
 
     /**
@@ -208,8 +245,9 @@ class TrainerRequestTest {
     }
 
     /**
-     * D84's "never sent", as a shape: there is no field for a meal, sleep, a raw reading, a weigh-in, a
-     * target, a name, a title or an origin. D89 adds the monthly lines and D90 the owner's note. D93 and
+     * D84's "never sent", as a shape, amended by D111: there is no field for a meal, a food, a single
+     * night's sleep or a single day's heart rate, a raw reading, a weigh-in, a target weight, a name, a
+     * title or an origin; a week's food and recovery go only as averages. D89 adds the monthly lines and D90 the owner's note. D93 and
      * D97 add two questions; D96 a planned session on the other two. A new field fails here before it
      * can leave the phone.
      */
@@ -224,7 +262,16 @@ class TrainerRequestTest {
             "avgHeartRate", "maxHeartRate", "zoneMinutes", "zoneMaxEstimated", "steps", "stepsFrom",
             "felt", "words", "plan",
         )
-        assertThat(fieldsOf(WeekFacts::class.java)).containsExactly("monday", "distanceM", "averageActiveKcal", "sessions", "current")
+        // D110, D111: each week's ledger, in place of D84's weekly totals.
+        assertThat(fieldsOf(WeekLedger::class.java)).containsExactly("monday", "current", "practice", "beyond", "food", "recovery")
+        assertThat(fieldsOf(PracticeLedger::class.java)).containsExactly("week", "ofWeeks", "sessions")
+        assertThat(fieldsOf(BeyondPlan::class.java)).containsExactly("kinds", "stepsADay", "distanceMADay")
+        assertThat(fieldsOf(KindLedger::class.java)).containsExactly("kind", "sessions", "minutes", "distanceM", "briskMinutes", "attempts")
+        // D111's additions, and no further: food as days logged and averages with the target; recovery as averages and usuals.
+        assertThat(fieldsOf(FoodContext::class.java)).containsExactly("daysLogged", "kcalADay", "proteinGADay", "targetKcal")
+        assertThat(fieldsOf(Recovery::class.java)).containsExactly(
+            "sleepMinutes", "usualSleepMinutes", "restingHeartRate", "usualRestingHeartRate", "hrvMs", "usualHrvMs",
+        )
         assertThat(fieldsOf(WeightFacts::class.java)).containsExactly("trendKg", "asOfEpochDay", "kgPerWeek", "overDays")
         assertThat(fieldsOf(MonthFacts::class.java)).containsExactly(
             "firstDay", "lastDay", "part", "kinds", "minutes", "longestMinutes", "bestWeekMonday", "bestWeekM",

@@ -10,13 +10,16 @@ import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.SessionFacts
+import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TrainerPath
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.WeekLedger
 import com.metaself.app.domain.trainer.WeekOutcome
 import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -256,19 +259,7 @@ object TrainerPrompt {
         put("today", date(request.today))
         put("about_me", request.aboutMe?.let(::JsonPrimitive) ?: JsonNull)
         putJsonArray("sessions") { request.sessions.forEach { add(sessionJson(it)) } }
-        putJsonArray("weeks") {
-            request.weeks.forEach { week ->
-                add(
-                    buildJsonObject {
-                        put("from", date(week.monday))
-                        put("so_far", week.current)
-                        put("distance_m", week.distanceM?.let(::JsonPrimitive) ?: JsonNull)
-                        put("movement_kcal_a_day", week.averageActiveKcal?.let(::JsonPrimitive) ?: JsonNull)
-                        put("sessions", week.sessions)
-                    },
-                )
-            }
-        }
+        putJsonArray("weeks") { request.weeks.forEach { add(ledgerJson(it)) } }
         putJsonArray("months") { request.months.forEach { add(month(it)) } }
         put(
             "weight",
@@ -361,16 +352,7 @@ object TrainerPrompt {
     private fun weekOutcome(week: WeekOutcome): JsonObject = buildJsonObject {
         put("week", week.week)
         putJsonArray("sessions") {
-            week.sessions.forEach { session ->
-                add(
-                    buildJsonObject {
-                        put("kind", kind(session.planned.kind))
-                        put("planned_minutes", session.planned.minutes)
-                        put("outcome", outcome(session.outcome))
-                        put("minutes_done", session.minutesDone?.let(::JsonPrimitive) ?: JsonNull)
-                    },
-                )
-            }
+            week.sessions.forEach { session -> add(sessionOutcomeJson(session)) }
         }
         putJsonArray("attempts") {
             week.attempts.forEach { attempt ->
@@ -384,6 +366,78 @@ object TrainerPrompt {
             }
         }
     }
+
+    /** D105: a planned session's outcome, as `how_it_went` and a ledger's practice send it. Minutes only. */
+    private fun sessionOutcomeJson(session: SessionOutcome): JsonObject = buildJsonObject {
+        put("kind", kind(session.planned.kind))
+        put("planned_minutes", session.planned.minutes)
+        put("outcome", outcome(session.outcome))
+        put("minutes_done", session.minutesDone?.let(::JsonPrimitive) ?: JsonNull)
+    }
+
+    /**
+     * D110: one week's ledger, every figure the phone's; a null was not recorded. Shared with the letter,
+     * which sends its week whole and so without `so_far` ([withSoFar] false).
+     */
+    internal fun ledgerJson(ledger: WeekLedger, withSoFar: Boolean = true): JsonObject = buildJsonObject {
+        put("from", date(ledger.monday))
+        if (withSoFar) put("so_far", ledger.current)
+        put(
+            "practice",
+            ledger.practice?.let { practice ->
+                buildJsonObject {
+                    put("week", practice.week)
+                    put("of_weeks", practice.ofWeeks)
+                    putJsonArray("sessions") { practice.sessions.forEach { add(sessionOutcomeJson(it)) } }
+                }
+            } ?: JsonNull,
+        )
+        putJsonObject("beyond_the_plan") {
+            putJsonArray("sessions_by_kind") {
+                ledger.beyond.kinds.forEach { group ->
+                    add(
+                        buildJsonObject {
+                            put("kind", kind(group.kind))
+                            put("sessions", group.sessions)
+                            put("minutes", group.minutes)
+                            put("distance_m", number(group.distanceM))
+                            put("brisk_minutes", number(group.briskMinutes))
+                            putJsonArray("attempts") {
+                                group.attempts.forEach { attempt ->
+                                    add(
+                                        buildJsonObject {
+                                            put("minutes", attempt.minutes)
+                                            put("planned_minutes", attempt.plannedMinutes)
+                                        },
+                                    )
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+            putJsonObject("everyday") {
+                put("steps_a_day", number(ledger.beyond.stepsADay))
+                put("distance_m_a_day", number(ledger.beyond.distanceMADay))
+            }
+        }
+        putJsonObject("food") {
+            put("days_logged", ledger.food.daysLogged)
+            put("kcal_a_day", number(ledger.food.kcalADay))
+            put("protein_g_a_day", number(ledger.food.proteinGADay))
+            put("target_kcal", number(ledger.food.targetKcal))
+        }
+        putJsonObject("recovery") {
+            put("sleep_minutes_a_night", number(ledger.recovery.sleepMinutes))
+            put("usual_sleep_minutes_a_night", number(ledger.recovery.usualSleepMinutes))
+            put("resting_heart_rate", number(ledger.recovery.restingHeartRate))
+            put("usual_resting_heart_rate", number(ledger.recovery.usualRestingHeartRate))
+            put("hrv_ms", number(ledger.recovery.hrvMs))
+            put("usual_hrv_ms", number(ledger.recovery.usualHrvMs))
+        }
+    }
+
+    private fun number(value: Int?): JsonElement = value?.let(::JsonPrimitive) ?: JsonNull
 
     private fun outcome(outcome: PlannedOutcome): String = when (outcome) {
         PlannedOutcome.DONE -> "done"
