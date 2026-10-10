@@ -195,6 +195,9 @@ object TrainerWording {
     /** D97. */
     fun privacyAdjust(ceiling: Int): String = privacy("your plan, how it has gone, and your words", ceiling)
 
+    /** D121, D125: Fill in next week, Plan this week, Plan the next block. */
+    fun privacyFill(ceiling: Int): String = privacy("your plan with its goal and outline, and how it has gone", ceiling)
+
     private fun privacy(first: String, ceiling: Int, extra: String? = null): String =
         "Sends to OpenAI, with your key: $first; your note about yourself; " +
             "your sessions of the last six weeks, with your words on them; weekly totals; " +

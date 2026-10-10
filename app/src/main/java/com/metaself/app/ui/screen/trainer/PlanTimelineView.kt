@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.trainer.DatedEvaluation
 import com.metaself.app.domain.trainer.MainAction
+import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.trainer.PlanOffer
 import com.metaself.app.domain.trainer.PlanShown
 import com.metaself.app.domain.trainer.PlanTile
 import com.metaself.app.domain.trainer.PlanTimeline
@@ -55,6 +57,7 @@ import com.metaself.app.domain.trainer.TileState
 import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TimelineWeek
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.GoalWording
 import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.PlanTimelineWording
 import com.metaself.app.ui.trainer.TrainerWeekWording
@@ -88,11 +91,15 @@ private const val TILES_PER_ROW = 3
  * [FromTrainerLabel] and before its buttons.
  */
 @Composable
-internal fun PlanShownView(shown: PlanShown) {
+internal fun PlanShownView(shown: PlanShown, today: Long? = null) {
     val timeline = shown.timeline
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
         Text(timeline.title, style = MaterialTheme.typography.headlineMedium)
+        // D119: the goal, at the top of the plan in words.
+        today?.let { GoalWording.goalLine(shown.goal, it) }?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
         Text(PlanTimelineWording.subtitle(timeline), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // Release 1's limit 3: an old plan finishing its week says when the next one starts.
+        shown.running?.replacedFrom?.let { Text(PlanPageWording.newPlanStarts(it), style = MaterialTheme.typography.bodyMedium) }
     }
     Timeline(timeline)
     shown.evaluation?.let { Stood(it, timeline.why) }
@@ -119,8 +126,9 @@ private fun Timeline(timeline: PlanTimeline) {
                     WeekHeading(week)
                     when (val place = week.place) {
                         is TimelinePlace.Past -> WeekLine(PlanTimelineWording.pastLine(place))
-                        is TimelinePlace.ThisWeek -> Tiles(place.tiles)
-                        is TimelinePlace.Ahead -> WeekLine(PlanTimelineWording.aheadLine(place.sessions))
+                        // D123: this week with no sessions yet says its target, as a week ahead does.
+                        is TimelinePlace.ThisWeek -> if (place.tiles.isEmpty()) WeekLine(PlanTimelineWording.weekLine(week)) else Tiles(place.tiles)
+                        is TimelinePlace.Ahead -> WeekLine(PlanTimelineWording.weekLine(week))
                     }
                 }
             }
@@ -251,21 +259,43 @@ private fun LabelledPart(@StringRes label: Int, text: String) {
     }
 }
 
+/** D121: the plan page's fill-in offer, its state, and what it sends. */
+internal data class FillButton(
+    val offer: PlanOffer?,
+    val filling: Boolean,
+    val failure: EstimateResult?,
+    val done: String?,
+    val ceiling: Int,
+)
+
 /**
- * D117 item 4, D124: under every view of the plan page. A running plan: Adjust the plan (outlined) beside the
- * session action — Plan the open walk, or Plan my next session — and under them Plan ahead, outlined. Ended,
- * stopped, or no plan: one filled Plan ahead.
+ * D117 item 4, D121, D124: under every view of the plan page. A running plan: what it offers to fill in — Fill in
+ * next week, Plan this week, Plan the next block — filled, with its privacy line; then Adjust the plan (outlined,
+ * not while an old plan finishes its week) beside the session action — Plan the open walk, or Plan my next
+ * session — and under them Plan ahead, outlined. Ended, stopped, or no plan: one filled Plan ahead.
  */
 @Composable
-internal fun PlanButtons(shown: PlanShown?, onAdjust: () -> Unit, onPlan: () -> Unit, onPlanAhead: () -> Unit) {
+internal fun PlanButtons(
+    shown: PlanShown?,
+    onAdjust: () -> Unit,
+    onPlan: () -> Unit,
+    onPlanAhead: () -> Unit,
+    fill: FillButton? = null,
+    onFill: () -> Unit = {},
+    onNextBlock: () -> Unit = {},
+) {
     val running = shown?.running
+    fill?.done?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
     if (shown == null || shown.timeline.over || running == null) {
         Button(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.PLAN_AHEAD) }
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            fill?.offer?.let { offer -> Offer(offer, fill, onFill, onNextBlock) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-                OutlinedButton(onClick = onAdjust, modifier = Modifier.weight(1f)) {
-                    Text(stringResource(R.string.trainer_adjust_plan), textAlign = TextAlign.Center)
+                if (running.replacedFrom == null) {
+                    OutlinedButton(onClick = onAdjust, modifier = Modifier.weight(1f)) {
+                        Text(stringResource(R.string.trainer_adjust_plan), textAlign = TextAlign.Center)
+                    }
                 }
                 Button(onClick = onPlan, modifier = Modifier.weight(1f)) {
                     val main = MainAction.session(running.next)
@@ -278,4 +308,21 @@ internal fun PlanButtons(shown: PlanShown?, onAdjust: () -> Unit, onPlan: () -> 
             OutlinedButton(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.PLAN_AHEAD) }
         }
     }
+}
+
+/** D121: the offer's button — once tapped, "Asking the trainer…" until the answer lands — its privacy line, and a failure. */
+@Composable
+private fun Offer(offer: PlanOffer, fill: FillButton, onFill: () -> Unit, onNextBlock: () -> Unit) {
+    val label = when (offer) {
+        is PlanOffer.FillNextWeek -> PlanPageWording.FILL_NEXT_WEEK
+        is PlanOffer.PlanThisWeek -> PlanPageWording.PLAN_THIS_WEEK
+        PlanOffer.NextBlock -> PlanPageWording.NEXT_BLOCK
+    }
+    Button(
+        onClick = if (offer == PlanOffer.NextBlock) onNextBlock else onFill,
+        enabled = !fill.filling,
+        modifier = Modifier.fillMaxWidth(),
+    ) { Text(if (fill.filling) PlanPageWording.FILLING else label) }
+    Text(TrainerWording.privacyFill(fill.ceiling), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    fill.failure?.let { Text(TrainerWording.failure(it), color = MaterialTheme.colorScheme.error) }
 }

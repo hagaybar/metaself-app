@@ -56,6 +56,10 @@ fun EvaluatePlanScreen(
     onGetSteps: (PlanPlace) -> Unit = {},
     /** D124: Not now, under the replace sentence. */
     onCancelKeep: () -> Unit = {},
+    /** D121: Fill in next week, or Plan this week. */
+    onFill: () -> Unit = {},
+    /** D121: Plan the next block. */
+    onNextBlock: () -> Unit = {},
 ) {
     val shown = state.shown
     val planShown = state.planShown
@@ -74,7 +78,7 @@ fun EvaluatePlanScreen(
                 when (state.view) {
                     EvaluatePlanViewModel.PlanView.WEEK -> if (planShown != null) {
                         FromTrainerLabel()
-                        PlanShownView(planShown)
+                        PlanShownView(planShown, state.today)
                     } else {
                         Text(stringResource(R.string.weeks_not_running))
                         // D122: with no plan, the kept single session is not one view further away.
@@ -84,17 +88,33 @@ fun EvaluatePlanScreen(
                         }
                     }
                     EvaluatePlanViewModel.PlanView.SESSION -> SessionView(state.sessions, onGetSteps)
-                    EvaluatePlanViewModel.PlanView.MONTH -> Text(
-                        if (planShown != null) PlanPageWording.NO_OUTLINE else stringResource(R.string.weeks_not_running),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    EvaluatePlanViewModel.PlanView.MONTH -> {
+                        val month = planShown?.month
+                        if (month != null) {
+                            FromTrainerLabel()
+                            PlanMonthView(month, state.today)
+                        } else {
+                            Text(
+                                if (planShown != null) PlanPageWording.NO_OUTLINE else stringResource(R.string.weeks_not_running),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                 }
-                PlanButtons(planShown, onAdjust, onPlan, onPlanAhead)
+                PlanButtons(
+                    planShown, onAdjust, onPlan, onPlanAhead,
+                    FillButton(state.offer, state.filling, state.fillFailure, state.filledLine, state.ceiling),
+                    onFill, onNextBlock,
+                )
             }
             shown == null -> EvaluateForm(state, onChange, onAsk)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
-                state.offered?.let { PlanShownView(it) }
+                state.offered?.let { offered ->
+                    // D124: the answer drawn as D118's weeks, with the Month view's outline above them.
+                    offered.month?.let { PlanMonthView(it, state.today) }
+                    PlanShownView(offered, state.today)
+                }
                 when {
                     state.kept -> Text(stringResource(R.string.weeks_kept), style = MaterialTheme.typography.bodyMedium)
                     // D124: drawn in place, not as a dialog, so what it says is on the page.

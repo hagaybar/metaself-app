@@ -591,6 +591,9 @@ fun MetaSelfNavHost(
                 // D123: Get the steps — the single-session form, for that planned session.
                 onGetSteps = { navController.navigate(Destination.PlanSession.forSession(it.week, it.session)) },
                 onCancelKeep = evaluateViewModel::cancelKeep,
+                // D121: asked here, beside the privacy line; the Trainer page's buttons for them open this page.
+                onFill = evaluateViewModel::fill,
+                onNextBlock = evaluateViewModel::nextBlock,
             )
         }
 

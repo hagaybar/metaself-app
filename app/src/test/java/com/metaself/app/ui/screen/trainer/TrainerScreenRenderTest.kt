@@ -11,6 +11,11 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.trainer.CountedPlan
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.WeekTarget
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.Phase
+import com.metaself.app.domain.trainer.Outline
+import com.metaself.app.domain.trainer.Block
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
@@ -122,6 +127,26 @@ class TrainerScreenRenderTest {
     }
 
     /** D105: a twenty-minute walk under a thirty-minute place is still asked about, now under the strip. Invented. */
+    /** D121: an outlined plan whose week has begun empty — the main button opens the plan page, where it is planned. */
+    @Test
+    fun `an empty week's main button is Plan this week, which opens the plan page`() {
+        var opened = 0
+        var planned = 0
+        val outline = Outline(listOf(Block(Phase.STEADY, "Invented", List(2) { WeekTarget(100, 30, false) })))
+        val empty = RUNNING.copy(
+            ask = ProgrammeAsk(2, 2, goal = PlanGoal.Steady),
+            plan = WeeksPlan("Invented", List(2) { PlanWeek("", emptyList()) }, "Invented.", outline),
+        )
+
+        val texts = draw(page(running = empty), onSeePlan = { opened++ }, onPlan = { planned++ })
+
+        assertThat(texts).containsAtLeast("Plan this week", "Plan my next session").inOrder()
+        render.click("Plan this week")
+        render.click("Plan my next session")
+        assertThat(opened).isEqualTo(1)
+        assertThat(planned).isEqualTo(1)
+    }
+
     @Test
     fun `the shorter-session question is still answerable, under the strip`() {
         var answered: Pair<Long, Boolean>? = null
@@ -270,7 +295,7 @@ class TrainerScreenRenderTest {
     ): TrainerViewModel.State {
         val counting = PlanCounting(1, 0, emptyMap())
         val card = running?.let { PlanCard.of(it, workouts, TEST_EPOCH_DAY, counting) } ?: PlanCard.None
-        val home = TrainerHome(waiting, emptyList(), card, (card as? PlanCard.Running)?.next)
+        val home = TrainerHome(waiting, emptyList(), card, (card as? PlanCard.Running)?.next, TEST_EPOCH_DAY)
         val plans = listOfNotNull(running?.let { CountedPlan(it, counting) })
         val week = TrainerWeek.of(MONDAY, TEST_EPOCH_DAY, workouts, days, food, 1_650, plans)
         return TrainerViewModel.State(home = home, today = TEST_EPOCH_DAY, week = week, note = note, answering = answering)

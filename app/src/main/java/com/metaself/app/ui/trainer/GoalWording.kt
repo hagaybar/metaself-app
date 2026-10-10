@@ -65,7 +65,9 @@ object GoalWording {
         "about ${target.minutes} min${SEP}longest ${target.longest}′" + if (target.easier) "${SEP}easier week" else ""
 
     /** D123: a block's row title: "Base · Easy rhythm" (invented). */
-    fun blockTitle(block: Block): String = phase(block.phase) + if (block.focus.isBlank()) "" else SEP + block.focus.trim()
+    fun blockTitle(block: Block): String = blockTitle(block.phase, block.focus)
+
+    fun blockTitle(phase: Phase, focus: String): String = phase(phase) + if (focus.isBlank()) "" else SEP + focus.trim()
 
     /**
      * D123: one bar in words, under its row — so no figure is only a height or a colour: "Wk 3 · 150 min, 120 done",
