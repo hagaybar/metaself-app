@@ -141,7 +141,9 @@ class TrainerWeekWordingTest {
         assertThat(TrainerWeekWording.planRow(PlanCard.of(running, emptyList(), TEST_EPOCH_DAY, counting))).isEqualTo("Your plan · week 2 of 2")
         val later = running.copy(startEpochDay = monday + 7)
         assertThat(TrainerWeekWording.planRow(PlanCard.of(later, emptyList(), TEST_EPOCH_DAY, counting))).isEqualTo("Your plan · starts Mon 7 Sep")
-        assertThat(TrainerWeekWording.planRow(PlanCard.of(running, emptyList(), TEST_EPOCH_DAY + 7, counting))).isNull()
+        // D117: an ended plan is still drawn on the plan screen, for the fourteen days the card is.
+        assertThat(TrainerWeekWording.planRow(PlanCard.of(running, emptyList(), TEST_EPOCH_DAY + 7, counting))).isEqualTo("Your plan · ended Sun 6 Sep")
+        assertThat(TrainerWeekWording.planRow(PlanCard.of(running, emptyList(), TEST_EPOCH_DAY + 30, counting))).isNull()
         assertThat(TrainerWeekWording.planRow(PlanCard.None)).isNull()
     }
 
