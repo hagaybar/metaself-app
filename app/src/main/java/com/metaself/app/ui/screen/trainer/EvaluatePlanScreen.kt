@@ -41,7 +41,7 @@ fun EvaluatePlanScreen(
     onAdjust: () -> Unit = {},
 ) {
     val shown = state.shown
-    val running = state.running
+    val running = state.planShown?.running
     val title = stringResource(
         when {
             state.onRunning -> R.string.weeks_running_title
@@ -55,7 +55,7 @@ fun EvaluatePlanScreen(
             state.onRunning && running == null -> Text(stringResource(R.string.weeks_not_running))
             state.onRunning && running != null -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
-                state.evaluation?.let { EvaluationView(it) }
+                state.planShown?.evaluation?.let { EvaluationView(it.evaluation) }
                 WeeksPlanView(running.programme.plan, running.programme.ask, running.programme.startEpochDay ?: 0, running.progress)
                 OutlinedButton(onClick = onAdjust, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.trainer_adjust_plan))
