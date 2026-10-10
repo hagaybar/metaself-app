@@ -29,7 +29,11 @@ import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.OUTLINE_15
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.STEADY_OUTLINE
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.SessionPlan
@@ -47,6 +51,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -351,7 +356,8 @@ class TrainerPromptTest {
             "question", "today", "about_me", "sessions", "weeks", "months", "weight", "goal", "body", "this_week",
             "earlier_feedback",
         )
-        assertThat(question.keys).containsExactly("kind", "weeks", "sessions_a_week", "words", "starts", "last_evaluation")
+        assertThat(question.keys).containsExactly("kind", "goal", "weeks", "sessions_a_week", "words", "starts", "last_evaluation")
+        assertThat(question.getValue("goal")).isEqualTo(JsonNull)
         assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("evaluate")
         assertThat(question.getValue("starts").jsonPrimitive.content).isEqualTo("2026-08-31")
         val last = question.getValue("last_evaluation").jsonObject
@@ -380,9 +386,10 @@ class TrainerPromptTest {
 
         assertThat(body.toString()).contains("weeks_plan")
         assertThat(question.keys).containsExactly(
-            "kind", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "done_by_week", "done_this_week",
-            "max_this_week", "words", "how_it_went",
+            "kind", "goal", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "filled_weeks", "done_by_week",
+            "done_this_week", "max_this_week", "words", "how_it_went",
         )
+        assertThat(question.getValue("filled_weeks").jsonArray.map { it.jsonPrimitive.int }).containsExactly(1, 2).inOrder()
         assertThat(question.getValue("this_week_number").jsonPrimitive.int).isEqualTo(2)
         assertThat(question.getValue("done_by_week").jsonArray.map { it.jsonPrimitive.int }).containsExactly(3)
         assertThat(question.getValue("done_this_week").jsonArray).hasSize(1)
@@ -608,6 +615,8 @@ class TrainerPromptTest {
         assertThat(systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.FEEDBACK))
         assertThat(systemContent(TrainerPrompt.evaluateBody("a-model", evaluateRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.EVALUATE))
         assertThat(systemContent(TrainerPrompt.adjustBody("a-model", adjustRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.ADJUST))
+        assertThat(systemContent(TrainerPrompt.fillBody("a-model", fillRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.FILL_WEEK))
+        assertThat(systemContent(TrainerPrompt.nextBlockBody("a-model", nextBlockRequest(), strict))).isEqualTo(TrainerPrompt.instructions(TrainerPath.NEXT_BLOCK))
     }
 
     @Test
@@ -653,6 +662,89 @@ class TrainerPromptTest {
     /** Invented: a four-week, three-a-week ask; the plan starts Monday 31 August 2026. */
     private fun evaluateRequest(last: LastEvaluation? = LAST) = request(
         TrainerQuestion.Evaluate(ProgrammeAsk(4, 3, "Invented words."), TEST_EPOCH_DAY - 3, last),
+    )
+
+    // --- D119–D121, D125: goals and outlines. The goal fixture; every figure is invented. ------------------
+
+    @Test
+    fun `a goal's evaluation sends the goal with its weeks to go, and the weeks it makes`() {
+        val request = request(TrainerQuestion.Evaluate(ProgrammeAsk(15, 3, "Invented words.", GOAL_15K), TEST_EPOCH_DAY - 3, null))
+        val body = Json.parseToJsonElement(TrainerPrompt.evaluateBody("a-model", request, RequestProfile.DETERMINISTIC)).jsonObject
+        val question = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("question").jsonObject
+        val goal = question.getValue("goal").jsonObject
+
+        assertThat(goal.keys).containsExactly("kind", "sport", "km", "by", "weeks_to_go")
+        assertThat(goal.getValue("kind").jsonPrimitive.content).isEqualTo("distance")
+        assertThat(goal.getValue("sport").jsonPrimitive.content).isEqualTo("run")
+        assertThat(goal.getValue("km").jsonPrimitive.double).isEqualTo(15.0)
+        assertThat(goal.getValue("by").jsonPrimitive.content).isEqualTo("2026-12-13")
+        assertThat(goal.getValue("weeks_to_go").jsonPrimitive.int).isEqualTo(14)
+        assertThat(question.getValue("weeks").jsonPrimitive.int).isEqualTo(15)
+        val steady = request(TrainerQuestion.Evaluate(ProgrammeAsk(4, 3, goal = PlanGoal.Steady), TEST_EPOCH_DAY - 3, null))
+        val steadyGoal = Json.parseToJsonElement(userContent(Json.parseToJsonElement(TrainerPrompt.evaluateBody("a-model", steady)).jsonObject))
+            .jsonObject.getValue("question").jsonObject.getValue("goal").jsonObject
+        assertThat(steadyGoal.keys).containsExactly("kind")
+        val schema = Json.parseToJsonElement(TrainerPrompt.evaluateBody("a-model", request, RequestProfile.DETERMINISTIC)).jsonObject
+            .getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
+        assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).contains("outline")
+    }
+
+    @Test
+    fun `an outlined plan is sent with its outline and which weeks are filled`() {
+        val question = Json.parseToJsonElement(TrainerPrompt.userMessage(fillRequest())).jsonObject.getValue("question").jsonObject
+
+        assertThat(question.keys).containsExactly(
+            "kind", "goal", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "week_to_fill", "filled_weeks",
+            "done_by_week", "how_it_went",
+        )
+        assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("fill_week")
+        assertThat(question.getValue("week_to_fill").jsonPrimitive.int).isEqualTo(3)
+        assertThat(question.getValue("this_week_number").jsonPrimitive.int).isEqualTo(2)
+        assertThat(question.getValue("filled_weeks").jsonArray.map { it.jsonPrimitive.int }).containsExactly(1, 2).inOrder()
+        val outline = question.getValue("plan").jsonObject.getValue("outline").jsonObject
+        val first = outline.getValue("blocks").jsonArray.first().jsonObject
+        assertThat(first.keys).containsExactly("phase", "focus", "weeks")
+        assertThat(first.getValue("phase").jsonPrimitive.content).isEqualTo("base")
+        assertThat(first.getValue("weeks").jsonArray.first().jsonObject.keys).containsExactly("minutes", "longest_minutes", "easier")
+
+        val block = Json.parseToJsonElement(TrainerPrompt.userMessage(nextBlockRequest())).jsonObject.getValue("question").jsonObject
+        assertThat(block.keys).containsExactly(
+            "kind", "goal", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "filled_weeks", "done_by_week", "how_it_went",
+        )
+        assertThat(block.getValue("kind").jsonPrimitive.content).isEqualTo("next_block")
+        assertThat(block.getValue("goal").jsonObject.getValue("kind").jsonPrimitive.content).isEqualTo("steady")
+    }
+
+    /** D125: the conventions go to the four plan paths, labelled as conventions; never to a session or its feedback. */
+    @Test
+    fun `the plan paths carry the coaching conventions as conventions, and the sum-near-target rule`() {
+        listOf(TrainerPath.EVALUATE, TrainerPath.ADJUST, TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK).forEach { path ->
+            val system = TrainerPrompt.instructions(path)
+            assertThat(system).contains(TrainerPrompt.CONVENTIONS)
+            assertThat(system).contains("not measured standards")
+            assertThat(system).contains("sum near its target")
+        }
+        listOf(TrainerPath.PLAN, TrainerPath.FEEDBACK).forEach { assertThat(TrainerPrompt.instructions(it)).doesNotContain(TrainerPrompt.CONVENTIONS) }
+        assertThat(TrainerPrompt.CONVENTIONS).contains("about a tenth")
+        assertThat(TrainerPrompt.CONVENTIONS).contains("every fourth week")
+        assertThat(TrainerPrompt.CONVENTIONS).contains("taper")
+        assertThat(TrainerPrompt.instructions(TrainerPath.FILL_WEEK)).contains("target_why")
+        assertThat(TrainerPrompt.instructions(TrainerPath.NEXT_BLOCK)).contains("four weeks")
+    }
+
+    private fun fillRequest() = request(
+        TrainerQuestion.FillWeek(
+            ProgrammeAsk(15, 3, goal = GOAL_15K), TEST_EPOCH_DAY - 10, OUTLINED, week = 2, weekIndex = 1, doneByWeek = listOf(3),
+            howItWent = listOf(WEEK_ONE, WEEK_ONE.copy(week = 2)),
+        ),
+    )
+
+    private fun nextBlockRequest() = request(
+        TrainerQuestion.NextBlock(
+            ProgrammeAsk(4, 3, goal = PlanGoal.Steady), TEST_EPOCH_DAY - 24,
+            WEEKS.copy(weeks = WEEKS.weeks + List(2) { PlanWeek("", listOf(STEADY)) }, outline = STEADY_OUTLINE),
+            weekIndex = 3, doneByWeek = listOf(3, 3, 2), howItWent = listOf(WEEK_ONE),
+        ),
     )
 
     private fun adjustRequest() = request(
@@ -797,6 +889,8 @@ class TrainerPromptTest {
         val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
         const val NOTE = "Invented note: an old knee injury, so no running downhill.\nWalks before work."
         val STEADY = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Steady walk")
+        /** The goal fixture's fifteen weeks, the first two filled. */
+        val OUTLINED: WeeksPlan by lazy { WEEKS.copy(weeks = WEEKS.weeks + List(13) { PlanWeek("", emptyList()) }, outline = OUTLINE_15) }
         val WEEKS = WeeksPlan(
             "Invented plan",
             listOf(PlanWeek("settle in", listOf(STEADY, STEADY, STEADY)), PlanWeek("a little longer", listOf(STEADY, STEADY, STEADY))),

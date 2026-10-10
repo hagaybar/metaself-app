@@ -58,7 +58,7 @@ fun TrainerWorkbenchPage(
             Text(WorkbenchWording.INTRO, style = MaterialTheme.typography.bodyMedium)
             if (state.unreadable) Text(WorkbenchWording.RECORD_NOT_READ, color = MaterialTheme.colorScheme.error)
             val open = !state.sending
-            ChoiceRow(R.string.workbench_row_path, TrainerPath.entries, state.path, WorkbenchWording::path, open, onPath)
+            ChoiceRow(R.string.workbench_row_path, TrainerPath.WORKBENCH, state.path, WorkbenchWording::path, open, onPath)
             PathInputs(state, open, onSession, onPlan, onEvaluate, onAdjustWords)
 
             Text(WorkbenchWording.willSend(state.fileName), style = MaterialTheme.typography.titleSmall)
@@ -129,6 +129,9 @@ private fun PathInputs(
         } else if (state.loaded) {
             Text(WorkbenchWording.NO_PLAN)
         }
+
+        // Not on the workbench (TrainerPath.WORKBENCH): never chosen here.
+        TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK -> Text(WorkbenchWording.NOT_HERE)
     }
 }
 

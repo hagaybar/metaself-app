@@ -20,6 +20,16 @@ import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.AttemptFacts
+import com.metaself.app.domain.trainer.Block
+import com.metaself.app.domain.trainer.BlockAnswer
+import com.metaself.app.domain.trainer.FilledWeek
+import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.OUTLINE_15
+import com.metaself.app.domain.trainer.Phase
+import com.metaself.app.domain.trainer.PlanAheadAsk
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.STEADY_OUTLINE
+import com.metaself.app.domain.trainer.target
 import com.metaself.app.domain.trainer.DatedEvaluation
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.EvaluationAndPlan
@@ -924,6 +934,145 @@ class AskTheTrainerTest {
 
         assertThat(ask().stepsFor(walk(id = 1, day = TEST_EPOCH_DAY))!!.id).isEqualTo(forFirst)
         assertThat(ask().stepsFor(swim)!!.id).isEqualTo(forSecond)
+    }
+
+    // --- D119–D121, D124: goals and blocks. The goal fixture; every figure is invented. -----------------
+
+    /** D124: Plan ahead's weeks follow from the goal, counted from the Monday keeping it would give. */
+    @Test
+    fun `planning ahead to a distance asks for the weeks to the goal, and keeps the goal with the plan`() = runTest {
+        trainer.evaluations += TrainerReply.Answered(EvaluationAndPlan(EVALUATION, outlined(filled = 2)), "a-model")
+
+        val offered = (ask().planAhead(PlanAheadAsk(GOAL_15K, 3, "Invented.")) as AskTheTrainer.Evaluated.Offered).programme
+
+        val question = trainer.asked.single().question as TrainerQuestion.Evaluate
+        assertThat(question.ask).isEqualTo(ProgrammeAsk(15, 3, "Invented.", GOAL_15K))
+        assertThat(question.startEpochDay).isEqualTo(MONDAY)
+        assertThat(offered.ask.goal).isEqualTo(GOAL_15K)
+        assertThat(offered.plan.outline).isEqualTo(OUTLINE_15)
+        assertThat(ask().keepProgramme(offered.id)).isEqualTo(MONDAY)
+    }
+
+    /** Choice 15: while a plan runs the answer starts next Monday, so the goal's weeks count from there. */
+    @Test
+    fun `while a plan runs, Plan ahead's question starts next Monday`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        trainer.evaluations += TrainerReply.Failed(EstimateResult.NoKey)
+
+        ask().planAhead(PlanAheadAsk(GOAL_15K, 3))
+
+        val question = trainer.asked.single().question as TrainerQuestion.Evaluate
+        assertThat(question.startEpochDay).isEqualTo(MONDAY + 7)
+        assertThat(question.ask.weeks).isEqualTo(14)
+    }
+
+    /** D121: from Friday, next week is filled in — kept at once as the plan's next version, its target as answered. */
+    @Test
+    fun `filling in next week keeps a new version with that week's sessions and its target`() = runTest {
+        val id = keptOutlined(filled = 1)
+        assertThat(ask().fillWeek()).isEqualTo(AskTheTrainer.Filled.NotOffered)
+        assertThat(trainer.asked).isEmpty()
+
+        day = MONDAY + 4
+        trainer.fills += TrainerReply.Answered(FilledWeek(PlanWeek("Invented", listOf(WALK_30, WALK_20)), target(110, 30), "Invented reason."), "a-model")
+        val filled = ask().fillWeek() as AskTheTrainer.Filled.Done
+
+        assertThat((trainer.asked.single().question as TrainerQuestion.FillWeek).week).isEqualTo(1)
+        assertThat(filled.why).isEqualTo("Invented reason.")
+        val running = programmes.running()!!
+        assertThat(running.id).isEqualTo(filled.programme.id)
+        assertThat(running.replacesId).isEqualTo(id)
+        assertThat(running.startEpochDay).isEqualTo(MONDAY)
+        assertThat(running.plan.weeks[1].sessions).containsExactly(WALK_30, WALK_20).inOrder()
+        assertThat(running.plan.weeks.drop(2).all { it.sessions.isEmpty() }).isTrue()
+        assertThat(running.plan.outline!!.target(1)).isEqualTo(target(110, 30))
+        assertThat(running.ask.goal).isEqualTo(GOAL_15K)
+        assertThat(programmes.rows.value.first { it.id == id }.status).isEqualTo(ProgrammeStatus.ADJUSTED)
+    }
+
+    /** D121: once a week has begun with no sessions, it is planned. */
+    @Test
+    fun `an empty week that has begun is planned, any day`() = runTest {
+        keptOutlined(filled = 0)
+        trainer.fills += TrainerReply.Answered(FilledWeek(PlanWeek("Invented", listOf(WALK_30)), target(120, 40), ""), "a-model")
+
+        assertThat(ask().fillWeek()).isInstanceOf(AskTheTrainer.Filled.Done::class.java)
+        assertThat((trainer.asked.single().question as TrainerQuestion.FillWeek).week).isEqualTo(0)
+        assertThat(programmes.running()!!.plan.weeks[0].sessions).containsExactly(WALK_30)
+    }
+
+    @Test
+    fun `a failed fill stores nothing`() = runTest {
+        val id = keptOutlined(filled = 0)
+        trainer.fills += TrainerReply.Failed(EstimateResult.NoKey)
+
+        assertThat(ask().fillWeek()).isEqualTo(AskTheTrainer.Filled.Failed(EstimateResult.NoKey))
+        assertThat(programmes.running()!!.id).isEqualTo(id)
+    }
+
+    /** D121: a steady plan's last week plans the next four weeks' outline, kept at once. */
+    @Test
+    fun `a steady plan's next block adds four weeks and the block`() = runTest {
+        val steady = offered().copy(
+            ask = ProgrammeAsk(4, 3, goal = PlanGoal.Steady),
+            plan = WeeksPlan("Invented", List(4) { PlanWeek("w", listOf(WALK_30)) }, "Invented reason.", STEADY_OUTLINE),
+        )
+        val id = programmes.add(steady)
+        programmes.keep(id, MONDAY - 21, TEST_EPOCH_DAY - 21)
+        val block = Block(Phase.STEADY, "Invented focus", List(4) { target(130, 40) })
+        trainer.blocks += TrainerReply.Answered(BlockAnswer(block, "Invented reason."), "a-model")
+
+        assertThat(ask().nextBlock()).isInstanceOf(AskTheTrainer.Filled.Done::class.java)
+
+        assertThat(trainer.asked.single().question).isInstanceOf(TrainerQuestion.NextBlock::class.java)
+        val running = programmes.running()!!
+        assertThat(running.ask.weeks).isEqualTo(8)
+        assertThat(running.plan.weeks).hasSize(8)
+        assertThat(running.plan.weeks.drop(4).all { it.sessions.isEmpty() }).isTrue()
+        assertThat(running.plan.outline!!.blocks).containsExactly(STEADY_OUTLINE.blocks.single(), block).inOrder()
+        assertThat(running.startEpochDay).isEqualTo(MONDAY - 21)
+        assertThat(ask().running()!!.weekIndex).isEqualTo(3)
+    }
+
+    @Test
+    fun `the next block is not asked for before the last week, nor for a distance`() = runTest {
+        keptOutlined(filled = 2)
+
+        assertThat(ask().nextBlock()).isEqualTo(AskTheTrainer.Filled.NotOffered)
+        assertThat(trainer.asked).isEmpty()
+    }
+
+    /** D121: Adjust rewrites the filled weeks and may change the later targets; the outline's blocks stay. */
+    @Test
+    fun `adjusting an outlined plan rewrites the two filled weeks and replaces the targets from this week`() = runTest {
+        keptOutlined(filled = 2)
+        trainer.adjustments += TrainerReply.Answered(
+            WeeksPlan("Invented new", listOf(PlanWeek("a", listOf(WALK_20)), PlanWeek("b", listOf(WALK_20, WALK_30))), "Invented."), "a-model",
+        )
+        trainer.adjustTargets += List(15) { target(100, 30) }
+
+        val version = (ask().adjust("Invented.") as AskTheTrainer.Adjusted.Offered).programme
+
+        assertThat(version.plan.weeks).hasSize(15)
+        assertThat(version.plan.weeks[0].sessions).containsExactly(WALK_30, WALK_20).inOrder()
+        assertThat(version.plan.weeks[1].sessions).containsExactly(WALK_20, WALK_30).inOrder()
+        assertThat(version.plan.weeks.drop(2).all { it.sessions.isEmpty() }).isTrue()
+        assertThat(version.plan.outline!!.targets).containsExactlyElementsIn(List(15) { target(100, 30) })
+        assertThat(version.plan.outline!!.blocks.map { it.phase }).isEqualTo(OUTLINE_15.blocks.map { it.phase })
+        assertThat(version.ask.goal).isEqualTo(GOAL_15K)
+    }
+
+    /** The goal fixture's plan, [filled] weeks with two thirty-minute walks each. */
+    private fun outlined(filled: Int) = WeeksPlan(
+        "Invented", List(15) { if (it < filled) PlanWeek("w", listOf(WALK_30, WALK_30)) else PlanWeek("", emptyList()) }, "Invented reason.", OUTLINE_15,
+    )
+
+    /** The goal fixture's plan, kept from [MONDAY]; its id. */
+    private suspend fun keptOutlined(filled: Int): Long {
+        val id = programmes.add(offered().copy(ask = ProgrammeAsk(15, 3, goal = GOAL_15K), plan = outlined(filled)))
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        return id
     }
 
     private fun ask() = AskTheTrainer(

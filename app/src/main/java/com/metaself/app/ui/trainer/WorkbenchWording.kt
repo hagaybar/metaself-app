@@ -33,7 +33,12 @@ object WorkbenchWording {
         TrainerPath.PLAN -> "Plan my next session"
         TrainerPath.EVALUATE -> "Plan ahead"
         TrainerPath.ADJUST -> "Change the rest of my plan"
+        TrainerPath.FILL_WEEK -> "Fill in next week"
+        TrainerPath.NEXT_BLOCK -> "Plan the next block"
     }
+
+    /** A path the workbench does not try (D121's two asks). */
+    const val NOT_HERE = "This one is not tried here."
 
     /** The line that always says which instructions Send will use. */
     fun willSend(fileName: String?): String = "Will send: ${fileName ?: APP_OWN}"

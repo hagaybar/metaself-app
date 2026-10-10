@@ -19,7 +19,10 @@ import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlanConfirmation
+import com.metaself.app.domain.trainer.PlanAheadAsk
 import com.metaself.app.domain.trainer.PlanCounting
+import com.metaself.app.domain.trainer.PlanFilling
+import com.metaself.app.domain.trainer.PlanOffer
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanMatch
 import com.metaself.app.domain.trainer.PlanPlace
@@ -94,6 +97,16 @@ class AskTheTrainer @Inject constructor(
 
         /** No plan runs, or it has ended: nothing was asked. */
         data object NotRunning : Adjusted
+    }
+
+    /** D121: a week filled in, or the next block, kept at once as the plan's next version (release 2's choice 5). */
+    sealed interface Filled {
+        /** [programme] is the version now running; [why] the trainer's sentence, "" when it said none. */
+        data class Done(val programme: Programme, val why: String) : Filled
+        data class Failed(val failure: EstimateResult) : Filled
+
+        /** Nothing to fill in, or no next block to plan, today: nothing was asked. */
+        data object NotOffered : Filled
     }
 
     sealed interface Reviewed {
@@ -193,6 +206,15 @@ class AskTheTrainer @Inject constructor(
         }
     }
 
+    /**
+     * D124: Plan ahead — the goal, sessions a week and words; the weeks follow from the goal, counted from the Monday
+     * keeping the answer today would give (next Monday while a plan runs). Stored OFFERED, with its goal.
+     */
+    suspend fun planAhead(ask: PlanAheadAsk): Evaluated = evaluate(ask.toAsk(planStart()))
+
+    /** The Monday an answer kept today starts on: next Monday while a plan runs (D124), else D94's. Reads only. */
+    private suspend fun planStart(): Long = replacingFrom() ?: ProgrammeCalendar.startFor(today().toEpochDay())
+
     /** D93: one ask; the answer is stored OFFERED. The plan would start on the Monday keeping it today gives (D94). */
     suspend fun evaluate(ask: ProgrammeAsk): Evaluated =
         when (val reply = trainer.evaluate(request(evaluateQuestion(ask)))) {
@@ -231,9 +253,18 @@ class AskTheTrainer @Inject constructor(
             is TrainerReply.Failed -> Adjusted.Failed(reply.failure)
             is TrainerReply.Answered -> {
                 keepNote(reply.weekNote)
-                val rest = reply.value
+                val rest = reply.value.plan
                 val thisWeek = PlanWeek(rest.weeks.first().focus, question.tickedThisWeek + rest.weeks.first().sessions)
-                val composed = WeeksPlan(rest.title, programme.plan.weeks.take(question.weekIndex) + thisWeek + rest.weeks.drop(1), rest.why)
+                val rewritten = listOf(thisWeek) + rest.weeks.drop(1)
+                val outline = programme.plan.outline
+                // D121: with an outline, the filled weeks are rewritten and the later ones keep their (empty) place;
+                // the targets from this week are the reply's, the blocks the plan's.
+                val composed = if (outline == null) {
+                    WeeksPlan(rest.title, programme.plan.weeks.take(question.weekIndex) + rewritten, rest.why)
+                } else {
+                    val weeks = programme.plan.weeks.take(question.weekIndex) + rewritten + programme.plan.weeks.drop(question.weekIndex + rewritten.size)
+                    WeeksPlan(rest.title, weeks, rest.why, outline.withTargetsFrom(question.weekIndex, reply.value.targets))
+                }
                 val version = Programme(
                     id = 0, createdAtMillis = now(), ask = programme.ask.copy(words = question.words), evaluation = null,
                     plan = composed, model = reply.model, replacesId = programme.id,
@@ -241,6 +272,60 @@ class AskTheTrainer @Inject constructor(
                 Adjusted.Offered(version.copy(id = programmes.add(version)))
             }
         }
+    }
+
+    /**
+     * D121: Fill in next week, or Plan this week — whichever [PlanFilling] offers today. The answer is kept at once as
+     * the plan's next version (the filled week's sessions, its target as answered); the old version stops today,
+     * adjusted, and kept steps follow their sessions. Only when tapped (D84).
+     */
+    suspend fun fillWeek(): Filled {
+        val running = adjustable() ?: return Filled.NotOffered
+        val question = fillQuestion(running) ?: return Filled.NotOffered
+        return when (val reply = trainer.fill(request(question))) {
+            is TrainerReply.Failed -> Filled.Failed(reply.failure)
+            is TrainerReply.Answered -> {
+                keepNote(reply.weekNote)
+                val programme = running.programme
+                val plan = programme.plan
+                val weeks = plan.weeks.mapIndexed { index, week -> if (index == question.week) reply.value.week else week }
+                val outline = requireNotNull(plan.outline).withTarget(question.week, reply.value.target)
+                val version = keepVersion(programme, programme.ask, plan.copy(weeks = weeks, outline = outline), reply.model)
+                Filled.Done(version, reply.value.why)
+            }
+        }
+    }
+
+    /**
+     * D121: a steady plan's next block, in its last week: four more weeks, empty, and the block, kept at once as the
+     * plan's next version. Only when tapped (D84).
+     */
+    suspend fun nextBlock(): Filled {
+        val running = adjustable() ?: return Filled.NotOffered
+        val question = nextBlockQuestion(running) ?: return Filled.NotOffered
+        return when (val reply = trainer.nextBlock(request(question))) {
+            is TrainerReply.Failed -> Filled.Failed(reply.failure)
+            is TrainerReply.Answered -> {
+                keepNote(reply.weekNote)
+                val programme = running.programme
+                val plan = programme.plan
+                val block = reply.value.block
+                val longer = plan.copy(
+                    weeks = plan.weeks + List(block.weeks.size) { PlanWeek("", emptyList()) },
+                    outline = requireNotNull(plan.outline) + block,
+                )
+                val version = keepVersion(programme, programme.ask.copy(weeks = programme.ask.weeks + block.weeks.size), longer, reply.model)
+                Filled.Done(version, reply.value.why)
+            }
+        }
+    }
+
+    /** A new version of [programme], stored and kept at once from the chain's start (D97's machinery); it is returned. */
+    private suspend fun keepVersion(programme: Programme, ask: ProgrammeAsk, plan: WeeksPlan, model: String): Programme {
+        val version = Programme(0, now(), ask, null, plan, model, replacesId = programme.id)
+        val stored = version.copy(id = programmes.add(version))
+        keepAdjusted(stored)
+        return stored.copy(status = ProgrammeStatus.RUNNING, startEpochDay = programme.startEpochDay)
     }
 
     /**
@@ -438,10 +523,44 @@ class AskTheTrainer @Inject constructor(
         return TrainerRequest.reviewQuestion(workout, review, plan).copy(planned = plannedTickOf(workout.id))
     }
 
-    /** D93, D94, D98: the form, the Monday keeping it today gives, and the last kept evaluation. */
-    suspend fun evaluateQuestion(ask: ProgrammeAsk): TrainerQuestion.Evaluate {
-        val day = today().toEpochDay()
-        return TrainerQuestion.Evaluate(ask, ProgrammeCalendar.startFor(day), lastEvaluation(day))
+    /**
+     * D93, D94, D98: the form, the Monday keeping it today gives — next Monday while a plan runs (D124) — and the last
+     * kept evaluation.
+     */
+    suspend fun evaluateQuestion(ask: ProgrammeAsk): TrainerQuestion.Evaluate =
+        TrainerQuestion.Evaluate(ask, planStart(), lastEvaluation(today().toEpochDay()))
+
+    /** D124: Plan ahead's question, its weeks counted from where the plan would start. */
+    suspend fun planAheadQuestion(ask: PlanAheadAsk): TrainerQuestion.Evaluate = evaluateQuestion(ask.toAsk(planStart()))
+
+    /** D121: the week [PlanFilling] offers to fill in today, with how the weeks before it went; null when none. */
+    suspend fun fillQuestion(): TrainerQuestion.FillWeek? = adjustable()?.let { fillQuestion(it) }
+
+    private fun fillQuestion(running: PlanCard.Running): TrainerQuestion.FillWeek? {
+        val week = when (val offer = PlanFilling.offer(running, today().toEpochDay())) {
+            is PlanOffer.PlanThisWeek -> offer.week
+            is PlanOffer.FillNextWeek -> offer.week
+            PlanOffer.NextBlock, null -> return null
+        }
+        val programme = running.programme
+        val begun = running.progress.weeks.take(week.coerceAtMost(running.weekIndex + 1).coerceAtLeast(0))
+        return TrainerQuestion.FillWeek(
+            programme.ask, requireNotNull(programme.startEpochDay), programme.plan, week, running.weekIndex,
+            begun.map { it.done }, running.progress.weeks.take((running.weekIndex + 1).coerceAtLeast(0)).map { it.outcome() },
+        )
+    }
+
+    /** D121: a steady plan's next block, from how its weeks went; null unless offered today. */
+    suspend fun nextBlockQuestion(): TrainerQuestion.NextBlock? = adjustable()?.let { nextBlockQuestion(it) }
+
+    private fun nextBlockQuestion(running: PlanCard.Running): TrainerQuestion.NextBlock? {
+        if (PlanFilling.offer(running, today().toEpochDay()) != PlanOffer.NextBlock) return null
+        val programme = running.programme
+        val index = running.weekIndex
+        return TrainerQuestion.NextBlock(
+            programme.ask, requireNotNull(programme.startEpochDay), programme.plan, index,
+            running.progress.weeks.take(index).map { it.done }, running.progress.weeks.take(index + 1).map { it.outcome() },
+        )
     }
 
     /** D97, D105: the running plan's rest and how each week went; null when no plan runs. */

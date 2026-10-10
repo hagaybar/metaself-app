@@ -131,12 +131,34 @@ data class WeeksPlan(val title: String, val weeks: List<PlanWeek>, val why: Stri
     /** D94: as many weeks as asked, each with one to [ProgrammeAsk.perWeek] sessions. */
     fun fits(ask: ProgrammeAsk): Boolean = weeks.size == ask.weeks && weeks.all { it.sessions.size in 1..ask.perWeek }
 
+    /** D125: the weeks that carry sessions, counted from 1 — every week of a plan made before outlines. */
+    val filledWeeks: List<Int> get() = weeks.withIndex().filter { it.value.sessions.isNotEmpty() }.map { it.index + 1 }
+
     /** D97: this week and the weeks after — this week up to [thisWeekMax] sessions, none allowed; later weeks one to [perWeek]. */
     fun fitsRest(weeksLeft: Int, perWeek: Int, thisWeekMax: Int): Boolean =
         weeksLeft >= 1 && weeks.size == weeksLeft &&
             weeks.first().sessions.size in 0..thisWeekMax &&
             weeks.drop(1).all { it.sessions.size in 1..perWeek }
 }
+
+/** D121: how many of a new plan's weeks carry sessions — the first two; the rest carry their target only. */
+const val FILLED_AT_FIRST = 2
+
+/**
+ * D120, D121: a new plan's reply — its first weeks with sessions — as the whole plan: the remaining weeks of [outline]
+ * added empty, with no focus (their block gives it), and the outline kept.
+ */
+fun WeeksPlan.withOutline(outline: Outline): WeeksPlan =
+    copy(weeks = weeks + List(outline.weeks - weeks.size) { PlanWeek("", emptyList()) }, outline = outline)
+
+/** D97, D121: Adjust's reply — this week's rest and the weeks after it that it rewrites — and, for a plan with an outline, a target for every week from this one. */
+data class AdjustedRest(val plan: WeeksPlan, val targets: List<WeekTarget> = emptyList())
+
+/** D121: one week filled in — its sessions, its target (as it was, or changed) and, when changed, one sentence of why ("" otherwise). */
+data class FilledWeek(val week: PlanWeek, val target: WeekTarget, val why: String)
+
+/** D121: a steady plan's next block, and why. */
+data class BlockAnswer(val block: Block, val why: String)
 
 /** D94: where the owner stands. [sinceLast] is "" when no earlier evaluation was sent. Advice (D4). */
 data class Evaluation(val headline: String, val goingWell: String, val toWorkOn: String, val sinceLast: String)

@@ -15,7 +15,13 @@ import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WeeksPlan
+import com.metaself.app.domain.trainer.AdjustedRest
 import com.metaself.app.domain.trainer.Block
+import com.metaself.app.domain.trainer.BlockAnswer
+import com.metaself.app.domain.trainer.FILLED_AT_FIRST
+import com.metaself.app.domain.trainer.FilledWeek
+import com.metaself.app.domain.trainer.PlanAheadAsk
+import com.metaself.app.domain.trainer.withOutline
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.Phase
@@ -65,14 +71,75 @@ object TrainerResponse {
      * the model wrote one — D94 says it is empty when there is none, and the answer is not failed for it.
      */
     fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk, hadLast: Boolean): TrainerReply<EvaluationAndPlan> =
-        content(body)?.let(::readEvaluationAndPlan)?.takeIf { it.plan.fits(ask) }
+        content(body)?.let { content -> if (ask.goal == null) readEvaluationAndPlan(content)?.takeIf { it.plan.fits(ask) } else readOutlined(content, ask) }
             ?.let { if (hadLast) it else it.copy(evaluation = it.evaluation.copy(sinceLast = "")) }
             ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
-    /** D97: this week and the weeks after, [fitting the rest][WeeksPlan.fitsRest]. */
-    fun parseAdjusted(body: String, model: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): TrainerReply<WeeksPlan> =
-        content(body)?.let(::readWeeksPlan)?.takeIf { it.fitsRest(weeksLeft, perWeek, thisWeekMax) }
+    /**
+     * D120, D121: a goal's evaluation — sessions for the plan's first two weeks (one, for a one-week plan), each with
+     * one to sessions-a-week; an outline covering every week of [ask] within the bounds — composed into the whole plan,
+     * its later weeks empty. Null for anything else.
+     */
+    private fun readOutlined(content: String, ask: ProgrammeAsk): EvaluationAndPlan? = runCatching {
+        val reply = readEvaluationAndPlan(content)!!
+        val outline = outline(json.parseToJsonElement(content).jsonObject.getValue("outline").jsonObject)
+        val first = reply.plan.weeks
+        val fits = first.size == minOf(FILLED_AT_FIRST, ask.weeks) && first.all { it.sessions.size in 1..ask.perWeek } &&
+            outline.covers(ask.weeks) && outline.fits(ask.perWeek)
+        if (fits) reply.copy(plan = reply.plan.copy(outline = null).withOutline(outline)) else null
+    }.getOrNull()
+
+    /**
+     * D97: this week and the weeks after, [fitting the rest][WeeksPlan.fitsRest]. For a plan with an outline
+     * ([outlined], D121): this week and next week only (this week alone when it is the last), and a target in bounds
+     * for every week left.
+     */
+    fun parseAdjusted(
+        body: String,
+        model: String,
+        weeksLeft: Int,
+        perWeek: Int,
+        thisWeekMax: Int,
+        outlined: Boolean = false,
+    ): TrainerReply<AdjustedRest> =
+        content(body)?.let { content -> if (outlined) readOutlinedRest(content, weeksLeft, perWeek, thisWeekMax) else readRest(content, weeksLeft, perWeek, thisWeekMax) }
+            ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    private fun readRest(content: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): AdjustedRest? =
+        readWeeksPlan(content)?.takeIf { it.fitsRest(weeksLeft, perWeek, thisWeekMax) }?.let { AdjustedRest(it.copy(outline = null)) }
+
+    private fun readOutlinedRest(content: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): AdjustedRest? = runCatching {
+        val plan = readWeeksPlan(content)!!.copy(outline = null)
+        val targets = json.parseToJsonElement(content).jsonObject.getValue("targets").jsonArray.map { target(it.jsonObject) }
+        val fits = plan.fitsRest(minOf(FILLED_AT_FIRST, weeksLeft), perWeek, thisWeekMax) &&
+            targets.size == weeksLeft && targets.all { it.fits(perWeek) }
+        if (fits) AdjustedRest(plan, targets) else null
+    }.getOrNull()
+
+    /** D121: one week filled in — one to [perWeek] sessions, its target in bounds, and why ("" when unchanged). */
+    fun parseFill(body: String, model: String, perWeek: Int): TrainerReply<FilledWeek> =
+        content(body)?.let { content ->
+            runCatching {
+                val payload = json.parseToJsonElement(content).jsonObject
+                val week = PlanWeek(payload.text("focus"), payload.getValue("sessions").jsonArray.map { planned(it.jsonObject) })
+                val filled = FilledWeek(week, target(payload.getValue("target").jsonObject), payload.text("target_why"))
+                filled.takeIf { week.sessions.size in 1..perWeek && it.target.fits(perWeek) }
+            }.getOrNull()
+        }
+            ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    /** D121: the next block — four weeks of targets in bounds — and why. */
+    fun parseNextBlock(body: String, model: String, perWeek: Int): TrainerReply<BlockAnswer> =
+        content(body)?.let { content ->
+            runCatching {
+                val payload = json.parseToJsonElement(content).jsonObject
+                val answer = BlockAnswer(block(payload.getValue("block").jsonObject), payload.text("why"))
+                answer.takeIf { it.block.weeks.size == PlanAheadAsk.BLOCK_WEEKS && it.block.weeks.all { week -> week.fits(perWeek) } && it.why.isNotEmpty() }
+            }.getOrNull()
+        }
             ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 

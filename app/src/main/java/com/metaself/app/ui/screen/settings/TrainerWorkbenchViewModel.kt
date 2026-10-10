@@ -80,6 +80,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
                 TrainerPath.PLAN -> plan.answers()?.let { TrainerWorkbench.Inputs.Plan(it) }
                 TrainerPath.EVALUATE -> evaluate.ask()?.let { TrainerWorkbench.Inputs.Evaluate(it) }
                 TrainerPath.ADJUST -> if (planRuns) TrainerWorkbench.Inputs.Adjust(adjustWords) else null
+                TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK -> null
             }
 
         val canSend: Boolean get() = loaded && !sending && inputs != null
@@ -173,7 +174,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
         )
     }
 
-    private fun pathNamed(name: String): TrainerPath? = TrainerPath.entries.firstOrNull { it.name == name }
+    private fun pathNamed(name: String): TrainerPath? = TrainerPath.WORKBENCH.firstOrNull { it.name == name }
 
     /** Reads the file and its name, then names it and takes its text in one update; a file that cannot be read changes nothing. */
     fun load(uri: String) {

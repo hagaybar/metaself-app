@@ -1,6 +1,7 @@
 package com.metaself.app.data.ai
 
 import com.metaself.app.domain.movement.EnergySource
+import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Feedback
@@ -228,21 +229,30 @@ object TrainerPrompt {
     """.trimIndent()
 
     private val EVALUATE = """
-        They are asking where they stand, and for a plan for the weeks ahead. The question gives how many
-        weeks, how many sessions a week they can manage (sessions_a_week), any words of theirs, the date the
-        plan starts (starts, a Monday; weeks run Monday to Sunday), and your last evaluation if there is one,
-        with the plan that ran with it and how many of its sessions were done each week (done_by_week,
-        counted by the app: one number for each week that had begun, so a plan stopped early has
-        fewer numbers than weeks) and how each of those weeks went (how_it_went, below).
+        They are asking where they stand, and for a plan for the weeks ahead. The question gives their goal
+        (question.goal, below), how many weeks the plan runs (weeks: for a distance, from the date it starts
+        to the goal's week; for a steady rhythm, one block of four), how many sessions a week they can manage
+        (sessions_a_week), any words of theirs, the date the plan starts (starts, a Monday; weeks run Monday
+        to Sunday), and your last evaluation if there is one, with the plan that ran with it and how many of
+        its sessions were done each week (done_by_week, counted by the app: one number for each week that had
+        begun, so a plan stopped early has fewer numbers than weeks) and how each of those weeks went
+        (how_it_went, below).
 
-        Reply with an evaluation and a plan. The evaluation: a one-line headline; going_well; to_work_on;
-        and since_last, what has changed since the last evaluation, or an empty string when there is none.
-        Judge from the record; do not invent a test or a score.
+        Reply with an evaluation, a plan and an outline. The evaluation: a one-line headline; going_well;
+        to_work_on; and since_last, what has changed since the last evaluation, or an
+        empty string when there is none. Judge from the record; do not invent a test or a score.
 
-        The plan: a title; exactly as many weeks as asked, in order, each with a short focus and between
-        one and sessions_a_week sessions; each session has a kind (walk, run, cycle, swim, strength or
-        other), whole minutes from 5 to 180, an effort (easy, steady or push) and one line on what it is.
-        Sessions have no day: each can be done on any day of its week. Then one paragraph on why.
+        The outline: the blocks from the plan's first week to the goal's week, in order — for a steady rhythm
+        one block of exactly four weeks — whose weeks together number exactly weeks; each week's target with
+        minutes, longest_minutes (5 to 180) and easier. When question.goal is null, give an empty list of
+        blocks.
+
+        The plan: a title; the sessions of its first two weeks only — the later weeks carry their target
+        until they are filled in — or, when question.goal is null, exactly as many weeks as asked; in order,
+        each with a short focus and between one and sessions_a_week sessions; each session has a kind (walk,
+        run, cycle, swim, strength or other), whole minutes from 5 to 180, an effort (easy, steady or push)
+        and one line on what it is. Sessions have no day: each can be done on any day of its week. Then one
+        paragraph on why.
     """.trimIndent() + "\n\n" + HOW_IT_WENT
 
     private val ADJUST = """
@@ -258,7 +268,65 @@ object TrainerPrompt {
         and sessions_a_week. Each session has a kind (walk, run, cycle, swim, strength or other), whole
         minutes from 5 to 180, an effort (easy, steady or push) and one line on what it is. Keep the same
         number of weeks; the end date does not move. Weeks already over are not yours to change.
+
+        When the plan has an outline, only this week and the next carry sessions: reply with this week and
+        next week only (this week alone in the plan's last week), and give targets — one per week from this
+        one to the end, each with minutes, longest_minutes (5 to 180) and easier — which may change the
+        outline's targets but not its blocks. When it has no outline, give targets as an empty list.
     """.trimIndent() + "\n\n" + HOW_IT_WENT
+
+    /** D121: one week filled in, for a plan with an outline. */
+    private val FILL_WEEK = """
+        They are following your weekly plan, which has an outline, and ask you to fill in one week of it:
+        week_to_fill, counted from 1 — next week, or this week when it has begun with no sessions. The
+        question gives the plan with its outline, the week they are in (this_week_number, from 1; 0 before
+        the plan starts), how many planned sessions were done in each week before it (done_by_week, counted
+        by the app) and how each week so far went (how_it_went, below).
+
+        Reply with that week: a short focus and between one and sessions_a_week sessions, each with a kind
+        (walk, run, cycle, swim, strength or other), whole minutes from 5 to 180, an effort (easy, steady or
+        push) and one line on what it is; then its target — minutes, longest_minutes (5 to 180) and easier —
+        as the outline has it, or changed when the record argues for it; and target_why: one sentence on why
+        you changed the target, or an empty string when you did not.
+    """.trimIndent() + "\n\n" + HOW_IT_WENT
+
+    /** D121: a steady plan's next block. */
+    private val NEXT_BLOCK = """
+        They are following your weekly plan towards a steady rhythm and are in the last week of its last
+        block; they ask for the next block. The question gives the plan with its outline, the week they are
+        in (this_week_number, from 1), how many planned sessions were done in each week before it
+        (done_by_week, counted by the app) and how each week of the plan went (how_it_went, below).
+
+        Reply with the next block, made from how this one went: a phase (usually steady), a one-line focus
+        and exactly four weeks, each with its target — minutes, longest_minutes (5 to 180) and easier; then
+        why, one paragraph. Its weeks are filled in with sessions later, as they come.
+    """.trimIndent() + "\n\n" + HOW_IT_WENT
+
+    /** D119, D120, D125: the goal and the outline, on the four plan paths. */
+    private val GOALS = """
+        question.goal is the plan's goal — not the weight goal above. It is null for a plan made before goals;
+        otherwise either kind "steady" (keep a steady rhythm, with no end date, planned one block at a time)
+        or kind "distance", with the sport (run, walk, swim or ride), km, by (the date, a Sunday) and
+        weeks_to_go (counted by the app, from this week to the goal's week). A plan's outline is its blocks in
+        order, each with a phase (base, build, peak, taper or steady), a one-line focus and one target per
+        week: minutes (the week's total), longest_minutes (its longest session) and easier (an easier week).
+        filled_weeks lists the weeks, counted from 1, that carry sessions; the others carry their target only.
+    """.trimIndent()
+
+    /**
+     * D125: the coaching conventions, sent as conventions — the phone enforces none of them — and the rule on a
+     * week's sum. On the four plan paths, never on a session's plan or its feedback.
+     */
+    internal val CONVENTIONS = """
+        Coaching conventions — rules of thumb from endurance coaching, not measured standards. Use them as a
+        coach would, and depart from them when the record argues otherwise:
+        - Blocks of about four weeks, each with one focus: base, then build, then peak, then a taper of one to
+          two weeks before a race. A steady rhythm repeats steady blocks.
+        - Weekly load rising by about a tenth from one week to the next.
+        - An easier week every fourth week.
+        - Most sessions easy.
+        A week's sessions should sum near its target, unless the week's ledger argues otherwise; then say why.
+    """.trimIndent()
 
     fun planBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.Plan) { "a plan is asked with a plan question" }
@@ -280,6 +348,16 @@ object TrainerPrompt {
         return ChatRequest.body(model, profile, messages(request), "weeks_plan", ADJUST_SCHEMA)
     }
 
+    fun fillBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
+        require(request.question is TrainerQuestion.FillWeek) { "a week is filled in with a fill question" }
+        return ChatRequest.body(model, profile, messages(request), "week_filled", FILL_SCHEMA)
+    }
+
+    fun nextBlockBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
+        require(request.question is TrainerQuestion.NextBlock) { "a next block is asked with a next-block question" }
+        return ChatRequest.body(model, profile, messages(request), "next_block", NEXT_BLOCK_SCHEMA)
+    }
+
     /**
      * D106: the whole system message [path] sends today — the shared part, the six ledgers and D112's
      * rules, the voice paragraph and the path's own, and the week's note (D116), joined as every body joins them. The workbench saves this to a file as the starting point. A model without the
@@ -290,9 +368,14 @@ object TrainerPrompt {
         COMMON + "\n\n" + SIX_WEEKS + "\n\n" + LEDGER + "\n\n" + WEEK_RULES + "\n\n" + when (path) {
             TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
             TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
-            TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE
-            TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST
+            TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE + PLANNING
+            TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST + PLANNING
+            TrainerPath.FILL_WEEK -> VOICE + "\n\n" + FILL_WEEK + PLANNING
+            TrainerPath.NEXT_BLOCK -> VOICE + "\n\n" + NEXT_BLOCK + PLANNING
         } + "\n\n" + WEEK_NOTE
+
+    /** D125: what the four plan paths add after their own task — the goal and outline, then the conventions. */
+    private val PLANNING: String get() = "\n\n" + GOALS + "\n\n" + CONVENTIONS
 
     /** The user message every body sends: [request], serialised. Shared with the workbench (D106). */
     fun userMessage(request: TrainerRequest): String = user(request).toString()
@@ -318,7 +401,7 @@ object TrainerPrompt {
     )
 
     private fun user(request: TrainerRequest): JsonObject = buildJsonObject {
-        put("question", question(request.question))
+        put("question", question(request.question, request.today))
         put("today", date(request.today))
         put("about_me", request.aboutMe?.let(::JsonPrimitive) ?: JsonNull)
         putJsonArray("sessions") { request.sessions.forEach { add(sessionJson(it)) } }
@@ -361,7 +444,7 @@ object TrainerPrompt {
         putJsonArray("earlier_feedback") { request.earlierFeedback.forEach { add(feedback(it)) } }
     }
 
-    private fun question(question: TrainerQuestion): JsonObject = when (question) {
+    private fun question(question: TrainerQuestion, today: Long): JsonObject = when (question) {
         is TrainerQuestion.Plan -> buildJsonObject {
             put("kind", "plan")
             put("what", question.answers.activity.name.lowercase().replace('_', ' '))
@@ -379,6 +462,7 @@ object TrainerPrompt {
         }
         is TrainerQuestion.Evaluate -> buildJsonObject {
             put("kind", "evaluate")
+            put("goal", sentGoal(question.ask.goal, today))
             put("weeks", question.ask.weeks)
             put("sessions_a_week", question.ask.perWeek)
             put("words", question.ask.words.trim())
@@ -398,17 +482,53 @@ object TrainerPrompt {
         }
         is TrainerQuestion.Adjust -> buildJsonObject {
             put("kind", "adjust")
+            put("goal", sentGoal(question.ask.goal, today))
             put("weeks", question.ask.weeks)
             put("sessions_a_week", question.ask.perWeek)
             put("starts", date(question.startEpochDay))
             put("plan", weeksPlanJson(question.plan))
             put("this_week_number", question.weekIndex + 1)
+            putJsonArray("filled_weeks") { question.plan.filledWeeks.forEach { add(it) } }
             putJsonArray("done_by_week") { question.doneByWeek.forEach { add(it) } }
             putJsonArray("done_this_week") { question.tickedThisWeek.forEach { add(plannedJson(it)) } }
             put("max_this_week", question.thisWeekMax)
             put("words", question.words.trim())
             putJsonArray("how_it_went") { question.howItWent.forEach { add(weekOutcome(it)) } }
         }
+        is TrainerQuestion.FillWeek -> buildJsonObject {
+            put("kind", "fill_week")
+            put("goal", sentGoal(question.ask.goal, today))
+            put("weeks", question.ask.weeks)
+            put("sessions_a_week", question.ask.perWeek)
+            put("starts", date(question.startEpochDay))
+            put("plan", weeksPlanJson(question.plan))
+            put("this_week_number", question.weekIndex + 1)
+            put("week_to_fill", question.week + 1)
+            putJsonArray("filled_weeks") { question.plan.filledWeeks.forEach { add(it) } }
+            putJsonArray("done_by_week") { question.doneByWeek.forEach { add(it) } }
+            putJsonArray("how_it_went") { question.howItWent.forEach { add(weekOutcome(it)) } }
+        }
+        is TrainerQuestion.NextBlock -> buildJsonObject {
+            put("kind", "next_block")
+            put("goal", sentGoal(question.ask.goal, today))
+            put("weeks", question.ask.weeks)
+            put("sessions_a_week", question.ask.perWeek)
+            put("starts", date(question.startEpochDay))
+            put("plan", weeksPlanJson(question.plan))
+            put("this_week_number", question.weekIndex + 1)
+            putJsonArray("filled_weeks") { question.plan.filledWeeks.forEach { add(it) } }
+            putJsonArray("done_by_week") { question.doneByWeek.forEach { add(it) } }
+            putJsonArray("how_it_went") { question.howItWent.forEach { add(weekOutcome(it)) } }
+        }
+    }
+
+    /** D125: the goal as sent — as stored, and for a distance the weeks from this week to the goal's week, counted here. */
+    private fun sentGoal(goal: PlanGoal?, today: Long): JsonElement {
+        if (goal == null) return JsonNull
+        val stored = goalJson(goal)
+        if (goal !is PlanGoal.Distance) return stored
+        val weeksToGo = (MovementWeek.mondayOf(goal.byEpochDay) - MovementWeek.mondayOf(today)) / 7
+        return JsonObject(stored + ("weeks_to_go" to JsonPrimitive(weeksToGo)))
     }
 
     /** D105: one week as the phone counted it — each planned session's outcome, and the attempts. Minutes only. */
@@ -775,19 +895,44 @@ object TrainerPrompt {
         "why" to string(),
     )
 
+    private fun boolean() = buildJsonObject { put("type", "boolean") }
+
+    /** D120: one week's target. */
+    private val TARGET_SCHEMA: JsonObject = strictObject("minutes" to integer(), "longest_minutes" to integer(), "easier" to boolean())
+
+    private val BLOCK_SCHEMA: JsonObject = strictObject(
+        "phase" to enumOf("base", "build", "peak", "taper", "steady"),
+        "focus" to string(),
+        "weeks" to arraySchema(TARGET_SCHEMA),
+    )
+
     private val EVALUATION_SCHEMA: JsonObject = strictObject(
         "evaluation" to strictObject(
             "headline" to string(), "going_well" to string(), "to_work_on" to string(), "since_last" to string(),
         ),
         "plan" to WEEKS_PLAN_SCHEMA,
+        "outline" to strictObject("blocks" to arraySchema(BLOCK_SCHEMA)),
         "week_note" to string(),
     )
+
+    /** D121: one week filled in, its target, and why it changed. */
+    private val FILL_SCHEMA: JsonObject = strictObject(
+        "focus" to string(),
+        "sessions" to arraySchema(PLANNED_SCHEMA),
+        "target" to TARGET_SCHEMA,
+        "target_why" to string(),
+        "week_note" to string(),
+    )
+
+    /** D121: a steady plan's next block. */
+    private val NEXT_BLOCK_SCHEMA: JsonObject = strictObject("block" to BLOCK_SCHEMA, "why" to string(), "week_note" to string())
 
     /** D97's reply: the plan of weeks, and the week's note (D116). The plan inside an evaluation keeps [WEEKS_PLAN_SCHEMA]. */
     private val ADJUST_SCHEMA: JsonObject = strictObject(
         "title" to string(),
         "weeks" to arraySchema(strictObject("focus" to string(), "sessions" to arraySchema(PLANNED_SCHEMA))),
         "why" to string(),
+        "targets" to arraySchema(TARGET_SCHEMA),
         "week_note" to string(),
     )
 }
