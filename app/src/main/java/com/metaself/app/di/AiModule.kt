@@ -25,6 +25,8 @@ import com.metaself.app.data.letter.LetterSettingsStore
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.DataStoreAboutMeStore
+import com.metaself.app.data.trainer.DataStoreWeekNoteStore
+import com.metaself.app.data.trainer.WeekNoteStore
 import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
@@ -83,6 +85,11 @@ object AiModule {
     @Provides
     @Singleton
     fun provideAboutMeStore(store: DataStore<Preferences>): AboutMeStore = DataStoreAboutMeStore(store)
+
+    /** The newest week_note (D116), the Trainer page's coach's note, beside About me. */
+    @Provides
+    @Singleton
+    fun provideWeekNoteStore(store: DataStore<Preferences>): WeekNoteStore = DataStoreWeekNoteStore(store)
 
     /** The weekly letter's switch and hour (D99), beside the AI settings. */
     @Provides

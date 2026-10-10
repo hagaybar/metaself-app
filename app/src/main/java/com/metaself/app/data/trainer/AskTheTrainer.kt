@@ -8,6 +8,7 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.CountedPlan
@@ -33,6 +34,8 @@ import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.coroutines.flow.first
 import java.time.Instant
@@ -58,6 +61,8 @@ class AskTheTrainer @Inject constructor(
     private val year: CurrentYear,
     /** Each day's food totals (D110), the letter's reader; never a meal. Defaulted for tests that send no food. */
     private val food: FoodTotals = FoodTotals { _, _ -> emptyMap() },
+    /** Where each answer's week_note is kept (D116). Defaulted for tests that do not look at it. */
+    private val weekNotes: WeekNoteStore = WeekNoteStore.NONE,
 ) {
 
     sealed interface Suggested {
@@ -100,6 +105,7 @@ class AskTheTrainer @Inject constructor(
         when (val reply = trainer.suggest(request(planQuestion(answers)))) {
             is TrainerReply.Failed -> Suggested.Failed(reply.failure)
             is TrainerReply.Answered -> {
+                keepNote(reply.weekNote)
                 val plan = TrainerPlan(0, now(), answers, reply.value, reply.model, kept = false)
                 Suggested.Planned(plan.copy(id = store.addPlan(plan)))
             }
@@ -120,6 +126,7 @@ class AskTheTrainer @Inject constructor(
         return when (val reply = trainer.feedback(request(question, exceptWorkoutId = workoutId))) {
             is TrainerReply.Failed -> Reviewed.NoFeedback(saved, reply.failure)
             is TrainerReply.Answered -> {
+                keepNote(reply.weekNote)
                 // With no plan sent there is nothing to have followed, whatever the model judged
                 // (design question 9); a planId whose plan is gone sends none either.
                 val feedback = if (question.session.plan == null) reply.value.copy(followed = PlanFollowed.NO_PLAN) else reply.value
@@ -136,6 +143,7 @@ class AskTheTrainer @Inject constructor(
         when (val reply = trainer.evaluate(request(evaluateQuestion(ask)))) {
             is TrainerReply.Failed -> Evaluated.Failed(reply.failure)
             is TrainerReply.Answered -> {
+                keepNote(reply.weekNote)
                 val programme = Programme(0, now(), ask, reply.value.evaluation, reply.value.plan, reply.model)
                 Evaluated.Offered(programme.copy(id = programmes.add(programme)))
             }
@@ -164,6 +172,7 @@ class AskTheTrainer @Inject constructor(
         return when (val reply = trainer.adjust(request(question))) {
             is TrainerReply.Failed -> Adjusted.Failed(reply.failure)
             is TrainerReply.Answered -> {
+                keepNote(reply.weekNote)
                 val rest = reply.value
                 val thisWeek = PlanWeek(rest.weeks.first().focus, question.tickedThisWeek + rest.weeks.first().sessions)
                 val composed = WeeksPlan(rest.title, programme.plan.weeks.take(question.weekIndex) + thisWeek + rest.weeks.drop(1), rest.why)
@@ -174,6 +183,17 @@ class AskTheTrainer @Inject constructor(
                 Adjusted.Offered(version.copy(id = programmes.add(version)))
             }
         }
+    }
+
+    /**
+     * D116: an answer's week_note, about this week, kept before anything else is stored — so an answer the
+     * owner discards later (Ask again, Keep the old one) still leaves it. A note is never worth failing a paid
+     * answer for: a failed write is dropped.
+     */
+    private suspend fun keepNote(text: String?) {
+        if (text == null) return
+        val monday = MovementWeek.mondayOf(today().toEpochDay())
+        runCatching { weekNotes.keep(WeekNote(text, now(), monday, WeekNoteSource.TRAINER)) }
     }
 
     /** D97: Keep this version. Refused (throws) when the plan it adjusts no longer runs (design question 6). */

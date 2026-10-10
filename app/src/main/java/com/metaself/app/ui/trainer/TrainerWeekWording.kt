@@ -5,7 +5,11 @@ import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PracticeLedger
 import com.metaself.app.domain.trainer.WeekLedger
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNoteSource
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.abs
@@ -16,6 +20,8 @@ object TrainerWeekWording {
     private const val SEP = " · "
     private val DAY_MONTH = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
     private val DAY_ONLY = DateTimeFormatter.ofPattern("EEE d", Locale.US)
+    private val WRITTEN = DateTimeFormatter.ofPattern("EEE HH:mm", Locale.US)
+    private val WEEKDAY = DateTimeFormatter.ofPattern("EEEE", Locale.US)
     private val NUMBERS = listOf("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten")
 
     /** The eighth column's heading, there only while planned sessions are open (D114). */
@@ -124,6 +130,15 @@ object TrainerWeekWording {
             "week ${running.weekIndex + 1} of ${running.programme.ask.weeks}"
         } else {
             "starts " + LocalDate.ofEpochDay(running.programme.startEpochDay ?: 0).format(DAY_MONTH)
+        }
+    }
+
+    /** D116: "Written Sat 09:12", or "From Sunday's letter" — the weekday it was written (invented). */
+    fun noteWhen(note: WeekNote, zone: ZoneId): String {
+        val at = Instant.ofEpochMilli(note.writtenAtMillis).atZone(zone)
+        return when (note.source) {
+            WeekNoteSource.TRAINER -> "Written " + at.format(WRITTEN)
+            WeekNoteSource.LETTER -> "From " + at.format(WEEKDAY) + "'s letter"
         }
     }
 

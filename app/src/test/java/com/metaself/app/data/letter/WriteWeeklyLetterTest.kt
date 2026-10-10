@@ -10,6 +10,7 @@ import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.trainer.FakeProgrammeStore
 import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.data.trainer.InMemoryAboutMeStore
+import com.metaself.app.data.trainer.InMemoryWeekNoteStore
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.DayTotals
@@ -38,6 +39,8 @@ import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.weight.WeightReading
 import kotlinx.coroutines.test.runTest
@@ -57,6 +60,7 @@ class WriteWeeklyLetterTest {
     private val profiles = FakeProfileRepository(aProfile())
     private val aboutMe = InMemoryAboutMeStore()
     private val letters = FakeLetterStore()
+    private val weekNotes = InMemoryWeekNoteStore()
     private val events = mutableListOf<String>()
     private var told = 0
     private var granted = false
@@ -85,6 +89,7 @@ class WriteWeeklyLetterTest {
         now = { NOW },
         year = { 2026 },
         notifier = { told++ },
+        weekNotes = weekNotes,
     )
 
     private fun walk(id: Long, day: Long, minutes: Int = 40) = Workout(
@@ -113,6 +118,20 @@ class WriteWeeklyLetterTest {
         food.days = emptyMap()
         assertThat(job()(LETTER_MONDAY)).isEqualTo(WriteWeeklyLetter.Outcome.Quiet)
         assertThat(told).isEqualTo(1)
+    }
+
+    /** D116: the letter's week_note is kept with the letter's week and the moment it came; a letter without one keeps none. */
+    @Test
+    fun `the letter's week_note is kept with its week`() = runTest {
+        someFood()
+        writer = FakeLetterWriter(LetterReply.Written(TEXTS, "a-model"))
+        job()(LETTER_MONDAY)
+        assertThat(weekNotes.note.value).isNull()
+
+        letters.letters.value = emptyList()
+        writer = FakeLetterWriter(LetterReply.Written(TEXTS, "a-model", "Invented week note."))
+        job()(LETTER_MONDAY)
+        assertThat(weekNotes.note.value).isEqualTo(WeekNote("Invented week note.", NOW, LETTER_MONDAY, WeekNoteSource.LETTER))
     }
 
     @Test

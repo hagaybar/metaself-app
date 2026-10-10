@@ -46,6 +46,8 @@ import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.domain.weight.WeightReading
@@ -67,6 +69,7 @@ class AskTheTrainerTest {
     private val aboutMe = InMemoryAboutMeStore()
     private val programmes = FakeProgrammeStore()
     private val food = FakeFoodTotals()
+    private val weekNotes = InMemoryWeekNoteStore()
 
     /** Today, as the phone reads it; [TEST_EPOCH_DAY] unless a test moves it. */
     private var day = TEST_EPOCH_DAY
@@ -413,6 +416,43 @@ class AskTheTrainerTest {
         assertThat(outcome.programme.status).isEqualTo(ProgrammeStatus.OFFERED)
     }
 
+    /** D116: every answer's week_note is kept, about this week, with the moment it came — whatever is done with the answer after. */
+    @Test
+    fun `each answer keeps its week_note, with the moment and this week`() = runTest {
+        fun kept(text: String) = WeekNote(text, NOW, MONDAY, WeekNoteSource.TRAINER)
+
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model", "Invented plan note.")
+        ask().suggest(ANSWERS)
+        assertThat(weekNotes.note.value).isEqualTo(kept("Invented plan note."))
+
+        trainer.feedback += TrainerReply.Answered(FEEDBACK, "a-model", "Invented feedback note.")
+        ask().save(1, Felt.RIGHT, "Invented.", null, withFeedback = true)
+        assertThat(weekNotes.note.value).isEqualTo(kept("Invented feedback note."))
+
+        trainer.evaluations += TrainerReply.Answered(EvaluationAndPlan(EVALUATION, WEEKS), "a-model", "Invented evaluation note.")
+        ask().evaluate(ProgrammeAsk(2, 2))
+        assertThat(weekNotes.note.value).isEqualTo(kept("Invented evaluation note."))
+
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY, TEST_EPOCH_DAY)
+        trainer.adjustments += TrainerReply.Answered(WeeksPlan("Invented new", listOf(PlanWeek("w", listOf(WALK_20)), PlanWeek("w", listOf(WALK_20))), "Invented."), "a-model", "Invented adjust note.")
+        assertThat(ask().adjust("Invented.")).isInstanceOf(AskTheTrainer.Adjusted.Offered::class.java)
+        assertThat(weekNotes.note.value).isEqualTo(kept("Invented adjust note."))
+    }
+
+    /** D116: an answer without a note keeps none and still answers; a note that cannot be stored never fails the answer. */
+    @Test
+    fun `an answer without a note keeps none, and a note that cannot be kept fails nothing`() = runTest {
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+        assertThat(ask().suggest(ANSWERS)).isInstanceOf(AskTheTrainer.Suggested.Planned::class.java)
+        assertThat(weekNotes.note.value).isNull()
+
+        weekNotes.failing = true
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model", "Invented plan note.")
+        assertThat(ask().suggest(ANSWERS)).isInstanceOf(AskTheTrainer.Suggested.Planned::class.java)
+        assertThat(weekNotes.note.value).isNull()
+    }
+
     @Test
     fun `with no plan running, adjusting asks nothing`() = runTest {
         assertThat(ask().adjust("Invented.")).isEqualTo(AskTheTrainer.Adjusted.NotRunning)
@@ -617,7 +657,7 @@ class AskTheTrainerTest {
 
     private fun ask() = AskTheTrainer(
         record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe, programmes,
-        Today { LocalDate.ofEpochDay(day) }, Now { NOW }, CurrentYear { TEST_YEAR }, food,
+        Today { LocalDate.ofEpochDay(day) }, Now { NOW }, CurrentYear { TEST_YEAR }, food, weekNotes,
     )
 
     /** A synced forty-minute walk starting at 08:00 on [day]. Invented. */

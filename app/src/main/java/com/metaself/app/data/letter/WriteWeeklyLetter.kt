@@ -10,6 +10,7 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.TrainerReviews
+import com.metaself.app.data.trainer.WeekNoteStore
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.DayTotals
@@ -34,6 +35,8 @@ import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.Programmes
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeekLedgers
 import com.metaself.app.domain.weight.WeightTrend
 import kotlinx.coroutines.flow.first
@@ -73,6 +76,8 @@ class WriteWeeklyLetter @Inject constructor(
     private val year: CurrentYear,
     /** Told when a letter is stored, so a "couldn't be written" notification still showing is taken down. */
     private val notifier: LetterNotifier = LetterNotifier.NONE,
+    /** Where the letter's week_note is kept (D116), about the letter's week. */
+    private val weekNotes: WeekNoteStore = WeekNoteStore.NONE,
 ) : WeeklyLetterJob {
     sealed interface Outcome {
         data object Quiet : Outcome
@@ -148,6 +153,8 @@ class WriteWeeklyLetter @Inject constructor(
                 letters.add(letter)
                 // A notification is never worth failing a stored letter for.
                 runCatching { notifier.letterWritten() }
+                // Nor is the week's note (D116).
+                reply.weekNote?.let { runCatching { weekNotes.keep(WeekNote(it, now(), weekMonday, WeekNoteSource.LETTER)) } }
                 Outcome.Written(letter)
             }
         }

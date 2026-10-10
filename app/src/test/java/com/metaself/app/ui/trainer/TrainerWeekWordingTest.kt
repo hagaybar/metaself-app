@@ -19,10 +19,13 @@ import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.Recovery
 import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.WeekLedger
+import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.ui.trainer.TrainerWeekWording.Box
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
+import java.time.ZoneId
 
 /**
  * What the top of the Trainer page says (D114, D115). The week is Monday 31 August 2026 to today, Thursday
@@ -142,10 +145,27 @@ class TrainerWeekWordingTest {
         assertThat(TrainerWeekWording.planRow(PlanCard.None)).isNull()
     }
 
+    /** D116: Saturday 5 September 2026 at 09:12, and Sunday the 6th, in UTC. Invented. */
+    @Test
+    fun `the note says when it was written`() {
+        val saturday = (monday + 5) * DAY + 9 * HOUR + 12 * MINUTE
+        val utc = ZoneId.of("UTC")
+
+        assertThat(TrainerWeekWording.noteWhen(WeekNote("Invented.", saturday, monday, WeekNoteSource.TRAINER), utc)).isEqualTo("Written Sat 09:12")
+        assertThat(TrainerWeekWording.noteWhen(WeekNote("Invented.", saturday + DAY, monday, WeekNoteSource.LETTER), utc))
+            .isEqualTo("From Sunday's letter")
+    }
+
     @Test
     fun `the day letters, and the open minutes`() {
         assertThat((0..6).map { TrainerWeekWording.dayLetter(monday + it) }).containsExactly("M", "T", "W", "T", "F", "S", "S").inOrder()
         assertThat(TrainerWeekWording.openMinutes(40)).isEqualTo("40′")
+    }
+
+    private companion object {
+        const val MINUTE = 60_000L
+        const val HOUR = 60 * MINUTE
+        const val DAY = 24 * HOUR
     }
 
     private fun walks(sessions: Int, minutes: Int) = KindLedger(WorkoutKind.WALK, sessions, minutes, null, null, emptyList())
