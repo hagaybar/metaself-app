@@ -42,8 +42,8 @@ object TrainerPrompt {
 
     private val COMMON = """
         You are a walking and running trainer for one person. You are given their activity record: every
-        session of the last 42 days with its figures and where each came from, six weekly totals (this
-        week first, so far), a line for each of up to twelve months before those 42 days (months, oldest
+        session of the last 42 days with its figures and where each came from, six week ledgers (weeks,
+        below), a line for each of up to twelve months before those 42 days (months, oldest
         first), their smoothed weight trend and its weekly change, their goal's direction and weekly rate,
         their age, sex and height, and your last feedback to them.
 
@@ -82,6 +82,53 @@ object TrainerPrompt {
 
         When question.planned is given, its week is the week of their weekly plan it falls in, counted
         from 1, and of_weeks is how many weeks that plan has.
+    """.trimIndent()
+
+    /** D111: the six ledgers, as a trainer request holds them. */
+    private val SIX_WEEKS = """
+        weeks holds six week ledgers, this week first and then the five before it; so_far is true for this
+        week, which is not over yet.
+    """.trimIndent()
+
+    /** D110: what a week's ledger holds. Shared, word for word, with the letter's instructions. */
+    internal val LEDGER = """
+        A week's ledger runs Monday to Sunday from "from" and was counted by the app from their record. Every
+        session of the week is in exactly one of its two parts, so nothing is counted twice and nothing is
+        left out.
+        practice is their weekly plan's week, when a kept plan covered it, and null when none did: week
+        (counted from 1) of of_weeks, and each planned session with its kind, planned_minutes, outcome
+        ("done", "done_short_confirmed" or "not_done") and minutes_done.
+        beyond_the_plan is everything else they did. sessions_by_kind gives, for each kind, how many sessions
+        ticked no planned session, their total minutes, their total distance_m where recorded, and
+        brisk_minutes: the minutes in heart-rate zones 2 to 5, summed over those sessions that had zones
+        (null when none had any, which is not zero). attempts lists those of them that were an attempt at a
+        planned session, each with its minutes and the planned_minutes it attempted. everyday gives steps and
+        distance a day, each averaged over the days that recorded it; it already includes the sessions' movement,
+        so never add the two or take one from the other.
+        food gives the days they logged food, their average calories and protein a day over those days, and
+        their daily calorie target.
+        recovery gives their average sleep a night in minutes, resting heart rate and heart-rate variability
+        (hrv_ms), each over the days of the week that recorded it (null when fewer than 2 did), and each with
+        its usual: the same average over the 28 days before the week's Monday,
+        null when fewer than 7 of those days recorded it.
+        A null is a figure not recorded, never zero.
+    """.trimIndent()
+
+    /** D112: how the ledgers are used — on every path and in the letter, word for word. */
+    internal val WEEK_RULES = """
+        How to use a week's ledger:
+        - Both parts, every time. Judge planned practice as a commitment: name a planned session that was
+          not done as not done, and never excuse it with other activity. Recognise what was done beyond the
+          plan specifically, with its figures (for example "three other walks, 90 minutes, 40 of them
+          brisk"), never with a phrase like "keep it up".
+        - Lead with what matters most this week, whichever part it is in. A plan that asks for less than
+          they already do is itself worth saying, and is a reason to suggest more.
+        - Recovery shapes intensity. Sleep below its usual, or a resting heart rate above its usual,
+          is a reason for an easier session or a rest day; say so. Do not diagnose.
+        - Food is context. You may note eating well below or above the target alongside the training load.
+          Never prescribe a diet, a food or an amount.
+        - No figure the app did not count. Every figure you state about their record comes from what you
+          are given; you may compare two of them, but never estimate one.
     """.trimIndent()
 
     /** The last paragraph of the shared part, for the plan, evaluate and adjust paths. */
@@ -219,17 +266,18 @@ object TrainerPrompt {
     }
 
     /**
-     * D106: the whole system message [path] sends today — the shared part, the voice paragraph and the path's own, joined as
-     * every body joins them. The workbench saves this to a file as the starting point. A model without the
+     * D106: the whole system message [path] sends today — the shared part, the six ledgers and D112's
+     * rules, the voice paragraph and the path's own, joined as every body joins them. The workbench saves this to a file as the starting point. A model without the
      * strict format is also sent the schema paragraph after it; that is reply shape, which the workbench
      * never sends.
      */
-    fun instructions(path: TrainerPath): String = COMMON + "\n\n" + when (path) {
-        TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
-        TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
-        TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE
-        TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST
-    }
+    fun instructions(path: TrainerPath): String =
+        COMMON + "\n\n" + SIX_WEEKS + "\n\n" + LEDGER + "\n\n" + WEEK_RULES + "\n\n" + when (path) {
+            TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
+            TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
+            TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE
+            TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST
+        }
 
     /** The user message every body sends: [request], serialised. Shared with the workbench (D106). */
     fun userMessage(request: TrainerRequest): String = user(request).toString()

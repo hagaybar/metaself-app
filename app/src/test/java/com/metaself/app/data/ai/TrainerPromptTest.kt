@@ -460,6 +460,28 @@ class TrainerPromptTest {
         }
     }
 
+    /** D110, D112: every path's instructions say what a ledger holds and carry the five rules for using it. */
+    @Test
+    fun `every path's instructions carry the ledger and the rules for using it`() {
+        TrainerPath.entries.forEach { path ->
+            val system = TrainerPrompt.instructions(path)
+
+            assertThat(system).contains(TrainerPrompt.LEDGER)
+            assertThat(system).contains(TrainerPrompt.WEEK_RULES)
+            assertThat(system).contains("weeks holds six week ledgers, this week first")
+            RULES.forEach { assertThat(system).contains(it) }
+            assertThat(system).doesNotContain("six weekly totals")
+        }
+    }
+
+    /** D110: the ledger's own words for what is never added up, and what a null is. */
+    @Test
+    fun `the ledger says everyday movement is never split, and a null is not zero`() {
+        assertThat(TrainerPrompt.LEDGER).contains("so never add the two or take one from the other")
+        assertThat(TrainerPrompt.LEDGER).contains("A null is a figure not recorded, never zero.")
+        assertThat(TrainerPrompt.LEDGER).contains("null when fewer than 7 of those days recorded it")
+    }
+
     /** plan_followed judges the matched single-session plan alone; a weekly-plan tick is context for against_plan only. */
     @Test
     fun `plan_followed stays about the matched single-session plan, even when a weekly tick is given`() {
@@ -738,6 +760,19 @@ class TrainerPromptTest {
     }
 
     private companion object {
+        /** D112's five rules, as fragments each on one line of the text. */
+        val RULES = listOf(
+            "Both parts, every time.",
+            "never excuse it with other activity",
+            "Lead with what matters most this week, whichever part it is in.",
+            "is itself worth saying, and is a reason to suggest more.",
+            "Recovery shapes intensity.",
+            "is a reason for an easier session or a rest day; say so. Do not diagnose.",
+            "Food is context.",
+            "Never prescribe a diet, a food or an amount.",
+            "No figure the app did not count.",
+            "you may compare two of them, but never estimate one.",
+        )
         const val LOADED = "Invented instructions: a short note from a coach."
         val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
         const val NOTE = "Invented note: an old knee injury, so no running downhill.\nWalks before work."
