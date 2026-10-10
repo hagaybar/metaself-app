@@ -49,6 +49,10 @@ these is said, on today and on no other day. Every ratio and time below is illus
 | 4 | Past the closing time, the eating inside the hours | "If you're keeping your fast, next meal from 12:00." |
 | 5 | Past the closing time, the eating over the hours | "You've eaten for 12h 0m — next meal from 12:00 if you're keeping your fast." |
 
+> *Amended by D109* (`2026-10-10-a-short-fast-says-so-design.md`): an open stretch holding a gap
+> longer than the eating hours — a fast that fell short — says that fast's length and gives rows 3 to
+> 5 from the first input after it, rather than counting the short night as eating.
+
 - **Before noon, the sentence opens with "Good morning."** Only before noon, because the same
   sentence is said all evening too, and "good morning" at 22:00 would be wrong.
 - **A time on a different calendar day from now says so**: "by 06:10 tomorrow", "from 12:00
