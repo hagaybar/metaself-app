@@ -446,4 +446,90 @@ class EatingStretchTest {
             .containsExactly(instant(today, 19), instant(today + 1, 20), instant(today + 2, 15))
             .inOrder()
     }
+
+    // ------------------------------------------------------------- a fast that fell short (D109)
+
+    /**
+     * A gap longer than the eating hours but short of the fast stays inside the stretch, and is
+     * noted. The night here is twelve hours on a 14/10: two short.
+     */
+    @Test
+    fun `a gap longer than the eating hours and short of the fast is a short fast`() {
+        val stretches = EatingStretches.of(
+            fourteenTen,
+            listOf(meal(today, 10), meal(today, 20), meal(today + 1, 8), meal(today + 1, 9)),
+            zone,
+        ).stretches
+
+        assertThat(stretches).hasSize(1)
+        val short = stretches[0].lastShortFast!!
+        assertThat(short.fromMillis).isEqualTo(instant(today, 20))
+        assertThat(short.toMillis).isEqualTo(instant(today + 1, 8))
+        assertThat(short.minutes).isEqualTo(12 * 60)
+    }
+
+    /** Exactly the eating hours can sit inside a kept stretch, so it is not a short fast. */
+    @Test
+    fun `a gap of exactly the eating hours is not a short fast, and a minute more is`() {
+        val exactly = EatingStretches.of(
+            fourteenTen,
+            listOf(meal(today, 8), meal(today, 18)),
+            zone,
+        ).stretches.single()
+        val aMinuteMore = EatingStretches.of(
+            fourteenTen,
+            listOf(meal(today, 8), meal(today, 18, 1)),
+            zone,
+        ).stretches.single()
+
+        assertThat(exactly.lastShortFast).isNull()
+        assertThat(aMinuteMore.lastShortFast).isNotNull()
+    }
+
+    /** After two short nights, the latest one is the one today's times run from. */
+    @Test
+    fun `the latest short fast is kept, not the longest`() {
+        val stretch = EatingStretches.of(
+            fourteenTen,
+            listOf(
+                meal(today, 8),
+                meal(today, 20),
+                // thirteen hours
+                meal(today + 1, 9),
+                meal(today + 1, 20),
+                // eleven hours
+                meal(today + 2, 7),
+            ),
+            zone,
+        ).stretches.single()
+
+        assertThat(stretch.lastShortFast!!.toMillis).isEqualTo(instant(today + 2, 7))
+        assertThat(stretch.lastShortFast!!.minutes).isEqualTo(11 * 60)
+    }
+
+    /** A completed fast closes the stretch; the next one owns none of the last one's short fasts. */
+    @Test
+    fun `a short fast belongs to its own stretch only`() {
+        val stretches = EatingStretches.of(
+            fourteenTen,
+            listOf(meal(today, 8), meal(today, 20), meal(today + 1, 8), meal(today + 2, 9)),
+            zone,
+        ).stretches
+
+        assertThat(stretches).hasSize(2)
+        assertThat(stretches[0].lastShortFast).isNotNull()
+        assertThat(stretches[1].lastShortFast).isNull()
+    }
+
+    /** A fast's length rounds DOWN, where a span rounds up: neither direction flatters. */
+    @Test
+    fun `a short fast's length rounds down to the minute`() {
+        val stretch = EatingStretches.of(
+            fourteenTen,
+            listOf(meal(today, 8), meal(today, 20, 0, 30), meal(today + 1, 8, 0, 0)),
+            zone,
+        ).stretches.single()
+
+        assertThat(stretch.lastShortFast!!.minutes).isEqualTo(11 * 60 + 59)
+    }
 }

@@ -215,6 +215,18 @@ class WindowWordingTest {
         startedOnEpochDay = onDay,
     )
 
+    /**
+     * Eating from 10:00 on [day] to [toHour] the next day, with a twelve-hour night from 20:00 to
+     * 08:00 inside it: two short of a 14/10 (D109).
+     */
+    private fun shortNight(toHour: Int): EatingStretch = EatingStretch(
+        startedAtMillis = at(day, 10),
+        lastAtMillis = at(day + 1, toHour),
+        inputs = 4,
+        startedOnEpochDay = day,
+        lastShortFast = ShortFast(fromMillis = at(day, 20), toMillis = at(day + 1, 8)),
+    )
+
 
 
 
@@ -290,6 +302,10 @@ class WindowWordingTest {
             WindowWording.ratioNow(
                 stretchOf(fromHour = 9, toHour = 19), fourteenTen, at(day + 1, 10), zone, true,
             ),
+            // a short night, each of its three continuations (D109)
+            WindowWording.ratioNow(shortNight(toHour = 9), fourteenTen, at(day + 1, 9), zone, true),
+            WindowWording.ratioNow(shortNight(toHour = 18), fourteenTen, at(day + 1, 20), zone, true),
+            WindowWording.ratioNow(shortNight(toHour = 20), fourteenTen, at(day + 1, 21), zone, true),
         ).map { it!!.lowercase() }
 
         said.forEach { sentence ->
@@ -316,6 +332,9 @@ class WindowWordingTest {
             WindowWording.ratioNow(
                 stretchOf(fromHour = 9, toHour = 22), fourteenTen, at(day, 23), zone, true,
             ),
+            WindowWording.ratioNow(shortNight(toHour = 9), fourteenTen, at(day + 1, 9), zone, true),
+            WindowWording.ratioNow(shortNight(toHour = 18), fourteenTen, at(day + 1, 20), zone, true),
+            WindowWording.ratioNow(shortNight(toHour = 20), fourteenTen, at(day + 1, 21), zone, true),
         )
 
         ahead.forEach { assertThat(it!!.lowercase()).contains("if you're keeping your") }

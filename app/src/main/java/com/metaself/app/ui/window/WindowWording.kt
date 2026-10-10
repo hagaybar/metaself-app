@@ -5,6 +5,7 @@ import com.metaself.app.domain.window.DayWindow
 import com.metaself.app.domain.window.EatingStretch
 import com.metaself.app.domain.window.EatingWindow
 import com.metaself.app.domain.window.MeasuredWindow
+import com.metaself.app.domain.window.ShortFast
 import com.metaself.app.domain.window.StretchVerdict
 import java.time.Instant
 import java.time.LocalDate
@@ -121,13 +122,22 @@ object WindowWording {
      * | open, before the closing time | "If you're keeping your window, last meal by 22:00." |
      * | open, past it, eating inside the hours | "If you're keeping your fast, next meal from 12:00." |
      * | open, eating over the hours | "You've eaten for 12h 0m — next meal from 12:00 if …" |
+     * | open, holding a short fast (D109) | "Your last fast ended at 08:00 after 12h 0m; …" + a row above |
      *
-     * The last row cannot come before the closing time: eating cannot exceed the eating hours while
-     * fewer than the eating hours have passed since it began. It carries the over-run of D31's live
-     * line — a ratio whose fast is never reached is one stretch that never closes, and without it
-     * the app would say nothing to exactly the person failing to keep it — and, first, the time he
-     * can act on. Over the hours is [EatingStretch.ranOver], the rule the verdict is judged by, so
-     * this can never say mid-stretch that he ran over a ratio the verdict then says he kept.
+     * The over-the-hours row cannot come before the closing time: eating cannot exceed the eating
+     * hours while fewer than the eating hours have passed since it began. It carries the over-run of
+     * D31's live line — a ratio whose fast is never reached is one stretch that never closes, and
+     * without it the app would say nothing to exactly the person failing to keep it — and, first,
+     * the time he can act on. Over the hours is [EatingStretch.ranOver], the rule the verdict is
+     * judged by, so this can never say mid-stretch that he ran over a ratio the verdict then says
+     * he kept.
+     *
+     * The short-fast row says the fast's length and the ratio, then one of the three open rows with
+     * its times run from the input that ended the fast. A short fast is a gap inside the stretch
+     * longer than the eating hours ([ShortFast]). Without that row, a night that fell short is
+     * counted as eating — "you've eaten for 22h" — and the next meal is put a whole fast after
+     * breakfast, for a stretch whose verdict is already settled. The verdict is unchanged: the
+     * stretch is still one, and still judged when it closes.
      *
      * **"Good morning." before noon, and only then**, because the same sentence is said all evening.
      *
@@ -148,25 +158,72 @@ object WindowWording {
         if (latest == null || !isToday) return null
 
         val now = Instant.ofEpochMilli(nowMillis).atZone(zone)
-        val closesAt = latest.startedAtMillis + window.eatingHours * MILLIS_PER_HOUR
         val fastDoneAt = latest.lastAtMillis + window.fastingHours * MILLIS_PER_HOUR
+        val shortFast = latest.lastShortFast
 
         val sentence = when {
             latest.closed(window, nowMillis) ->
                 "Your ${window.fastingHours} hours were up ${since(fastDoneAt, now)} — " +
                     "eat when you like."
 
-            nowMillis < closesAt ->
-                "If you're keeping your window, last meal by ${ahead(closesAt, now)}."
+            // D109: the night fell short, so the stretch is already over the hours and fasting now
+            // saves nothing. Say how short, and give the times from the input that ended it.
+            shortFast != null ->
+                "Your last fast ended ${since(shortFast.toMillis, now)} after " +
+                    "${duration(shortFast.minutes)}; your ratio asks for ${window.fastingHours} " +
+                    "hours. " +
+                    ongoing(
+                        firstAt = shortFast.toMillis,
+                        lastAt = latest.lastAtMillis,
+                        window = window,
+                        nowMillis = nowMillis,
+                        now = now,
+                        fromThere = true,
+                    )
 
-            !latest.ranOver(window) ->
+            else -> ongoing(
+                firstAt = latest.startedAtMillis,
+                lastAt = latest.lastAtMillis,
+                window = window,
+                nowMillis = nowMillis,
+                now = now,
+                fromThere = false,
+            )
+        }
+        return if (now.hour < NOON) "Good morning. $sentence" else sentence
+    }
+
+    /**
+     * Rows 3 to 5 of D32, for eating that began at [firstAt] and was last logged at [lastAt].
+     *
+     * Over the hours is [EatingStretch.ranOver] when this is the whole stretch, and the same rule
+     * over the eating since a short fast when [fromThere] (D109): that run is measured with the
+     * same rounding, so the two can never disagree about a stretch with no short fast in it.
+     */
+    private fun ongoing(
+        firstAt: Long,
+        lastAt: Long,
+        window: MeasuredWindow,
+        nowMillis: Long,
+        now: ZonedDateTime,
+        fromThere: Boolean,
+    ): String {
+        val closesAt = firstAt + window.eatingHours * MILLIS_PER_HOUR
+        val fastDoneAt = lastAt + window.fastingHours * MILLIS_PER_HOUR
+        val spanMinutes = (lastAt - firstAt + MILLIS_PER_MINUTE - 1) / MILLIS_PER_MINUTE
+
+        return when {
+            nowMillis < closesAt ->
+                "If you're keeping your window${if (fromThere) " from there" else ""}, " +
+                    "last meal by ${ahead(closesAt, now)}."
+
+            spanMinutes <= window.eatingHours * 60L ->
                 "If you're keeping your fast, next meal from ${ahead(fastDoneAt, now)}."
 
             else ->
-                "You've eaten for ${duration(latest.spanMinutes)} — " +
+                "You've eaten for ${duration(spanMinutes)}${if (fromThere) " since then" else ""} — " +
                     "next meal from ${ahead(fastDoneAt, now)} if you're keeping your fast."
         }
-        return if (now.hour < NOON) "Good morning. $sentence" else sentence
     }
 
     /** "12:00", or "12:00 tomorrow" for a moment on the next calendar day. */
@@ -257,6 +314,8 @@ object WindowWording {
     private fun duration(minutes: Long): String = "${minutes / 60}h ${minutes % 60}m"
 
     private const val MILLIS_PER_HOUR = 60L * 60L * 1000L
+
+    private const val MILLIS_PER_MINUTE = 60L * 1000L
 
     private const val NOON = 12
 

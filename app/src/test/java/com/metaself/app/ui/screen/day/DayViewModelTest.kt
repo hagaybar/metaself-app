@@ -1129,17 +1129,17 @@ class DayViewModelTest {
      * exactly the person failing to keep the ratio he set himself. That is the mirror image of the
      * problem the whole stretch rule exists to fix.
      *
-     * TODAY now says how long it has been, about the stretch that is open RIGHT NOW and whichever
-     * day that stretch began on. Thirty days and seven hours by mid-afternoon: 727h against a ratio
-     * allowing eight. Nothing is judged by it — the stretch is still open, so it is in neither half
-     * of the tally and neither kept nor broken.
+     * TODAY now says so, about the stretch that is open RIGHT NOW: every twelve-hour night is a
+     * fast that fell short (D109), so it names the latest one against the sixteen hours asked for.
+     * Nothing is judged by it — the stretch is still open, so it is in neither half of the tally and
+     * neither kept nor broken.
      *
      * The month is not decoration. The stretch began thirty days before the day the sentence is
-     * said on, so a view model that read only the days around the one on screen would state a
-     * duration that was an artefact of where its read stopped, which is the one thing D4 forbids.
+     * said on, so a view model that read only the days around the one on screen would see a
+     * different record from the one the tally is kept on.
      */
     @Test
-    fun `today says how long a stretch that never closes has been running`() = runTest {
+    fun `today names the fast that fell short in a stretch that never closes`() = runTest {
         val profiles = FakeProfileRepository(aProfile())
         profiles.addWindowRule(
             WindowRule.Measured(
@@ -1157,15 +1157,16 @@ class DayViewModelTest {
         )
         advanceUntilIdle()
 
-        // From 08:00 thirty days ago to this morning's 08:00, every gap twelve hours: thirty days of
-        // eating, said in hours. It first read "727h", which was 08:00 thirty days ago to 15:00 NOW —
-        // the seven hours since breakfast counted as eating (2026-09-18) — and the fixture also held
-        // a 20:00 meal today, five hours after the test's own clock.
+        // From 08:00 thirty days ago to this morning's 08:00, every gap twelve hours, and no meal
+        // after the test's own clock of 15:00.
         assertThat(ready(model).isToday).isTrue()
-        // Now the over-run is said with the time he can act on (D32): a sixteen-hour fast from this
-        // morning's 08:00 breakfast completes at midnight.
+        // Every twelve-hour night is longer than the eight eating hours, so each is a fast that fell
+        // short (D109): today says the latest one and gives its times from this morning's 08:00
+        // breakfast, rather than counting a month of nights as 720h of eating. At 15:00 the eight
+        // hours from 08:00 have not yet run out.
         assertThat(ready(model).ratioNow).isEqualTo(
-            "You've eaten for 720h 0m — next meal from 00:00 tomorrow if you're keeping your fast.",
+            "Your last fast ended at 08:00 after 12h 0m; your ratio asks for 16 hours. " +
+                "If you're keeping your window from there, last meal by 16:00.",
         )
         // Judged by nothing: no day of the month has a closed stretch, so both halves of the tally
         // are still zero and no day is kept or broken.

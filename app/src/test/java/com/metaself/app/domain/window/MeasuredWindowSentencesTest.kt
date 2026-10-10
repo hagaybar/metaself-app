@@ -107,12 +107,21 @@ class MeasuredWindowSentencesTest {
             toHour: Int = fromHour,
             toMinute: Int = fromMinute,
             inputs: Int = 2,
+            shortFast: ShortFast? = null,
         ) = EatingStretch(
             startedAtMillis = at(fromDay, fromHour, fromMinute),
             lastAtMillis = at(toDay, toHour, toMinute),
             inputs = inputs,
             startedOnEpochDay = fromDay,
+            lastShortFast = shortFast,
         )
+
+        /** A night from [fromHour] on [fromDay] to [toHour] the next morning. */
+        private fun night(fromDay: Long, fromHour: Int, toHour: Int) =
+            ShortFast(fromMillis = at(fromDay, fromHour), toMillis = at(fromDay + 1, toHour))
+
+        private fun lastFast(moment: String, hours: Int) =
+            "Your last fast ended $moment after ${hours}h 0m; your ratio asks for 14 hours. "
 
         private const val MORNING = "Good morning. "
 
@@ -277,6 +286,74 @@ class MeasuredWindowSentencesTest {
                 now = at(D, 11, 59),
                 beganOnScreen = listOf(eating(D, 7, inputs = 1)),
                 expected = listOf(MORNING + lastMealBy("17:00")),
+            ),
+
+            // --- TODAY, an open stretch holding a fast that fell short (D109) ----------------------
+
+            Row(
+                name = "S1 today: a twelve-hour night, after breakfast — the fast's length, " +
+                    "last meal by, from breakfast (was: eaten for 22h, next meal from 22:00)",
+                isToday = true,
+                now = at(D + 1, 9),
+                beganEarlier = listOf(
+                    eating(D, 10, toDay = D + 1, toHour = 8, inputs = 4, shortFast = night(D, 20, 8)),
+                ),
+                expected = listOf(
+                    MORNING + lastFast("at 08:00", 12) +
+                        "If you're keeping your window from there, last meal by 18:00.",
+                ),
+            ),
+            Row(
+                name = "S2 today: a short night, eating since inside the hours — next meal from",
+                isToday = true,
+                now = at(D + 1, 20),
+                beganEarlier = listOf(
+                    eating(D, 10, toDay = D + 1, toHour = 18, inputs = 5, shortFast = night(D, 20, 8)),
+                ),
+                expected = listOf(lastFast("at 08:00", 12) + nextMealFrom("08:00 tomorrow")),
+            ),
+            Row(
+                name = "S3 today: a short night, eating since over the hours — how long since then",
+                isToday = true,
+                now = at(D + 1, 21),
+                beganEarlier = listOf(
+                    eating(D, 10, toDay = D + 1, toHour = 19, inputs = 5, shortFast = night(D, 20, 8)),
+                ),
+                expected = listOf(
+                    lastFast("at 08:00", 12) +
+                        "You've eaten for 11h 0m since then — " +
+                        "next meal from 09:00 tomorrow if you're keeping your fast.",
+                ),
+            ),
+            Row(
+                name = "S4 today, after midnight: the short fast ended yesterday — says yesterday",
+                isToday = true,
+                now = at(D + 2, 1),
+                beganEarlier = listOf(
+                    eating(D, 10, toDay = D + 1, toHour = 17, inputs = 5, shortFast = night(D, 20, 8)),
+                ),
+                expected = listOf(
+                    MORNING + lastFast("yesterday at 08:00", 12) + nextMealFrom("07:00"),
+                ),
+            ),
+            Row(
+                name = "S5 today: the fast after a stretch with a short night has completed — " +
+                    "the fast that ended it, as before",
+                isToday = true,
+                now = at(D + 2, 10),
+                beganEarlier = listOf(
+                    eating(D, 10, toDay = D + 1, toHour = 18, inputs = 5, shortFast = night(D, 20, 8)),
+                ),
+                expected = listOf(MORNING + fastWasUp("at 08:00")),
+            ),
+            Row(
+                name = "S6 past day: a stretch with a short night, still open — still open, as before",
+                isToday = false,
+                now = at(D + 1, 9),
+                beganOnScreen = listOf(
+                    eating(D, 10, toDay = D + 1, toHour = 8, inputs = 4, shortFast = night(D, 20, 8)),
+                ),
+                expected = listOf(STILL_OPEN),
             ),
 
             // --- A PAST DAY on screen ------------------------------------------------------------

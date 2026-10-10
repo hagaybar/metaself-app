@@ -26,12 +26,15 @@ import java.time.ZoneId
  * @property startedOnEpochDay the local date of the FIRST input, in the zone the walk was given. A
  *   stretch belongs to the day it began on and never to two (design §3), because giving it to both
  *   would let one late dinner break two days.
+ * @property lastShortFast the LATEST gap inside the stretch that is longer than the eating hours,
+ *   or null if it holds none (D109). Read off the record by the walk, like everything else here.
  */
 data class EatingStretch(
     val startedAtMillis: Long,
     val lastAtMillis: Long,
     val inputs: Int,
     val startedOnEpochDay: Long,
+    val lastShortFast: ShortFast? = null,
 ) {
 
     /**
@@ -120,6 +123,32 @@ data class EatingStretch(
 }
 
 /**
+ * A fast that fell short: a gap inside a stretch that is longer than the eating hours (D109).
+ *
+ * Necessarily shorter than the fasting hours, or it would have closed the stretch. The threshold is
+ * the ratio's own: no gap longer than the eating hours can sit inside a stretch that keeps the ratio,
+ * so such a gap was a fast attempted, not eating. A gap of exactly the eating hours can sit in a kept
+ * stretch, and is not one.
+ *
+ * @property fromMillis the input before the gap.
+ * @property toMillis the input after it — where today's sentence restarts its times from.
+ */
+data class ShortFast(
+    val fromMillis: Long,
+    val toMillis: Long,
+) {
+
+    /**
+     * How long the fast lasted, rounded DOWN to the minute.
+     *
+     * Down, where [EatingStretch.spanMinutes] rounds up: each is the direction that cannot flatter.
+     * A fast reported a minute longer than it was is a fast nearer the ratio than it came.
+     */
+    val minutes: Long
+        get() = (toMillis - fromMillis) / (60L * 1000L)
+}
+
+/**
  * What one moment makes of one stretch.
  *
  * Separate from [EatingStretch] because the stretch is a fact and this is an opinion held at a time:
@@ -184,7 +213,8 @@ object EatingStretches {
      *    a stretch of its own in the middle of the record, or stretch a real one to fifty hours.
      * 2. Sort what is left by the moment it happened, because nothing may depend on the order the
      *    database hands the rows over in.
-     * 3. Walk it, breaking wherever the gap reaches the fasting hours.
+     * 3. Walk it, breaking wherever the gap reaches the fasting hours, and noting the latest gap in
+     *    each stretch that is longer than the eating hours — a fast that fell short (D109).
      *
      * Pure and ungated: the rule's start day plays no part here, which is why this takes a ratio and
      * never a [WindowRule]. The gate lives in [WindowRules.stretches].
@@ -201,23 +231,28 @@ object EatingStretches {
         }
 
         val fast = window.fastingHours * 60L * 60L * 1000L
+        val eating = window.eatingHours * 60L * 60L * 1000L
         val stretches = mutableListOf<EatingStretch>()
 
         var startedAt = timed.first()
         var lastAt = timed.first()
         var inputs = 1
+        var shortFast: ShortFast? = null
 
         timed.drop(1).forEach { at ->
             if (at - lastAt >= fast) {
-                stretches += finish(startedAt, lastAt, inputs, zone)
+                stretches += finish(startedAt, lastAt, inputs, shortFast, zone)
                 startedAt = at
                 inputs = 1
+                shortFast = null
             } else {
+                // The latest wins: after two short nights, the advice belongs to this morning.
+                if (at - lastAt > eating) shortFast = ShortFast(fromMillis = lastAt, toMillis = at)
                 inputs++
             }
             lastAt = at
         }
-        stretches += finish(startedAt, lastAt, inputs, zone)
+        stretches += finish(startedAt, lastAt, inputs, shortFast, zone)
 
         return EatingStretchWalk(stretches = stretches, mealsUntimed = untimedMeals.size)
     }
@@ -228,7 +263,13 @@ object EatingStretches {
      * The day comes from the START and never from the end, so a stretch that runs past midnight
      * still belongs to the evening it began in (design §3).
      */
-    private fun finish(startedAt: Long, lastAt: Long, inputs: Int, zone: ZoneId): EatingStretch =
+    private fun finish(
+        startedAt: Long,
+        lastAt: Long,
+        inputs: Int,
+        shortFast: ShortFast?,
+        zone: ZoneId,
+    ): EatingStretch =
         EatingStretch(
             startedAtMillis = startedAt,
             lastAtMillis = lastAt,
@@ -237,6 +278,7 @@ object EatingStretches {
                 .atZone(zone)
                 .toLocalDate()
                 .toEpochDay(),
+            lastShortFast = shortFast,
         )
 }
 
