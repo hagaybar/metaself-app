@@ -35,7 +35,10 @@ One request carries exactly:
 - **The last three feedback texts**, so advice stays consistent.
 
 Never sent: meals or anything eaten, raw readings, sleep, the owner's name, the key's owner, device or
-app names. A request counts against the same daily ceiling as a meal estimate (D57's call, shared).
+app names.
+
+> *Amended by D111* (`2026-10-10-the-trainer-sees-the-whole-week-design.md`): six week ledgers replace
+> the six weekly totals, and weekly averages of sleep, resting heart rate, HRV and food may now go. A request counts against the same daily ceiling as a meal estimate (D57's call, shared).
 
 ## D85 — Where the trainer lives
 
