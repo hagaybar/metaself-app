@@ -1,6 +1,7 @@
 package com.metaself.app.data.ai
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
@@ -11,12 +12,14 @@ import com.metaself.app.domain.profile.Goal
 import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.trainer.AttemptFacts
+import com.metaself.app.domain.trainer.CountedPlan
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanStep
@@ -25,7 +28,9 @@ import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
+import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
@@ -41,6 +46,7 @@ import com.metaself.app.domain.weight.WeightReading
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -50,8 +56,9 @@ import org.junit.jupiter.api.assertThrows
 
 /**
  * What the trainer sends (D84) — the twin of [EstimatePromptTest]'s "nothing about the person is
- * sent". Every figure, date, title and word is invented; the weigh-in, the target, the sleep and the
- * resting heart rate below are here only so the test can prove they stay on the phone.
+ * sent". Every figure, date, title and word is invented; the weigh-in, the target, each single night's
+ * sleep and each single day's resting heart rate below are here only so the test can prove they stay on
+ * the phone.
  */
 class TrainerPromptTest {
 
@@ -92,17 +99,21 @@ class TrainerPromptTest {
     }
 
     /**
-     * D84's "never sent". If this fails because the prompt's own wording used a word, rephrase the prompt.
+     * D84's "never sent", amended by D111 and no further. If this fails because the prompt's own wording used
+     * a word, rephrase the prompt.
      *
-     * Each category has at least one value the fixtures below really hold: the title "Quillberry loop";
-     * the day's sleep (430) and resting heart rate (58); the weigh-ins (80.4, 79.2, 78.6, none equal to
-     * the smoothed line) and the profile's weight (83.0); the target (71.5). [yearRequest] adds a month
-     * whose session has the same title, whose day has the same sleep and resting heart rate, and whose
-     * weigh-ins (82.0, 80.0) must stay on the phone too (D89). The words ("sleep",
-     * "meal", ...) and the package name have no path into a request; they stay as a guard on the prompt.
+     * Each category has at least one value the fixtures really hold: the title "Quillberry loop"; a single
+     * night's sleep (410, 450), a single day's resting heart rate (55, 61) and HRV (37, 53) — whose week's
+     * averages (430, 58, 45) may go (D111); a single day's calories (1,900, 2,300) and protein (94, 126) —
+     * whose averages may go; sleep stages (95 deep minutes), oxygen (96.5) and breathing rate (14.5); the
+     * weigh-ins (80.4, 79.2, 78.6) and the profile's weight (83.0); the target weight (71.5). [yearRequest]
+     * adds a June day outside every week's 28 days, whose sleep (470) and resting heart rate (64) stay on the
+     * phone, and weigh-ins (82.0, 80.0) that must too (D89). A number is matched as a whole number, so 410
+     * does not match inside 4100. The words and the package name have no path into a request; they stay as
+     * a guard on the prompt.
      */
     @Test
-    fun `no meal, sleep, weigh-in, target, title or app name is sent`() {
+    fun `no meal, single night or day, raw reading, weigh-in, target weight, title or app name is sent`() {
         listOf(
             TrainerPrompt.planBody("a-model", planRequest()),
             TrainerPrompt.feedbackBody("a-model", reviewRequest()),
@@ -111,9 +122,12 @@ class TrainerPromptTest {
             .map { it.lowercase() }
             .forEach { body ->
                 listOf(
-                    "quillberry", "com.example", "sleep", "slept", "meal", "eaten", "breakfast",
-                    "83.0", "80.4", "79.2", "78.6", "71.5", "430", "58", "resting", "82.0", "80.0",
+                    "quillberry", "com.example", "slept", "meal", "eaten", "breakfast", "oxygen", "respiratory",
+                    "deep_minutes", "83.0", "80.4", "79.2", "78.6", "71.5", "82.0", "80.0", "96.5", "14.5",
                 ).forEach { forbidden -> assertThat(body).doesNotContain(forbidden) }
+                listOf("410", "450", "55", "61", "37", "53", "1900", "2300", "94", "126", "95", "470", "64").forEach { forbidden ->
+                    assertThat(Regex("(?<![0-9.])$forbidden(?![0-9.])").containsMatchIn(body)).isFalse()
+                }
             }
     }
 
@@ -251,6 +265,53 @@ class TrainerPromptTest {
         assertThat(thisWeek.keys).containsExactly("sessions_so_far", "days_left_after_today")
         assertThat(thisWeek.getValue("days_left_after_today").jsonPrimitive.int).isEqualTo(3)
         assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest()))).contains("not counting today")
+    }
+
+    /** D110, D111: six ledgers, newest first; each with exactly these keys, and only the phone's counts. */
+    @Test
+    fun `each week is sent as its ledger, with exactly these keys`() {
+        val body = Json.parseToJsonElement(TrainerPrompt.planBody("a-model", ledgerRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+        val weeks = Json.parseToJsonElement(userContent(body)).jsonObject.getValue("weeks").jsonArray.map { it.jsonObject }
+
+        assertThat(weeks.map { it.getValue("from").jsonPrimitive.content })
+            .containsExactly("2026-08-31", "2026-08-24", "2026-08-17", "2026-08-10", "2026-08-03", "2026-07-27").inOrder()
+        val week = weeks.first()
+        assertThat(week.keys).containsExactly("from", "so_far", "practice", "beyond_the_plan", "food", "recovery")
+        assertThat(week.getValue("so_far").jsonPrimitive.boolean).isTrue()
+        assertThat(weeks[1].getValue("so_far").jsonPrimitive.boolean).isFalse()
+
+        val practice = week.getValue("practice").jsonObject
+        assertThat(practice.keys).containsExactly("week", "of_weeks", "sessions")
+        val planned = practice.getValue("sessions").jsonArray.map { it.jsonObject }
+        assertThat(planned.first().keys).containsExactly("kind", "planned_minutes", "outcome", "minutes_done")
+        assertThat(planned.map { it.getValue("outcome").jsonPrimitive.content }).containsExactly("done", "not_done").inOrder()
+        assertThat(weeks[1].getValue("practice")).isEqualTo(JsonNull)
+
+        val beyond = week.getValue("beyond_the_plan").jsonObject
+        assertThat(beyond.keys).containsExactly("sessions_by_kind", "everyday")
+        val strength = beyond.getValue("sessions_by_kind").jsonArray.single().jsonObject
+        assertThat(strength.keys).containsExactly("kind", "sessions", "minutes", "distance_m", "brisk_minutes", "attempts")
+        assertThat(strength.getValue("kind").jsonPrimitive.content).isEqualTo("strength")
+        assertThat(strength.getValue("minutes").jsonPrimitive.int).isEqualTo(45)
+        assertThat(strength.getValue("brisk_minutes")).isEqualTo(JsonNull)
+        assertThat(beyond.getValue("everyday").jsonObject.keys).containsExactly("steps_a_day", "distance_m_a_day")
+
+        val food = week.getValue("food").jsonObject
+        assertThat(food.keys).containsExactly("days_logged", "kcal_a_day", "protein_g_a_day", "target_kcal")
+        assertThat(food.getValue("days_logged").jsonPrimitive.int).isEqualTo(2)
+        assertThat(food.getValue("kcal_a_day").jsonPrimitive.int).isEqualTo(2_100)
+        assertThat(food.getValue("protein_g_a_day").jsonPrimitive.int).isEqualTo(110)
+        assertThat(food.getValue("target_kcal").jsonPrimitive.int).isEqualTo(2_000)
+
+        val recovery = week.getValue("recovery").jsonObject
+        assertThat(recovery.keys).containsExactly(
+            "sleep_minutes_a_night", "usual_sleep_minutes_a_night", "resting_heart_rate", "usual_resting_heart_rate",
+            "hrv_ms", "usual_hrv_ms",
+        )
+        assertThat(recovery.getValue("sleep_minutes_a_night").jsonPrimitive.int).isEqualTo(430)
+        assertThat(recovery.getValue("resting_heart_rate").jsonPrimitive.int).isEqualTo(58)
+        assertThat(recovery.getValue("hrv_ms").jsonPrimitive.int).isEqualTo(45)
+        assertThat(recovery.getValue("usual_sleep_minutes_a_night")).isEqualTo(JsonNull)
     }
 
     @Test
@@ -397,6 +458,28 @@ class TrainerPromptTest {
         ).forEach { body ->
             assertThat(systemContent(body)).contains("of_weeks is how many weeks that plan has")
         }
+    }
+
+    /** D110, D112: every path's instructions say what a ledger holds and carry the five rules for using it. */
+    @Test
+    fun `every path's instructions carry the ledger and the rules for using it`() {
+        TrainerPath.entries.forEach { path ->
+            val system = TrainerPrompt.instructions(path)
+
+            assertThat(system).contains(TrainerPrompt.LEDGER)
+            assertThat(system).contains(TrainerPrompt.WEEK_RULES)
+            assertThat(system).contains("weeks holds six week ledgers, this week first")
+            RULES.forEach { assertThat(system).contains(it) }
+            assertThat(system).doesNotContain("six weekly totals")
+        }
+    }
+
+    /** D110: the ledger's own words for what is never added up, and what a null is. */
+    @Test
+    fun `the ledger says everyday movement is never split, and a null is not zero`() {
+        assertThat(TrainerPrompt.LEDGER).contains("so never add the two or take one from the other")
+        assertThat(TrainerPrompt.LEDGER).contains("A null is a figure not recorded, never zero.")
+        assertThat(TrainerPrompt.LEDGER).contains("null when fewer than 7 of those days recorded it")
     }
 
     /** plan_followed judges the matched single-session plan alone; a weekly-plan tick is context for against_plan only. */
@@ -584,21 +667,52 @@ class TrainerPromptTest {
 
     private fun reviewRequest() = request(TrainerRequest.reviewQuestion(walk, review, plan))
 
-    private fun request(question: TrainerQuestion, earlier: List<Feedback> = emptyList()) = TrainerRequest.of(
-        question = question, today = TEST_EPOCH_DAY, workouts = listOf(walk, strength), reviews = listOf(review),
-        plans = mapOf(9L to plan),
-        days = listOf(HealthDay(TEST_EPOCH_DAY, distanceM = 4_000, activeKcal = 300, sleepMinutes = 430, restingHeartRate = 58)),
-        readings = listOf(
-            WeightReading(TEST_EPOCH_DAY - 28, 80.4), WeightReading(TEST_EPOCH_DAY - 14, 79.2), WeightReading(TEST_EPOCH_DAY, 78.6),
+    /**
+     * Two days this week, each with its own sleep, resting heart rate and HRV, so the week's averages (430
+     * minutes, 58, 45 ms) differ from every single day's; one of them also holds sleep stages, oxygen and a
+     * breathing rate, which never go. Two days of food, whose averages (2,100 kcal, 110 g) differ from each day's.
+     */
+    private fun request(question: TrainerQuestion, earlier: List<Feedback> = emptyList(), weeklyPlans: List<CountedPlan> = emptyList()) =
+        TrainerRequest.of(
+            question = question, today = TEST_EPOCH_DAY, workouts = listOf(walk, strength), reviews = listOf(review),
+            plans = mapOf(9L to plan),
+            days = listOf(
+                HealthDay(
+                    TEST_EPOCH_DAY, distanceM = 4_000, activeKcal = 300, sleepMinutes = 410, restingHeartRate = 55, hrvMs = 37.0,
+                    deepMinutes = 95, oxygenPct = 96.5, respiratoryRate = 14.5,
+                ),
+                HealthDay(TEST_EPOCH_DAY - 1, sleepMinutes = 450, restingHeartRate = 61, hrvMs = 53.0),
+            ),
+            food = mapOf(TEST_EPOCH_DAY - 1 to DayTotals(1_900, 94, 200, 70), TEST_EPOCH_DAY to DayTotals(2_300, 126, 200, 70)),
+            targetKcal = 2_000,
+            weeklyPlans = weeklyPlans,
+            readings = listOf(
+                WeightReading(TEST_EPOCH_DAY - 28, 80.4), WeightReading(TEST_EPOCH_DAY - 14, 79.2), WeightReading(TEST_EPOCH_DAY, 78.6),
+            ),
+            profile = aProfile(weightKg = 83.0, goal = Goal.lose(0.5, targetKg = 71.5)),
+            currentYear = TEST_YEAR, earlierFeedback = earlier,
+        )
+
+    /** [planRequest] with a kept plan of two weeks of two steady walks, begun this Monday: the walk ticks one. */
+    private fun ledgerRequest() = request(
+        TrainerQuestion.Plan(PlanAnswers(PlanActivity.TREADMILL_WALK, TimeAvailable.MIN_30, Feeling.FRESH, Wish.PUSH)),
+        weeklyPlans = listOf(
+            CountedPlan(
+                Programme(
+                    1, 0, ProgrammeAsk(2, 2), null,
+                    WeeksPlan("Invented plan", List(2) { PlanWeek("Invented focus", listOf(STEADY, STEADY)) }, "Invented."),
+                    "a-model", TEST_EPOCH_DAY - 3, ProgrammeStatus.RUNNING,
+                ),
+                PlanCounting(1, 0, emptyMap()),
+            ),
         ),
-        profile = aProfile(weightKg = 83.0, goal = Goal.lose(0.5, targetKg = 71.5)),
-        currentYear = TEST_YEAR, earlierFeedback = earlier,
     )
 
     /**
      * [planRequest] with a year behind it (D89, D90): the record begins on 1 June 2026; June has one
-     * 50-minute walk of 4 km, heart 120, felt hard, under the same title as the recent walk; two days with
-     * steps and distance, one of them with the day's sleep and resting heart rate; weigh-ins at both ends
+     * 50-minute walk of 4 km, heart 120, felt hard, under the same title as the recent walk; two June days with
+     * steps and distance, one of them with a night's sleep and the day's resting heart rate, outside every
+     * week's 28 days; weigh-ins at both ends
      * of June. And the owner's note.
      */
     private fun yearRequest(): TrainerRequest {
@@ -611,10 +725,13 @@ class TrainerPromptTest {
             reviews = listOf(review, TrainerReview(id = 2, workoutId = 3, planId = null, felt = Felt.HARD, words = "Invented.")),
             plans = mapOf(9L to plan),
             days = listOf(
-                HealthDay(TEST_EPOCH_DAY, distanceM = 4_000, activeKcal = 300, sleepMinutes = 430, restingHeartRate = 58),
-                HealthDay(JUNE_1 + 9, steps = 6_000, distanceM = 6_000, sleepMinutes = 430, restingHeartRate = 58),
+                HealthDay(TEST_EPOCH_DAY, distanceM = 4_000, activeKcal = 300),
+                HealthDay(JUNE_1 + 9, steps = 6_000, distanceM = 6_000, sleepMinutes = 470, restingHeartRate = 64),
                 HealthDay(JUNE_1 + 10, steps = 8_000),
             ),
+            food = emptyMap(),
+            targetKcal = 2_000,
+            weeklyPlans = emptyList(),
             readings = listOf(WeightReading(JUNE_1 - 1, 82.0), WeightReading(JUNE_1 + 29, 80.0)),
             profile = aProfile(weightKg = 83.0, goal = Goal.lose(0.5, targetKg = 71.5)),
             currentYear = TEST_YEAR, earlierFeedback = emptyList(),
@@ -643,6 +760,19 @@ class TrainerPromptTest {
     }
 
     private companion object {
+        /** D112's five rules, as fragments each on one line of the text. */
+        val RULES = listOf(
+            "Both parts, every time.",
+            "never excuse it with other activity",
+            "Lead with what matters most this week, whichever part it is in.",
+            "is itself worth saying, and is a reason to suggest more.",
+            "Recovery shapes intensity.",
+            "is a reason for an easier session or a rest day; say so. Do not diagnose.",
+            "Food is context.",
+            "Never prescribe a diet, a food or an amount.",
+            "No figure the app did not count.",
+            "you may compare two of them, but never estimate one.",
+        )
         const val LOADED = "Invented instructions: a short note from a coach."
         val JUNE_1 = java.time.LocalDate.of(2026, 6, 1).toEpochDay()
         const val NOTE = "Invented note: an old knee injury, so no running downhill.\nWalks before work."

@@ -6,21 +6,24 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.BeyondPlan
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.FoodContext
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.Recovery
 import com.metaself.app.domain.trainer.Rhythm
 import com.metaself.app.domain.trainer.SessionFacts
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerRequest
-import com.metaself.app.domain.trainer.WeekFacts
+import com.metaself.app.domain.trainer.WeekLedger
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
 import kotlinx.coroutines.flow.Flow
@@ -227,7 +230,11 @@ class OpenAiTrainerTest {
             sessions = emptyList(),
             months = emptyList(),
             weeks = (0 until 6).map { back ->
-                WeekFacts(monday = TEST_EPOCH_DAY - 3 - 7L * back, distanceM = null, averageActiveKcal = null, sessions = 0, current = back == 0)
+                WeekLedger(
+                    monday = TEST_EPOCH_DAY - 3 - 7L * back, current = back == 0, practice = null,
+                    beyond = BeyondPlan(emptyList(), null, null), food = FoodContext(0, null, null, null),
+                    recovery = Recovery(null, null, null, null, null, null),
+                )
             },
             weight = null,
             goal = null,

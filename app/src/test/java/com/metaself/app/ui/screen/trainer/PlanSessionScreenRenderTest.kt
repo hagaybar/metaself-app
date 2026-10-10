@@ -75,6 +75,7 @@ class PlanSessionScreenRenderTest {
         assertThat(render.textsAgain()).contains(
             "Sends to OpenAI, with your key: these answers; " +
                 "your note about yourself; your sessions of the last six weeks, with your words on them; weekly totals; " +
+                "weekly averages of your sleep, resting heart rate, heart-rate variability and food, with your calorie target; " +
                 "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; and the trainer's last three feedbacks. " +
                 "One of today's 20 AI requests.",
         )

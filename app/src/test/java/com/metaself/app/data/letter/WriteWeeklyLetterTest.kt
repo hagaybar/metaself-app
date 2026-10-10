@@ -17,19 +17,26 @@ import com.metaself.app.domain.letter.LetterReply
 import com.metaself.app.domain.letter.LetterTexts
 import com.metaself.app.domain.letter.PlanWeekFigures
 import com.metaself.app.domain.movement.EnergySource
+import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.target.CurrentTarget
+import com.metaself.app.domain.trainer.AttemptFacts
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.FoodContext
+import com.metaself.app.domain.trainer.KindLedger
 import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PracticeLedger
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeStatus
+import com.metaself.app.domain.trainer.SessionOutcome
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.weight.WeightReading
@@ -285,6 +292,38 @@ class WriteWeeklyLetterTest {
         job()(LETTER_MONDAY)
 
         assertThat(writer.asked.single().figures.week.plan!!.done).isEqualTo(2)
+    }
+
+    /**
+     * D110, D111: the letter carries its week's ledger. The plan's second week holds two 40-minute walks:
+     * one is done; a 25-minute walk, never answered, is a candidate — beyond the plan, marked as an attempt.
+     * Seven nights of 400 minutes before the week; two in it, of 400 and 440. Invented.
+     */
+    @Test
+    fun `the request carries the week's ledger`() = runTest {
+        val planned = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented walk")
+        val plan = WeeksPlan("Invented plan", List(2) { PlanWeek("Invented focus", listOf(planned, planned)) }, "Invented.")
+        programmes.rows.value = listOf(
+            Programme(1, 0, ProgrammeAsk(2, 2), null, plan, "a-model", LETTER_MONDAY - 7, ProgrammeStatus.RUNNING),
+        )
+        record.workouts.value = listOf(walk(1, LETTER_MONDAY), walk(2, LETTER_MONDAY + 2, minutes = 25))
+        record.days.value = (1L..7L).map { HealthDay(LETTER_MONDAY - it, sleepMinutes = 400) } +
+            listOf(HealthDay(LETTER_MONDAY, sleepMinutes = 400), HealthDay(LETTER_MONDAY + 1, sleepMinutes = 440))
+        someFood()
+
+        job()(LETTER_MONDAY)
+
+        val ledger = writer.asked.single().ledger
+        assertThat(ledger.monday).isEqualTo(LETTER_MONDAY)
+        assertThat(ledger.practice).isEqualTo(
+            PracticeLedger(2, 2, listOf(SessionOutcome(planned, PlannedOutcome.DONE, 40), SessionOutcome(planned, PlannedOutcome.NOT_DONE, null))),
+        )
+        assertThat(ledger.beyond.kinds).containsExactly(
+            KindLedger(WorkoutKind.WALK, 1, 25, 3_000, null, listOf(AttemptFacts(WorkoutKind.WALK, 25, 40))),
+        )
+        assertThat(ledger.food).isEqualTo(FoodContext(1, 2_000, 100, CurrentTarget.of(aProfile(), null, 2026, 0).kcal))
+        assertThat(ledger.recovery.sleepMinutes).isEqualTo(420)
+        assertThat(ledger.recovery.usualSleepMinutes).isEqualTo(400)
     }
 
     @Test

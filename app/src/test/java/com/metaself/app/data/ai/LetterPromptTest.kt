@@ -12,14 +12,23 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.profile.GoalDirection
 import com.metaself.app.domain.profile.Sex
+import com.metaself.app.domain.trainer.AttemptFacts
+import com.metaself.app.domain.trainer.BeyondPlan
 import com.metaself.app.domain.trainer.BodyFacts
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.FoodContext
 import com.metaself.app.domain.trainer.GoalFacts
+import com.metaself.app.domain.trainer.KindLedger
 import com.metaself.app.domain.trainer.Origin
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.PracticeLedger
+import com.metaself.app.domain.trainer.Recovery
 import com.metaself.app.domain.trainer.SessionFacts
+import com.metaself.app.domain.trainer.SessionOutcome
+import com.metaself.app.domain.trainer.WeekLedger
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -47,8 +56,20 @@ class LetterPromptTest {
         zoneMaxEstimated = true, steps = 5_000, stepsFrom = Origin.SYNCED, felt = null, words = null, plan = null,
     )
 
+    /** The week's ledger, every part filled so every key path shows. Invented figures. */
+    private val ledger = WeekLedger(
+        monday = monday, current = true,
+        practice = PracticeLedger(
+            1, 2, listOf(SessionOutcome(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"), PlannedOutcome.DONE, 40)),
+        ),
+        beyond = BeyondPlan(listOf(KindLedger(WorkoutKind.WALK, 2, 50, 4_000, 20, listOf(AttemptFacts(WorkoutKind.WALK, 10, 30)))), 8_000, 6_000),
+        food = FoodContext(5, 2_000, 100, 2_100),
+        recovery = Recovery(420, 400, 60, 58, 45, 40),
+    )
+
     private fun request() = LetterRequest(
         figures = LetterFigures(week(monday), List(4) { week(monday - 7L * (it + 1)) }, 2_100),
+        ledger = ledger,
         sessions = listOf(session),
         aboutMe = "Invented note.",
         goal = GoalFacts(GoalDirection.LOSE, 0.5),
@@ -86,7 +107,7 @@ class LetterPromptTest {
 
         assertThat(body).contains("weekly_letter")
         assertThat(user.keys).containsExactly(
-            "week", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan", "last_next_week",
+            "week", "ledger", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan", "last_next_week",
         )
         assertThat(user.getValue("earlier_weeks").jsonArray).hasSize(4)
     }
@@ -94,8 +115,10 @@ class LetterPromptTest {
     /**
      * D101's "never sent", as the whole shape: food only as a week's averages and a count of days; the
      * weight only as the trend's change across a week; a session's figures without the owner's words,
-     * felt or plan; no sleep, no meal, no food, no amount, no time of eating, no single weigh-in. A new
-     * key anywhere fails here before it can leave the phone.
+     * felt or plan; no single night's sleep or single day's heart rate, no meal, no food, no amount, no time
+     * of eating, no single weigh-in; the week's ledger (D111): its practice, what was beyond the plan, its
+     * food as averages with the target, and its recovery as averages with their usuals — never a single
+     * night or day. A new key anywhere fails here before it can leave the phone.
      */
     @Test
     fun `nothing else is sent`() {
@@ -111,8 +134,21 @@ class LetterPromptTest {
             "heart_rate.average", "heart_rate.highest", "heart_rate.source", "zone_minutes", "zone_max", "steps",
             "steps_source", "felt", "words", "plan",
         )
-        val expected = listOf("week", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan", "last_next_week") +
-            week.map { "week.$it" } + week.map { "earlier_weeks[].$it" } + session.map { "sessions[].$it" } +
+        val ledger = listOf(
+            "from", "practice", "practice.week", "practice.of_weeks", "practice.sessions", "practice.sessions[].kind",
+            "practice.sessions[].planned_minutes", "practice.sessions[].outcome", "practice.sessions[].minutes_done",
+            "beyond_the_plan", "beyond_the_plan.sessions_by_kind", "beyond_the_plan.sessions_by_kind[].kind",
+            "beyond_the_plan.sessions_by_kind[].sessions", "beyond_the_plan.sessions_by_kind[].minutes",
+            "beyond_the_plan.sessions_by_kind[].distance_m", "beyond_the_plan.sessions_by_kind[].brisk_minutes",
+            "beyond_the_plan.sessions_by_kind[].attempts", "beyond_the_plan.sessions_by_kind[].attempts[].minutes",
+            "beyond_the_plan.sessions_by_kind[].attempts[].planned_minutes", "beyond_the_plan.everyday",
+            "beyond_the_plan.everyday.steps_a_day", "beyond_the_plan.everyday.distance_m_a_day",
+            "food", "food.days_logged", "food.kcal_a_day", "food.protein_g_a_day", "food.target_kcal",
+            "recovery", "recovery.sleep_minutes_a_night", "recovery.usual_sleep_minutes_a_night",
+            "recovery.resting_heart_rate", "recovery.usual_resting_heart_rate", "recovery.hrv_ms", "recovery.usual_hrv_ms",
+        )
+        val expected = listOf("week", "ledger", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan", "last_next_week") +
+            week.map { "week.$it" } + week.map { "earlier_weeks[].$it" } + session.map { "sessions[].$it" } + ledger.map { "ledger.$it" } +
             listOf("goal.direction", "goal.kg_a_week", "body.age", "body.sex", "body.height_cm") +
             listOf("plan.title", "plan.focus", "plan.sessions", "plan.sessions[].kind", "plan.sessions[].minutes", "plan.sessions[].effort", "plan.sessions[].what")
 
@@ -133,7 +169,7 @@ class LetterPromptTest {
     @Test
     fun `the request has room for exactly what D101 lists`() {
         assertThat(fieldsOf(LetterRequest::class.java)).containsExactly(
-            "figures", "sessions", "aboutMe", "goal", "body", "planTitle", "planWeek", "lastNextWeek",
+            "figures", "ledger", "sessions", "aboutMe", "goal", "body", "planTitle", "planWeek", "lastNextWeek",
         )
         assertThat(fieldsOf(LetterFigures::class.java)).containsExactly("week", "earlier", "targetKcal", "average\$delegate")
         assertThat(fieldsOf(WeekFigures::class.java)).containsExactly("monday", "food", "weightChangeKg", "weighedIn", "movement", "plan")
@@ -164,6 +200,20 @@ class LetterPromptTest {
             "Never shame, never exaggerate, no exclamation marks, no emoji. Every figure mentioned must be one given.",
             "The close is one warm sentence about the week or the person, not a slogan.",
             "Nothing medical is diagnosed.",
+        ).forEach { assertThat(system).contains(it) }
+    }
+
+    /** D112: the letter is told what its ledger holds, and the trainer's five rules, word for word. */
+    @Test
+    fun `the ledger and the rules for using it are in the instructions`() {
+        val system = system(body())
+
+        assertThat(system).contains("ledger is this week's ledger.")
+        assertThat(system).contains(TrainerPrompt.LEDGER)
+        assertThat(system).contains(TrainerPrompt.WEEK_RULES)
+        listOf(
+            "Both parts, every time.", "never excuse it with other activity", "Recovery shapes intensity.",
+            "Food is context.", "Never prescribe a diet, a food or an amount.", "No figure the app did not count.",
         ).forEach { assertThat(system).contains(it) }
     }
 

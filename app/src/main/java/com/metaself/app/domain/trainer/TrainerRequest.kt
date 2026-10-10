@@ -1,5 +1,6 @@
 package com.metaself.app.domain.trainer
 
+import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementWeek
@@ -79,15 +80,6 @@ data class SessionFacts(
     val plan: SessionPlan?,
 )
 
-/** One Monday-based week's D74 figures. [current] is this week, so far. */
-data class WeekFacts(
-    val monday: Long,
-    val distanceM: Int?,
-    val averageActiveKcal: Int?,
-    val sessions: Int,
-    val current: Boolean,
-)
-
 /** The weight screen's figures: the smoothed line's last point and its measured weekly change. */
 data class WeightFacts(val trendKg: Double, val asOfEpochDay: Long, val kgPerWeek: Double?, val overDays: Int?)
 
@@ -103,11 +95,13 @@ data class BodyFacts(val ageYears: Int, val sex: Sex, val heightCm: Int)
 data class Rhythm(val sessionsSoFar: Int, val daysLeft: Int)
 
 /**
- * Everything one trainer request holds (D84) — built fresh from the stored record every time; no
- * conversation is kept or replayed. There is deliberately no field for a meal, sleep, a raw reading,
- * a single weigh-in, a target weight, a name, or an app or device name; `TrainerRequestTest` fails if
- * one is added.
+ * Everything one trainer request holds (D84, amended by D111) — built fresh from the stored record every
+ * time; no conversation is kept or replayed. There is deliberately no field for a meal, a food, a single
+ * night's sleep or a single day's heart rate, a raw reading, a single weigh-in, a target weight, a name, or
+ * an app or device name; a week's food and recovery go only as averages in its ledger (D110).
+ * `TrainerRequestTest` fails if a field is added.
  *
+ * @property weeks six week ledgers (D110), this week first and so far, then the five before it.
  * @property aboutMe the owner's standing note (D90), trimmed, sent unchanged; null when there is none.
  * @property months a line for each of up to twelve months before the 42 days (D89), oldest first.
  */
@@ -116,7 +110,7 @@ data class TrainerRequest(
     val today: Long,
     val aboutMe: String?,
     val sessions: List<SessionFacts>,
-    val weeks: List<WeekFacts>,
+    val weeks: List<WeekLedger>,
     val months: List<MonthFacts>,
     val weight: WeightFacts?,
     val goal: GoalFacts?,
@@ -138,13 +132,20 @@ data class TrainerRequest(
         /** The first day the monthly lines (D89) can need: the first of the month a year before this one. */
         fun firstRecordDay(today: Long): Long = MonthlyLines.firstDay(today)
 
+        /** The first day the six ledgers read: the 28 days before the first week, for recovery's usuals (D110). */
+        fun firstLedgerDay(today: Long): Long = firstSummaryDay(today) - WeekLedgers.USUAL_DAYS
+
         /**
          * @param workouts any workouts; only the visible, counted ones of the 42 days are sent as
-         *   sessions, and those of the months before them are counted into the monthly lines (D89).
+         *   sessions; those of the six weeks are placed in their ledgers (D110); those of the months before
+         *   the 42 days are counted into the monthly lines (D89).
          * @param reviews any reviews; each is attached to its session.
-         * @param plans the stored plans the reviews name, by id.
-         * @param days the daily summaries from [firstSummaryDay] (or [firstRecordDay], for the monthly
-         *   lines) to [today]; meals are never read.
+         * @param plans the stored single-session plans the reviews name, by id.
+         * @param days the daily summaries from [firstLedgerDay] (or [firstRecordDay], for the monthly
+         *   lines) to [today].
+         * @param food each day's food totals over the six weeks (D110); a meal is never read.
+         * @param targetKcal today's calorie target, beside each week's food (D110); null with no profile.
+         * @param weeklyPlans every kept version of a weekly plan, with its counting (D105): each week's practice.
          * @param earlierFeedback newest first; the first [FEEDBACK_COUNT] are sent.
          * @param earliestDay the first day the record holds anything; months before it have no line (D89).
          * @param aboutMe the owner's note (D90), as stored.
@@ -156,6 +157,9 @@ data class TrainerRequest(
             reviews: List<TrainerReview>,
             plans: Map<Long, TrainerPlan>,
             days: List<HealthDay>,
+            food: Map<Long, DayTotals>,
+            targetKcal: Int?,
+            weeklyPlans: List<CountedPlan>,
             readings: List<WeightReading>,
             profile: Profile?,
             currentYear: Int,
@@ -175,8 +179,7 @@ data class TrainerRequest(
                 }
             val thisMonday = MovementWeek.mondayOf(today)
             val weeks = (0 until WEEKS).map { back ->
-                val week = MovementWeek.of(today, days, workouts, emptyMap(), thisMonday - 7L * back)
-                WeekFacts(week.monday, week.distanceM, week.averageActiveKcal, week.workoutCount + week.walkCount, back == 0)
+                WeekLedgers.of(thisMonday - 7L * back, today, workouts, days, food, targetKcal, weeklyPlans)
             }
             val trend = WeightTrend.of(readings)
             val rate = MeasuredRate.of(trend, today)
@@ -190,7 +193,11 @@ data class TrainerRequest(
                 weight = trend.lastOrNull()?.let { WeightFacts(it.trendKg, it.reading.epochDay, rate?.kgPerWeek, rate?.spanDays) },
                 goal = profile?.let { GoalFacts(it.goal.direction, it.goal.kgPerWeek) },
                 body = profile?.let { BodyFacts(it.ageYears(currentYear), it.sex, it.heightCm) },
-                thisWeek = Rhythm(weeks.first().sessions, (thisMonday + 6 - today).toInt()),
+                // D87, unchanged: this week's visible, counted sessions so far, as the Movement screen counts them.
+                thisWeek = Rhythm(
+                    workouts.count { !it.hidden && it.counted && it.epochDay in thisMonday..today },
+                    (thisMonday + 6 - today).toInt(),
+                ),
                 earlierFeedback = earlierFeedback.take(FEEDBACK_COUNT),
             )
         }

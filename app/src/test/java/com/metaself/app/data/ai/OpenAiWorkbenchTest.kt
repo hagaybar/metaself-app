@@ -3,16 +3,19 @@ package com.metaself.app.data.ai
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
+import com.metaself.app.domain.trainer.BeyondPlan
 import com.metaself.app.domain.trainer.Feeling
+import com.metaself.app.domain.trainer.FoodContext
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
+import com.metaself.app.domain.trainer.Recovery
 import com.metaself.app.domain.trainer.Rhythm
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerRequest
-import com.metaself.app.domain.trainer.WeekFacts
-import com.metaself.app.domain.trainer.WorkbenchReply
+import com.metaself.app.domain.trainer.WeekLedger
 import com.metaself.app.domain.trainer.Wish
+import com.metaself.app.domain.trainer.WorkbenchReply
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -174,7 +177,11 @@ class OpenAiWorkbenchTest {
             aboutMe = null,
             sessions = emptyList(),
             weeks = (0 until 6).map { back ->
-                WeekFacts(monday = TEST_EPOCH_DAY - 3 - 7L * back, distanceM = null, averageActiveKcal = null, sessions = 0, current = back == 0)
+                WeekLedger(
+                    monday = TEST_EPOCH_DAY - 3 - 7L * back, current = back == 0, practice = null,
+                    beyond = BeyondPlan(emptyList(), null, null), food = FoodContext(0, null, null, null),
+                    recovery = Recovery(null, null, null, null, null, null),
+                )
             },
             months = emptyList(),
             weight = null,

@@ -12,6 +12,7 @@ import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.letter.LetterFigures
 import com.metaself.app.domain.letter.LetterReply
 import com.metaself.app.domain.letter.LetterRequest
@@ -19,10 +20,12 @@ import com.metaself.app.domain.letter.LetterWriter
 import com.metaself.app.domain.letter.PlanWeekFigures
 import com.metaself.app.domain.letter.WeekFigures
 import com.metaself.app.domain.letter.WeeklyLetter
+import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.profile.ageYears
 import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.BodyFacts
+import com.metaself.app.domain.trainer.CountedPlan
 import com.metaself.app.domain.trainer.GoalFacts
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanProgress
@@ -31,6 +34,7 @@ import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.Programmes
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.WeekLedgers
 import com.metaself.app.domain.weight.WeightTrend
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -118,9 +122,11 @@ class WriteWeeklyLetter @Inject constructor(
             CurrentTarget.of(it, profiles.revision.first(), year(), profiles.burnAdjustmentKcal.first()).kcal
         }
         val figures = LetterFigures(figuresWeek, (1..LetterFigures.WEEKS_BEFORE).map { counted.week(weekMonday - 7L * it) }, target)
-        val running = runningIn(counted.kept, weekMonday)?.first
+        val running = CountedPlan.covering(counted.kept, weekMonday)?.programme
         val request = LetterRequest(
             figures = figures,
+            // D110, D111: the week's ledger, counted to its Sunday.
+            ledger = WeekLedgers.of(weekMonday, sunday, workouts, counted.days, counted.food, target, counted.kept),
             sessions = workouts
                 .filter { !it.hidden && it.counted && it.epochDay in weekMonday..sunday }
                 .sortedBy { it.startedAtMillis }
@@ -155,11 +161,18 @@ class WriteWeeklyLetter @Inject constructor(
         letters.of(weekMonday) == null && !count(weekMonday).week(weekMonday).quiet
 
     /** The record over [weekMonday]'s week and the four before it, read once. */
-    private class Counted(val workouts: List<Workout>, val kept: List<Pair<Programme, PlanCounting>>, val week: (Long) -> WeekFigures)
+    private class Counted(
+        val workouts: List<Workout>,
+        val days: List<HealthDay>,
+        val food: Map<Long, DayTotals>,
+        val kept: List<CountedPlan>,
+        val week: (Long) -> WeekFigures,
+    )
 
     private suspend fun count(weekMonday: Long): Counted {
         val sunday = weekMonday + 6
-        val first = weekMonday - 7L * LetterFigures.WEEKS_BEFORE
+        // The four earlier weeks (D100) and the ledger's 28 days of usuals (D110) — the same span today.
+        val first = minOf(weekMonday - 7L * LetterFigures.WEEKS_BEFORE, weekMonday - WeekLedgers.USUAL_DAYS)
         val foodByDay = food.byDay(first, sunday)
         val trend = WeightTrend.of(weights.readings.first())
         val workouts = record.observeWorkouts(first, sunday).first()
@@ -167,8 +180,8 @@ class WriteWeeklyLetter @Inject constructor(
         val allReviews = reviews.observeReviews().first()
         val all = programmes.all()
         val kept = all.filter { it.status != ProgrammeStatus.OFFERED && it.startEpochDay != null }
-            .map { it to counting(it, all) }
-        return Counted(workouts, kept) { monday ->
+            .map { CountedPlan(it, counting(it, all)) }
+        return Counted(workouts, days, foodByDay, kept) { monday ->
             WeekFigures.of(monday, foodByDay, trend, workouts, allReviews, days, planWeek(kept, workouts, monday))
         }
     }
@@ -179,21 +192,17 @@ class WriteWeeklyLetter @Inject constructor(
         return PlanCounting(root.id, root.createdAtMillis, programmes.confirmations(root.id))
     }
 
-    /** Design question 13: the kept plan counted during [monday]'s week, the latest-started. */
-    private fun runningIn(kept: List<Pair<Programme, PlanCounting>>, monday: Long): Pair<Programme, PlanCounting>? = kept
-        .filter { (p, _) ->
-            val start = p.startEpochDay!!
-            start <= monday + 6 && Programmes.countedUntil(p, monday + 6) >= monday
-        }
-        .maxByOrNull { it.first.startEpochDay!! }
-
-    /** Its week's planned and done; done counts only ticked sessions — full, or confirmed short (D105). */
-    private fun planWeek(kept: List<Pair<Programme, PlanCounting>>, workouts: List<Workout>, monday: Long): PlanWeekFigures? {
-        val (p, counting) = runningIn(kept, monday) ?: return null
-        val start = p.startEpochDay!!
-        val index = ProgrammeCalendar.weekIndex(start, monday)
-        val week = PlanProgress.of(p.plan, start, workouts, Programmes.countedUntil(p, monday + 6), counting).weeks.getOrNull(index)
+    /**
+     * Its week's planned and done; done counts only ticked sessions — full, or confirmed short (D105). The
+     * plan is [CountedPlan.covering]'s: design question 13's latest-started, and of two with one start, the
+     * one made later (D110).
+     */
+    private fun planWeek(kept: List<CountedPlan>, workouts: List<Workout>, monday: Long): PlanWeekFigures? {
+        val plan = CountedPlan.covering(kept, monday) ?: return null
+        val p = plan.programme
+        val index = ProgrammeCalendar.weekIndex(plan.start, monday)
+        val week = PlanProgress.of(p.plan, plan.start, workouts, Programmes.countedUntil(p, monday + 6), plan.counting).weeks.getOrNull(index)
             ?: return null
-        return PlanWeekFigures(p.plan.title, week.planned, week.done, ProgrammeCalendar.ended(start, p.ask.weeks, monday + 6))
+        return PlanWeekFigures(p.plan.title, week.planned, week.done, ProgrammeCalendar.ended(plan.start, p.ask.weeks, monday + 6))
     }
 }

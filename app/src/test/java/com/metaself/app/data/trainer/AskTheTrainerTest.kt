@@ -2,12 +2,14 @@ package com.metaself.app.data.trainer
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.health.FakeMovementRecord
+import com.metaself.app.data.letter.FakeFoodTotals
 import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
@@ -16,12 +18,15 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.AttemptFacts
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.FoodContext
+import com.metaself.app.domain.trainer.KindLedger
 import com.metaself.app.domain.trainer.PlanActivity
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanConfirmation
@@ -61,6 +66,7 @@ class AskTheTrainerTest {
     private val trainer = FakeTrainer()
     private val aboutMe = InMemoryAboutMeStore()
     private val programmes = FakeProgrammeStore()
+    private val food = FakeFoodTotals()
 
     /** Today, as the phone reads it; [TEST_EPOCH_DAY] unless a test moves it. */
     private var day = TEST_EPOCH_DAY
@@ -244,6 +250,48 @@ class AskTheTrainerTest {
         assertThat(june.sessions).isEqualTo(1)
         assertThat(june.stepsADay).isEqualTo(6_000)
         assertThat(asked.sessions.map { it.epochDay }).containsExactly(TEST_EPOCH_DAY)
+    }
+
+    /**
+     * D110, D111: six ledgers, newest first. The plan (two weeks of two 30-minute walks) began last Monday;
+     * every walk is forty minutes. Last week one walk ticked one of two; this week two tick both and a third
+     * is beyond the plan. Two days of food this week. Invented.
+     */
+    @Test
+    fun `the request carries six week ledgers, with the plan's practice, the food and the target`() = runTest {
+        val id = programmes.add(offered())
+        programmes.keep(id, MONDAY - 7, TEST_EPOCH_DAY - 7)
+        store.workouts.value = listOf(
+            walk(id = 1, day = MONDAY - 7), walk(id = 2, day = MONDAY), walk(id = 3, day = MONDAY + 1), walk(id = 4, day = TEST_EPOCH_DAY),
+        )
+        record.workouts.value = store.workouts.value
+        food.days = mapOf(MONDAY to DayTotals(2_000, 100, 200, 70), MONDAY + 1 to DayTotals(2_200, 120, 200, 70))
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+
+        ask().suggest(ANSWERS)
+
+        val weeks = trainer.asked.single().weeks
+        assertThat(weeks.map { it.monday })
+            .containsExactly(MONDAY, MONDAY - 7, MONDAY - 14, MONDAY - 21, MONDAY - 28, MONDAY - 35).inOrder()
+        assertThat(weeks[0].practice!!.sessions.map { it.outcome }).containsExactly(PlannedOutcome.DONE, PlannedOutcome.DONE)
+        assertThat(weeks[0].beyond.kinds).containsExactly(KindLedger(WorkoutKind.WALK, 1, 40, 4_000, null, emptyList()))
+        assertThat(weeks[1].practice!!.sessions.map { it.outcome }).containsExactly(PlannedOutcome.DONE, PlannedOutcome.NOT_DONE).inOrder()
+        assertThat(weeks[1].beyond.kinds).isEmpty()
+        assertThat(weeks[2].practice).isNull()
+        assertThat(weeks[0].food).isEqualTo(FoodContext(2, 2_100, 110, CurrentTarget.of(aProfile(), null, TEST_YEAR, 0).kcal))
+        assertThat(weeks[1].food.daysLogged).isEqualTo(0)
+    }
+
+    /** D110: the sixth week's usual needs the 28 days before its Monday; seven nights there are enough. Invented. */
+    @Test
+    fun `the request reads the 28 days before its first week, for recovery's usuals`() = runTest {
+        val sixth = MONDAY - 35
+        record.days.value = (1L..7L).map { HealthDay(sixth - it * 4, sleepMinutes = 420) }
+        trainer.plans += TrainerReply.Answered(PLAN, "a-model")
+
+        ask().suggest(ANSWERS)
+
+        assertThat(trainer.asked.single().weeks.last().recovery.usualSleepMinutes).isEqualTo(420)
     }
 
     // --- D93–D98 -----------------------------------------------------------------------------------
@@ -569,7 +617,7 @@ class AskTheTrainerTest {
 
     private fun ask() = AskTheTrainer(
         record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe, programmes,
-        Today { LocalDate.ofEpochDay(day) }, Now { NOW }, CurrentYear { TEST_YEAR },
+        Today { LocalDate.ofEpochDay(day) }, Now { NOW }, CurrentYear { TEST_YEAR }, food,
     )
 
     /** A synced forty-minute walk starting at 08:00 on [day]. Invented. */
