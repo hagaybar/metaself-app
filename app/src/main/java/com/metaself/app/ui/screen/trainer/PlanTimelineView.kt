@@ -127,7 +127,7 @@ private fun Timeline(timeline: PlanTimeline) {
                     when (val place = week.place) {
                         is TimelinePlace.Past -> WeekLine(PlanTimelineWording.pastLine(place))
                         // D123: this week with no sessions yet says its target, as a week ahead does.
-                        is TimelinePlace.ThisWeek -> if (place.tiles.isEmpty()) WeekLine(PlanTimelineWording.weekLine(week)) else Tiles(place.tiles)
+                        is TimelinePlace.ThisWeek -> if (place.tiles.isEmpty() && week.target != null) WeekLine(PlanTimelineWording.weekLine(week)) else Tiles(place.tiles)
                         is TimelinePlace.Ahead -> WeekLine(PlanTimelineWording.weekLine(week))
                     }
                 }
