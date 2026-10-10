@@ -10,6 +10,7 @@ import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanShown
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
@@ -42,6 +43,7 @@ class AdjustPlanViewModel @Inject constructor(
      * @property writing Keep this version or Stop it was tapped and its write has not finished (and,
      *   once it has, the page is closing): every further tap that would write is ignored, so a second
      *   tap cannot refuse the first one's work as "nothing changed".
+     * @property offered D118: [shown] drawn as its weeks, read with it.
      */
     data class State(
         val loading: Boolean = true,
@@ -50,6 +52,7 @@ class AdjustPlanViewModel @Inject constructor(
         val asking: Boolean = false,
         val failure: EstimateResult? = null,
         val shown: Programme? = null,
+        val offered: PlanShown? = null,
         val confirmStop: Boolean = false,
         val finished: Boolean = false,
         val today: Long = 0,
@@ -79,16 +82,22 @@ class AdjustPlanViewModel @Inject constructor(
 
     fun adjust() {
         if (!local.value.canAsk) return
+        val start = local.value.running?.programme?.startEpochDay ?: return
         val words = local.value.words
         local.update { it.copy(asking = true, failure = null, refused = null) }
         outlived(
             outliving,
             problems,
             onRefused = { local.update { it.copy(asking = false, refused = ActionRefused.NOTHING_CHANGED) } },
-            work = { ask.adjust(words) },
-        ) { outcome ->
+            // D118: the version is read as its weeks with the answer, so the two arrive together. A failure to
+            // read it refuses the ask as a failure of adjust itself would; the version stays stored, offered.
+            work = {
+                val outcome = ask.adjust(words)
+                outcome to (outcome as? AskTheTrainer.Adjusted.Offered)?.let { ask.planShownOf(it.programme, start) }
+            },
+        ) { (outcome, offered) ->
             when (outcome) {
-                is AskTheTrainer.Adjusted.Offered -> local.update { it.copy(asking = false, shown = outcome.programme) }
+                is AskTheTrainer.Adjusted.Offered -> local.update { it.copy(asking = false, shown = outcome.programme, offered = offered) }
                 is AskTheTrainer.Adjusted.Failed -> local.update { it.copy(asking = false, failure = outcome.failure) }
                 AskTheTrainer.Adjusted.NotRunning -> local.update { it.copy(asking = false, running = null) }
             }

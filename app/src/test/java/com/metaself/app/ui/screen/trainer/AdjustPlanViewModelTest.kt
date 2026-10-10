@@ -10,6 +10,7 @@ import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.PlanStanding
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -77,6 +78,11 @@ class AdjustPlanViewModelTest {
         assertThat(trainer.asked).hasSize(1)
         assertThat(viewModel.state.value.shown!!.replacesId).isEqualTo(runningId)
         assertThat(programmes.running()!!.id).isEqualTo(runningId)
+        // D118: the new version drawn as its weeks — the plan began this Monday, so week 1 is this week.
+        val offered = viewModel.state.value.offered!!
+        assertThat(offered.timeline.title).isEqualTo(viewModel.state.value.shown!!.plan.title)
+        assertThat(offered.timeline.standing).isEqualTo(PlanStanding.InWeek(1))
+        assertThat(offered.running).isNull()
     }
 
     @Test
