@@ -126,6 +126,20 @@ class TrainerHomeTest {
         assertThat(home().main).isEqualTo(MainAction.Evaluate)
     }
 
+    /** D117: the plan screen's main action is the Trainer page's, from the running card alone. Invented. */
+    @Test
+    fun `the main action is read from a running card`() {
+        val card = PlanCard.of(running, emptyList(), today = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap())) as PlanCard.Running
+        val done = PlanCard.of(
+            running, listOf(planSession(1, start), planSession(2, start + 1).copy(durationMinutes = 40)),
+            today = TEST_EPOCH_DAY, counting = PlanCounting(1, 0, emptyMap()),
+        ) as PlanCard.Running
+
+        assertThat(MainAction.of(card, card.next)).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
+        assertThat(MainAction.of(done, done.next)).isEqualTo(MainAction.PlanNext)
+        assertThat(MainAction.of(PlanCard.None, null)).isEqualTo(MainAction.Evaluate)
+    }
+
     /** A synced thirty-minute walk at 07:00 on [day]. Invented. */
     private fun planSession(id: Long, day: Long) = Workout(
         id = id, epochDay = day, startedAtMillis = day * DAY + 7 * HOUR, durationMinutes = 30,

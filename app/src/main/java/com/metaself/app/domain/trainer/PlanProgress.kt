@@ -169,10 +169,13 @@ object Programmes {
     }
 
     /** The evaluation a version carries, else the one of the version it replaces, and so on back. */
-    fun evaluationOf(programme: Programme, all: List<Programme>): Evaluation? =
+    fun evaluationOf(programme: Programme, all: List<Programme>): Evaluation? = evaluatedOf(programme, all)?.evaluation
+
+    /** D117: the version whose evaluation [evaluationOf] gives — for the day it was made; null when none has one. */
+    fun evaluatedOf(programme: Programme, all: List<Programme>): Programme? =
         generateSequence(programme) { current -> current.replacesId?.let { id -> all.firstOrNull { it.id == id } } }
             .take(all.size + 1)
-            .firstNotNullOfOrNull { it.evaluation }
+            .firstOrNull { it.evaluation != null }
 
     /** D105: the chain's first version — followed back through `replacesId`, bounded as [evaluationOf] is. */
     fun rootOf(programme: Programme, all: List<Programme>): Programme =

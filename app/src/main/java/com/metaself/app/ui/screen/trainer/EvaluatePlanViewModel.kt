@@ -102,7 +102,7 @@ class EvaluatePlanViewModel @Inject constructor(
     private fun readRunning() {
         guarded(problems, onRefused = { local.update { it.copy(loading = false, refused = ActionRefused.COULD_NOT_OPEN) } }) {
             val running = ask.running()
-            val evaluation = running?.let { ask.evaluationOf(it.programme) }
+            val evaluation = running?.let { ask.datedEvaluationOf(it.programme)?.evaluation }
             local.update { it.copy(loading = false, running = running, evaluation = evaluation) }
         }
     }

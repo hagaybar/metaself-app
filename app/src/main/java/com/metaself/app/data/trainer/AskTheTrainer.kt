@@ -13,7 +13,7 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.CountedPlan
-import com.metaself.app.domain.trainer.Evaluation
+import com.metaself.app.domain.trainer.DatedEvaluation
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.PlanAnswers
@@ -22,6 +22,8 @@ import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanProgress
+import com.metaself.app.domain.trainer.PlanShown
+import com.metaself.app.domain.trainer.PlanTimeline
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.Programme
@@ -37,6 +39,7 @@ import com.metaself.app.domain.trainer.TrainerRequest
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.TrainerWeek
 import com.metaself.app.domain.trainer.WeekNote
+import com.metaself.app.domain.trainer.WeekLedgers
 import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
 import kotlinx.coroutines.flow.first
@@ -250,8 +253,62 @@ class AskTheTrainer @Inject constructor(
     /** D96: the running plan's next session this week, for the plan form. Reads only; nothing is sent. */
     suspend fun nextPlanned(): PlannedTick? = running()?.next
 
-    /** D98: the evaluation of the running or last plan — its own, or its chain's (design question 3). */
-    suspend fun evaluationOf(programme: Programme): Evaluation? = Programmes.evaluationOf(programme, programmes.all())
+    /**
+     * D117: the plan "See the plan" draws — the running one; else one that ended, or was stopped, in the last
+     * [ProgrammeCalendar.ENDED_SHOWN_DAYS] days; null when none. Reads only.
+     */
+    suspend fun planShown(): PlanShown? {
+        val card = card()
+        val programme = when (card) {
+            is PlanCard.Running -> card.programme
+            is PlanCard.Ended -> card.programme
+            PlanCard.None -> recentlyStopped(today().toEpochDay())
+        } ?: return null
+        val start = programme.startEpochDay ?: return null
+        return PlanShown(timelineOf(programme, start), card as? PlanCard.Running, datedEvaluationOf(programme))
+    }
+
+    /** D118: an answer offered and not yet kept, drawn as it would be from [start], with its chain's evaluation. Reads only. */
+    suspend fun planShownOf(offered: Programme, start: Long): PlanShown =
+        PlanShown(timelineOf(offered, start), null, datedEvaluationOf(offered))
+
+    private suspend fun recentlyStopped(day: Long): Programme? = programmes.all()
+        .filter { programme ->
+            val stopped = programme.stoppedEpochDay
+            programme.status == ProgrammeStatus.STOPPED && programme.startEpochDay != null && stopped != null &&
+                day - stopped in 0..ProgrammeCalendar.ENDED_SHOWN_DAYS.toLong()
+        }
+        .maxByOrNull { it.createdAtMillis }
+
+    /**
+     * D117, D118: [programme] drawn as its weeks from [start]. A kept version is counted as the Trainer page
+     * counts it, to today or its stop day; an adjusted version not yet kept as its chain would count it (its
+     * weeks already past are the running plan's, D97); an evaluation's answer not yet kept counts nothing. Each
+     * week begun gets its ledger (D110), for the sessions of its own. Reads only.
+     */
+    suspend fun timelineOf(programme: Programme, start: Long): PlanTimeline {
+        val day = today().toEpochDay()
+        if (programme.startEpochDay == null && programme.replacesId == null) {
+            return PlanTimeline.of(programme, start, day, null, emptyMap())
+        }
+        val read = minOf(day, ProgrammeCalendar.lastDay(start, programme.plan.weeks.size))
+        val until = if (programme.startEpochDay != null) Programmes.countedUntil(programme, day) else read
+        val workouts = if (read < start) emptyList() else record.observeWorkouts(start, read).first()
+        val progress = PlanProgress.of(programme.plan, start, workouts, until, counting(programme))
+        val plans = countedPlans()
+        val ledgers = programme.plan.weeks.indices.map { ProgrammeCalendar.monday(start, it) }
+            .filter { it <= read }
+            .associateWith { WeekLedgers.of(it, day, workouts, emptyList(), emptyMap(), null, plans) }
+        return PlanTimeline.of(programme, start, day, progress, ledgers)
+    }
+
+    /** D117: the evaluation [programme] carries, or its chain's, with the day it was made (D98). Reads only. */
+    suspend fun datedEvaluationOf(programme: Programme): DatedEvaluation? {
+        val evaluated = Programmes.evaluatedOf(programme, programmes.all()) ?: return null
+        val evaluation = evaluated.evaluation ?: return null
+        val made = Instant.ofEpochMilli(evaluated.createdAtMillis).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+        return DatedEvaluation(evaluation, made)
+    }
 
     // The question builders. The asks above and the workbench (D106) build their questions here and only
     // here, so the workbench's request is the real one by construction. Each reads only.

@@ -695,7 +695,7 @@ In `AskTheTrainerTest`, a section before `// --- D105`:
     }
 
     @Test
-    fun `with nothing kept there is no plan to show; stopped, it is shown stopped for fourteen days`() = runTest {
+    fun `with nothing kept there is no plan to show, and a stopped plan is shown stopped for fourteen days`() = runTest {
         assertThat(ask().planShown()).isNull()
         val id = programmes.add(offered())
         programmes.keep(id, MONDAY - 7, MONDAY - 7)
@@ -1101,7 +1101,7 @@ OFFERED, and Ask again — Adjust — is open.)
     }
 
     @Test
-    fun `while it runs, Adjust the plan and the main action; nothing open, Plan my next session`() {
+    fun `while it runs, Adjust the plan and the main action, and with nothing open Plan my next session`() {
         val opened = mutableListOf<String>()
         val done = listOf(TrainerScreens.walk(1, MONDAY), TrainerScreens.walk(2, MONDAY + 1).copy(durationMinutes = 45))
         draw(running(workouts = done), onAdjust = { opened += "adjust" }, onPlan = { opened += "plan" })
