@@ -76,7 +76,7 @@ the view models; JUnit 4 + Robolectric only for the Compose render tests (`Evalu
    with ink text. This week's node: a `primary` ring. A week ahead: an `outlineVariant` dot, its heading and line
    in `onSurfaceVariant`. The line under a past week `primary`, every other `outlineVariant`. "— this week" in
    `onSurfaceVariant`. **The fold's label is ink, not green**: the theme's `primary` on the default card measures
-   3.88:1, under the 4.5:1 floor (the same reason the strip's "40′" is ink); a `primary` arrow beside it carries
+   3.86:1, under the 4.5:1 floor (the same reason the strip's "40′" is ink); a `primary` arrow beside it carries
    the colour (non-text, 3:1).
 7. **The fold.** One line, "Read the trainer's full evaluation" with a down arrow; opened, it reads "Hide the
    trainer's full evaluation" with an up arrow, and under it Going well., To work on., Since last time. (only when
@@ -1375,7 +1375,7 @@ private fun Tiles(tiles: List<PlanTile>) {
 
 /**
  * Done (short or not): filled in the dark green, its text `onPrimary` (5.00:1 light, 7.29:1 dark — InkLadderTest).
- * Open: the strip's dashed outline, its text in ink — the green on the page is under the text floor.
+ * Open: the strip's dashed outline, its text in ink, as the strip's "40′" is.
  */
 @Composable
 private fun Tile(tile: PlanTile, modifier: Modifier) {
@@ -1400,7 +1400,7 @@ private fun Tile(tile: PlanTile, modifier: Modifier) {
 /**
  * D117 item 3: "WHERE YOU STOOD" and its date, the headline, and the rest folded — going well, to work on,
  * since last time (when there is one) and the plan's why. The fold's words are ink (the green on a card is
- * 3.88:1, under the floor); its arrow carries the green.
+ * 3.86:1, under the floor); its arrow carries the green.
  */
 @Composable
 private fun Stood(dated: DatedEvaluation, why: String) {

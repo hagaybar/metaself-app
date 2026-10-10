@@ -5,6 +5,8 @@ import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlanCounting
+import com.metaself.app.domain.trainer.PlanShown
+import com.metaself.app.domain.trainer.PlanTimeline
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
@@ -41,17 +43,20 @@ class AdjustPlanScreenRenderTest {
         assertThat(texts).contains("Stop this plan")
     }
 
+    /** D118: the new version is drawn as the timeline, under the D4 label, above its two Keep buttons. */
     @Test
-    fun `a new version shows with Keep this version and Keep the old one`() {
+    fun `a new version shows as its weeks with Keep this version and Keep the old one`() {
         var keptNew = false
+        val version = RUNNING.programme.copy(id = 2, replacesId = 1, plan = RUNNING.programme.plan.copy(title = "Invented new"))
+        val offered = PlanShown(PlanTimeline.of(version, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY, null, emptyMap()), null, null)
         val texts = draw(
-            AdjustPlanViewModel.State(loading = false, running = RUNNING, shown = RUNNING.programme.copy(id = 2, replacesId = 1), today = TEST_EPOCH_DAY),
+            AdjustPlanViewModel.State(loading = false, running = RUNNING, shown = version, offered = offered, today = TEST_EPOCH_DAY),
             onKeepNew = { keptNew = true },
         )
 
         assertThat(texts.count { it == "From the AI trainer · advice, not a measurement" }).isEqualTo(1)
-        assertThat(render.isDrawnBefore("From the AI trainer", "THE PLAN")).isTrue()
-        assertThat(texts).contains("Keep the old one")
+        assertThat(render.isDrawnBefore("From the AI trainer", "Invented new")).isTrue()
+        assertThat(texts).containsAtLeast("Invented new", "Week 1 · w — this week", "Easy 30′", "Open", "Week 2 · w", "Keep this version", "Keep the old one").inOrder()
         render.click("Keep this version")
         assertThat(keptNew).isTrue()
     }

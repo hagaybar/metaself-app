@@ -5,9 +5,7 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
-import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.ProgrammeCalendar
-import com.metaself.app.domain.trainer.Tick
 import com.metaself.app.domain.trainer.WeekProgress
 import com.metaself.app.ui.movement.MovementWeekWording
 import java.time.LocalDate
@@ -19,7 +17,6 @@ object ProgrammeWording {
 
     private const val SEP = " · "
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
-    private val WEEKDAY = DateTimeFormatter.ofPattern("EEE", Locale.US)
 
     fun effort(effort: PlannedEffort): String = when (effort) {
         PlannedEffort.EASY -> "Easy"
@@ -43,17 +40,7 @@ object ProgrammeWording {
     fun nextInPlan(tick: PlannedTick): String =
         "Next in your plan: " + plannedTitle(tick.session).replaceFirstChar { it.lowercase(Locale.US) }
 
-    fun span(start: Long, weeks: Int): String = "Starts ${date(start)}, ends ${date(ProgrammeCalendar.lastDay(start, weeks))}"
-
-    fun planHeading(ask: ProgrammeAsk): String = "THE PLAN$SEP${ask.weeks} WEEKS$SEP${ask.perWeek} SESSIONS A WEEK"
-
     fun weekTitle(number: Int, focus: String): String = if (focus.isBlank()) "Week $number" else "Week $number$SEP${focus.trim()}"
-
-    fun tickTitle(tick: Tick): String = (if (tick.by != null) "Done: " else "To do: ") + plannedTitle(tick.planned)
-
-    /** Design question 8: "Done Mon · Walking, 32 min" (invented). */
-    fun tickLine(workout: Workout): String =
-        "Done ${LocalDate.ofEpochDay(workout.epochDay).format(WEEKDAY)}$SEP${MovementWeekWording.name(workout)}, ${workout.durationMinutes} min"
 
     /** D105: a shorter session waiting for the owner's answer: "Walking, 20 min — count it for this?" (invented). */
     fun candidateLine(workout: Workout): String =

@@ -51,7 +51,7 @@ fun AdjustPlanScreen(
             running == null -> Text(stringResource(R.string.weeks_not_running))
             shown != null -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
-                WeeksPlanView(shown.plan, shown.ask, running.programme.startEpochDay ?: 0, null)
+                state.offered?.let { PlanShownView(it) }
                 Button(onClick = onKeepNew, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.adjust_keep_new))
                 }
