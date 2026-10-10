@@ -173,7 +173,8 @@ object TrainerWording {
     /**
      * Design question 20: everything one request holds (D84), under the plan form's ask button — the
      * note about yourself (D90) and the monthly lines (D89) included; with a running weekly plan, its
-     * next session too (D96).
+     * next session too (D96). D111: and each week's averages of sleep, resting heart rate, HRV and food,
+     * with the calorie target.
      */
     fun privacyPlan(ceiling: Int, withPlan: Boolean = false): String =
         privacy(if (withPlan) "these answers and the next session in your weekly plan" else "these answers", ceiling)
@@ -197,6 +198,7 @@ object TrainerWording {
     private fun privacy(first: String, ceiling: Int, extra: String? = null): String =
         "Sends to OpenAI, with your key: $first; your note about yourself; " +
             "your sessions of the last six weeks, with your words on them; weekly totals; " +
+            "weekly averages of your sleep, resting heart rate, heart-rate variability and food, with your calorie target; " +
             "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; " +
             (extra?.let { "$it; " } ?: "") +
             "and the trainer's last three feedbacks. One of today's $ceiling AI requests."
