@@ -156,6 +156,28 @@ class TrainerHomeTest {
             .isEqualTo(PlanCard.None)
     }
 
+    /** D121, D124: an outlined plan's main button — Plan this week, Fill in next week on Sunday, the next block. */
+    @Test
+    fun `an outlined plan's main button fills in its weeks`() {
+        val target = WeekTarget(100, 30, false)
+        fun outlined(filled: Int, weeks: Int = 4, goal: PlanGoal = GOAL_15K) = running.copy(
+            ask = ProgrammeAsk(weeks, 2, goal = goal),
+            plan = WeeksPlan("Invented", List(weeks) { if (it < filled) PlanWeek("w", listOf(walk30)) else PlanWeek("", emptyList()) }, "Invented.",
+                Outline(listOf(Block(Phase.STEADY, "Invented", List(weeks) { target })))),
+        )
+        fun main(programme: Programme, today: Long) =
+            TrainerHome.of(today, emptyList(), emptyList(), emptyList(), programme, emptyList(), PlanCounting(1, 0, emptyMap())).main
+
+        assertThat(main(outlined(filled = 0), TEST_EPOCH_DAY)).isEqualTo(MainAction.PlanThisWeek)
+        assertThat(main(outlined(filled = 1), TEST_EPOCH_DAY)).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
+        // Friday and Saturday the plan page offers next week; Sunday it is the main button.
+        assertThat(main(outlined(filled = 1), start + 4)).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
+        assertThat(main(outlined(filled = 1), start + 6)).isEqualTo(MainAction.FillNextWeek)
+        // A steady plan's last week plans the next block; a distance plan's, the next plan.
+        assertThat(main(outlined(filled = 4, goal = PlanGoal.Steady), start + 21)).isEqualTo(MainAction.NextBlock)
+        assertThat(main(outlined(filled = 4), start + 21)).isEqualTo(MainAction.PlanAhead)
+    }
+
     /** A synced thirty-minute walk at 07:00 on [day]. Invented. */
     private fun planSession(id: Long, day: Long) = Workout(
         id = id, epochDay = day, startedAtMillis = day * DAY + 7 * HOUR, durationMinutes = 30,

@@ -19,7 +19,7 @@ object PlanPageWording {
     const val WEEK = "Week"
     const val SESSION = "Session"
 
-    /** D123: the Month view of a plan made before outlines existed — every plan, until release 2. */
+    /** D123: the Month view of a plan made before outlines existed. */
     const val NO_OUTLINE = "This plan has no outline — plan ahead to set a goal."
 
     /** D124: was "Evaluate me and plan the weeks ahead". */
@@ -32,6 +32,21 @@ object PlanPageWording {
     const val HIDE_STEPS = "Hide the steps"
     const val GET_STEPS = "Get the steps"
     const val NOTHING_COMING = "Nothing planned is coming up."
+
+    /** D121: the plan page's fill-in buttons, and what they say once done. */
+    const val FILL_NEXT_WEEK = "Fill in next week"
+    const val PLAN_THIS_WEEK = "Plan this week"
+    const val NEXT_BLOCK = "Plan the next block"
+    const val FILLING = "Asking the trainer…"
+
+    /** D121: after a fill — "Filled in." and the trainer's sentence when it gave one (invented). */
+    fun filled(why: String): String = "Filled in." + if (why.isBlank()) "" else " " + why.trim()
+
+    /** D121: after the next block — "Next block planned." and why (invented). */
+    fun blockPlanned(why: String): String = "Next block planned." + if (why.isBlank()) "" else " " + why.trim()
+
+    /** Release 1's limit 3: an old plan finishing its week, "Your new plan starts Mon 7 Sep." (invented). */
+    fun newPlanStarts(start: Long): String = "Your new plan starts ${LocalDate.ofEpochDay(start).format(DAY_DATE)}."
 
     /** D124: the replace confirmation's two answers. */
     const val REPLACE = "Replace it"

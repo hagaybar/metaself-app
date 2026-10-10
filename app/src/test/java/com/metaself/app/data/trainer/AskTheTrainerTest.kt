@@ -1063,6 +1063,24 @@ class AskTheTrainerTest {
         assertThat(version.ask.goal).isEqualTo(GOAL_15K)
     }
 
+    /** D123: the plan shown carries its goal and its Month; a plan made before outlines carries neither. */
+    @Test
+    fun `the plan shown carries its goal and month, and an older plan neither`() = runTest {
+        keptOutlined(filled = 2)
+
+        val shown = ask().planShown()!!
+
+        assertThat(shown.goal).isEqualTo(GOAL_15K)
+        assertThat(shown.month!!.blocks.flatMap { it.weeks }.single { it.here }.number).isEqualTo(1)
+        assertThat(shown.timeline.weeks[2].target).isEqualTo(OUTLINE_15.target(2))
+
+        programmes.rows.value = emptyList()
+        val legacy = programmes.add(offered())
+        programmes.keep(legacy, MONDAY, TEST_EPOCH_DAY)
+        assertThat(ask().planShown()!!.month).isNull()
+        assertThat(ask().planShown()!!.goal).isNull()
+    }
+
     /** The goal fixture's plan, [filled] weeks with two thirty-minute walks each. */
     private fun outlined(filled: Int) = WeeksPlan(
         "Invented", List(15) { if (it < filled) PlanWeek("w", listOf(WALK_30, WALK_30)) else PlanWeek("", emptyList()) }, "Invented reason.", OUTLINE_15,

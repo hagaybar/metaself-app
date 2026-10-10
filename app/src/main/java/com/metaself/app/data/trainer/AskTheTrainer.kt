@@ -25,6 +25,7 @@ import com.metaself.app.domain.trainer.PlanFilling
 import com.metaself.app.domain.trainer.PlanOffer
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlanMatch
+import com.metaself.app.domain.trainer.PlanMonth
 import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.PlanProgress
 import com.metaself.app.domain.trainer.PlanShown
@@ -455,7 +456,19 @@ class AskTheTrainer @Inject constructor(
         } ?: return null
         val start = programme.startEpochDay ?: return null
         val steps = stepsOf(programme)
-        return PlanShown(timelineOf(programme, start).withSteps(steps.keys), card as? PlanCard.Running, datedEvaluationOf(programme), steps)
+        return PlanShown(
+            timelineOf(programme, start).withSteps(steps.keys), card as? PlanCard.Running, datedEvaluationOf(programme), steps,
+            programme.ask.goal, monthOf(programme, start),
+        )
+    }
+
+    /** D123: [programme]'s Month from [start], its past weeks' minutes read from the record; null without an outline. Reads only. */
+    private suspend fun monthOf(programme: Programme, start: Long): PlanMonth? {
+        if (programme.plan.outline == null) return null
+        val day = today().toEpochDay()
+        val read = minOf(day, ProgrammeCalendar.lastDay(start, programme.plan.weeks.size))
+        val workouts = if (read < start) emptyList() else record.observeWorkouts(start, read).first()
+        return PlanMonth.of(programme, start, day, workouts)
     }
 
     /** D122: the steps kept for [programme]'s chain's planned sessions, by place. */
@@ -468,7 +481,7 @@ class AskTheTrainer @Inject constructor(
 
     /** D118: an answer offered and not yet kept, drawn as it would be from [start], with its chain's evaluation. Reads only. */
     suspend fun planShownOf(offered: Programme, start: Long): PlanShown =
-        PlanShown(timelineOf(offered, start), null, datedEvaluationOf(offered))
+        PlanShown(timelineOf(offered, start), null, datedEvaluationOf(offered), goal = offered.ask.goal, month = monthOf(offered, start))
 
     private suspend fun recentlyStopped(day: Long): Programme? = programmes.all()
         .filter { programme ->

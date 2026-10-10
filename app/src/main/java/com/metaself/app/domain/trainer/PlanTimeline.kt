@@ -42,8 +42,8 @@ sealed interface TimelinePlace {
     data class Ahead(val sessions: List<PlannedSession>) : TimelinePlace
 }
 
-/** D117: one row of the timeline, [number] counted from 1. */
-data class TimelineWeek(val number: Int, val focus: String, val place: TimelinePlace)
+/** D117: one row of the timeline, [number] counted from 1; [target], its outline's target (D123), null without one. */
+data class TimelineWeek(val number: Int, val focus: String, val place: TimelinePlace, val target: WeekTarget? = null)
 
 /**
  * D117, D118: a weekly plan drawn as its weeks — kept, or offered and not yet kept. Every count is the phone's
@@ -110,7 +110,7 @@ data class PlanTimeline(
                     index == current -> TimelinePlace.ThisWeek(week.sessions.mapIndexed { at, planned -> tile(planned, ticks?.getOrNull(at)) })
                     else -> TimelinePlace.Ahead(week.sessions)
                 }
-                TimelineWeek(index + 1, week.focus, place)
+                TimelineWeek(index + 1, week.focus, place, plan.outline?.target(index))
             }
             return PlanTimeline(plan.title, plan.why, start, standing, weeks)
         }
@@ -135,4 +135,8 @@ data class PlanShown(
     val running: PlanCard.Running?,
     val evaluation: DatedEvaluation?,
     val steps: Map<PlanPlace, TrainerPlan> = emptyMap(),
+    /** D119: the plan's goal; null for a plan made before goals. */
+    val goal: PlanGoal? = null,
+    /** D123: the Month view; null for a plan without an outline. */
+    val month: PlanMonth? = null,
 )
