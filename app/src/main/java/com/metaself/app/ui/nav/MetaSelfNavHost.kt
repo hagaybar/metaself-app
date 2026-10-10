@@ -351,6 +351,7 @@ fun MetaSelfNavHost(
                 onScan = { navController.navigate(Destination.Scan.route) },
                 onOpenWeight = { navController.navigate(Destination.Weight.route) },
                 onOpenMovement = { navController.navigate(Destination.Movement.route) },
+                onOpenTrainer = { navController.navigate(Destination.Trainer.route) },
                 onOpenSettings = { navController.navigate(Destination.Settings.route) },
                 onOpenWindowSettings = { navController.navigate(Destination.Settings.atWindow) },
                 onOpenManager = { navController.navigate(Destination.Foods.route) },
