@@ -303,6 +303,8 @@ class WriteWeeklyLetterTest {
         someFood()
         record.workouts.value = listOf(walk(1, LETTER_MONDAY))
         record.days.value = listOf(HealthDay(LETTER_MONDAY, steps = 8_000, sleepMinutes = 420))
+        // The movement record begins a week before the letter's: the days before it have no minutes.
+        record.earliest.value = LETTER_MONDAY - 7
 
         job()(LETTER_MONDAY)
 
@@ -315,6 +317,8 @@ class WriteWeeklyLetterTest {
         assertThat(monday.sleepMinutes).isEqualTo(420)
         assertThat(monday.kcal).isEqualTo(2_000)
         assertThat(request.days.single { it.epochDay == LETTER_MONDAY + 1 }.kcal).isNull()
+        assertThat(request.days.single { it.epochDay == LETTER_MONDAY - 8 }.ownMinutes).isNull()
+        assertThat(request.days.single { it.epochDay == LETTER_MONDAY - 7 }.ownMinutes).isEqualTo(0)
         assertThat(request.patterns).isEqualTo(LetterPatterns.of(request.days, LETTER_MONDAY))
     }
 
@@ -343,6 +347,51 @@ class WriteWeeklyLetterTest {
             "Invented plan words" to false, "Invented adjust words" to true,
         ).inOrder()
         assertThat(request.toString()).doesNotContain("Invented old words")
+    }
+
+    @Test
+    fun `a blank note is sent as none`() = runTest {
+        someFood()
+        aboutMe.note.value = "   "
+
+        job()(LETTER_MONDAY)
+
+        assertThat(writer.asked.single().aboutMe).isNull()
+        assertThat(writer.asked.single().lastLetters).isEmpty()
+    }
+
+    /** D144: written again, the week's letter is replaced — already read, nothing notified — by the Sunday request. */
+    @Test
+    fun `a letter written again replaces the week's letter, from the same request as Sunday's`() = runTest {
+        someFood()
+        job()(LETTER_MONDAY)
+        val sunday = writer.asked.single()
+        val first = letters.letters.value.single()
+        writer = FakeLetterWriter(LetterReply.Written(TEXTS.copy(headline = "Invented again."), "a-model"))
+
+        val outcome = job().writeAgain(LETTER_MONDAY)
+
+        assertThat(writer.asked.single()).isEqualTo(sunday)
+        val stored = letters.letters.value.single()
+        assertThat(stored.texts.headline).isEqualTo("Invented again.")
+        assertThat(stored.id).isNotEqualTo(first.id)
+        assertThat(stored.readAtMillis).isEqualTo(NOW)
+        assertThat((outcome as WriteWeeklyLetter.Outcome.Written).letter.texts.headline).isEqualTo("Invented again.")
+        // Only the Sunday letter told the notifications.
+        assertThat(told).isEqualTo(1)
+    }
+
+    @Test
+    fun `a letter that cannot be written again leaves the week's letter as it was`() = runTest {
+        someFood()
+        job()(LETTER_MONDAY)
+        val first = letters.letters.value.single()
+        writer = FakeLetterWriter(LetterReply.Failed(EstimateResult.Unreachable(), null))
+
+        val outcome = job().writeAgain(LETTER_MONDAY)
+
+        assertThat(outcome).isInstanceOf(WriteWeeklyLetter.Outcome.Retry::class.java)
+        assertThat(letters.letters.value).containsExactly(first)
     }
 
     @Test

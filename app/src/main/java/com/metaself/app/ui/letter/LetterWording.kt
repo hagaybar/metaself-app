@@ -34,6 +34,12 @@ object LetterWording {
     /** D140: the figures table, closed behind this until tapped. */
     const val FIGURES = "The week's figures ›"
 
+    /** D144: the newest letter, written again on a tap and a confirmation. */
+    const val WRITE_AGAIN = "Write this letter again"
+    const val CONFIRM_AGAIN = "This asks the trainer again (one request) and replaces this letter."
+    const val YES_AGAIN = "Write it again"
+    const val KEEP = "Keep this one"
+
     /** D102's headings, for a letter written before D140 — drawn as it was. */
     const val EFFORT = "WHAT YOU PUT IN"
     const val PROGRESS = "WHERE IT'S TAKING YOU"

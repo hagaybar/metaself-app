@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -48,15 +51,21 @@ fun LetterScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     zone: ZoneId = ZoneId.systemDefault(),
+    onOfferAgain: () -> Unit = {},
+    onWriteAgain: () -> Unit = {},
+    onKeep: () -> Unit = {},
 ) {
     MetaSelfScreen(title = LetterWording.PAGE_TITLE, modifier = modifier, onBack = onBack) {
         when (state) {
             LetterViewModel.State.Loading -> Unit
             LetterViewModel.State.Missing -> Text(LetterWording.MISSING, style = MaterialTheme.typography.bodyMedium)
             LetterViewModel.State.Unreadable -> Text(LetterWording.UNREADABLE, color = MaterialTheme.colorScheme.error)
-            is LetterViewModel.State.Shown -> when (val texts = state.letter.texts) {
-                is LetterTexts.Coach -> CoachLetter(state.letter, texts, zone)
-                is LetterTexts.SixParts -> SixPartLetter(state.letter, texts, zone)
+            is LetterViewModel.State.Shown -> {
+                when (val texts = state.letter.texts) {
+                    is LetterTexts.Coach -> CoachLetter(state.letter, texts, zone)
+                    is LetterTexts.SixParts -> SixPartLetter(state.letter, texts, zone)
+                }
+                if (state.newest) Again(state, onOfferAgain, onWriteAgain, onKeep)
             }
         }
     }
@@ -133,6 +142,29 @@ private fun CoachLetter(letter: WeeklyLetter, texts: LetterTexts.Coach, zone: Zo
     if (figuresOpen) {
         Box(letter)
         Notes(letter, zone)
+    }
+}
+
+/**
+ * D144, at the end of the newest letter: "Write this letter again", then its confirmation in the page; while
+ * the trainer is asked, the letter shown stays and the button says so; a failure is said under it.
+ */
+@Composable
+private fun Again(state: LetterViewModel.State.Shown, onOffer: () -> Unit, onWrite: () -> Unit, onKeep: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        if (state.confirming) {
+            Text(LetterWording.CONFIRM_AGAIN, style = MaterialTheme.typography.bodyMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                Button(onClick = onWrite) { Text(LetterWording.YES_AGAIN) }
+                OutlinedButton(onClick = onKeep) { Text(LetterWording.KEEP) }
+            }
+        } else {
+            OutlinedButton(onClick = onOffer, enabled = !state.writing, modifier = Modifier.fillMaxWidth()) {
+                Text(if (state.writing) LetterWording.WRITING else LetterWording.WRITE_AGAIN)
+            }
+        }
+        state.said?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+        state.refused?.let { Text(stringResource(it.sentence), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
     }
 }
 

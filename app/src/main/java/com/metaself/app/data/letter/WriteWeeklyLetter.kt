@@ -59,6 +59,9 @@ import javax.inject.Inject
 interface WeeklyLetterJob {
     suspend fun write(weekMonday: Long, copy: Boolean): WriteWeeklyLetter.Outcome
     suspend fun wanted(weekMonday: Long): Boolean
+
+    /** D144: [weekMonday]'s letter asked for again and, when written, put in place of the stored one. */
+    suspend fun writeAgain(weekMonday: Long): WriteWeeklyLetter.Outcome
 }
 
 /**
@@ -125,7 +128,18 @@ class WriteWeeklyLetter @Inject constructor(
         val bandDataUntil = if (copied) null else status.current().lastCopiedMillis
         // The copy can take a while; a letter written meanwhile (Write it now) is not asked for twice.
         if (letters.of(weekMonday) != null) return Outcome.AlreadyWritten
+        return ask(weekMonday, bandDataUntil, again = false)
+    }
 
+    /**
+     * D144: the week's letter asked for again — the Sunday letter's own request, its figures recounted now,
+     * the band's data not copied first (as Write it now). Written, it replaces the stored letter, already
+     * read, and nothing is notified; otherwise the stored letter is left as it was. Only a tap calls this.
+     */
+    override suspend fun writeAgain(weekMonday: Long): Outcome =
+        ask(weekMonday, status.current().lastCopiedMillis, again = true)
+
+    private suspend fun ask(weekMonday: Long, bandDataUntil: Long?, again: Boolean): Outcome {
         val sunday = weekMonday + 6
         val counted = count(weekMonday)
         val figuresWeek = counted.week(weekMonday)
@@ -139,7 +153,7 @@ class WriteWeeklyLetter @Inject constructor(
         val figures = LetterFigures(figuresWeek, (1..LetterFigures.WEEKS_BEFORE).map { counted.week(weekMonday - 7L * it) }, target)
         val running = CountedPlan.covering(counted.kept, weekMonday)?.programme
         // D141: the 35 day rows, and D142's patterns over them.
-        val dayRows = LetterDays.of(sunday, workouts, counted.kept, counted.reviews, counted.days, counted.food)
+        val dayRows = LetterDays.of(sunday, workouts, counted.kept, counted.reviews, counted.days, counted.food, record.observeEarliestMovementDay().first())
         val weekSessions = WeekSessions.between(workouts, weekMonday, sunday)
         val reviewed = SessionReviews.bySession(weekSessions, counted.reviews)
         val request = LetterRequest(
@@ -174,9 +188,14 @@ class WriteWeeklyLetter @Inject constructor(
                     weekMonday = weekMonday, createdAtMillis = now(), figures = figures, texts = reply.texts,
                     model = reply.model, bandDataUntil = bandDataUntil,
                 )
-                letters.add(letter)
-                // A notification is never worth failing a stored letter for.
-                runCatching { notifier.letterWritten() }
+                if (again) {
+                    // D144: asked for on the letter's own page, so it is read as it arrives.
+                    letters.replace(letter.copy(readAtMillis = now()))
+                } else {
+                    letters.add(letter)
+                    // A notification is never worth failing a stored letter for.
+                    runCatching { notifier.letterWritten() }
+                }
                 // Nor is the week's note (D116).
                 reply.weekNote?.let { runCatching { weekNotes.keep(WeekNote(it, now(), weekMonday, WeekNoteSource.LETTER)) } }
                 Outcome.Written(letter)

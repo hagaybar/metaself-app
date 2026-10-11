@@ -140,6 +140,10 @@ interface TrainerDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertLetter(letter: WeeklyLetterEntity): Long
 
+    /** D144: one statement — the unique week makes REPLACE delete the week's old row before inserting this one. */
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun replaceLetter(letter: WeeklyLetterEntity): Long
+
     @Query("SELECT * FROM weekly_letters WHERE weekMonday = :weekMonday")
     suspend fun letterOf(weekMonday: Long): WeeklyLetterEntity?
 

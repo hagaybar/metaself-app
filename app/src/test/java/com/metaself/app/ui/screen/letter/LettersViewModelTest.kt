@@ -225,6 +225,9 @@ class LettersViewModelTest {
         }
 
         override suspend fun wanted(weekMonday: Long): Boolean = wanted && store.of(weekMonday) == null
+
+        /** The letters page never writes a letter again (D144): only the letter's own page does. */
+        override suspend fun writeAgain(weekMonday: Long): WriteWeeklyLetter.Outcome = error("not from the letters page")
     }
 
     private companion object {

@@ -17,6 +17,9 @@ interface LetterStore {
     /** Throws if the week already has one (one letter a week). */
     suspend fun add(letter: WeeklyLetter): Long
 
+    /** D144: [letter] in place of its week's letter, which is discarded; added when the week has none. */
+    suspend fun replace(letter: WeeklyLetter): Long
+
     /** Sets the time the letter was first read; a later call leaves it. */
     suspend fun markRead(weekMonday: Long, atMillis: Long)
 }
@@ -25,6 +28,7 @@ class RoomLetterStore @Inject constructor(private val dao: TrainerDao) : LetterS
     override fun observeAll(): Flow<List<WeeklyLetter>> = dao.observeLetters().map { rows -> rows.mapNotNull { it.toLetter() } }
     override suspend fun of(weekMonday: Long): WeeklyLetter? = dao.letterOf(weekMonday)?.toLetter()
     override suspend fun add(letter: WeeklyLetter): Long = dao.insertLetter(letter.toEntity())
+    override suspend fun replace(letter: WeeklyLetter): Long = dao.replaceLetter(letter.toEntity())
     override suspend fun markRead(weekMonday: Long, atMillis: Long) = dao.markLetterRead(weekMonday, atMillis)
 }
 

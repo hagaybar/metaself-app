@@ -101,6 +101,68 @@ class LetterScreenRenderTest {
         assertThat(current.none { it.startsWith("Band data up to") }).isTrue()
     }
 
+    /** D144: "Write this letter again" at the end of the newest letter only, whatever its shape. */
+    @Test
+    fun `only the newest letter offers to be written again, at its end`() {
+        val newest = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter(texts = SIX_PARTS), newest = true), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(newest).contains(LetterWording.WRITE_AGAIN)
+        assertThat(render.isDrawnBefore("Calories and protein are averages", LetterWording.WRITE_AGAIN)).isTrue()
+        assertThat(render.isDrawnBefore("Invented close.", LetterWording.WRITE_AGAIN)).isTrue()
+
+        val coach = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter().copy(texts = COACH), newest = true), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(render.isDrawnBefore(LetterWording.FIGURES, LetterWording.WRITE_AGAIN)).isTrue()
+        assertThat(coach).contains(LetterWording.WRITE_AGAIN)
+
+        assertThat(draw(aWeeklyLetter(texts = SIX_PARTS))).doesNotContain(LetterWording.WRITE_AGAIN)
+    }
+
+    @Test
+    fun `the confirmation says what writing again does, with its two answers`() {
+        var offered = 0
+        var written = 0
+        var kept = 0
+        render.texts {
+            LetterScreen(
+                LetterViewModel.State.Shown(aWeeklyLetter(), newest = true), onBack = {}, zone = ZoneOffset.UTC,
+                onOfferAgain = { offered++ },
+            )
+        }
+        render.click(LetterWording.WRITE_AGAIN)
+        assertThat(offered).isEqualTo(1)
+
+        val confirming = render.texts {
+            LetterScreen(
+                LetterViewModel.State.Shown(aWeeklyLetter(), newest = true, confirming = true), onBack = {}, zone = ZoneOffset.UTC,
+                onWriteAgain = { written++ }, onKeep = { kept++ },
+            )
+        }
+        assertThat(confirming).containsAtLeast(
+            "This asks the trainer again (one request) and replaces this letter.", "Write it again", "Keep this one",
+        ).inOrder()
+        assertThat(confirming).doesNotContain(LetterWording.WRITE_AGAIN)
+        render.click("Write it again")
+        render.click("Keep this one")
+        assertThat(written to kept).isEqualTo(1 to 1)
+    }
+
+    @Test
+    fun `while it is written again the letter stays, and a failure is said`() {
+        val writing = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter(), newest = true, writing = true), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(writing).containsAtLeast("Invented headline.", LetterWording.WRITING).inOrder()
+        assertThat(render.isEnabled(LetterWording.WRITING)).isFalse()
+
+        val failed = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter(), newest = true, said = "Invented failure."), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(failed).containsAtLeast("Invented headline.", LetterWording.WRITE_AGAIN, "Invented failure.").inOrder()
+    }
+
     @Test
     fun `a letter that cannot be read says so`() {
         val texts = render.texts { LetterScreen(LetterViewModel.State.Unreadable, onBack = {}) }

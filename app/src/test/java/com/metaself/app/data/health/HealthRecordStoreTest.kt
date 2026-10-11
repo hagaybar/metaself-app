@@ -953,6 +953,20 @@ class HealthRecordStoreTest {
         assertThat(letters.of(LETTER_MONDAY - 7)!!.readAtMillis).isNull()
     }
 
+    /** D144 over a real table: a letter written again takes its week's row; the other weeks' stay. Invented figures. */
+    @Test
+    fun `a weekly letter written again replaces its week's row`() = runTest {
+        val letters = RoomLetterStore(db.trainerDao())
+        letters.add(aWeeklyLetter(weekMonday = LETTER_MONDAY))
+        letters.add(aWeeklyLetter(weekMonday = LETTER_MONDAY - 7))
+        val again = aWeeklyLetter(weekMonday = LETTER_MONDAY).copy(createdAtMillis = 2_000, model = "another-model", readAtMillis = 2_000)
+
+        val id = letters.replace(again)
+
+        assertThat(letters.of(LETTER_MONDAY)).isEqualTo(again.copy(id = id))
+        assertThat(letters.observeAll().first().map { it.weekMonday }).containsExactly(LETTER_MONDAY, LETTER_MONDAY - 7).inOrder()
+    }
+
     private fun aFeedback(headline: String) =
         Feedback(headline, "Invented.", "Invented.", "Invented.", "Invented.", PlanFollowed.NO_PLAN)
 

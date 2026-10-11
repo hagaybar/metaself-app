@@ -546,7 +546,13 @@ fun MetaSelfNavHost(
         ) {
             val letterViewModel: LetterViewModel = hiltViewModel()
             val letterState by letterViewModel.state.collectAsStateWithLifecycle()
-            LetterScreen(state = letterState, onBack = { navController.popBackStack() })
+            LetterScreen(
+                state = letterState,
+                onBack = { navController.popBackStack() },
+                onOfferAgain = letterViewModel::offerAgain,
+                onWriteAgain = letterViewModel::writeAgain,
+                onKeep = letterViewModel::keep,
+            )
         }
 
         composable(Destination.AboutMe.route) {
