@@ -20,7 +20,7 @@ data class ChangeLogEntry(
 object ChangeLog {
 
     val entries: List<ChangeLogEntry> = listOf(
-        entry("0.84.0", 10, 11, "The weekly letter is written like a coach: what you did and what it took first, then one thing to look after."),
+        entry("0.84.0", 10, 11, "The weekly letter is written like a coach: what you did and what it took first, then one thing to look after; the newest letter can be written again."),
         entry("0.83.1", 10, 11, "The 12-week average and comparison leave out the week still under way."),
         entry("0.83.0", 10, 11, "A workout file shared before its session reaches the phone now waits and fills it in later; Recent problems lists only real problems."),
         entry("0.82.0", 10, 11, "Your movement shows Week, 12 weeks and Year, as charts you can swipe through."),
