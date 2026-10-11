@@ -106,12 +106,13 @@ class LetterPromptTest {
         lastLetters = listOf(PastLetter(monday - 7, "Invented look after.", "Invented line.")),
     )
 
-    /** 35 days: the first logged and slept, with a planned walk; the rest with nothing recorded. */
+    /** 35 days: the first logged and slept, with a planned walk; the rest with nothing recorded, minutes included. */
     private val days = (monday - 28..monday + 6).map { day ->
         if (day == monday - 28) {
             LetterDay(day, 30, 0, listOf(DaySession(WorkoutKind.WALK, 30, Felt.EASY)), 8_000, 420, 2_000, 100)
         } else {
-            LetterDay(day, 0, 0, emptyList(), null, null, null, null)
+            // Before the movement record begins: no minutes, not zero.
+            LetterDay(day, null, null, emptyList(), null, null, null, null)
         }
     }
 
@@ -292,6 +293,8 @@ class LetterPromptTest {
         assertThat(first.getValue("planned_minutes").jsonPrimitive.content).isEqualTo("30")
         assertThat(first.getValue("sleep_minutes").jsonPrimitive.content).isEqualTo("420")
         assertThat(first.getValue("kcal").jsonPrimitive.content).isEqualTo("2000")
+        assertThat(rows[1].getValue("own_minutes")).isEqualTo(JsonNull)
+        assertThat(rows[1].getValue("planned_minutes")).isEqualTo(JsonNull)
         // A day with nothing logged sends null food, never zero.
         assertThat(rows[1].getValue("kcal")).isEqualTo(JsonNull)
         assertThat(rows[1].getValue("protein_g")).isEqualTo(JsonNull)

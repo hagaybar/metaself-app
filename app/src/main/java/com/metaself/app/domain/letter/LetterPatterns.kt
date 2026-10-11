@@ -14,10 +14,10 @@ data class SessionGroup(val sessions: Int, val averageMinutes: Int)
  */
 data class SleepAndSessions(val medianSleepMinutes: Int, val nights: Int, val afterShorter: SessionGroup, val afterLonger: SessionGroup)
 
-/** D142 pattern 2: counted minutes a day on weekdays (Monday to Friday) and on weekends, over [weekdays] and [weekendDays] days. */
+/** D142 pattern 2: counted minutes a day on weekdays (Monday to Friday) and on weekends, over [weekdays] and [weekendDays] recorded days. */
 data class WeekdaysAndWeekends(val weekdayMinutesADay: Int, val weekdays: Int, val weekendMinutesADay: Int, val weekendDays: Int)
 
-/** D142 pattern 3: calories a day on logged days with at least [FoodOnMovingDays.MOVING_MINUTES] counted minutes, against logged days with fewer. */
+/** D142 pattern 3: calories a day on logged, recorded days with at least [FoodOnMovingDays.MOVING_MINUTES] counted minutes, against those with fewer. */
 data class FoodOnMovingDays(val movingKcalADay: Int, val movingDays: Int, val otherKcalADay: Int, val otherDays: Int) {
     companion object {
         const val MOVING_MINUTES = 20
@@ -66,13 +66,14 @@ data class LetterPatterns(
         }
 
         private fun weekdays(days: List<LetterDay>): WeekdaysAndWeekends? {
-            val (weekend, weekday) = days.partition { LocalDate.ofEpochDay(it.epochDay).dayOfWeek in WEEKEND }
+            // D142 (amended): a day before the record begins is not a day of zero minutes.
+            val (weekend, weekday) = days.filter { it.minutes != null }.partition { LocalDate.ofEpochDay(it.epochDay).dayOfWeek in WEEKEND }
             if (weekday.size < LEAST || weekend.size < LEAST) return null
-            return WeekdaysAndWeekends(mean(weekday.map { it.minutes }), weekday.size, mean(weekend.map { it.minutes }), weekend.size)
+            return WeekdaysAndWeekends(mean(weekday.map { it.minutes!! }), weekday.size, mean(weekend.map { it.minutes!! }), weekend.size)
         }
 
         private fun food(days: List<LetterDay>): FoodOnMovingDays? {
-            val (moving, other) = days.filter { it.kcal != null }.partition { it.minutes >= FoodOnMovingDays.MOVING_MINUTES }
+            val (moving, other) = days.filter { it.kcal != null && it.minutes != null }.partition { it.minutes!! >= FoodOnMovingDays.MOVING_MINUTES }
             if (moving.size < LEAST || other.size < LEAST) return null
             return FoodOnMovingDays(mean(moving.map { it.kcal!! }), moving.size, mean(other.map { it.kcal!! }), other.size)
         }

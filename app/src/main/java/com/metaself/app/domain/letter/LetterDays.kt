@@ -18,20 +18,22 @@ data class DaySession(val kind: WorkoutKind, val minutes: Int, val felt: Felt?)
 /**
  * One day of the letter's 35 (D141). [plannedMinutes] are the minutes of the day's sessions that ticked a
  * planned session, [ownMinutes] the rest — the split the week's ledger makes (D110). [sleepMinutes] is the
- * night ending that morning (D68). [kcal] and [proteinG] are null when nothing was logged that day.
- * A null figure is one not recorded, never zero.
+ * night ending that morning (D68). [kcal] and [proteinG] are null when nothing was logged that day. A day
+ * before the movement record begins (D136) has null minutes, never zero (D141, amended). A null figure is
+ * one not recorded, never zero.
  */
 data class LetterDay(
     val epochDay: Long,
-    val plannedMinutes: Int,
-    val ownMinutes: Int,
+    val plannedMinutes: Int?,
+    val ownMinutes: Int?,
     val sessions: List<DaySession>,
     val steps: Int?,
     val sleepMinutes: Int?,
     val kcal: Int?,
     val proteinG: Int?,
 ) {
-    val minutes: Int get() = plannedMinutes + ownMinutes
+    /** Every counted minute of the day; null before the record begins. */
+    val minutes: Int? get() = if (plannedMinutes == null || ownMinutes == null) null else plannedMinutes + ownMinutes
 }
 
 /** D141: the letter's day rows, counted afresh from the record. Pure. */
@@ -47,6 +49,7 @@ object LetterDays {
      * @param reviews any; a session's felt is its review's (D85), never its words.
      * @param days the health record's days.
      * @param food each day's totals, for days holding at least one item.
+     * @param recordStart the first day the record holds any movement (D136), null when none; days before it have no minutes.
      */
     fun of(
         sunday: Long,
@@ -55,6 +58,7 @@ object LetterDays {
         reviews: List<TrainerReview>,
         days: List<HealthDay>,
         food: Map<Long, DayTotals>,
+        recordStart: Long?,
     ): List<LetterDay> {
         require(MovementWeek.mondayOf(sunday) == sunday - 6) { "not a Sunday: $sunday" }
         val first = sunday - DAYS + 1
@@ -69,10 +73,11 @@ object LetterDays {
         return (first..sunday).map { day ->
             val today = byDay[day].orEmpty()
             val eaten = food[day]
+            val recorded = recordStart != null && day >= recordStart
             LetterDay(
                 epochDay = day,
-                plannedMinutes = today.filter { it.id in planned }.sumOf { it.durationMinutes },
-                ownMinutes = today.filterNot { it.id in planned }.sumOf { it.durationMinutes },
+                plannedMinutes = if (recorded) today.filter { it.id in planned }.sumOf { it.durationMinutes } else null,
+                ownMinutes = if (recorded) today.filterNot { it.id in planned }.sumOf { it.durationMinutes } else null,
                 sessions = today.map { DaySession(it.kind, it.durationMinutes, felt[it.id]?.felt) },
                 steps = health[day]?.steps,
                 sleepMinutes = health[day]?.sleepMinutes,

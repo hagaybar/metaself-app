@@ -37,9 +37,10 @@ object LetterPrompt {
         days holds the last 35 days, one row a day, oldest first, ending on this week's Sunday: the date and
         weekday; planned_minutes, the minutes of sessions that ticked a planned session, and own_minutes,
         the minutes of every other counted session, which were their own choice, both counted as the ledger
-        counts them; sessions, each with its kind, minutes and felt ("easy", "right" or "hard", null when
-        not reviewed); steps; sleep_minutes, the night ending that morning; and kcal and protein_g logged
-        that day, null when nothing was logged that day.
+        counts them, and both null on a day before their movement record begins; sessions, each with its
+        kind, minutes and felt ("easy", "right" or "hard", null when not reviewed); steps; sleep_minutes,
+        the night ending that morning; and kcal and protein_g logged that day, null when nothing was logged
+        that day.
 
         patterns were worked out by their app over those 35 days. Each is null when a side of it rests on
         fewer than three days or sessions, and then says nothing.
@@ -152,8 +153,8 @@ object LetterPrompt {
     private fun day(day: LetterDay): JsonObject = buildJsonObject {
         put("date", TrainerPrompt.date(day.epochDay))
         put("weekday", LocalDate.ofEpochDay(day.epochDay).dayOfWeek.name.lowercase())
-        put("planned_minutes", day.plannedMinutes)
-        put("own_minutes", day.ownMinutes)
+        put("planned_minutes", day.plannedMinutes.json())
+        put("own_minutes", day.ownMinutes.json())
         putJsonArray("sessions") {
             day.sessions.forEach { s ->
                 add(

@@ -35,12 +35,12 @@ class LetterDaysTest {
 
     @Test
     fun `the rows are the 35 days to the letter's Sunday, oldest first`() {
-        val rows = LetterDays.of(sunday, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap())
+        val rows = LetterDays.of(sunday, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap(), recordStart = monday - 28)
 
         assertThat(rows).hasSize(35)
         assertThat(rows.first().epochDay).isEqualTo(monday - 28)
         assertThat(rows.last().epochDay).isEqualTo(sunday)
-        assertThrows<IllegalArgumentException> { LetterDays.of(sunday - 1, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap()) }
+        assertThrows<IllegalArgumentException> { LetterDays.of(sunday - 1, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap(), recordStart = monday - 28) }
     }
 
     /** One planned walk a week: the first walk of the week ticks it; the second, and the swim, are his own. */
@@ -51,7 +51,7 @@ class LetterDaysTest {
             session(3, monday + 2, minutes = 20), session(4, monday + 3, minutes = 50).copy(hidden = true),
         )
 
-        val rows = LetterDays.of(sunday, sessions, listOf(kept(plan(walk30))), emptyList(), emptyList(), emptyMap())
+        val rows = LetterDays.of(sunday, sessions, listOf(kept(plan(walk30))), emptyList(), emptyList(), emptyMap(), recordStart = monday - 28)
 
         val first = rows.single { it.epochDay == monday }
         assertThat(first.plannedMinutes).isEqualTo(40)
@@ -64,7 +64,7 @@ class LetterDaysTest {
 
     @Test
     fun `without a plan every minute is his own`() {
-        val rows = LetterDays.of(sunday, listOf(session(1, monday)), emptyList(), emptyList(), emptyList(), emptyMap())
+        val rows = LetterDays.of(sunday, listOf(session(1, monday)), emptyList(), emptyList(), emptyList(), emptyMap(), recordStart = monday - 28)
 
         assertThat(rows.single { it.epochDay == monday }.let { it.plannedMinutes to it.ownMinutes }).isEqualTo(0 to 40)
     }
@@ -73,7 +73,7 @@ class LetterDaysTest {
     fun `a session carries how it felt, never the words`() {
         val review = TrainerReview(workoutId = 1, planId = null, felt = Felt.EASY, words = "Invented words.")
 
-        val rows = LetterDays.of(sunday, listOf(session(1, monday)), emptyList(), listOf(review), emptyList(), emptyMap())
+        val rows = LetterDays.of(sunday, listOf(session(1, monday)), emptyList(), listOf(review), emptyList(), emptyMap(), recordStart = monday - 28)
 
         assertThat(rows.single { it.epochDay == monday }.sessions).containsExactly(DaySession(WorkoutKind.WALK, 40, Felt.EASY))
     }
@@ -83,7 +83,7 @@ class LetterDaysTest {
         val days = listOf(HealthDay(monday, steps = 8_000, sleepMinutes = 420))
         val food = mapOf(monday + 1 to DayTotals(2_000, 100, 200, 70))
 
-        val rows = LetterDays.of(sunday, emptyList(), emptyList(), emptyList(), days, food)
+        val rows = LetterDays.of(sunday, emptyList(), emptyList(), emptyList(), days, food, recordStart = monday - 28)
 
         val first = rows.single { it.epochDay == monday }
         assertThat(first.steps).isEqualTo(8_000)
@@ -95,6 +95,20 @@ class LetterDaysTest {
         assertThat(second.proteinG).isEqualTo(100)
         assertThat(second.steps).isNull()
         assertThat(second.sleepMinutes).isNull()
+    }
+
+    /** D141 (amended): a day before the record begins has no minutes at all, not zero. */
+    @Test
+    fun `a day before the movement record begins sends no minutes, and with no record no day does`() {
+        val rows = LetterDays.of(sunday, listOf(session(1, monday)), emptyList(), emptyList(), emptyList(), emptyMap(), recordStart = monday - 3)
+
+        assertThat(rows.single { it.epochDay == monday - 4 }.let { it.plannedMinutes to it.ownMinutes }).isEqualTo(null to null)
+        assertThat(rows.single { it.epochDay == monday - 4 }.minutes).isNull()
+        assertThat(rows.single { it.epochDay == monday - 3 }.let { it.plannedMinutes to it.ownMinutes }).isEqualTo(0 to 0)
+        assertThat(rows.single { it.epochDay == monday }.ownMinutes).isEqualTo(40)
+
+        val none = LetterDays.of(sunday, emptyList(), emptyList(), emptyList(), emptyList(), emptyMap(), recordStart = null)
+        assertThat(none.all { it.plannedMinutes == null && it.ownMinutes == null }).isTrue()
     }
 
     private fun plan(vararg sessions: PlannedSession) =

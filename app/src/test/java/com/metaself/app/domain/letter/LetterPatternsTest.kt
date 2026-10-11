@@ -27,8 +27,8 @@ class LetterPatternsTest {
     private fun walk(minutes: Int, felt: Felt? = null) = DaySession(WorkoutKind.WALK, minutes, felt)
 
     private fun LetterDay.withSession(minutes: Int, felt: Felt? = null, planned: Boolean = false) = copy(
-        plannedMinutes = plannedMinutes + if (planned) minutes else 0,
-        ownMinutes = ownMinutes + if (planned) 0 else minutes,
+        plannedMinutes = (plannedMinutes ?: 0) + if (planned) minutes else 0,
+        ownMinutes = (ownMinutes ?: 0) + if (planned) 0 else minutes,
         sessions = sessions + walk(minutes, felt),
     )
 
@@ -83,6 +83,31 @@ class LetterPatternsTest {
         days.set(monday + 5) { it.withSession(200) }
 
         assertThat(LetterPatterns.of(days, monday).weekdaysAndWeekends).isEqualTo(WeekdaysAndWeekends(10, 25, 20, 10))
+    }
+
+    /** D142 (amended): days before the record begins are not days of zero minutes; three recorded days are still enough. */
+    @Test
+    fun `weekdays and weekends count recorded days only`() {
+        val days = empty()
+        // The record begins on the letter week's Monday: five weekdays and two weekend days recorded.
+        days.replaceAll { if (it.epochDay < monday) it.copy(plannedMinutes = null, ownMinutes = null) else it }
+        days.set(monday) { it.withSession(50) }
+        days.set(monday + 5) { it.withSession(60) }
+
+        // Two weekend days: too few.
+        assertThat(LetterPatterns.of(days, monday).weekdaysAndWeekends).isNull()
+
+        days.set(monday - 1) { it.copy(plannedMinutes = 0, ownMinutes = 30, sessions = listOf(walk(30))) }
+        assertThat(LetterPatterns.of(days, monday).weekdaysAndWeekends).isEqualTo(WeekdaysAndWeekends(10, 5, 30, 3))
+    }
+
+    @Test
+    fun `food on moving days leaves out logged days before the record begins`() {
+        val days = empty()
+        (0L..2L).forEach { i -> days.set(first + i) { it.withSession(20).copy(kcal = 2_400) } }
+        (3L..5L).forEach { i -> days.set(first + i) { it.copy(plannedMinutes = null, ownMinutes = null, kcal = 1_800) } }
+
+        assertThat(LetterPatterns.of(days, monday).foodOnMovingDays).isNull()
     }
 
     @Test
