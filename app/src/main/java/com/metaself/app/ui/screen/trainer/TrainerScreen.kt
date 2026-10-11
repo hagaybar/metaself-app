@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -92,11 +93,13 @@ fun TrainerScreen(
     onLetters: () -> Unit,
     /** D114: the reviewed sessions, on their own page. */
     onEarlier: () -> Unit,
-    /** D114: the strip's tap — Movement, at this week. */
+    /** D114, D132: the strip's tap, its movement line and the Your movement row — Your movement, at this week. */
     onMovement: () -> Unit,
     modifier: Modifier = Modifier,
     /** D105: the owner's answer to "count it for this?" — the session's id, and Yes (true) or No. */
     onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
+    /** D132 item 2: Your movement, with the log-a-workout sheet open for today. */
+    onLogWorkout: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
@@ -112,7 +115,7 @@ fun TrainerScreen(
                     if (boxes.isNotEmpty()) Boxes(boxes)
                 }
                 state.note?.let { NoteView(it, zone) }
-                MainButton(home, onPlan, onPlanAhead, onSeePlan)
+                MainButton(home, onPlan, onPlanAhead, onSeePlan, onLogWorkout)
                 home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
                 // D122: the kept single session is on the plan page now (Your plan → Session), not here.
                 Rows(
@@ -394,46 +397,62 @@ private fun NoteView(note: WeekNote, zone: ZoneId) {
 }
 
 /**
- * D114 item 5, D124: the next thing to do, filled. When it is Plan ahead, the session action stays under it,
- * outlined — "Plan the open walk" in a plan's last week, else Plan my next session, the one way to a single
- * session's plan with no weekly plan running.
+ * D114 item 5, D124: the next thing to do, filled — with Log a workout, outlined, beside it on one row (D132
+ * item 2). When it is Plan ahead or a plan-page button, the session action stays under the row, outlined — "Plan
+ * the open walk" in a plan's last week, else Plan my next session, the one way to a single session's plan with
+ * no weekly plan running.
  */
 @Composable
-private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onPlanAhead: () -> Unit, onSeePlan: () -> Unit) {
-    when (val main = home.main) {
-        is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(TrainerWeekWording.planOpen(main.kind))
-                home.next?.let { Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall) }
+private fun MainButton(
+    home: TrainerHome,
+    onPlan: () -> Unit,
+    onPlanAhead: () -> Unit,
+    onSeePlan: () -> Unit,
+    onLogWorkout: () -> Unit,
+) {
+    val main = home.main
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        // One height for both, so they read as one row whatever the main button holds.
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+        ) {
+            OutlinedButton(onClick = onLogWorkout, modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Text(stringResource(R.string.movement_log_workout), textAlign = TextAlign.Center)
+            }
+            val filled = Modifier.weight(1f).fillMaxHeight()
+            when (main) {
+                is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = filled) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(TrainerWeekWording.planOpen(main.kind), textAlign = TextAlign.Center)
+                        home.next?.let {
+                            Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+                MainAction.PlanNext -> Button(onClick = onPlan, modifier = filled) {
+                    Text(stringResource(R.string.trainer_plan_next), textAlign = TextAlign.Center)
+                }
+                MainAction.PlanAhead -> Button(onClick = onPlanAhead, modifier = filled) {
+                    Text(stringResource(R.string.trainer_evaluate), textAlign = TextAlign.Center)
+                }
+                // D121: the ask is on the plan page, beside its privacy line; this button takes him there.
+                MainAction.PlanThisWeek -> Button(onClick = onSeePlan, modifier = filled) {
+                    Text(PlanPageWording.PLAN_THIS_WEEK, textAlign = TextAlign.Center)
+                }
+                MainAction.FillNextWeek -> Button(onClick = onSeePlan, modifier = filled) {
+                    Text(PlanPageWording.FILL_NEXT_WEEK, textAlign = TextAlign.Center)
+                }
+                MainAction.NextBlock -> Button(onClick = onSeePlan, modifier = filled) {
+                    Text(PlanPageWording.NEXT_BLOCK, textAlign = TextAlign.Center)
+                }
             }
         }
-        MainAction.PlanNext -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.trainer_plan_next))
-        }
-        MainAction.PlanAhead -> WithSession(home, onPlan) {
-            Button(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_evaluate)) }
-        }
-        // D121: the ask is on the plan page, beside its privacy line; this button takes him there.
-        MainAction.PlanThisWeek -> WithSession(home, onPlan) {
-            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.PLAN_THIS_WEEK) }
-        }
-        MainAction.FillNextWeek -> WithSession(home, onPlan) {
-            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.FILL_NEXT_WEEK) }
-        }
-        MainAction.NextBlock -> WithSession(home, onPlan) {
-            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.NEXT_BLOCK) }
-        }
-    }
-}
-
-/** [main], then the session action under it, outlined — Plan the open walk, or Plan my next session. */
-@Composable
-private fun WithSession(home: TrainerHome, onPlan: () -> Unit, main: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-        main()
-        OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-            val session = MainAction.session(home.next)
-            Text(if (session is MainAction.PlanOpen) TrainerWeekWording.planOpen(session.kind) else stringResource(R.string.trainer_plan_next))
+        if (main !is MainAction.PlanOpen && main != MainAction.PlanNext) {
+            OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
+                val session = MainAction.session(home.next)
+                Text(if (session is MainAction.PlanOpen) TrainerWeekWording.planOpen(session.kind) else stringResource(R.string.trainer_plan_next))
+            }
         }
     }
 }

@@ -35,6 +35,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * JUnit 4 by necessity — Robolectric's runner is JUnit 4.
@@ -73,7 +74,7 @@ class TrainerScreenRenderTest {
 
         val order = listOf(
             "THIS WEEK · MON 31 AUG – SUN 6 SEP", "60 minutes moving this week.", "Planned, done", "Walking, 20 min — count it for this?",
-            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Plan the open walk", "WAITING FOR YOUR WORDS",
+            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Log a workout", "Plan the open walk", "WAITING FOR YOUR WORDS",
             "Your plan · week 1 of 2", "Weekly letters", "Earlier sessions", "About me",
         )
         order.zipWithNext().forEach { (first, second) ->
@@ -124,6 +125,30 @@ class TrainerScreenRenderTest {
         assertThat(last).containsAtLeast("Plan ahead", "Plan the open walk").inOrder()
         render.click("Plan the open walk")
         assertThat(planned).isEqualTo(4)
+    }
+
+    /** D132 item 2: Log a workout, outlined, beside the main button — on one row — in each of the main button's cases. */
+    @Test
+    // Tall, because a node scrolled out of the window reports no bounds; only relative geometry is asserted.
+    @Config(qualifiers = "+h8000dp")
+    fun `Log a workout shares the main button's row, and asks for the sheet`() {
+        var logged = 0
+        listOf(
+            page(running = RUNNING) to "Plan the open walk",
+            page(workouts = listOf(walk(1, MONDAY), walk(2, MONDAY + 1)), running = RUNNING) to "Plan my next session",
+            page() to "Plan ahead",
+        ).forEach { (state, main) ->
+            draw(state, onLogWorkout = { logged++ })
+
+            assertThat(render.roleOf("Log a workout")).isEqualTo(Role.Button)
+            assertThat(render.topDp("Log a workout")).isEqualTo(render.topDp(main))
+            assertThat(render.isDrawnBefore("Log a workout", main)).isTrue()
+            render.click("Log a workout")
+        }
+        assertThat(logged).isEqualTo(3)
+        // With Plan ahead, the session's action stays under the row.
+        assertThat(render.topDp("Plan ahead")).isGreaterThan(0)
+        assertThat(render.topDp("Plan my next session")).isGreaterThan(render.topDp("Plan ahead"))
     }
 
     /** D105: a twenty-minute walk under a thirty-minute place is still asked about, now under the strip. Invented. */
@@ -290,6 +315,7 @@ class TrainerScreenRenderTest {
         onEarlier: () -> Unit = {},
         onMovement: () -> Unit = {},
         onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
+        onLogWorkout: () -> Unit = {},
     ): List<String> = render.texts {
         TrainerScreen(
             state = state,
@@ -303,6 +329,7 @@ class TrainerScreenRenderTest {
             onEarlier = onEarlier,
             onMovement = onMovement,
             onAnswer = onAnswer,
+            onLogWorkout = onLogWorkout,
         )
     }
 

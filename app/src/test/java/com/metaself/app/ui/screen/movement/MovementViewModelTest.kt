@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.movement
 
+import androidx.lifecycle.SavedStateHandle
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
@@ -217,6 +218,40 @@ class MovementViewModelTest {
         assertThat(sheet.weightKg).isEqualTo(80.0)
         assertThat(sheet.draft).isEqualTo(WorkoutDraft())
         assertThat(sheet.editing).isNull()
+    }
+
+    /** D132: "Log a workout" on the Trainer opens this page with the sheet already open, for today. */
+    @Test
+    fun `opened to log a workout, the sheet is open for today`() = runTest {
+        val model = viewModel(savedState = SavedStateHandle(mapOf(MovementViewModel.OPEN_LOG to true)))
+
+        val sheet = model.state.first { it.sheet != null }.sheet!!
+        assertThat(sheet.epochDay).isEqualTo(TEST_EPOCH_DAY)
+        assertThat(sheet.draft).isEqualTo(WorkoutDraft())
+        assertThat(sheet.editing).isNull()
+    }
+
+    /** D132: only once — the page rebuilt from the same entry (a turn of the phone) does not open it again. */
+    @Test
+    fun `the sheet opened to log a workout is not opened again for the same visit`() = runTest {
+        val saved = SavedStateHandle(mapOf(MovementViewModel.OPEN_LOG to true))
+        val first = viewModel(savedState = saved)
+        first.state.first { it.sheet != null }
+        first.closeSheet()
+
+        val again = viewModel(savedState = saved)
+        advanceUntilIdle()
+
+        assertThat(again.state.first { it.week != null }.sheet).isNull()
+    }
+
+    @Test
+    fun `opened any other way, no sheet is open`() = runTest {
+        val model = viewModel(savedState = SavedStateHandle(mapOf(MovementViewModel.OPEN_LOG to false)))
+        advanceUntilIdle()
+
+        assertThat(model.state.first { it.week != null }.sheet).isNull()
+        assertThat(viewModel().state.first { it.week != null }.sheet).isNull()
     }
 
     /** D76: onto the day that is open; today when none is. */
@@ -1023,7 +1058,8 @@ class MovementViewModelTest {
         importer: WorkoutFileImporter = WorkoutFileImporter.NONE,
         trainer: TrainerReviews = TrainerReviews.NONE,
         splits: SessionSplits = SessionSplits.NONE,
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer, splits)
+        savedState: SavedStateHandle = SavedStateHandle(),
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer, splits, savedState)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())
