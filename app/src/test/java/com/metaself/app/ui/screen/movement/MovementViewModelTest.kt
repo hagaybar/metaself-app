@@ -14,6 +14,7 @@ import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.FakeTrainerStore
+import com.metaself.app.data.trainer.KeptPlans
 import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
@@ -32,7 +33,19 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.CountedPlan
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.MovementSpan
+import com.metaself.app.domain.trainer.PlanCounting
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.PlannedEffort
+import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.ProgrammeStatus
+import com.metaself.app.domain.trainer.SpanMeasure
+import com.metaself.app.domain.trainer.TrainerWeek
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.RecordingProblemLog
 import kotlinx.coroutines.CompletableDeferred
@@ -40,6 +53,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
@@ -88,13 +102,14 @@ class MovementViewModelTest {
     }
 
     @Test
-    fun `it reads this week, and the four before it for their distances`() = runTest {
+    fun `it reads this week, and the four before it for their distances and its usual week`() = runTest {
         val record = FakeRecord()
 
         viewModel(record).state.first { it.week != null }
 
         assertThat(record.daysAsked).containsExactly(20_668L to TEST_EPOCH_DAY)
-        assertThat(record.workoutsAsked).containsExactly(20_696L to TEST_EPOCH_DAY)
+        // D137: the four weeks before, for the usual week.
+        assertThat(record.workoutsAsked).containsExactly(20_668L to TEST_EPOCH_DAY)
     }
 
     /** D73: one day open at a time; tapping an open day closes it. */
@@ -726,7 +741,7 @@ class MovementViewModelTest {
         assertThat(state.canGoEarlier).isTrue()
         assertThat(state.canGoLater).isTrue()
         assertThat(record.daysAsked.last()).isEqualTo(20_661L to 20_695L)
-        assertThat(record.workoutsAsked.last()).isEqualTo(20_689L to 20_695L)
+        assertThat(record.workoutsAsked.last()).isEqualTo(20_661L to 20_695L)
         job.cancel()
     }
 
@@ -1043,6 +1058,171 @@ class MovementViewModelTest {
         assertThat(problems.recorded.single().kind).isEqualTo("movement")
     }
 
+    // D135–D137: the spans.
+
+    @Test
+    fun `the page opens on Week, with the Trainer's strip for the week and no To do`() = runTest {
+        val record = FakeRecord().apply {
+            earliest.value = 20_600L
+            workouts.value = listOf(walk(1, 20_696L), walk(2, 20_697L, minutes = 20))
+        }
+        val plans = KeptPlans { listOf(keptWalkPlan(start = 20_696L)) }
+
+        val state = viewModel(record, plans = plans).state.first { it.strip != null }
+
+        assertThat(state.span).isEqualTo(MovementSpan.WEEK)
+        val trainer = TrainerWeek.of(20_696L, TEST_EPOCH_DAY, record.workouts.value, emptyList(), emptyMap(), null, plans.counted()).strip
+        assertThat(state.strip!!.days).isEqualTo(trainer.days)
+        assertThat(state.strip!!.withPlan).isTrue()
+        assertThat(trainer.toDo).isNotEmpty()
+        assertThat(state.strip!!.toDo).isEmpty()
+    }
+
+    @Test
+    fun `Week carries the usual week of the recorded weeks before it`() = runTest {
+        val record = FakeRecord().apply {
+            earliest.value = 20_600L
+            workouts.value = listOf(walk(1, 20_689L, minutes = 100), walk(2, 20_682L, minutes = 60))
+        }
+
+        // Four recorded weeks before: 100, 60, 0 and 0.
+        assertThat(viewModel(record).state.first { it.week != null }.usualWeek).isEqualTo(40.0)
+    }
+
+    @Test
+    fun `12 weeks reads its span once and ends with the week in view`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_000L }
+        val model = viewModel(record)
+        model.state.first { it.week != null }
+
+        model.chooseSpan(MovementSpan.TWELVE_WEEKS)
+        val state = model.state.first { it.chart != null }
+
+        assertThat(state.span).isEqualTo(MovementSpan.TWELVE_WEEKS)
+        assertThat(state.chart!!.bars).hasSize(12)
+        assertThat(state.chart!!.bars.last().first).isEqualTo(20_696L)
+        assertThat(record.workoutsAsked.last()).isEqualTo(20_696L - 77 to TEST_EPOCH_DAY)
+        assertThat(record.daysAsked.last()).isEqualTo(20_696L - 77 to TEST_EPOCH_DAY)
+        assertThat(state.canGoEarlier).isTrue()
+        assertThat(state.canGoLater).isFalse()
+        assertThat(state.logDay).isNull()
+    }
+
+    @Test
+    fun `arrows move one span back and forward, never past today's`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_000L }
+        val model = viewModel(record)
+        model.state.first { it.week != null }
+        model.chooseSpan(MovementSpan.TWELVE_WEEKS)
+        model.state.first { it.chart != null }
+
+        model.earlier()
+        val back = model.state.first { it.chart?.bars?.last()?.first == 20_696L - 84 }
+        assertThat(back.canGoLater).isTrue()
+
+        model.later()
+        val again = model.state.first { it.chart?.bars?.last()?.first == 20_696L }
+        assertThat(again.canGoLater).isFalse()
+        model.later()
+        assertThat(model.state.value.chart!!.bars.last().first).isEqualTo(20_696L)
+    }
+
+    @Test
+    fun `back stops where the record of movement starts`() = runTest {
+        val record = FakeRecord().apply {
+            earliest.value = 20_000L
+            movementStart.value = 20_696L - 77
+        }
+        val model = viewModel(record)
+        model.state.first { it.week != null }
+        model.chooseSpan(MovementSpan.TWELVE_WEEKS)
+
+        val state = model.state.first { it.chart != null }
+        assertThat(state.canGoEarlier).isFalse()
+        model.earlier()
+        assertThat(model.state.value.chart!!.bars.last().first).isEqualTo(20_696L)
+    }
+
+    @Test
+    fun `the switch keeps the week in view`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_000L }
+        val model = viewModel(record)
+        model.state.first { it.week != null }
+        model.earlierWeek()
+        model.state.first { it.week?.monday == 20_689L }
+
+        model.chooseSpan(MovementSpan.TWELVE_WEEKS)
+        assertThat(model.state.first { it.chart != null }.chart!!.bars.last().first).isEqualTo(20_689L)
+
+        model.chooseSpan(MovementSpan.WEEK)
+        assertThat(model.state.first { it.week != null }.week!!.monday).isEqualTo(20_689L)
+    }
+
+    @Test
+    fun `tapping a week opens it in Week, and a month opens the 12 weeks ending with its last week`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_000L }
+        val model = viewModel(record)
+        model.state.first { it.week != null }
+
+        model.chooseSpan(MovementSpan.YEAR)
+        val year = model.state.first { it.chart?.span == MovementSpan.YEAR }.chart!!
+        // July 2026, the tenth of the twelve months; its last day, Friday 31 July, is in the week of Monday 27 July.
+        val july = year.bars[9]
+        assertThat(LocalDate.ofEpochDay(july.first)).isEqualTo(LocalDate.of(2026, 7, 1))
+        model.openBar(july)
+        val twelve = model.state.first { it.chart?.span == MovementSpan.TWELVE_WEEKS }
+        assertThat(LocalDate.ofEpochDay(twelve.chart!!.bars.last().first)).isEqualTo(LocalDate.of(2026, 7, 27))
+
+        model.openBar(twelve.chart!!.bars[3])
+        val week = model.state.first { it.week != null }
+        assertThat(week.span).isEqualTo(MovementSpan.WEEK)
+        assertThat(week.week!!.monday).isEqualTo(twelve.chart!!.bars[3].first)
+        assertThat(week.openDay).isNull()
+    }
+
+    @Test
+    fun `a bar before the record opens nothing`() = runTest {
+        val record = FakeRecord().apply { earliest.value = 20_690L }
+        val model = viewModel(record)
+        model.state.first { it.week != null }
+        model.chooseSpan(MovementSpan.TWELVE_WEEKS)
+        val chart = model.state.first { it.chart != null }.chart!!
+
+        model.openBar(chart.bars.first())
+
+        assertThat(model.state.value.span).isEqualTo(MovementSpan.TWELVE_WEEKS)
+    }
+
+    @Test
+    fun `the chips change what the bars count`() = runTest {
+        val model = viewModel()
+        model.chooseMeasure(SpanMeasure.KM)
+
+        assertThat(model.state.first { it.measure == SpanMeasure.KM }.measure).isEqualTo(SpanMeasure.KM)
+    }
+
+    @Test
+    fun `a plan that cannot be read fails the read, and says so`() = runTest {
+        val problems = RecordingProblemLog()
+        val model = viewModel(problems = problems, plans = KeptPlans { error("disk") })
+
+        assertThat(model.state.first { it.unreadable }.unreadable).isTrue()
+        assertThat(problems.recorded.single().kind).isEqualTo("movement")
+    }
+
+    private fun walk(id: Long, day: Long, minutes: Int = 40) = Workout(
+        id = id, epochDay = day, startedAtMillis = day * 86_400_000L + 7 * 3_600_000L, durationMinutes = minutes,
+        kind = WorkoutKind.WALK, title = null, distanceM = null, energyKcal = null, energySource = EnergySource.NONE,
+        effort = null, source = WorkoutSource.SYNCED, hidden = false, note = null,
+    )
+
+    /** An invented kept plan: two 30-minute walks a week, for two weeks from [start]. */
+    private fun keptWalkPlan(start: Long): CountedPlan {
+        val walk = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Easy walk")
+        val plan = WeeksPlan("Invented plan", List(2) { PlanWeek("Invented focus", listOf(walk, walk, walk)) }, "Invented reason.")
+        return CountedPlan(Programme(1, 0, ProgrammeAsk(2, 3), null, plan, "a-model", start, ProgrammeStatus.RUNNING), PlanCounting(1, 0, emptyMap()))
+    }
+
     private class FakeImporter(var next: ImportOutcome) : WorkoutFileImporter {
         val calls = mutableListOf<String>()
         override suspend fun import(uri: String): ImportOutcome = next.also { calls += "import $uri" }
@@ -1059,7 +1239,8 @@ class MovementViewModelTest {
         trainer: TrainerReviews = TrainerReviews.NONE,
         splits: SessionSplits = SessionSplits.NONE,
         savedState: SavedStateHandle = SavedStateHandle(),
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer, splits, savedState)
+        plans: KeptPlans = KeptPlans.NONE,
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer, splits, savedState, plans)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())
@@ -1068,7 +1249,12 @@ class MovementViewModelTest {
         val workoutsAsked = mutableListOf<Pair<Long, Long>>()
         val earliest = MutableStateFlow<Long?>(null)
 
+        /** D136: where the record of movement starts; null follows [earliest]. */
+        val movementStart = MutableStateFlow<Long?>(null)
+
         override fun observeEarliestDay(): Flow<Long?> = earliest
+
+        override fun observeEarliestMovementDay(): Flow<Long?> = combine(earliest, movementStart) { any, start -> start ?: any }
 
         override fun observeDays(from: Long, to: Long): Flow<List<HealthDay>> {
             daysAsked += from to to

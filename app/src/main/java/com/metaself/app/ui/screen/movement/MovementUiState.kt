@@ -4,7 +4,11 @@ import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
+import com.metaself.app.domain.trainer.MovementSpan
+import com.metaself.app.domain.trainer.SpanChart
+import com.metaself.app.domain.trainer.SpanMeasure
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeekStrip
 
 /**
  * @property week null until the first read has answered, and when it failed.
@@ -19,8 +23,9 @@ import com.metaself.app.domain.trainer.TrainerReview
  * @property undoFailed the last Undo did not put the workout back; the screen says so, and Undo is
  *   still offered (D8).
  * @property fileImport the last workout file's import (D82), until dismissed; null when there is none.
- * @property canGoEarlier the record holds something before the week shown, so ‹ is drawn (D83).
- * @property canGoLater the week shown is an earlier one, so › is drawn; never on this week (D83).
+ * @property canGoEarlier the record holds something before the week shown, so ‹ is drawn (D83); on 12 weeks and
+ *   Year, the record of movement starts before the span (D135, D136).
+ * @property canGoLater the span shown is an earlier one, so › is drawn; never on the span holding today (D83, D135).
  * @property logDay the day "Log a workout" logs onto: the open day; today on this week when none is
  *   open (D76); null on an earlier week with none open, when the button is disabled (D83).
  * @property reviews the owner's review of each session that has one, by workout id — what a session's
@@ -28,6 +33,11 @@ import com.metaself.app.domain.trainer.TrainerReview
  *   session has a button, and the week is shown all the same (D8).
  * @property canUndoSplit the last "These are two sessions" can still be undone (D92); like [canUndo],
  *   false whenever [unreadable] is true.
+ * @property span the span shown (D135); Week each time the page opens.
+ * @property chart the 12-week or Year chart (D136); null on Week and until the first read has answered.
+ * @property measure what the 12-week bars count (D136); Minutes first.
+ * @property strip the Week chart: the Trainer's strip for the week shown, without its "To do" (D135).
+ * @property usualWeek the mean minutes of the recorded weeks among the four before the week shown; null under two (D137).
  */
 data class MovementUiState(
     val week: MovementWeek? = null,
@@ -42,6 +52,11 @@ data class MovementUiState(
     val logDay: Long? = null,
     val reviews: Map<Long, TrainerReview>? = emptyMap(),
     val canUndoSplit: Boolean = false,
+    val span: MovementSpan = MovementSpan.WEEK,
+    val chart: SpanChart? = null,
+    val measure: SpanMeasure = SpanMeasure.MINUTES,
+    val strip: WeekStrip? = null,
+    val usualWeek: Double? = null,
 )
 
 /**
