@@ -53,6 +53,9 @@ internal fun SettingsDestination(
     here: NavBackStackEntry,
     graph: NavBackStackEntry,
     navController: NavController,
+    /** Your numbers' status line (D133), and the root's way to open that page over the app. */
+    yourNumbers: String,
+    onOpenYourNumbers: () -> Unit,
     /** The installed version and build, for About this app (D134). */
     versionName: String,
     versionCode: Int,
@@ -102,7 +105,9 @@ internal fun SettingsDestination(
     when (page) {
         null -> SettingsScreen(
             state = settingsState,
+            yourNumbers = yourNumbers,
             versionName = versionName,
+            onOpenYourNumbers = onOpenYourNumbers,
             onOpen = { navController.openSettingsPage(here, it) },
             onBack = onBack,
         )

@@ -92,8 +92,8 @@ import com.metaself.app.ui.screen.trainer.TrainerViewModel
 /**
  * The places this host can be.
  *
- * The profile is not one of them: it is the root's business, reached through `onEditProfile` (and
- * its editor through `onEditGoal`), for the same reason step 2 gave — it is chosen by data rather
+ * The profile is not one of them: it is the root's business, reached through `onOpenYourNumbers` from
+ * Settings' first row (D133) (and its editor through `onEditGoal`), for the same reason step 2 gave — it is chosen by data rather
  * than pushed onto a stack.
  */
 sealed class Destination(val route: String) {
@@ -281,7 +281,10 @@ private val describeRoute = Destination.Describe.route + "?text={text}&from={fro
  */
 @Composable
 fun MetaSelfNavHost(
-    onEditProfile: () -> Unit,
+    /** Your numbers (D133), the root's cover; closing it comes back to the Settings index it was opened from. */
+    onOpenYourNumbers: () -> Unit,
+    /** Your numbers' status line on the Settings index: the target and the goal (D133). */
+    yourNumbers: String,
     /** The profile editor, opened straight away: where the goal weight and weekly rate are set. */
     onEditGoal: () -> Unit,
     /** The installed version and build, for Settings' About this app (D134). */
@@ -346,7 +349,6 @@ fun MetaSelfNavHost(
             }
             DayPager(
                 viewModel = dayViewModel,
-                onOpenProfile = onEditProfile,
                 // Correcting a row is no longer reached from the day: the day draws parts of the
                 // clock (D51) and the rows live on the record screen (D50), which is where the way
                 // to the editor goes. The editor itself, and its route below, are untouched.
@@ -737,6 +739,8 @@ fun MetaSelfNavHost(
                     here = here,
                     graph = graph,
                     navController = navController,
+                    yourNumbers = yourNumbers,
+                    onOpenYourNumbers = onOpenYourNumbers,
                     versionName = versionName,
                     versionCode = versionCode,
                 )

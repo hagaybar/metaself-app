@@ -1,10 +1,13 @@
 package com.metaself.app.ui.settings
 
 import com.metaself.app.data.movement.StepAccess
+import com.metaself.app.domain.profile.Profile
 import com.metaself.app.domain.reminder.Reminder
+import com.metaself.app.domain.target.DailyTarget
 import com.metaself.app.domain.window.WindowRule
 import com.metaself.app.ui.about.AboutWording
 import com.metaself.app.ui.day.ReminderWording
+import com.metaself.app.ui.target.TargetWording
 import com.metaself.app.ui.screen.settings.SettingsPage
 import com.metaself.app.ui.screen.settings.SettingsUiState
 import com.metaself.app.ui.window.WindowWording
@@ -19,6 +22,13 @@ import java.util.Locale
  * not a claim that everything is safe, which is something he cannot check from a line of text.
  */
 object SettingsIndexWording {
+
+    /**
+     * Your numbers' row (D133): the daily target, and the goal as that page's goal line words it —
+     * "1,650 kcal a day · lose 0.5 kg a week" (figures invented).
+     */
+    fun yourNumbers(target: DailyTarget, profile: Profile): String =
+        "${String.format(Locale.US, "%,d", target.kcal)} kcal a day · ${TargetWording.goal(profile)}"
 
     /** The rule in force, by its hours or its ratio, and the reminder. */
     fun eating(rule: WindowRule?, reminder: Reminder): String {

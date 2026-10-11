@@ -59,7 +59,8 @@
     <string name="today_logged_dismiss">Got it</string>
     <string name="today_more">More</string>
     <string name="today_got_it">Got it</string>
-    <string name="today_profile">Your numbers</string>
+    <!-- D133: Settings' first row, and the title of the page it opens. -->
+    <string name="your_numbers">Your numbers</string>
 
     <string name="day_meal_adjusted">Changed for this day</string>
     <string name="day_meal_open">Open · %1$s</string>

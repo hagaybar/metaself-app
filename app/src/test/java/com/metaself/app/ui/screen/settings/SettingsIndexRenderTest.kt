@@ -17,8 +17,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * The Settings index (D79): its rows in order, About this app last (D134), each its title with its one
- * status line straight after, each opening its page — and none of any page's controls. Order in the drawn tree is what a
+ * The Settings index (D79): its rows in order — Your numbers first (D133), About this app last (D134) —
+ * each its title with its one status line straight after, each opening its page — and none of any page's
+ * controls. Order in the drawn tree is what a
  * render test here can say about position; nothing about size (`CLAUDE.md`). Figures invented.
  *
  * JUnit 4 because Robolectric's runner is.
@@ -29,6 +30,8 @@ class SettingsIndexRenderTest {
     private val render = ComposeRender()
 
     private val opened = mutableListOf<SettingsPage>()
+
+    private var openedYourNumbers = 0
 
     private val state = SettingsUiState(
         loaded = true,
@@ -56,6 +59,7 @@ class SettingsIndexRenderTest {
         val texts = draw()
 
         val rows = listOf(
+            "Your numbers" to YOUR_NUMBERS,
             "Eating" to SettingsIndexWording.eating(state.windowRule, state.reminder),
             "Movement and health" to SettingsIndexWording.movement(StepAccess.GRANTED, 30),
             "Backups" to SettingsIndexWording.backups(true, true, state.lastBackup),
@@ -78,6 +82,7 @@ class SettingsIndexRenderTest {
         val texts = draw()
 
         assertThat(texts).containsAtLeast(
+            YOUR_NUMBERS,
             "10:00–18:00 · reminder at 21:00",
             "On · health record 30 days",
             "Daily to a folder and to Drive · last copy 3 Sep",
@@ -101,6 +106,17 @@ class SettingsIndexRenderTest {
         assertThat(opened).containsExactlyElementsIn(SettingsPage.entries).inOrder()
     }
 
+    /** D133: not a page of Settings but the root's cover, opened through its own callback. */
+    @Test
+    fun `the first row opens Your numbers`() {
+        draw()
+
+        render.click("Your numbers")
+
+        assertThat(openedYourNumbers).isEqualTo(1)
+        assertThat(opened).isEmpty()
+    }
+
     @Test
     fun `no page's controls are on the index`() {
         val texts = draw()
@@ -119,7 +135,14 @@ class SettingsIndexRenderTest {
     @Test
     fun `nothing is said about any row before the page has read anything`() {
         val texts = render.texts {
-            SettingsScreen(state = SettingsUiState(), versionName = VERSION, onOpen = { opened += it }, onBack = {})
+            SettingsScreen(
+                state = SettingsUiState(),
+                yourNumbers = YOUR_NUMBERS,
+                versionName = VERSION,
+                onOpenYourNumbers = { openedYourNumbers++ },
+                onOpen = { opened += it },
+                onBack = {},
+            )
         }
 
         assertThat(texts).containsNoneOf(
@@ -133,11 +156,21 @@ class SettingsIndexRenderTest {
     }
 
     private fun draw(): List<String> = render.texts {
-        SettingsScreen(state = state, versionName = VERSION, onOpen = { opened += it }, onBack = {})
+        SettingsScreen(
+            state = state,
+            yourNumbers = YOUR_NUMBERS,
+            versionName = VERSION,
+            onOpenYourNumbers = { openedYourNumbers++ },
+            onOpen = { opened += it },
+            onBack = {},
+        )
     }
 
     private companion object {
         /** An invented version name. */
         const val VERSION = "0.1.0"
+
+        /** An invented line, in SettingsIndexWording.yourNumbers' shape. */
+        const val YOUR_NUMBERS = "1,650 kcal a day · lose 0.5 kg a week"
     }
 }

@@ -1,6 +1,11 @@
 package com.metaself.app.ui.settings
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.profile.Goal
+import com.metaself.app.domain.profile.Profile
+import com.metaself.app.domain.profile.TEST_YEAR
+import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.target.DailyTargetCalculator
 import com.metaself.app.data.health.HealthRecordState
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.domain.health.HealthKind
@@ -118,6 +123,16 @@ class SettingsIndexWordingTest {
         assertThat(
             SettingsIndexWording.movement(StepAccess.UNAVAILABLE, healthDays = 0, someNotAllowed = true),
         ).isEqualTo("Health Connect not available")
+    }
+
+    /** D133: the target, and the goal as Your numbers' goal line words it. The standard profile; figures invented. */
+    @Test
+    fun `your numbers is the target a day and the goal`() {
+        fun line(profile: Profile) = SettingsIndexWording.yourNumbers(DailyTargetCalculator.of(profile, TEST_YEAR), profile)
+
+        assertThat(line(aProfile())).isEqualTo("2,090 kcal a day · lose 0.5 kg a week")
+        assertThat(line(aProfile(goal = Goal.hold()))).isEqualTo("2,640 kcal a day · hold your weight")
+        assertThat(line(aProfile(goal = Goal.gain(0.25)))).isEqualTo("2,910 kcal a day · gain 0.25 kg a week")
     }
 
     @Test

@@ -337,7 +337,6 @@ private fun TypingTheNumbersHere(dayViewModel: DayViewModel, goBack: () -> Unit)
 private fun TodayHere(dayViewModel: DayViewModel, stack: MutableList<Where>) {
     DayPager(
         viewModel = dayViewModel,
-        onOpenProfile = {},
         // Every part of the clock is a door to the record (D50, D51), opening at the logging that
         // part begins with. Copied from the nav host, as every callback in this file is.
         onOpenRecord = { epochDay, mealId -> stack.add(Where.Record(epochDay, mealId)) },

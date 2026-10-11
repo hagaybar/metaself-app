@@ -49,6 +49,14 @@ class TargetWordingTest {
         assertThat(lines[2].heading).isEqualTo("To hold your weight: no change")
     }
 
+    /** D133: Settings' Your numbers row says the goal in the goal line's own words. */
+    @Test
+    fun `the goal in a few words, as the goal line says it`() {
+        assertThat(TargetWording.goal(aProfile())).isEqualTo("lose 0.5 kg a week")
+        assertThat(TargetWording.goal(aProfile(goal = Goal.hold()))).isEqualTo("hold your weight")
+        assertThat(TargetWording.goal(aProfile(goal = Goal.gain(0.25)))).isEqualTo("gain 0.25 kg a week")
+    }
+
     @Test
     fun `a target held at the floor explains the floor in place of the total`() {
         val steep = aProfile(

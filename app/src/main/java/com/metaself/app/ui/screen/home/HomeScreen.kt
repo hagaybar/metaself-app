@@ -57,7 +57,7 @@ fun HomeScreen(
     var showingWorking by rememberSaveable { mutableStateOf(false) }
 
     MetaSelfScreen(
-        title = stringResource(R.string.today_profile),
+        title = stringResource(R.string.your_numbers),
         modifier = modifier,
         onBack = onBack,
     ) {

@@ -65,7 +65,6 @@ import java.time.ZoneOffset
 @Composable
 fun DayPager(
     viewModel: DayViewModel,
-    onOpenProfile: () -> Unit,
     /**
      * Open the day's record (D50) — for one day, at one logging.
      *
@@ -113,7 +112,6 @@ fun DayPager(
         DayPagerOn(
             todayEpochDay = todayEpochDay,
             viewModel = viewModel,
-            onOpenProfile = onOpenProfile,
             onOpenRecord = onOpenRecord,
             onAdd = onAdd,
             onDescribe = onDescribe,
@@ -141,7 +139,6 @@ fun DayPager(
 private fun DayPagerOn(
     todayEpochDay: Long,
     viewModel: DayViewModel,
-    onOpenProfile: () -> Unit,
     onOpenRecord: (Long, Long) -> Unit,
     onAdd: () -> Unit,
     onDescribe: () -> Unit,
@@ -202,7 +199,6 @@ private fun DayPagerOn(
             TodayActions(
                 onOpenTrainer = onOpenTrainer,
                 onOpenWeight = onOpenWeight,
-                onOpenProfile = onOpenProfile,
                 onOpenManager = onOpenManager,
                 onOpenSettings = onOpenSettings,
             )
@@ -353,7 +349,6 @@ internal fun AddSomethingButton(onClick: () -> Unit) {
 internal fun TodayActions(
     onOpenTrainer: () -> Unit,
     onOpenWeight: () -> Unit,
-    onOpenProfile: () -> Unit,
     onOpenManager: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -370,7 +365,6 @@ internal fun TodayActions(
             onChosen = { showingMenu = false },
             onOpenTrainer = onOpenTrainer,
             onOpenWeight = onOpenWeight,
-            onOpenProfile = onOpenProfile,
             onOpenManager = onOpenManager,
             onOpenSettings = onOpenSettings,
         )
@@ -378,8 +372,9 @@ internal fun TodayActions(
 }
 
 /**
- * The menu's items, in order: Weight, Trainer (D113), Your numbers, Foods & meals, Settings. Movement is not
- * among them (D130): it is Your movement, behind the Trainer, and the day's step line opens it. Each calls
+ * The menu's items, in order: Weight, Trainer (D113), Foods & meals, Settings. Movement is not among them
+ * (D130): it is Your movement, behind the Trainer, and the day's step line opens it. Nor is Your numbers
+ * (D133): it is Settings' first row. Each calls
  * [onChosen] — which closes the menu — before it opens its page.
  */
 @Composable
@@ -387,7 +382,6 @@ internal fun TodayMenuItems(
     onChosen: () -> Unit,
     onOpenTrainer: () -> Unit,
     onOpenWeight: () -> Unit,
-    onOpenProfile: () -> Unit,
     onOpenManager: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -403,13 +397,6 @@ internal fun TodayMenuItems(
         onClick = {
             onChosen()
             onOpenTrainer()
-        },
-    )
-    DropdownMenuItem(
-        text = { Text(stringResource(R.string.today_profile)) },
-        onClick = {
-            onChosen()
-            onOpenProfile()
         },
     )
     // Looking after the food list and the meals is a job of its own, done well after
