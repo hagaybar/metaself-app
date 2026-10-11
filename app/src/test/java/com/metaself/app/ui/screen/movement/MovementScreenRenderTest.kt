@@ -10,6 +10,9 @@ import com.metaself.app.domain.movement.FigureSource
 import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.ImportOutcome
+import com.metaself.app.domain.movement.WaitingLine
+import com.metaself.app.domain.movement.WaitingFile
+import com.metaself.app.domain.movement.FilledLater
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.SessionSplit
 import com.metaself.app.domain.movement.SessionWitnesses
@@ -342,6 +345,95 @@ class MovementScreenRenderTest {
         assertThat(chosen).isEqualTo(6L)
         render.click("Add it as a workout")
         assertThat(added).isEqualTo(1)
+    }
+
+    /** D138: a file whose session has not arrived waits; it can still be added now, or left with OK. */
+    @Test
+    fun `a waiting file says so, and offers Add it as a workout now and OK`() {
+        var added = 0
+        var dismissed = 0
+        val texts = draw(
+            state = MovementUiState(week = week, openDay = null, fileImport = FileImportState(ImportOutcome.Waiting(aFile))),
+            onAddFromFile = { added++ },
+            onDismissFile = { dismissed++ },
+        )
+
+        assertThat(texts).contains("The band's session for this file hasn't reached the phone yet. It will be filled in when it does.")
+        assertThat(texts).doesNotContain("Done")
+        render.click("Add it as a workout now")
+        render.click("OK")
+        assertThat(added).isEqualTo(1)
+        assertThat(dismissed).isEqualTo(1)
+    }
+
+    /** D138: under D91's offer, a third choice keeps the file waiting for the band's own session. */
+    @Test
+    fun `a file offered sessions of its kind can wait for the band instead`() {
+        var waited = 0
+        val offered = aTypedWorkout(id = 6, kind = WorkoutKind.WALK, minutes = 40)
+        val texts = draw(
+            state = MovementUiState(week = week, openDay = null, fileImport = FileImportState(ImportOutcome.NoMatch(aFile, listOf(offered)))),
+            onWaitForBand = { waited++ },
+        )
+
+        assertThat(render.isDrawnBefore("Walking ·", "None of these — wait for the band")).isTrue()
+        assertThat(texts).contains("None of these — wait for the band")
+        render.click("None of these")
+        assertThat(waited).isEqualTo(1)
+    }
+
+    /** D138: a file matched nothing is never offered the wait without sessions to set it against. */
+    @Test
+    fun `a file with no sessions of its kind offers no wait for the band`() {
+        val texts = draw(state = MovementUiState(week = week, openDay = null, fileImport = FileImportState(ImportOutcome.NoMatch(aFile))))
+
+        assertThat(texts).doesNotContain("None of these — wait for the band")
+    }
+
+    /** D138: above the day rows, three waiting files at most, then how many more; each can be added or dropped. */
+    @Test
+    fun `waiting files are listed above the days, three then how many more, each with Add and Drop`() {
+        var added: FileWorkout? = null
+        var dropped: FileWorkout? = null
+        val files = (0 until 4).map { aFile.copy(writtenAt = LocalDateTime.of(2026, 9, 3, 7 + it, 5)) }
+        val texts = draw(
+            state = MovementUiState(week = week, openDay = null, waiting = files.map { WaitingLine(WaitingFile(it, 0)) }),
+            onAddWaiting = { added = it },
+            onDropWaiting = { dropped = it },
+        )
+
+        assertThat(texts).contains("A file from Thu 3 Sep 07:05 is waiting for the band's session")
+        assertThat(texts).contains("A file from Thu 3 Sep 09:05 is waiting for the band's session")
+        assertThat(texts).doesNotContain("A file from Thu 3 Sep 10:05 is waiting for the band's session")
+        assertThat(texts).contains("and 1 more")
+        assertThat(render.isDrawnBefore("A file from", "Mon 31 Aug")).isTrue()
+        render.click("Add it as a workout")
+        render.click("Drop it")
+        assertThat(added).isEqualTo(files[0])
+        assertThat(dropped).isEqualTo(files[0])
+    }
+
+    /** D138: several sessions match a waiting file — it is chosen for on its line. */
+    @Test
+    fun `a waiting file that matches several sessions offers them`() {
+        var chosen: Pair<FileWorkout, Long>? = null
+        val choices = listOf(aTypedWorkout(id = 4, kind = WorkoutKind.WALK), aTypedWorkout(id = 5, kind = WorkoutKind.RUN, minutes = 30))
+        draw(
+            state = MovementUiState(week = week, openDay = null, waiting = listOf(WaitingLine(WaitingFile(aFile, 0), choices))),
+            onChooseForWaiting = { file, id -> chosen = file to id },
+        )
+
+        render.click("Running ·")
+        assertThat(chosen).isEqualTo(aFile to 5L)
+    }
+
+    /** D138: a file filled in the background is said, by its session's kind and day. */
+    @Test
+    fun `a file filled in the background is said above the days`() {
+        val texts = draw(state = MovementUiState(week = week, openDay = null, filledLater = listOf(FilledLater(WorkoutKind.WALK, TEST_EPOCH_DAY - 1))))
+
+        assertThat(texts).contains("Filled in your walk of Wed 2 Sep from the file that was waiting.")
+        assertThat(render.isDrawnBefore("Filled in your walk", "Mon 31 Aug")).isTrue()
     }
 
     @Test
@@ -758,6 +850,10 @@ class MovementScreenRenderTest {
         onAddFromFile: () -> Unit = {},
         onChooseForFile: (Long) -> Unit = {},
         onDismissFile: () -> Unit = {},
+        onWaitForBand: () -> Unit = {},
+        onAddWaiting: (FileWorkout) -> Unit = {},
+        onChooseForWaiting: (FileWorkout, Long) -> Unit = { _, _ -> },
+        onDropWaiting: (FileWorkout) -> Unit = {},
         onEarlierWeek: () -> Unit = {},
         onLaterWeek: () -> Unit = {},
         onReview: (Long) -> Unit = {},
@@ -779,6 +875,10 @@ class MovementScreenRenderTest {
             onAddFromFile = onAddFromFile,
             onChooseForFile = onChooseForFile,
             onDismissFile = onDismissFile,
+            onWaitForBand = onWaitForBand,
+            onAddWaiting = onAddWaiting,
+            onChooseForWaiting = onChooseForWaiting,
+            onDropWaiting = onDropWaiting,
             onEarlierWeek = onEarlierWeek,
             onLaterWeek = onLaterWeek,
             onReview = onReview,

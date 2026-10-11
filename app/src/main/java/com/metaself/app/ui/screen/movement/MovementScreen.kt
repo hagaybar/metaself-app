@@ -30,7 +30,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
+import com.metaself.app.domain.movement.FileWorkout
+import com.metaself.app.domain.movement.FilledLater
 import com.metaself.app.domain.movement.ImportOutcome
+import com.metaself.app.domain.movement.WaitingLine
 import com.metaself.app.domain.movement.MovementDay
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
@@ -96,6 +99,10 @@ fun MovementScreen(
     onAddFromFile: () -> Unit = {},
     onChooseForFile: (Long) -> Unit = {},
     onDismissFile: () -> Unit = {},
+    onWaitForBand: () -> Unit = {},
+    onAddWaiting: (FileWorkout) -> Unit = {},
+    onChooseForWaiting: (FileWorkout, Long) -> Unit = { _, _ -> },
+    onDropWaiting: (FileWorkout) -> Unit = {},
     onEarlierWeek: () -> Unit = {},
     onLaterWeek: () -> Unit = {},
     onReview: (Long) -> Unit = {},
@@ -186,6 +193,16 @@ fun MovementScreen(
                     )
                 }
 
+                WaitingFileLines(
+                    lines = state.waiting,
+                    filled = state.filledLater,
+                    today = week.today,
+                    enabled = state.fileImport?.working != true,
+                    onAdd = onAddWaiting,
+                    onChoose = onChooseForWaiting,
+                    onDrop = onDropWaiting,
+                )
+
                 Column(modifier = Modifier.fillMaxWidth()) {
                     week.days.forEach { day ->
                         DayRow(
@@ -218,6 +235,7 @@ fun MovementScreen(
                 onAdd = onAddFromFile,
                 onChoose = onChooseForFile,
                 onDismiss = onDismissFile,
+                onWait = onWaitForBand,
             )
         }
     }
@@ -245,6 +263,7 @@ private fun WorkoutFileLines(
     onAdd: () -> Unit,
     onChoose: (Long) -> Unit,
     onDismiss: () -> Unit,
+    onWait: () -> Unit,
 ) {
     val zone = ZoneId.systemDefault()
     val idle = file?.working != true
@@ -276,11 +295,17 @@ private fun WorkoutFileLines(
                             }
                         }
                         if (outcome.sameKind.isNotEmpty()) {
+                            // D138: the file waits for the band's own session rather than filling one of these.
+                            TextButton(onClick = onWait, enabled = idle) { Text(stringResource(R.string.movement_file_wait)) }
                             Text(WorkoutFileWording.OR_ADD, style = MaterialTheme.typography.bodyMedium)
                         }
                         TextButton(onClick = onAdd, enabled = idle) {
                             Text(stringResource(R.string.movement_file_add))
                         }
+                    }
+                    // D138: kept waiting; it can still be added at once.
+                    is ImportOutcome.Waiting -> TextButton(onClick = onAdd, enabled = idle) {
+                        Text(stringResource(R.string.movement_file_add_now))
                     }
                     is ImportOutcome.Several -> outcome.choices.forEach { workout ->
                         TextButton(onClick = { onChoose(workout.id) }, enabled = idle) {
@@ -289,11 +314,60 @@ private fun WorkoutFileLines(
                     }
                     else -> Unit
                 }
-                TextButton(onClick = onDismiss, enabled = idle) { Text(stringResource(R.string.movement_file_done)) }
+                val dismiss = if (outcome is ImportOutcome.Waiting) R.string.movement_file_ok else R.string.movement_file_done
+                TextButton(onClick = onDismiss, enabled = idle) { Text(stringResource(dismiss)) }
             }
         }
     }
 }
+
+/**
+ * D138: above the day rows, the files waiting for the band's session — one line each, at most [WAITING_SHOWN], then
+ * "and N more" — each with "Add it as a workout" and "Drop it", and the sessions it matches when there are several.
+ * Above them, once, the files filled in the background since the page was last open.
+ */
+@Composable
+private fun WaitingFileLines(
+    lines: List<WaitingLine>,
+    filled: List<FilledLater>,
+    today: Long,
+    enabled: Boolean,
+    onAdd: (FileWorkout) -> Unit,
+    onChoose: (FileWorkout, Long) -> Unit,
+    onDrop: (FileWorkout) -> Unit,
+) {
+    val zone = ZoneId.systemDefault()
+    if (filled.isNotEmpty() || lines.isNotEmpty()) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            filled.forEach { note ->
+                Text(WorkoutFileWording.filledLater(note, today), style = MaterialTheme.typography.bodyMedium)
+            }
+            lines.take(WAITING_SHOWN).forEach { line ->
+                val file = line.waiting.file
+                Text(WorkoutFileWording.waiting(file, today), style = MaterialTheme.typography.bodyMedium)
+                line.choices.forEach { workout ->
+                    TextButton(onClick = { onChoose(file, workout.id) }, enabled = enabled) {
+                        Text(WorkoutFileWording.choice(workout, zone))
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                    TextButton(onClick = { onAdd(file) }, enabled = enabled) { Text(stringResource(R.string.movement_file_add)) }
+                    TextButton(onClick = { onDrop(file) }, enabled = enabled) { Text(stringResource(R.string.movement_waiting_drop)) }
+                }
+            }
+            if (lines.size > WAITING_SHOWN) {
+                Text(
+                    WorkoutFileWording.andMore(lines.size - WAITING_SHOWN),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** D138: how many waiting files have a line of their own. */
+private const val WAITING_SHOWN = 3
 
 /**
  * The way back from "These are two sessions" (D92, decided after review): pinned where the delete's
