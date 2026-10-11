@@ -62,6 +62,38 @@ date 6 to 30 weeks ahead (a Sunday). The plan ends on that date's week, as a dis
 - The outline's coverage check (D120) is a distance's: every week from the first Monday to the goal's
   week.
 
+## D128 — A distance goal says it is one session
+
+"A distance by a date" can be read as a total accumulated over the weeks. It means one session of that length. The
+choice is renamed **"One long session"**, with the line under it "Go this far in a single run, walk, swim or ride, by a
+date"; its km row reads DISTANCE IN ONE GO (KM). The goal line becomes "15 km run in one go · by Sun 14 Mar · 22 weeks
+to go". The trainer's GOALS text says explicitly that a distance goal is one session of that distance, not a total over
+the weeks. Stored and sent JSON unchanged.
+
+## D129 — The trainer takes a stand on the goal
+
+A coach who is handed an ambitious goal says so. Every Plan ahead reply (the evaluate path, D93, D124) gains
+**goal_view**: `{verdict, says, instead}`.
+
+- **verdict**: `within_reach`, `stretch` or `too_big` — judged against what the ledgers and past weeks show (the longest
+  recent session, the weekly totals) and the conventions (load rising about a tenth a week). It is the trainer's
+  judgement, not the phone's; the phone checks only that it is one of the three.
+- **says**: one or two sentences in the coach's voice (D108, D112), naming what the record shows and the size of the
+  jump; when the owner's words asked for something, it answers them directly. No figure the app did not count.
+- **instead**: for `too_big`, and optionally for `stretch`, a more moderate goal of the same shape as a goal (D119,
+  D127), with the same date; null otherwise. The phone checks it like a suggestion (D126); a failing one is dropped,
+  keeping the rest.
+
+The plan returned is still for the goal as asked — the owner decides. The instructions tell the trainer to judge the
+goal before planning, to be plain rather than polite about a big jump, and to never pretend an unrealistic goal is
+fine.
+
+**On the offered plan** (D118), above the evaluation headline, a card "THE TRAINER ON THIS GOAL": the says sentence(s),
+tinted amber for too_big, plain otherwise. When instead is present, an outlined button **"Plan for <instead's goal
+line> instead"** fills the form with that goal (keeping sessions a week and words) and asks again. The kept plan stores
+goal_view with its evaluation, and the plan page shows the says line under the goal line. A reply without goal_view is
+still valid (shows no card). Not on adjust, fill-week or next-block.
+
 ## Not built here
 
 Pace or speed goals (pace is not reliably recorded); goals for sleep or food (the trainer plans
@@ -76,3 +108,9 @@ sessions); the workbench's distance and time goals; storing suggestions or showi
   usable.
 - **D127**: the goal line's forms; stored and sent JSON, with weeks_to_go; the plan's weeks run to the
   goal's week; the form's third choice, its step and bounds; the instructions carry the time goal's rule.
+- **D128**: the choice's name, its line and the km row; the goal line's "in one go"; the GOALS text says a distance is
+  one session, not a total.
+- **D129**: goal_view read for each verdict; a bad verdict, or a missing goal_view, drops only the goal_view and the
+  reply stands; instead checked like a suggestion and dropped when out of range; the card shown, and tinted for
+  too_big; the instead button asks again with the moderated goal, keeping sessions a week and words; goal_view stored
+  with the kept plan and its says line on the plan page; the instructions carry the rule to take a stand.
