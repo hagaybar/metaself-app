@@ -1,4 +1,4 @@
-# Suggested goals, and a goal of more time each week — Implementation Plan (D126, D127)
+# Suggested goals, and a goal of more time each week — Implementation Plan (D126–D129)
 
 **Goal:** `docs/superpowers/specs/2026-10-11-suggested-goals-design.md`. Plan ahead gains a third goal, **More time
 each week** (minutes a week, 30 to 900, by a Sunday 6 to 30 weeks ahead), and a **Suggest goals** button that asks the
@@ -81,7 +81,26 @@ by Sunday 13 December 2026** (`TEST_EPOCH_DAY + 101`, the distance fixture's dat
   usable), render (button, Suggesting…, cards, Chosen, click calls back).
 - Commit: `feat(trainer): suggested goals as cards that fill Plan ahead's form (D126)`.
 
-### Task 5 — version
+### Task 5 — D128: a distance goal says it is one session (added to the release 2026-10-11)
+- `GoalWording`: DISTANCE "One long session", DISTANCE_LINE (drawn under the goal chips when it is chosen), ROW_KM
+  "DISTANCE IN ONE GO (KM)", goal line "… km run in one go · …"; GOALS gains "A distance goal is one session of that
+  distance, not a total over the weeks." Stored and sent JSON unchanged.
+- Commit: `feat(trainer): a distance goal says it is one session (D128)`.
+
+### Task 6 — D129: the trainer takes a stand on the goal (added to the release 2026-10-11)
+- `GoalVerdict`, `GoalView`; `EvaluationAndPlan.goalView`, `Programme.goalView`, `DatedEvaluation.goalView`.
+- **Storage — no schema change:** `goal_view` is a key of the evaluation's JSON (`encodeStoredEvaluation`,
+  `readGoalView`); `readEvaluation` ignores it; a stand that does not read is no stand, the row still reads.
+- **Reading:** `parseEvaluation(…, today)` reads goal_view leniently — a bad verdict or empty says drops it, the reply
+  stands; instead is dropped alone when it does not fit (`GoalBounds.checked`) or comes with within_reach. The phone
+  does not check that instead keeps the asked goal's kind or date (the instructions ask for both).
+- **Instructions:** GOAL_VIEW on the evaluate path only; the schema requires goal_view, instead an anyOf of the three
+  goal shapes or null.
+- **UI:** THE TRAINER ON THIS GOAL card above the offered plan, tinted `MetaSelfTint.caution` for too_big; Plan for
+  <goal line> instead (not once kept) → `planInstead()`; the plan page's says line under the goal line.
+- Commit: `feat(trainer): the trainer takes a stand on the goal (D129)`.
+
+### Task 7 — version
 - `app/build.gradle.kts`: 0.79.0, versionCode 135.
 - Full `:app:testDebugUnitTest` and `:app:lintDebug`.
 - Commit: `0.79.0: suggested goals and a goal of more time each week (D126, D127)`.
