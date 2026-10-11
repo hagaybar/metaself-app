@@ -11,6 +11,7 @@ import com.metaself.app.domain.trainer.Block
 import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.Phase
@@ -388,5 +389,53 @@ class TrainerResponseTest {
         assertThat(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", ask, hadLast = false))
             .isInstanceOf(TrainerReply.Answered::class.java)
         assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, STEADY_OUTLINE)), "a-model", ask, hadLast = false))
+    }
+
+    // --- D126: suggested goals. Today is Thursday 3 September 2026; every figure is invented. -------------------
+
+    private fun suggestion(goal: String, perWeek: Int = 3, title: String = "Invented title") =
+        """{"title":"$title","goal":$goal,"per_week":$perWeek,"why":"Invented why."}"""
+
+    private fun suggestions(vararg items: String, note: String? = null) =
+        """{"suggestions":[${items.joinToString(",")}]""" + (note?.let { ""","week_note":"$it"""" } ?: "") + "}"
+
+    @Test
+    fun `suggestions are read with their dates moved to the Sunday`() {
+        val reply = TrainerResponse.parseSuggestions(
+            reply(
+                suggestions(
+                    suggestion("""{"kind":"steady"}"""),
+                    suggestion("""{"kind":"weekly_minutes","minutes":150,"by":"2026-12-09"}""", perWeek = 2),
+                    suggestion("""{"kind":"distance","sport":"run","km":15.0,"by":"2026-12-13"}"""),
+                    note = "Invented note.",
+                ),
+            ),
+            "a-model", TEST_EPOCH_DAY,
+        ) as TrainerReply.Answered
+
+        assertThat(reply.value.map { it.goal }).containsExactly(PlanGoal.Steady, GOAL_150_MIN, GOAL_15K).inOrder()
+        assertThat(reply.value[1].perWeek).isEqualTo(2)
+        assertThat(reply.value[0].title).isEqualTo("Invented title")
+        assertThat(reply.weekNote).isEqualTo("Invented note.")
+    }
+
+    @Test
+    fun `a suggestion that does not fit is dropped, and a reply with none left is refused`() {
+        val good = suggestion("""{"kind":"steady"}""")
+        val tooSoon = suggestion("""{"kind":"weekly_minutes","minutes":150,"by":"2026-09-20"}""")
+        val tooMany = suggestion("""{"kind":"weekly_minutes","minutes":1000,"by":"2026-12-13"}""")
+        val oneSession = suggestion("""{"kind":"steady"}""", perWeek = 1)
+        val twoDecimals = suggestion("""{"kind":"distance","sport":"run","km":12.25,"by":"2026-12-13"}""")
+        val unknown = suggestion("""{"kind":"pace","by":"2026-12-13"}""")
+
+        val reply = TrainerResponse.parseSuggestions(reply(suggestions(tooSoon, good, tooMany, oneSession, twoDecimals, unknown)), "a-model", TEST_EPOCH_DAY)
+            as TrainerReply.Answered
+        assertThat(reply.value).hasSize(1)
+        assertThat(reply.weekNote).isNull()
+        assertUnreadable(TrainerResponse.parseSuggestions(reply(suggestions(tooSoon, tooMany)), "a-model", TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseSuggestions(reply(suggestions()), "a-model", TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseSuggestions(reply("""{"week_note":"Invented."}"""), "a-model", TEST_EPOCH_DAY))
+        val four = TrainerResponse.parseSuggestions(reply(suggestions(good, good, good, good)), "a-model", TEST_EPOCH_DAY) as TrainerReply.Answered
+        assertThat(four.value).hasSize(3)
     }
 }

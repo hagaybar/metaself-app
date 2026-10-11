@@ -35,6 +35,7 @@ object WorkbenchWording {
         TrainerPath.ADJUST -> "Change the rest of my plan"
         TrainerPath.FILL_WEEK -> "Fill in next week"
         TrainerPath.NEXT_BLOCK -> "Plan the next block"
+        TrainerPath.SUGGEST_GOALS -> "Suggest goals"
     }
 
     /** A path the workbench does not try (D121's two asks). */

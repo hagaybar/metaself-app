@@ -7,6 +7,7 @@ import com.metaself.app.domain.trainer.BlockAnswer
 import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.FilledWeek
 import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.GoalSuggestion
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerQuestion
@@ -74,6 +75,13 @@ class OpenAiTrainer(
         require(question is TrainerQuestion.NextBlock) { "a next block is asked with a next-block question" }
         return ask({ model, profile -> TrainerPrompt.nextBlockBody(model, request, profile) }) { body, model ->
             TrainerResponse.parseNextBlock(body, model, question.ask.perWeek)
+        }
+    }
+
+    override suspend fun suggestGoals(request: TrainerRequest): TrainerReply<List<GoalSuggestion>> {
+        require(request.question is TrainerQuestion.SuggestGoals) { "goals are suggested for a suggest-goals question" }
+        return ask({ model, profile -> TrainerPrompt.suggestGoalsBody(model, request, profile) }) { body, model ->
+            TrainerResponse.parseSuggestions(body, model, request.today)
         }
     }
 

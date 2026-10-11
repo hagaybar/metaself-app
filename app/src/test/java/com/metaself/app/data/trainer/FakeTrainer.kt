@@ -5,6 +5,7 @@ import com.metaself.app.domain.trainer.BlockAnswer
 import com.metaself.app.domain.trainer.EvaluationAndPlan
 import com.metaself.app.domain.trainer.FilledWeek
 import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.GoalSuggestion
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.TrainerReply
@@ -26,6 +27,7 @@ class FakeTrainer : Trainer {
     val adjustTargets = mutableListOf<List<WeekTarget>>()
     val fills = mutableListOf<TrainerReply<FilledWeek>>()
     val blocks = mutableListOf<TrainerReply<BlockAnswer>>()
+    val suggestions = mutableListOf<TrainerReply<List<GoalSuggestion>>>()
     val asked = mutableListOf<TrainerRequest>()
 
     override suspend fun suggest(request: TrainerRequest): TrainerReply<SessionPlan> {
@@ -60,5 +62,10 @@ class FakeTrainer : Trainer {
     override suspend fun nextBlock(request: TrainerRequest): TrainerReply<BlockAnswer> {
         asked += request
         return blocks.removeAt(0)
+    }
+
+    override suspend fun suggestGoals(request: TrainerRequest): TrainerReply<List<GoalSuggestion>> {
+        asked += request
+        return suggestions.removeAt(0)
     }
 }

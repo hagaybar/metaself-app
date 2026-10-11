@@ -33,6 +33,7 @@ import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.GOAL_150_MIN
+import com.metaself.app.domain.trainer.RunningGoal
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.STEADY_OUTLINE
 import com.metaself.app.domain.trainer.ProgrammeStatus
@@ -740,6 +741,59 @@ class TrainerPromptTest {
             assertThat(system).contains("reaching it in the goal's week and holding it there")
             assertThat(system).contains("no taper, there is no race")
         }
+    }
+
+    // --- D126: suggesting goals. Every figure is invented. ----------------------------------------------------
+
+    /** D126: the ask carries the ledgers, the form's words and sessions a week, the window, the running goal and outline. */
+    @Test
+    fun `a suggest-goals request carries the form, the window, the running goal and the last evaluation`() {
+        val request = request(
+            TrainerQuestion.SuggestGoals(3, " Invented words. ", TEST_EPOCH_DAY + 4, LAST, RunningGoal(GOAL_15K, OUTLINE_15)),
+        )
+        val body = Json.parseToJsonElement(TrainerPrompt.suggestGoalsBody("a-model", request, RequestProfile.DETERMINISTIC)).jsonObject
+        val user = Json.parseToJsonElement(userContent(body)).jsonObject
+        val question = user.getValue("question").jsonObject
+
+        assertThat(user.getValue("weeks").jsonArray).hasSize(6)
+        assertThat(question.keys).containsExactly(
+            "kind", "sessions_a_week", "words", "starts", "earliest_by", "latest_by", "running_plan", "last_evaluation",
+        ).inOrder()
+        assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("suggest_goals")
+        assertThat(question.getValue("sessions_a_week").jsonPrimitive.int).isEqualTo(3)
+        assertThat(question.getValue("words").jsonPrimitive.content).isEqualTo("Invented words.")
+        assertThat(question.getValue("earliest_by").jsonPrimitive.content).isEqualTo("2026-10-18")
+        assertThat(question.getValue("latest_by").jsonPrimitive.content).isEqualTo("2027-04-04")
+        val running = question.getValue("running_plan").jsonObject
+        assertThat(running.getValue("goal").jsonObject.getValue("weeks_to_go").jsonPrimitive.int).isEqualTo(14)
+        assertThat(running.getValue("outline").jsonObject.getValue("blocks").jsonArray).hasSize(4)
+        assertThat(question.getValue("last_evaluation").jsonObject.keys).contains("how_it_went")
+        assertThat(systemContent(TrainerPrompt.suggestGoalsBody("a-model", request, RequestProfile.DETERMINISTIC)))
+            .isEqualTo(TrainerPrompt.instructions(TrainerPath.SUGGEST_GOALS))
+        val schema = body.getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
+        assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).containsExactly("suggestions", "week_note")
+
+        val empty = Json.parseToJsonElement(
+            TrainerPrompt.userMessage(request(TrainerQuestion.SuggestGoals(null, "", TEST_EPOCH_DAY + 4, null, null))),
+        ).jsonObject.getValue("question").jsonObject
+        assertThat(empty.getValue("sessions_a_week")).isEqualTo(JsonNull)
+        assertThat(empty.getValue("running_plan")).isEqualTo(JsonNull)
+        assertThat(empty.getValue("last_evaluation")).isEqualTo(JsonNull)
+    }
+
+    /** D126: three goals of differing kind, fitted to both ledgers, words first, within the conventions; not on the workbench. */
+    @Test
+    fun `the suggest-goals instructions ask for three goals of differing kind`() {
+        val system = TrainerPrompt.instructions(TrainerPath.SUGGEST_GOALS)
+
+        assertThat(system).contains("Suggest exactly three goals")
+        assertThat(system).contains("they differ in kind")
+        assertThat(system).contains("parts of each week counted")
+        assertThat(system).contains("they weigh more than the record")
+        assertThat(system).contains("a title of at most eight words")
+        assertThat(system).contains("No figure the app did not count")
+        assertThat(system).contains(TrainerPrompt.CONVENTIONS)
+        assertThat(TrainerPath.WORKBENCH).doesNotContain(TrainerPath.SUGGEST_GOALS)
     }
 
     /** D125: the conventions go to the four plan paths, labelled as conventions; never to a session or its feedback. */

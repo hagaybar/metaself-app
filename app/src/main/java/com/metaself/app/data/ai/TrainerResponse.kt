@@ -23,6 +23,8 @@ import com.metaself.app.domain.trainer.FilledWeek
 import com.metaself.app.domain.trainer.PlanAheadAsk
 import com.metaself.app.domain.trainer.withOutline
 import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.GoalBounds
+import com.metaself.app.domain.trainer.GoalSuggestion
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.Phase
 import com.metaself.app.domain.trainer.PlanGoal
@@ -142,6 +144,28 @@ object TrainerResponse {
         }
             ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    /**
+     * D126: the suggestions, each read and [checked][GoalBounds.checked] on its own against [today] — its date moved to
+     * its Sunday; one that does not read or fit is dropped. At most [GoalBounds.SUGGESTIONS]; none left is unreadable.
+     */
+    fun parseSuggestions(body: String, model: String, today: Long): TrainerReply<List<GoalSuggestion>> =
+        content(body)?.let { content ->
+            runCatching {
+                json.parseToJsonElement(content).jsonObject.getValue("suggestions").jsonArray.mapNotNull { element ->
+                    runCatching { suggestion(element.jsonObject) }.getOrNull()?.let { GoalBounds.checked(it, today) }
+                }.take(GoalBounds.SUGGESTIONS)
+            }.getOrNull()?.takeIf { it.isNotEmpty() }
+        }
+            ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    private fun suggestion(payload: JsonObject): GoalSuggestion = GoalSuggestion(
+        title = payload.text("title"),
+        goal = goal(payload.getValue("goal").jsonObject),
+        perWeek = payload.minute("per_week"),
+        why = payload.text("why"),
+    )
 
     /**
      * D116: a reply's week_note, trimmed — read leniently, unlike the answer: absent, not a string, or blank is

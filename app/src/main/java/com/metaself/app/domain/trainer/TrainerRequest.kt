@@ -92,6 +92,19 @@ sealed interface TrainerQuestion {
             require(plan.outline != null) { "only a plan with an outline has blocks" }
         }
     }
+
+    /**
+     * D126: three goals fitted to the record. [perWeek] and [words] are what the form holds (either may be empty);
+     * [startEpochDay] is the Monday a plan kept today would start on; [last] is how past planned weeks went (D105), as
+     * the evaluate path sends it; [running] the running plan's goal and outline (D125), null when none runs.
+     */
+    data class SuggestGoals(
+        val perWeek: Int?,
+        val words: String,
+        val startEpochDay: Long,
+        val last: LastEvaluation?,
+        val running: RunningGoal?,
+    ) : TrainerQuestion
 }
 
 /** One session as D84 sends it. [title] and [origin] of the workout are deliberately absent. */
@@ -293,4 +306,7 @@ interface Trainer {
 
     /** [request]'s question must be [TrainerQuestion.NextBlock] (D121). */
     suspend fun nextBlock(request: TrainerRequest): TrainerReply<BlockAnswer>
+
+    /** [request]'s question must be [TrainerQuestion.SuggestGoals] (D126). One to three suggestions, each checked. */
+    suspend fun suggestGoals(request: TrainerRequest): TrainerReply<List<GoalSuggestion>>
 }
