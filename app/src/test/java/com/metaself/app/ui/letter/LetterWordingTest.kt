@@ -145,6 +145,12 @@ class LetterWordingTest {
         )
     }
 
+    /** D4, D140 (amended): the coach's letter still says it is the AI's advice, not a measurement. */
+    @Test
+    fun `the coach's letter is attributed as AI advice`() {
+        assertThat(LetterWording.FROM_COACH).isEqualTo("From your AI trainer · advice, not a measurement · the figures were counted on your phone")
+    }
+
     @Test
     fun `rests_on is introduced once`() {
         assertThat(LetterWording.restsOn("5 of 7 days logged")).isEqualTo("Rests on 5 of 7 days logged")

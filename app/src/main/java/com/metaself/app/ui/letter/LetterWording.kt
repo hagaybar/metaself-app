@@ -22,8 +22,8 @@ object LetterWording {
     /** D4: first under the headline, before anything the model wrote. */
     const val FROM_TRAINER = "From the AI trainer · advice, not a measurement. The figures were counted on your phone."
 
-    /** D140: under the headline of a letter written as the coach, above its parts. */
-    const val FROM_COACH = "From your trainer · counted on your phone"
+    /** D4, D140: under the headline of a letter written as the coach, above its parts — still the AI's advice. */
+    const val FROM_COACH = "From your AI trainer · advice, not a measurement · the figures were counted on your phone"
 
     const val PAGE_TITLE = "Weekly letter"
 
