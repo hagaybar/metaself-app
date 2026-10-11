@@ -18,14 +18,16 @@ object GoalWording {
     private val DAY_DATE = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
 
     const val STEADY = "Keep a steady rhythm"
-    const val DISTANCE = "A distance by a date"
+    /** D128: a distance goal is one session of that length, not a total over the weeks. */
+    const val DISTANCE = "One long session"
+    const val DISTANCE_LINE = "Go this far in a single run, walk, swim or ride, by a date"
     const val MINUTES = "More time each week"
     const val HERE = "you are here"
 
     /** Plan ahead's form (D124). */
     const val ROW_GOAL = "GOAL"
     const val ROW_SPORT = "WHAT"
-    const val ROW_KM = "DISTANCE (KM)"
+    const val ROW_KM = "DISTANCE IN ONE GO (KM)"
     const val ROW_BY = "BY"
     const val ROW_MINUTES = "MINUTES A WEEK"
     const val FEWER = "10 min less"
@@ -57,13 +59,13 @@ object GoalWording {
     }
 
     /**
-     * D119, D127: "15 km run · by Sun 13 Dec · 14 weeks to go", "150 min a week · by Sun 13 Dec · 14 weeks to go", or
+     * D119, D127, D128: "15 km run in one go · by Sun 13 Dec · 14 weeks to go", "150 min a week · by Sun 13 Dec · 14 weeks to go", or
      * "Keep a steady rhythm" (invented); null without a goal.
      */
     fun goalLine(goal: PlanGoal?, today: Long): String? = when (goal) {
         null -> null
         PlanGoal.Steady -> STEADY
-        is PlanGoal.Distance -> "${km(goal.km)} km ${sport(goal.sport).lowercase(Locale.US)}" + dated(goal, today)
+        is PlanGoal.Distance -> "${km(goal.km)} km ${sport(goal.sport).lowercase(Locale.US)} in one go" + dated(goal, today)
         is PlanGoal.WeeklyMinutes -> minutesLine(goal.minutes) + dated(goal, today)
     }
 

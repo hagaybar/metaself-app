@@ -199,7 +199,7 @@ private fun EvaluateForm(
 }
 
 /**
- * D119, D124, D127: the goal — Keep a steady rhythm, A distance by a date, or More time each week; for a distance,
+ * D119, D124, D127, D128: the goal — Keep a steady rhythm, One long session, or More time each week; for a distance,
  * what, how far, and by when; for more time, how many minutes a week (moved by ten) and by when.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -240,6 +240,7 @@ private fun GoalRows(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boo
         ByRow(form, today, enabled, onChange)
     }
     if (form.goal == EvaluatePlanViewModel.GoalChoice.DISTANCE) {
+        Text(GoalWording.DISTANCE_LINE, style = MaterialTheme.typography.bodyMedium)
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             RowLabel(GoalWording.ROW_SPORT)
             FlowRow(

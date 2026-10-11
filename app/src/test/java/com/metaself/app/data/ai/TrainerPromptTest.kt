@@ -732,6 +732,14 @@ class TrainerPromptTest {
         assertThat(TrainerPrompt.goalJson(GOAL_150_MIN).keys).containsExactly("kind", "minutes", "by").inOrder()
     }
 
+    /** D128: the plan paths, and suggesting goals, are told a distance goal is one session, not a total. */
+    @Test
+    fun `a distance goal is told as one session of that distance`() {
+        listOf(TrainerPath.EVALUATE, TrainerPath.ADJUST, TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS).forEach { path ->
+            assertThat(TrainerPrompt.instructions(path)).contains("A distance goal is one session of that distance, not a total over the weeks.")
+        }
+    }
+
     /** D127: the plan paths are told how to build towards a time goal — reached in its week and held, no taper. */
     @Test
     fun `the plan paths carry the time goal's rule`() {

@@ -313,8 +313,8 @@ object TrainerPrompt {
         the plan that ran with it and how each of its weeks went (last_evaluation, with how_it_went, below), or null.
 
         Suggest exactly three goals. Where the record allows, they differ in kind: one about consistency (kind
-        "steady", a steady rhythm), one about building time (kind "weekly_minutes") and one about a distance (kind
-        "distance"); otherwise they differ in ambition. Fit each to what the ledgers show was actually done, both
+        "steady", a steady rhythm), one about building time (kind "weekly_minutes") and one about a distance in one
+        session (kind "distance"); otherwise they differ in ambition. Fit each to what the ledgers show was actually done, both
         parts of each week counted, and keep each within reach by its date under the coaching conventions below.
         When their words are given, they weigh more than the record.
 
@@ -337,6 +337,7 @@ object TrainerPrompt {
         order, each with a phase (base, build, peak, taper or steady), a one-line focus and one target per
         week: minutes (the week's total), longest_minutes (its longest session) and easier (an easier week).
         filled_weeks lists the weeks, counted from 1, that carry sessions; the others carry their target only.
+        A distance goal is one session of that distance, not a total over the weeks.
     """.trimIndent()
 
     /**

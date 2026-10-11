@@ -57,10 +57,11 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
         assertThat(texts).contains("Plan ahead")
-        assertThat(texts).containsAtLeast("GOAL", "Keep a steady rhythm", "A distance by a date", "More time each week", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
+        assertThat(texts).containsAtLeast("GOAL", "Keep a steady rhythm", "One long session", "More time each week", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
         assertThat(texts).doesNotContain("HOW MANY WEEKS")
-        assertThat(texts).doesNotContain("DISTANCE (KM)")
+        assertThat(texts).doesNotContain("DISTANCE IN ONE GO (KM)")
         assertThat(texts).doesNotContain("MINUTES A WEEK")
+        assertThat(texts).doesNotContain("Go this far in a single run, walk, swim or ride, by a date")
         assertThat(texts.any { it.contains("your last evaluation and how its plan went") && it.endsWith("Never meals.") }).isTrue()
     }
 
@@ -70,7 +71,7 @@ class EvaluatePlanScreenRenderTest {
         draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
         assertThat(render.isSelected("Keep a steady rhythm")).isTrue()
-        assertThat(render.isSelected("A distance by a date")).isFalse()
+        assertThat(render.isSelected("One long session")).isFalse()
         assertThat(render.isSelected("3")).isTrue()
         assertThat(render.isEnabled("Ask the trainer")).isTrue()
 
@@ -84,7 +85,7 @@ class EvaluatePlanScreenRenderTest {
         val distance = EvaluatePlanViewModel.Form(goal = EvaluatePlanViewModel.GoalChoice.DISTANCE, perWeek = 3, weeksAhead = 14)
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance))
 
-        assertThat(texts).containsAtLeast("GOAL", "WHAT", "Run", "Walk", "Swim", "Ride", "BY", "Sun 13 Dec · 14 weeks", "A week earlier", "A week later").inOrder()
+        assertThat(texts).containsAtLeast("GOAL", "Go this far in a single run, walk, swim or ride, by a date", "WHAT", "Run", "Walk", "Swim", "Ride", "BY", "Sun 13 Dec · 14 weeks", "A week earlier", "A week later").inOrder()
         assertThat(render.isEnabled("Ask the trainer")).isFalse()
 
         draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance.copy(km = "15")))
@@ -101,7 +102,7 @@ class EvaluatePlanScreenRenderTest {
 
         assertThat(render.isSelected("More time each week")).isTrue()
         assertThat(texts).containsAtLeast("GOAL", "MINUTES A WEEK", "150 min a week", "10 min less", "10 min more", "BY", "Sun 13 Dec · 14 weeks").inOrder()
-        assertThat(texts).doesNotContain("DISTANCE (KM)")
+        assertThat(texts).doesNotContain("DISTANCE IN ONE GO (KM)")
         assertThat(render.isEnabled("Ask the trainer")).isTrue()
         draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = minutes.copy(minutes = 900)))
         assertThat(render.isEnabled("10 min more")).isFalse()
@@ -362,7 +363,7 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(outlined(today = MONDAY + 10, workouts = listOf(TrainerScreens.walk(1, MONDAY))).copy(view = EvaluatePlanViewModel.PlanView.MONTH))
 
         assertThat(texts).containsAtLeast(
-            "15 km run · by Sun 13 Dec · 13 weeks to go",
+            "15 km run in one go · by Sun 13 Dec · 13 weeks to go",
             "Base · Easy rhythm", "Wk 1 · 120 min, 40 done", "Wk 2 · 130 min, you are here", "Wk 4 · 100 min, easier",
             "Build · Longer runs", "Peak · Race distance", "Taper · Fresh legs", "Wk 15 · 90 min, easier",
             "Adjust the plan",
@@ -375,7 +376,7 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(outlined())
 
         assertThat(texts).containsAtLeast(
-            "Invented plan", "15 km run · by Sun 13 Dec · 14 weeks to go",
+            "Invented plan", "15 km run in one go · by Sun 13 Dec · 14 weeks to go",
             "Week 1 · settle in — this week", "Week 2 · add a walk", "Week 3", "about 140 min · longest 50′",
             "Week 4", "about 100 min · longest 30′ · easier week",
         ).inOrder()
@@ -445,7 +446,7 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = answer))
 
         assertThat(texts).containsAtLeast(
-            "15 km run · by Sun 13 Dec · 14 weeks to go", "Base · Easy rhythm", "Invented plan", "Week 1 · settle in — this week", "Keep this plan",
+            "15 km run in one go · by Sun 13 Dec · 14 weeks to go", "Base · Easy rhythm", "Invented plan", "Week 1 · settle in — this week", "Keep this plan",
         ).inOrder()
     }
 
