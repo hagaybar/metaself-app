@@ -49,8 +49,8 @@ import com.metaself.app.ui.theme.Spacing
 import java.time.ZoneId
 
 /**
- * This week's movement (D73–D75): the week's distance as the one large figure, the average movement
- * calories and the workouts beneath it, a short row per day — today first — and the last four weeks
+ * Your movement (D73–D75, D130, D131): the week's minutes moving as the one large figure, its sessions, km
+ * and average movement calories beneath it, a short row per day — today first — and the last four weeks
  * at the foot.
  *
  * "Log a workout" sits at the bottom edge, where it cannot scroll away (D75, D76); a typed workout's
@@ -285,7 +285,7 @@ private fun UndoLine(failed: Boolean, onUndo: () -> Unit) {
 }
 
 /**
- * D74 items 1–4: the kicker, the one large figure, and the two smaller lines beneath it. The kicker
+ * D74, D131: the kicker, the one large figure — the week's minutes — and the line beneath it. The kicker
  * sits between ‹ and › (D83); an arrow not offered leaves its width empty, so the kicker keeps its
  * place from week to week.
  */
@@ -317,23 +317,15 @@ private fun Headline(
                 Spacer(Modifier.size(ARROW_SIZE))
             }
         }
-        // The one number this screen exists to answer, in the app's display face (D48).
-        MovementWeekWording.distance(week)?.let { distance ->
-            Text(
-                text = distance,
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-        MovementWeekWording.averageMovement(week)?.let { average ->
-            Text(text = average, style = MaterialTheme.typography.bodyLarge)
-        }
-        MovementWeekWording.workouts(week)?.let { workouts ->
-            Text(
-                text = workouts,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        // The one number this screen exists to answer, in the app's display face (D48): the week's minutes
+        // moving, counted as the Trainer's verdict counts them (D131).
+        Text(
+            text = MovementWeekWording.minutes(week),
+            style = MaterialTheme.typography.displayLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        MovementWeekWording.underHeadline(week)?.let { line ->
+            Text(text = line, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

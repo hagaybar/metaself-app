@@ -77,15 +77,26 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("Back")
     }
 
-    /** D74: 8.0 + 4.4 km; (410 + 300) / 2 kcal; one run. */
+    /** D131: one 32-minute run; 8.0 + 4.4 km; (410 + 300) / 2 kcal. */
     @Test
-    fun `the headline is the week's distance, the average movement and the workouts`() {
+    fun `the headline is the week's minutes, with its sessions, km and movement under it`() {
         val texts = draw()
 
         assertThat(texts).contains("THIS WEEK · FROM MON 31 AUG")
-        assertThat(texts).contains("12.4 km")
-        assertThat(texts).contains("355 kcal of movement a day, on average")
-        assertThat(texts).contains("1 workout · 32 min")
+        assertThat(texts).contains("32 min")
+        assertThat(texts).contains("1 session · 12.4 km · 355 kcal of movement a day")
+        assertThat(render.isDrawnBefore("32 min", "1 session · 12.4 km")).isTrue()
+    }
+
+    /** D131: a week with nothing recorded still has its headline. */
+    @Test
+    fun `an empty week's headline is 0 min, with no line under it`() {
+        val empty = MovementWeek.of(today = TEST_EPOCH_DAY, days = emptyList(), workouts = emptyList(), mealsByDay = emptyMap())
+
+        val texts = draw(state = MovementUiState(week = empty, openDay = TEST_EPOCH_DAY, logDay = TEST_EPOCH_DAY))
+
+        assertThat(texts).contains("0 min")
+        assertThat(texts.filter { it.contains("kcal of movement a day") }).isEmpty()
     }
 
     @Test
@@ -457,8 +468,9 @@ class MovementScreenRenderTest {
         val texts = draw(state = MovementUiState(week = pastWeek, canGoEarlier = true, canGoLater = true), onLaterWeek = { later++ })
 
         assertThat(texts).contains("LAST WEEK · FROM MON 24 AUG")
-        assertThat(texts).contains("3.0 km")
-        assertThat(texts).contains("250 kcal of movement a day, on average")
+        // D131: that week's own minutes — none — not this week's 32.
+        assertThat(texts).contains("0 min")
+        assertThat(texts).contains("3.0 km · 250 kcal of movement a day")
         assertThat(render.isDrawnBefore("Sun 30 Aug", "Sat 29 Aug")).isTrue()
         assertThat(render.isDrawnBefore("Tue 25 Aug", "Mon 24 Aug")).isTrue()
         assertThat(texts.count { it == "nothing recorded" }).isEqualTo(6)

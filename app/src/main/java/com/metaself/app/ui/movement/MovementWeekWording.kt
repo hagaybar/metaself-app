@@ -26,7 +26,7 @@ import kotlin.math.roundToInt
 data class DetailLine(val text: String, val workout: Workout? = null)
 
 /**
- * What the Movement screen says (D73, D74).
+ * What the Your movement page says (D73, D74, D131).
  *
  * Every part is said only when it was recorded: a missing figure is left out, never written as zero
  * (D4, D69). Movement calories are shown as themselves — never a total burn, never eaten minus
@@ -61,20 +61,27 @@ object MovementWeekWording {
         }
     }
 
-    /** The one large figure (D74): "42.6 km". */
-    fun distance(week: MovementWeek): String? = week.distanceM?.let(::km)
+    /**
+     * The one large figure (D131): the week's minutes moving, "156 min" — the Trainer verdict's own count (D115);
+     * "0 min" with no session. Always minutes, as the verdict says them.
+     */
+    fun minutes(week: MovementWeek): String = "${number(week.minutes)} min"
 
-    fun averageMovement(week: MovementWeek): String? =
-        week.averageActiveKcal?.let { "${number(it)} kcal of movement a day, on average" }
+    /**
+     * The line under it (D131): "6 sessions · 21.4 km · 310 kcal of movement a day" (invented) — the session
+     * count, the week's km, the average movement calories. A part with nothing to say is left out; null with none.
+     */
+    fun underHeadline(week: MovementWeek): String? = listOfNotNull(
+        sessionCount(week.sessions),
+        week.distanceM?.let(::km),
+        week.averageActiveKcal?.let { "${number(it)} kcal of movement a day" },
+    ).takeIf { it.isNotEmpty() }?.joinToString(SEP)
 
-    /** "2 workouts · 3 walks · 4 h 30" (D78): either part left out at zero; null with neither. */
-    fun workouts(week: MovementWeek): String? {
-        val parts = listOfNotNull(
-            week.workoutCount.takeIf { it > 0 }?.let { if (it == 1) "1 workout" else "$it workouts" },
-            week.walkCount.takeIf { it > 0 }?.let { if (it == 1) "1 walk" else "$it walks" },
-        )
-        if (parts.isEmpty()) return null
-        return (parts + duration(week.workoutMinutes)).joinToString(SEP)
+    /** "1 session", "6 sessions"; null at none (D131, D132). */
+    fun sessionCount(count: Int): String? = when {
+        count <= 0 -> null
+        count == 1 -> "1 session"
+        else -> "$count sessions"
     }
 
     /**
