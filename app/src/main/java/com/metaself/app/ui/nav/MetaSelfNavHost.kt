@@ -596,6 +596,7 @@ fun MetaSelfNavHost(
                 onNextBlock = evaluateViewModel::nextBlock,
                 onSuggest = evaluateViewModel::suggest,
                 onPick = evaluateViewModel::pick,
+                onPlanInstead = evaluateViewModel::planInstead,
             )
         }
 

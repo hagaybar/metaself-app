@@ -47,7 +47,7 @@ class OpenAiTrainer(
         val question = request.question
         require(question is TrainerQuestion.Evaluate) { "an evaluation is asked with an evaluation question" }
         return ask({ model, profile -> TrainerPrompt.evaluateBody(model, request, profile) }) { body, model ->
-            TrainerResponse.parseEvaluation(body, model, question.ask, hadLast = question.last != null)
+            TrainerResponse.parseEvaluation(body, model, question.ask, hadLast = question.last != null, today = request.today)
         }
     }
 

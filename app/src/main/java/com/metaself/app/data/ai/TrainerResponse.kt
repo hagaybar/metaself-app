@@ -25,6 +25,8 @@ import com.metaself.app.domain.trainer.withOutline
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.GoalBounds
 import com.metaself.app.domain.trainer.GoalSuggestion
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.Phase
 import com.metaself.app.domain.trainer.PlanGoal
@@ -71,10 +73,13 @@ object TrainerResponse {
      * D94: the evaluation and a plan that [fits][WeeksPlan.fits] [ask]; anything else is unreadable.
      * [hadLast] is whether a last evaluation was sent; when it was not, since_last is blanked even if
      * the model wrote one — D94 says it is empty when there is none, and the answer is not failed for it.
+     * D129: its goal_view is read leniently ([readGoalView], against [today]) — one that does not read is dropped and
+     * the reply stands.
      */
-    fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk, hadLast: Boolean): TrainerReply<EvaluationAndPlan> =
+    fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk, hadLast: Boolean, today: Long): TrainerReply<EvaluationAndPlan> =
         content(body)?.let { content -> if (ask.goal == null) readEvaluationAndPlan(content)?.takeIf { it.plan.fits(ask) } else readOutlined(content, ask) }
             ?.let { if (hadLast) it else it.copy(evaluation = it.evaluation.copy(sinceLast = "")) }
+            ?.let { it.copy(goalView = readGoalView(content(body), today)) }
             ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
@@ -159,6 +164,30 @@ object TrainerResponse {
         }
             ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    /**
+     * D129: the goal_view in [content] (a reply, or a stored evaluation), read leniently: null when absent or when its
+     * verdict or says does not read. Its instead is dropped alone when it does not read, does not fit the form against
+     * [today] (a reply; a stored one was checked when it came), or comes with a goal within reach.
+     */
+    fun readGoalView(content: String?, today: Long? = null): GoalView? = runCatching {
+        val payload = json.parseToJsonElement(content!!).jsonObject[GOAL_VIEW]?.jsonObject ?: return@runCatching null
+        val verdict = GoalVerdict.entries.first { it.name.lowercase() == payload.text("verdict") }
+        val says = payload.text("says").also { require(it.isNotEmpty()) { "says is empty" } }
+        val instead = payload["instead"]?.takeUnless { it is JsonNull || verdict == GoalVerdict.WITHIN_REACH }?.let { element ->
+            runCatching { goal(element.jsonObject) }.getOrNull()?.let { if (today == null) it else GoalBounds.checked(it, today) }
+        }
+        GoalView(verdict, says, instead)
+    }.getOrNull()
+
+    /** D129: an evaluation as stored — its own shape and, when the trainer took a stand, that under [GOAL_VIEW]. */
+    fun encodeStoredEvaluation(evaluation: Evaluation, goalView: GoalView?): String {
+        val shape = TrainerPrompt.evaluationJson(evaluation)
+        if (goalView == null) return shape.toString()
+        return JsonObject(shape + (GOAL_VIEW to TrainerPrompt.goalViewJson(goalView))).toString()
+    }
+
+    private const val GOAL_VIEW = "goal_view"
 
     private fun suggestion(payload: JsonObject): GoalSuggestion = GoalSuggestion(
         title = payload.text("title"),

@@ -61,6 +61,8 @@ import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TrainerPlan
 import com.metaself.app.domain.trainer.GoalSuggestion
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
 import com.metaself.app.domain.trainer.RunningGoal
 import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.TrainerQuestion
@@ -976,6 +978,20 @@ class AskTheTrainerTest {
         assertThat(question.running).isNull()
         assertThat(question.perWeek).isNull()
         assertThat(question.startEpochDay).isEqualTo(MONDAY)
+    }
+
+    /** D129: the trainer's stand on the goal is kept with the answer, and the plan page reads it with the evaluation. */
+    @Test
+    fun `the stand on the goal is stored with the answer and shown with the kept plan`() = runTest {
+        val view = GoalView(GoalVerdict.TOO_BIG, "Invented stand.", GOAL_150_MIN)
+        trainer.evaluations += TrainerReply.Answered(EvaluationAndPlan(EVALUATION, outlined(filled = 2), view), "a-model")
+
+        val offered = (ask().planAhead(PlanAheadAsk(GOAL_15K, 3)) as AskTheTrainer.Evaluated.Offered).programme
+        assertThat(offered.goalView).isEqualTo(view)
+        assertThat(programmes.all().single().goalView).isEqualTo(view)
+
+        ask().keepProgramme(offered.id)
+        assertThat(ask().planShown()!!.evaluation!!.goalView).isEqualTo(view)
     }
 
     // --- D119–D121, D124: goals and blocks. The goal fixture; every figure is invented. -----------------

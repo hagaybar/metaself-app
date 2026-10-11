@@ -348,6 +348,20 @@ class EvaluatePlanViewModel @Inject constructor(
         }
     }
 
+    /**
+     * D129: Plan for the trainer's moderated goal instead — the form holds it (sessions a week and words kept), and it is
+     * asked again. The answer shown stays stored, offered, as Ask again leaves it.
+     */
+    fun planInstead() {
+        val current = local.value
+        val instead = current.shown?.goalView?.instead ?: return
+        if (current.kept || current.writing || current.asking) return
+        local.update {
+            it.copy(form = it.form.holding(instead, null, it.today), shown = null, kept = false, failure = null, refused = null, confirming = false)
+        }
+        ask()
+    }
+
     /** D124: Not now — the replace sentence goes, nothing written. */
     fun cancelKeep() = local.update { it.copy(confirming = false) }
 

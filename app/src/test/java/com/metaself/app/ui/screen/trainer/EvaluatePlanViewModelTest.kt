@@ -24,6 +24,8 @@ import com.metaself.app.domain.trainer.FilledWeek
 import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.GoalSuggestion
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.PlanOffer
@@ -328,6 +330,29 @@ class EvaluatePlanViewModelTest {
         advanceUntilIdle()
         assertThat(viewModel.state.value.form.perWeek).isEqualTo(5)
         assertThat(viewModel.state.value.canAsk).isTrue()
+    }
+
+    /** D129: Plan for the trainer's goal instead fills the form with it, keeps sessions a week and words, and asks again. */
+    @Test
+    fun `planning for the trainer's goal instead asks again with it, keeping sessions a week and words`() = runTest {
+        val view = GoalView(GoalVerdict.TOO_BIG, "Invented stand.", GOAL_150_MIN)
+        trainer.evaluations += TrainerReply.Answered(ANSWER.copy(goalView = view), "a-model")
+        trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
+        val viewModel = watched()
+        viewModel.change(EvaluatePlanViewModel.Form(goal = EvaluatePlanViewModel.GoalChoice.DISTANCE, km = "15", weeksAhead = 14, perWeek = 4, words = "Invented words."))
+        advanceUntilIdle()
+        viewModel.ask()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.shown!!.goalView).isEqualTo(view)
+
+        viewModel.planInstead()
+        advanceUntilIdle()
+
+        assertThat(trainer.asked).hasSize(2)
+        val again = (trainer.asked[1].question as TrainerQuestion.Evaluate).ask
+        assertThat(again).isEqualTo(ProgrammeAsk(15, 4, "Invented words.", GOAL_150_MIN))
+        assertThat(viewModel.state.value.form.goal).isEqualTo(EvaluatePlanViewModel.GoalChoice.MINUTES)
+        assertThat(viewModel.state.value.shown!!.goalView).isNull()
     }
 
     /** D121: the plan page offers to fill in a week; the answer is kept and the page read again, its sentence said. */

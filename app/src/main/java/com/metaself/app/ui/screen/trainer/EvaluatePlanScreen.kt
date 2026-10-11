@@ -29,6 +29,8 @@ import com.metaself.app.R
 import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.ui.theme.MetaSelfTint
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
@@ -71,6 +73,8 @@ fun EvaluatePlanScreen(
     onSuggest: () -> Unit = {},
     /** D126: a suggested goal's card, by its place in the list. */
     onPick: (Int) -> Unit = {},
+    /** D129: Plan for the trainer's moderated goal instead. */
+    onPlanInstead: () -> Unit = {},
 ) {
     val shown = state.shown
     val planShown = state.planShown
@@ -121,6 +125,7 @@ fun EvaluatePlanScreen(
             shown == null -> EvaluateForm(state, onChange, onAsk, onSuggest, onPick)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
+                shown.goalView?.let { GoalViewCard(it, state.today, offerInstead = !state.kept, enabled = !state.writing, onPlanInstead) }
                 state.offered?.let { offered ->
                     // D124: the answer drawn as D118's weeks, with the Month view's outline above them.
                     offered.month?.let { PlanMonthView(it, state.today) }
@@ -331,6 +336,33 @@ private fun Suggestions(state: EvaluatePlanViewModel.State, onSuggest: () -> Uni
                     Text(GoalWording.perWeek(suggestion.perWeek), style = MaterialTheme.typography.bodyMedium)
                     Text(suggestion.why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (chosen) Text(GoalWording.CHOSEN, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * D129: the trainer's stand on the goal, above the evaluation — what it says, tinted when it judges the goal too big
+ * (the words carry the judgement; the tint only adds to them), and, when it gave one, Plan for its goal instead.
+ */
+@Composable
+private fun GoalViewCard(view: GoalView, today: Long, offerInstead: Boolean, enabled: Boolean, onPlanInstead: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = if (GoalWording.cautions(view.verdict)) {
+            CardDefaults.cardColors(containerColor = MetaSelfTint.caution, contentColor = MaterialTheme.colorScheme.onSurface)
+        } else {
+            CardDefaults.cardColors()
+        },
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(GoalWording.GOAL_VIEW, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(view.says, style = MaterialTheme.typography.bodyLarge)
+            val instead = view.instead
+            if (instead != null && offerInstead) {
+                OutlinedButton(onClick = onPlanInstead, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                    Text(GoalWording.planInstead(instead, today))
                 }
             }
         }

@@ -243,7 +243,7 @@ class AskTheTrainer @Inject constructor(
             is TrainerReply.Failed -> Evaluated.Failed(reply.failure)
             is TrainerReply.Answered -> {
                 keepNote(reply.weekNote)
-                val programme = Programme(0, now(), ask, reply.value.evaluation, reply.value.plan, reply.model)
+                val programme = Programme(0, now(), ask, reply.value.evaluation, reply.value.plan, reply.model, goalView = reply.value.goalView)
                 Evaluated.Offered(programme.copy(id = programmes.add(programme)))
             }
         }
@@ -539,7 +539,7 @@ class AskTheTrainer @Inject constructor(
         val evaluated = Programmes.evaluatedOf(programme, programmes.all()) ?: return null
         val evaluation = evaluated.evaluation ?: return null
         val made = Instant.ofEpochMilli(evaluated.createdAtMillis).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
-        return DatedEvaluation(evaluation, made)
+        return DatedEvaluation(evaluation, made, evaluated.goalView)
     }
 
     // The question builders. The asks above and the workbench (D106) build their questions here and only

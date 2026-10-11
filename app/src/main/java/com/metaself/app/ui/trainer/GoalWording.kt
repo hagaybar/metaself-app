@@ -3,6 +3,7 @@ package com.metaself.app.ui.trainer
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.trainer.Block
 import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.GoalVerdict
 import com.metaself.app.domain.trainer.MonthWeek
 import com.metaself.app.domain.trainer.Phase
 import com.metaself.app.domain.trainer.PlanGoal
@@ -33,6 +34,15 @@ object GoalWording {
     const val FEWER = "10 min less"
     const val MORE = "10 min more"
     const val EARLIER = "A week earlier"
+
+    /** D129: the card above an offered plan's evaluation. */
+    const val GOAL_VIEW = "THE TRAINER ON THIS GOAL"
+
+    /** D129: the card is tinted when the trainer judges the goal too big; plain otherwise. */
+    fun cautions(verdict: GoalVerdict): Boolean = verdict == GoalVerdict.TOO_BIG
+
+    /** D129: "Plan for 10 km run in one go · by Sun 13 Dec · 14 weeks to go instead" (invented). */
+    fun planInstead(goal: PlanGoal, today: Long): String = "Plan for ${goalLine(goal, today)} instead"
 
     /** D126: Suggest goals and its cards. */
     const val SUGGEST = "Suggest goals"

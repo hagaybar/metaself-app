@@ -732,6 +732,22 @@ class TrainerPromptTest {
         assertThat(TrainerPrompt.goalJson(GOAL_150_MIN).keys).containsExactly("kind", "minutes", "by").inOrder()
     }
 
+    /** D129: Plan ahead's instructions take a stand on the goal; no other path's do. Its schema requires goal_view. */
+    @Test
+    fun `Plan ahead's instructions take a stand on the goal`() {
+        val system = TrainerPrompt.instructions(TrainerPath.EVALUATE)
+        assertThat(system).contains(TrainerPrompt.GOAL_VIEW)
+        assertThat(TrainerPrompt.GOAL_VIEW).contains("Take a stand on the goal before you plan for it.")
+        assertThat(TrainerPrompt.GOAL_VIEW).contains("Be plain rather than polite about a big jump, and never pretend an unrealistic goal is fine.")
+        assertThat(TrainerPrompt.GOAL_VIEW).contains("The plan is still for the goal as asked: they decide.")
+        TrainerPath.entries.filter { it != TrainerPath.EVALUATE }.forEach { assertThat(TrainerPrompt.instructions(it)).doesNotContain(TrainerPrompt.GOAL_VIEW) }
+        val schema = Json.parseToJsonElement(TrainerPrompt.evaluateBody("a-model", evaluateRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+            .getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
+        assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).contains("goal_view")
+        val view = schema.getValue("properties").jsonObject.getValue("goal_view").jsonObject
+        assertThat(view.getValue("required").jsonArray.map { it.jsonPrimitive.content }).containsExactly("verdict", "says", "instead").inOrder()
+    }
+
     /** D128: the plan paths, and suggesting goals, are told a distance goal is one session, not a total. */
     @Test
     fun `a distance goal is told as one session of that distance`() {

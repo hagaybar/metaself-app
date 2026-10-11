@@ -23,6 +23,7 @@ import com.metaself.app.domain.trainer.Block
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.GoalBounds
+import com.metaself.app.domain.trainer.GoalView
 import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.WeekTarget
 import kotlinx.serialization.json.JsonArray
@@ -304,6 +305,20 @@ object TrainerPrompt {
         why, one paragraph. Its weeks are filled in with sessions later, as they come.
     """.trimIndent() + "\n\n" + HOW_IT_WENT
 
+    /** D129: the stand on the goal, on the evaluate path (Plan ahead) only. */
+    internal val GOAL_VIEW = """
+        Take a stand on the goal before you plan for it. Judge question.goal against what the record shows — the
+        longest recent session, the weekly totals in the ledgers and in how past planned weeks went — and the
+        coaching conventions (load rising by about a tenth a week).
+        Give goal_view: verdict "within_reach", "stretch" or "too_big"; says, one or two sentences to them naming what
+        the record shows and the size of the jump, answering their words directly when they asked for something;
+        and instead: for too_big, and for stretch when you judge it useful, a more moderate goal of the same kind
+        with the same by, in the shape a goal is sent in but without weeks_to_go; null otherwise.
+        Be plain rather than polite about a big jump, and never pretend an unrealistic goal is fine.
+        The plan is still for the goal as asked: they decide.
+        When question.goal is null, give verdict "within_reach", says as an empty string and instead null.
+    """.trimIndent()
+
     /** D126: three goals fitted to the record, before a plan is asked for. */
     private val SUGGEST_GOALS = """
         They are about to plan ahead and ask you to suggest goals. The question gives what their form already holds —
@@ -400,7 +415,7 @@ object TrainerPrompt {
         COMMON + "\n\n" + SIX_WEEKS + "\n\n" + LEDGER + "\n\n" + WEEK_RULES + "\n\n" + when (path) {
             TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
             TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
-            TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE + PLANNING
+            TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE + "\n\n" + GOAL_VIEW + PLANNING
             TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST + PLANNING
             TrainerPath.FILL_WEEK -> VOICE + "\n\n" + FILL_WEEK + PLANNING
             TrainerPath.NEXT_BLOCK -> VOICE + "\n\n" + NEXT_BLOCK + PLANNING
@@ -864,6 +879,13 @@ object TrainerPrompt {
         }
     }
 
+    /** D129: a goal_view in the reply schema's own shape, and as stored beside its evaluation. */
+    fun goalViewJson(view: GoalView): JsonObject = buildJsonObject {
+        put("verdict", view.verdict.name.lowercase())
+        put("says", view.says)
+        put("instead", view.instead?.let(::goalJson) ?: JsonNull)
+    }
+
     /** An evaluation in the reply schema's own shape: sent as the last one, and what `TrainerResponse.encodeEvaluation` stores. */
     fun evaluationJson(evaluation: Evaluation): JsonObject = buildJsonObject {
         put("headline", evaluation.headline)
@@ -968,6 +990,11 @@ object TrainerPrompt {
         ),
         "plan" to WEEKS_PLAN_SCHEMA,
         "outline" to strictObject("blocks" to arraySchema(BLOCK_SCHEMA)),
+        "goal_view" to strictObject(
+            "verdict" to enumOf("within_reach", "stretch", "too_big"),
+            "says" to string(),
+            "instead" to buildJsonObject { putJsonArray("anyOf") { goalOptions().forEach { add(it) }; add(buildJsonObject { put("type", "null") }) } },
+        ),
         "week_note" to string(),
     )
 
@@ -982,14 +1009,14 @@ object TrainerPrompt {
 
     private fun number() = buildJsonObject { put("type", "number") }
 
-    /** D119, D127: a goal in its stored shape — one of three strict objects. */
-    private val GOAL_SCHEMA: JsonObject = buildJsonObject {
-        putJsonArray("anyOf") {
-            add(strictObject("kind" to enumOf("steady")))
-            add(strictObject("kind" to enumOf("distance"), "sport" to enumOf("run", "walk", "swim", "ride"), "km" to number(), "by" to string()))
-            add(strictObject("kind" to enumOf("weekly_minutes"), "minutes" to integer(), "by" to string()))
-        }
-    }
+    /** D119, D127: a goal in its stored shape — one of three strict objects. A function: it is used before this point. */
+    private fun goalOptions(): List<JsonObject> = listOf(
+        strictObject("kind" to enumOf("steady")),
+        strictObject("kind" to enumOf("distance"), "sport" to enumOf("run", "walk", "swim", "ride"), "km" to number(), "by" to string()),
+        strictObject("kind" to enumOf("weekly_minutes"), "minutes" to integer(), "by" to string()),
+    )
+
+    private val GOAL_SCHEMA: JsonObject = buildJsonObject { putJsonArray("anyOf") { goalOptions().forEach { add(it) } } }
 
     /** D126: the suggestions, and the week's note (D116). */
     private val SUGGESTIONS_SCHEMA: JsonObject = strictObject(

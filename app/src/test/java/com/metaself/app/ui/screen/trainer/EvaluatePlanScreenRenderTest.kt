@@ -16,6 +16,9 @@ import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.GoalSuggestion
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.ui.trainer.GoalWording
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.PlanProgress
@@ -339,6 +342,50 @@ class EvaluatePlanScreenRenderTest {
         assertThat(texts).doesNotContain("Adjust the plan")
         render.click("Keep this plan")
         assertThat(kept).isTrue()
+    }
+
+    /** D129: the trainer's stand sits above the evaluation; Plan for its goal instead when it gave one, until kept. */
+    @Test
+    fun `the trainer's stand on the goal is a card above the evaluation, with its goal instead`() {
+        var instead = 0
+        val tooBig = SHOWN.copy(goalView = GoalView(GoalVerdict.TOO_BIG, "Invented stand.", GOAL_150_MIN))
+        val texts = render.texts {
+            EvaluatePlanScreen(
+                state = EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = tooBig), onBack = {}, onChange = {}, onAsk = {},
+                onKeep = {}, onAskAgain = {}, onPlanInstead = { instead++ },
+            )
+        }
+
+        assertThat(texts).containsAtLeast(
+            "THE TRAINER ON THIS GOAL", "Invented stand.", "Plan for 150 min a week · by Sun 13 Dec · 14 weeks to go instead",
+            "Invented plan", "Invented headline.", "Keep this plan",
+        ).inOrder()
+        render.click("Plan for 150 min a week")
+        assertThat(instead).isEqualTo(1)
+        assertThat(GoalWording.cautions(GoalVerdict.TOO_BIG)).isTrue()
+        assertThat(GoalWording.cautions(GoalVerdict.STRETCH)).isFalse()
+        assertThat(GoalWording.cautions(GoalVerdict.WITHIN_REACH)).isFalse()
+
+        val kept = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = tooBig, kept = true))
+        assertThat(kept).contains("Invented stand.")
+        assertThat(kept.none { it.startsWith("Plan for ") }).isTrue()
+        val within = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = SHOWN.copy(goalView = GoalView(GoalVerdict.WITHIN_REACH, "Invented fine."))))
+        assertThat(within).contains("Invented fine.")
+        assertThat(within.none { it.startsWith("Plan for ") }).isTrue()
+        assertThat(draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = SHOWN))).doesNotContain("THE TRAINER ON THIS GOAL")
+    }
+
+    /** D129: on the plan page the stand is the line under the goal line. */
+    @Test
+    fun `the plan page says the trainer's stand under the goal line`() {
+        val state = outlined()
+        val shown = state.planShown!!.copy(
+            evaluation = DatedEvaluation(SHOWN.evaluation!!, MONDAY - 1, GoalView(GoalVerdict.STRETCH, "Invented stand.")),
+        )
+        val texts = draw(state.copy(planShown = shown))
+
+        assertThat(texts).containsAtLeast("15 km run in one go · by Sun 13 Dec · 14 weeks to go", "Invented stand.").inOrder()
+        assertThat(texts).doesNotContain("THE TRAINER ON THIS GOAL")
     }
 
     @Test
