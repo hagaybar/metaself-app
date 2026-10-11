@@ -192,6 +192,10 @@ object TrainerWording {
     fun privacyEvaluate(ceiling: Int): String =
         privacy("these answers", ceiling, extra = "your last evaluation and how its plan went") + " Never meals."
 
+    /** D126: Suggest goals. */
+    fun privacySuggest(ceiling: Int): String =
+        privacy("the sessions a week and words on this form, and your plan's goal and outline if one runs", ceiling, extra = "your last evaluation and how its plan went") + " Never meals."
+
     /** D97. */
     fun privacyAdjust(ceiling: Int): String = privacy("your plan, how it has gone, and your words", ceiling)
 

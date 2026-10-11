@@ -31,6 +31,14 @@ object GoalWording {
     const val FEWER = "10 min less"
     const val MORE = "10 min more"
     const val EARLIER = "A week earlier"
+
+    /** D126: Suggest goals and its cards. */
+    const val SUGGEST = "Suggest goals"
+    const val SUGGESTING = "Suggesting…"
+    const val CHOSEN = "Chosen"
+
+    /** "2 sessions a week" (invented). */
+    fun perWeek(perWeek: Int): String = "$perWeek sessions a week"
     const val LATER = "A week later"
 
     fun sport(sport: GoalSport): String = when (sport) {

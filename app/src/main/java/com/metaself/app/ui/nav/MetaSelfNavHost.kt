@@ -594,6 +594,8 @@ fun MetaSelfNavHost(
                 // D121: asked here, beside the privacy line; the Trainer page's buttons for them open this page.
                 onFill = evaluateViewModel::fill,
                 onNextBlock = evaluateViewModel::nextBlock,
+                onSuggest = evaluateViewModel::suggest,
+                onPick = evaluateViewModel::pick,
             )
         }
 

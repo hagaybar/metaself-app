@@ -7,6 +7,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -61,6 +67,10 @@ fun EvaluatePlanScreen(
     onFill: () -> Unit = {},
     /** D121: Plan the next block. */
     onNextBlock: () -> Unit = {},
+    /** D126: Suggest goals. */
+    onSuggest: () -> Unit = {},
+    /** D126: a suggested goal's card, by its place in the list. */
+    onPick: (Int) -> Unit = {},
 ) {
     val shown = state.shown
     val planShown = state.planShown
@@ -108,7 +118,7 @@ fun EvaluatePlanScreen(
                     onFill, onNextBlock,
                 )
             }
-            shown == null -> EvaluateForm(state, onChange, onAsk)
+            shown == null -> EvaluateForm(state, onChange, onAsk, onSuggest, onPick)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
                 state.offered?.let { offered ->
@@ -153,11 +163,14 @@ private fun EvaluateForm(
     state: EvaluatePlanViewModel.State,
     onChange: (EvaluatePlanViewModel.Form) -> Unit,
     onAsk: () -> Unit,
+    onSuggest: () -> Unit,
+    onPick: (Int) -> Unit,
 ) {
     val form = state.form
     val open = !state.asking
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
         Text(stringResource(R.string.weeks_intro), style = MaterialTheme.typography.bodyMedium)
+        Suggestions(state, onSuggest, onPick)
         GoalRows(form, state.today, open, onChange)
         NumberRow(R.string.weeks_row_per_week, ProgrammeAsk.PER_WEEK.toList(), form.perWeek, { "$it" }, open) {
             onChange(form.copy(perWeek = it))
@@ -278,6 +291,47 @@ private fun ByRow(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boolea
                 onClick = { onChange(form.later()) },
                 enabled = enabled && form.weeksAhead < EvaluatePlanViewModel.Form.WEEKS_AHEAD.last,
             ) { Text(GoalWording.LATER) }
+        }
+    }
+}
+
+/**
+ * D126: Suggest goals — the outlined button, what it sends, a failure, and the cards. A card says its title, its goal
+ * line, sessions a week and why; tapping it fills the form, and it reads "Chosen" (so the choice is not only a colour).
+ */
+@Composable
+private fun Suggestions(state: EvaluatePlanViewModel.State, onSuggest: () -> Unit, onPick: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        OutlinedButton(onClick = onSuggest, enabled = !state.suggesting && !state.asking, modifier = Modifier.fillMaxWidth()) {
+            Text(if (state.suggesting) GoalWording.SUGGESTING else GoalWording.SUGGEST)
+        }
+        Text(
+            TrainerWording.privacySuggest(state.ceiling),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        state.suggestFailure?.let { Text(TrainerWording.failure(it), color = MaterialTheme.colorScheme.error) }
+        state.suggestions.forEachIndexed { index, suggestion ->
+            val chosen = state.chosen == index
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = chosen, enabled = !state.asking, role = Role.Button, onClick = { onPick(index) }),
+                colors = if (chosen) {
+                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                } else {
+                    CardDefaults.outlinedCardColors()
+                },
+                border = if (chosen) null else CardDefaults.outlinedCardBorder(),
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Text(suggestion.title, style = MaterialTheme.typography.titleMedium)
+                    GoalWording.goalLine(suggestion.goal, state.today)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    Text(GoalWording.perWeek(suggestion.perWeek), style = MaterialTheme.typography.bodyMedium)
+                    Text(suggestion.why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (chosen) Text(GoalWording.CHOSEN, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
         }
     }
 }

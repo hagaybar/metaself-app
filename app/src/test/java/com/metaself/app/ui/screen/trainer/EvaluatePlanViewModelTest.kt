@@ -23,6 +23,7 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.FilledWeek
 import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.GOAL_150_MIN
+import com.metaself.app.domain.trainer.GoalSuggestion
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.PlanOffer
@@ -262,6 +263,73 @@ class EvaluatePlanViewModelTest {
         assertThat(question.ask).isEqualTo(ProgrammeAsk(15, 3, goal = GOAL_150_MIN))
     }
 
+    /** D126: Suggest goals asks once with the form; tapping a card fills goal, figures and sessions a week, not the words. */
+    @Test
+    fun `a suggested goal fills the form and leaves the words`() = runTest {
+        trainer.suggestions += TrainerReply.Answered(SUGGESTED, "a-model")
+        val viewModel = watched()
+        viewModel.change(EvaluatePlanViewModel.PRESET.copy(words = "Invented words."))
+
+        viewModel.suggest()
+        viewModel.suggest()
+        advanceUntilIdle()
+
+        assertThat(trainer.asked).hasSize(1)
+        val question = trainer.asked.single().question as TrainerQuestion.SuggestGoals
+        assertThat(question.perWeek).isEqualTo(3)
+        assertThat(question.words).isEqualTo("Invented words.")
+        assertThat(viewModel.state.value.suggesting).isFalse()
+        assertThat(viewModel.state.value.suggestions).isEqualTo(SUGGESTED)
+
+        viewModel.pick(1)
+        advanceUntilIdle()
+        val minutes = viewModel.state.value.form
+        assertThat(viewModel.state.value.chosen).isEqualTo(1)
+        assertThat(minutes.ask(TEST_EPOCH_DAY)).isEqualTo(com.metaself.app.domain.trainer.PlanAheadAsk(GOAL_150_MIN, 2, "Invented words."))
+        assertThat(minutes.goal).isEqualTo(EvaluatePlanViewModel.GoalChoice.MINUTES)
+
+        viewModel.pick(2)
+        advanceUntilIdle()
+        val distance = viewModel.state.value.form
+        assertThat(distance.goal).isEqualTo(EvaluatePlanViewModel.GoalChoice.DISTANCE)
+        assertThat(distance.km).isEqualTo("15")
+        assertThat(distance.weeksAhead).isEqualTo(14)
+        assertThat(distance.perWeek).isEqualTo(4)
+        assertThat(distance.words).isEqualTo("Invented words.")
+
+        viewModel.pick(0)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.form.goal).isEqualTo(EvaluatePlanViewModel.GoalChoice.STEADY)
+        assertThat(viewModel.state.value.form.perWeek).isEqualTo(3)
+    }
+
+    /** D126: asking again replaces the cards and the choice; a failure is said and the form stays usable. */
+    @Test
+    fun `asking again replaces the cards, and a failure leaves the form usable`() = runTest {
+        trainer.suggestions += TrainerReply.Answered(SUGGESTED, "a-model")
+        trainer.suggestions += TrainerReply.Answered(SUGGESTED.take(1), "a-model")
+        trainer.suggestions += TrainerReply.Failed(EstimateResult.NoKey)
+        val viewModel = watched()
+
+        viewModel.suggest()
+        advanceUntilIdle()
+        viewModel.pick(2)
+        advanceUntilIdle()
+        viewModel.suggest()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.suggestions).hasSize(1)
+        assertThat(viewModel.state.value.chosen).isNull()
+
+        viewModel.suggest()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.suggestFailure).isEqualTo(EstimateResult.NoKey)
+        assertThat(viewModel.state.value.suggesting).isFalse()
+        viewModel.change(viewModel.state.value.form.copy(perWeek = 5))
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.form.perWeek).isEqualTo(5)
+        assertThat(viewModel.state.value.canAsk).isTrue()
+    }
+
     /** D121: the plan page offers to fill in a week; the answer is kept and the page read again, its sentence said. */
     @Test
     fun `the plan page fills in an empty week, says the trainer's sentence, and shows the week`() = runTest {
@@ -409,6 +477,11 @@ class EvaluatePlanViewModelTest {
     }
 
     private companion object {
+        val SUGGESTED = listOf(
+            GoalSuggestion("Invented steady", PlanGoal.Steady, 3, "Invented why."),
+            GoalSuggestion("Invented minutes", GOAL_150_MIN, 2, "Invented why."),
+            GoalSuggestion("Invented distance", GOAL_15K, 4, "Invented why."),
+        )
         val ON_PLAN: SavedStateHandle get() = SavedStateHandle(mapOf(EvaluatePlanViewModel.SHOW to EvaluatePlanViewModel.RUNNING))
         val WALK = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Invented line")
         val ANSWER = EvaluationAndPlan(

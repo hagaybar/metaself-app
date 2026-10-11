@@ -14,6 +14,8 @@ import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.STEADY_OUTLINE
 import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GOAL_150_MIN
+import com.metaself.app.domain.trainer.GoalSuggestion
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.PlanProgress
@@ -104,6 +106,46 @@ class EvaluatePlanScreenRenderTest {
         draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = minutes.copy(minutes = 900)))
         assertThat(render.isEnabled("10 min more")).isFalse()
         assertThat(render.isEnabled("10 min less")).isTrue()
+    }
+
+    /** D126: Suggest goals sits above the goal; its cards say the title, the goal line, sessions a week and why. */
+    @Test
+    fun `suggested goals are cards above the goal that fill the form when tapped`() {
+        var suggested = 0
+        var picked = -1
+        val state = EvaluatePlanViewModel.State(
+            today = TEST_EPOCH_DAY,
+            suggestions = listOf(
+                GoalSuggestion("Invented steady", PlanGoal.Steady, 3, "Invented why one."),
+                GoalSuggestion("Invented minutes", GOAL_150_MIN, 2, "Invented why two."),
+            ),
+            chosen = 1,
+        )
+        val texts = draw(state, onSuggest = { suggested++ }, onPick = { picked = it })
+
+        assertThat(texts).containsAtLeast(
+            "Suggest goals", "Invented steady", "Keep a steady rhythm", "3 sessions a week", "Invented why one.",
+            "Invented minutes", "150 min a week · by Sun 13 Dec · 14 weeks to go", "2 sessions a week", "Invented why two.", "Chosen", "GOAL",
+        ).inOrder()
+        assertThat(texts.any { it.startsWith("Sends to OpenAI") && it.contains("your plan's goal and outline") }).isTrue()
+        render.click("Suggest goals")
+        assertThat(suggested).isEqualTo(1)
+        render.click("Invented minutes")
+        assertThat(picked).isEqualTo(1)
+        assertThat(render.isSelected("Invented minutes")).isTrue()
+        assertThat(render.isSelected("Invented steady")).isFalse()
+    }
+
+    @Test
+    fun `while suggesting the button says so, and a failure is said`() {
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, suggesting = true))
+        assertThat(render.isEnabled("Suggesting…")).isFalse()
+        assertThat(render.isEnabled("Ask the trainer")).isTrue()
+
+        val failed = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, suggestFailure = EstimateResult.NoKey))
+        assertThat(failed).contains(TrainerWording.failure(EstimateResult.NoKey))
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, asking = true))
+        assertThat(render.isEnabled("Suggest goals")).isFalse()
     }
 
     @Test
@@ -445,11 +487,13 @@ class EvaluatePlanScreenRenderTest {
         onCancelKeep: () -> Unit = {},
         onFill: () -> Unit = {},
         onNextBlock: () -> Unit = {},
+        onSuggest: () -> Unit = {},
+        onPick: (Int) -> Unit = {},
     ): List<String> = render.texts {
         EvaluatePlanScreen(
             state = state, onBack = {}, onChange = {}, onAsk = {}, onKeep = onKeep, onAskAgain = {},
             onAdjust = onAdjust, onPlan = onPlan, onPlanAhead = onPlanAhead, onChoose = onChoose, onGetSteps = onGetSteps,
-            onCancelKeep = onCancelKeep, onFill = onFill, onNextBlock = onNextBlock,
+            onCancelKeep = onCancelKeep, onFill = onFill, onNextBlock = onNextBlock, onSuggest = onSuggest, onPick = onPick,
         )
     }
 
