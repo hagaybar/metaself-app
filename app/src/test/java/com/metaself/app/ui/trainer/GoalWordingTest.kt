@@ -3,6 +3,7 @@ package com.metaself.app.ui.trainer
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.MonthWeek
 import com.metaself.app.domain.trainer.Phase
@@ -16,12 +17,12 @@ class GoalWordingTest {
 
     @Test
     fun `the goal line says the distance, the date and the weeks to go`() {
-        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY)).isEqualTo("15 km run · by Sun 13 Dec · 14 weeks to go")
-        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY + 7 * 13)).isEqualTo("15 km run · by Sun 13 Dec · 1 week to go")
-        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY + 7 * 14)).isEqualTo("15 km run · by Sun 13 Dec · goal week")
-        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY + 7 * 15)).isEqualTo("15 km run · by Sun 13 Dec · goal date passed")
+        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY)).isEqualTo("15 km run in one go · by Sun 13 Dec · 14 weeks to go")
+        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY + 7 * 13)).isEqualTo("15 km run in one go · by Sun 13 Dec · 1 week to go")
+        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY + 7 * 14)).isEqualTo("15 km run in one go · by Sun 13 Dec · goal week")
+        assertThat(GoalWording.goalLine(GOAL_15K, TEST_EPOCH_DAY + 7 * 15)).isEqualTo("15 km run in one go · by Sun 13 Dec · goal date passed")
         assertThat(GoalWording.goalLine(PlanGoal.Distance(GoalSport.RIDE, 42.5, GOAL_15K.byEpochDay), TEST_EPOCH_DAY))
-            .isEqualTo("42.5 km ride · by Sun 13 Dec · 14 weeks to go")
+            .isEqualTo("42.5 km ride in one go · by Sun 13 Dec · 14 weeks to go")
         assertThat(GoalWording.goalLine(PlanGoal.Steady, TEST_EPOCH_DAY)).isEqualTo("Keep a steady rhythm")
     }
 
@@ -40,5 +41,24 @@ class GoalWordingTest {
     fun `the form's date says the Sunday and the weeks`() {
         assertThat(GoalWording.byLine(GOAL_15K.byEpochDay, TEST_EPOCH_DAY)).isEqualTo("Sun 13 Dec · 14 weeks")
         assertThat(GoalWording.byDay(TEST_EPOCH_DAY, 14)).isEqualTo(GOAL_15K.byEpochDay)
+    }
+
+    /** D127: "150 min a week · by Sun 13 Dec · 14 weeks to go", then goal week and goal date passed (invented). */
+    @Test
+    fun `a time goal's line says the minutes, the date and the weeks to go`() {
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY)).isEqualTo("150 min a week · by Sun 13 Dec · 14 weeks to go")
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY + 7 * 13)).isEqualTo("150 min a week · by Sun 13 Dec · 1 week to go")
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY + 7 * 14)).isEqualTo("150 min a week · by Sun 13 Dec · goal week")
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY + 7 * 15)).isEqualTo("150 min a week · by Sun 13 Dec · goal date passed")
+        assertThat(GoalWording.minutesLine(150)).isEqualTo("150 min a week")
+        assertThat(GoalWording.MINUTES).isEqualTo("More time each week")
+    }
+
+    /** D128: a distance goal is one session of that length, not a total over the weeks. */
+    @Test
+    fun `a distance goal says it is one session`() {
+        assertThat(GoalWording.DISTANCE).isEqualTo("One long session")
+        assertThat(GoalWording.DISTANCE_LINE).isEqualTo("Go this far in a single run, walk, swim or ride, by a date")
+        assertThat(GoalWording.ROW_KM).isEqualTo("DISTANCE IN ONE GO (KM)")
     }
 }

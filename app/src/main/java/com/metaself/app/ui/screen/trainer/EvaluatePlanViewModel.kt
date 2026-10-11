@@ -16,6 +16,8 @@ import com.metaself.app.domain.trainer.PlanShown
 import com.metaself.app.domain.trainer.PlanTimeline
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.GoalBounds
+import com.metaself.app.domain.trainer.GoalSuggestion
 import com.metaself.app.domain.trainer.PlanAheadAsk
 import com.metaself.app.domain.trainer.PlanFilling
 import com.metaself.app.domain.trainer.PlanGoal
@@ -58,18 +60,20 @@ class EvaluatePlanViewModel @Inject constructor(
     /** D123: the plan page's three views. */
     enum class PlanView { MONTH, WEEK, SESSION }
 
-    /** D119: the form's two goals. */
-    enum class GoalChoice { STEADY, DISTANCE }
+    /** D119, D127: the form's three goals. */
+    enum class GoalChoice { STEADY, DISTANCE, MINUTES }
 
     /**
      * D124: Plan ahead's form — the goal (for a distance: the sport, km as typed, and the date as whole weeks after
-     * this one), sessions a week (null until answered) and words. The page opens on [PRESET].
+     * this one; for more time each week, D127: minutes a week and the same date), sessions a week (null until
+     * answered) and words. The page opens on [PRESET].
      */
     data class Form(
         val goal: GoalChoice = GoalChoice.STEADY,
         val sport: GoalSport = GoalSport.RUN,
         val km: String = "",
         val weeksAhead: Int = DEFAULT_WEEKS_AHEAD,
+        val minutes: Int = DEFAULT_MINUTES,
         val perWeek: Int? = null,
         val words: String = "",
     ) {
@@ -83,8 +87,31 @@ class EvaluatePlanViewModel @Inject constructor(
                     if (weeksAhead !in WEEKS_AHEAD) return null
                     PlanGoal.Distance(sport, km, GoalWording.byDay(today, weeksAhead))
                 }
+                GoalChoice.MINUTES -> {
+                    if (weeksAhead !in WEEKS_AHEAD || minutes !in PlanGoal.WeeklyMinutes.MINUTES) return null
+                    PlanGoal.WeeklyMinutes(minutes, GoalWording.byDay(today, weeksAhead))
+                }
             }
             return PlanAheadAsk(goal, perWeek, words)
+        }
+
+        /**
+         * D126: the form holding [goal] — its kind and figures, and its date as whole weeks after [today]'s — and
+         * [perWeek] when given; the words and every other row as they were.
+         */
+        fun holding(goal: PlanGoal, perWeek: Int?, today: Long): Form {
+            val sessions = perWeek ?: this.perWeek
+            return when (goal) {
+                PlanGoal.Steady -> copy(goal = GoalChoice.STEADY, perWeek = sessions)
+                is PlanGoal.Distance -> copy(
+                    goal = GoalChoice.DISTANCE, sport = goal.sport, km = GoalWording.km(goal.km),
+                    weeksAhead = GoalBounds.weeksAhead(today, goal.byEpochDay).toInt(), perWeek = sessions,
+                )
+                is PlanGoal.WeeklyMinutes -> copy(
+                    goal = GoalChoice.MINUTES, minutes = goal.minutes,
+                    weeksAhead = GoalBounds.weeksAhead(today, goal.byEpochDay).toInt(), perWeek = sessions,
+                )
+            }
         }
 
         /** Release 2's choice 14: the workbench's ask — a steady rhythm, whatever the goal row says. */
@@ -93,12 +120,20 @@ class EvaluatePlanViewModel @Inject constructor(
         fun earlier(): Form = copy(weeksAhead = (weeksAhead - 1).coerceIn(WEEKS_AHEAD))
         fun later(): Form = copy(weeksAhead = (weeksAhead + 1).coerceIn(WEEKS_AHEAD))
 
+        /** D127: ten minutes a week less, or more, within [PlanGoal.WeeklyMinutes.MINUTES]. */
+        fun fewer(): Form = copy(minutes = (minutes - MINUTES_STEP).coerceIn(PlanGoal.WeeklyMinutes.MINUTES))
+        fun more(): Form = copy(minutes = (minutes + MINUTES_STEP).coerceIn(PlanGoal.WeeklyMinutes.MINUTES))
+
         companion object {
-            /** D119: a distance's date is 6 to 30 weeks ahead. */
-            val WEEKS_AHEAD = 6..30
+            /** D119, D127: a dated goal's date is 6 to 30 weeks ahead. */
+            val WEEKS_AHEAD = GoalBounds.WEEKS_AHEAD
 
             /** Where the date row opens — a starting point, not a recommendation. */
             const val DEFAULT_WEEKS_AHEAD = 12
+
+            /** D127: where the minutes row opens, and its step — a starting point, not a recommendation. */
+            const val DEFAULT_MINUTES = 150
+            const val MINUTES_STEP = 10
 
             private val KM = Regex("""\d{1,4}([.,]\d)?""")
 
@@ -140,6 +175,13 @@ class EvaluatePlanViewModel @Inject constructor(
         val fillFailure: EstimateResult? = null,
         /** D121: "Filled in." or "Next block planned." with the trainer's sentence, once one landed. */
         val filledLine: String? = null,
+        /** D126: Suggest goals was tapped and its answer has not landed. */
+        val suggesting: Boolean = false,
+        /** D126: the trainer's suggestions, while the form is open; asking again replaces them. */
+        val suggestions: List<GoalSuggestion> = emptyList(),
+        /** D126: the card last tapped, which filled the form. */
+        val chosen: Int? = null,
+        val suggestFailure: EstimateResult? = null,
     ) {
         val canAsk: Boolean get() = form.ask(today) != null && !asking
 
@@ -227,6 +269,34 @@ class EvaluatePlanViewModel @Inject constructor(
         }
     }
 
+    /**
+     * D126: Suggest goals — once, with the form's sessions a week and words. The form stays usable meanwhile; the
+     * answer replaces the cards. Runs in [outliving], so its week_note is kept if the page is left.
+     */
+    fun suggest() {
+        val current = local.value
+        if (current.suggesting || current.asking) return
+        local.update { it.copy(suggesting = true, suggestFailure = null, refused = null) }
+        outlived(
+            outliving,
+            problems,
+            onRefused = { local.update { it.copy(suggesting = false, refused = ActionRefused.NOTHING_CHANGED) } },
+            work = { ask.suggestGoals(current.form.perWeek, current.form.words) },
+        ) { outcome ->
+            when (outcome) {
+                is AskTheTrainer.Suggestions.Offered -> local.update { it.copy(suggesting = false, suggestions = outcome.suggestions, chosen = null) }
+                is AskTheTrainer.Suggestions.Failed -> local.update { it.copy(suggesting = false, suggestFailure = outcome.failure) }
+            }
+        }
+    }
+
+    /** D126: the card at [index] fills the form — goal, figures, sessions a week — and is marked chosen; the words stay. */
+    fun pick(index: Int) = local.update { state ->
+        val suggestion = state.suggestions.getOrNull(index)
+        if (suggestion == null || state.asking) state
+        else state.copy(form = state.form.holding(suggestion.goal, suggestion.perWeek, state.today), chosen = index, failure = null)
+    }
+
     /** D121: Fill in next week, or Plan this week — once; the answer is kept by the trainer and the page read again. */
     fun fill() = filled(PlanPageWording::filled) { ask.fillWeek() }
 
@@ -276,6 +346,20 @@ class EvaluatePlanViewModel @Inject constructor(
                 it.copy(writing = false, kept = true, shown = shown.copy(startEpochDay = start, status = ProgrammeStatus.RUNNING))
             }
         }
+    }
+
+    /**
+     * D129: Plan for the trainer's moderated goal instead — the form holds it (sessions a week and words kept), and it is
+     * asked again. The answer shown stays stored, offered, as Ask again leaves it.
+     */
+    fun planInstead() {
+        val current = local.value
+        val instead = current.shown?.goalView?.instead ?: return
+        if (current.kept || current.writing || current.asking) return
+        local.update {
+            it.copy(form = it.form.holding(instead, null, it.today), shown = null, kept = false, failure = null, refused = null, confirming = false)
+        }
+        ask()
     }
 
     /** D124: Not now — the replace sentence goes, nothing written. */

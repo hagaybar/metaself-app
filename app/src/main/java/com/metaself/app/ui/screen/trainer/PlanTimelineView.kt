@@ -97,6 +97,8 @@ internal fun PlanShownView(shown: PlanShown, today: Long? = null) {
         Text(timeline.title, style = MaterialTheme.typography.headlineMedium)
         // D119: the goal, at the top of the plan in words.
         today?.let { GoalWording.goalLine(shown.goal, it) }?.let { Text(it, style = MaterialTheme.typography.titleSmall) }
+        // D129: the trainer's stand on the goal, kept with the plan's evaluation.
+        shown.evaluation?.goalView?.let { Text(it.says, style = MaterialTheme.typography.bodyMedium) }
         Text(PlanTimelineWording.subtitle(timeline), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         // Release 1's limit 3: an old plan finishing its week says when the next one starts.
         shown.running?.replacedFrom?.let { Text(PlanPageWording.newPlanStarts(it), style = MaterialTheme.typography.bodyMedium) }

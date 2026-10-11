@@ -9,6 +9,12 @@ import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Block
 import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GOAL_150_MIN
+import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.domain.trainer.Evaluation
+import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.Phase
@@ -148,7 +154,7 @@ class TrainerResponseTest {
         val note = "\"week_note\":\"  Invented week note.  \""
         val plan = TrainerResponse.parsePlan(reply(withNote(goodPlan, note)), "a-model") as TrainerReply.Answered
         val feedback = TrainerResponse.parseFeedback(reply(withNote(goodFeedback, note)), "a-model") as TrainerReply.Answered
-        val evaluated = TrainerResponse.parseEvaluation(reply(withNote(evaluated(twoWeeks), note)), "a-model", ProgrammeAsk(2, 2), hadLast = true)
+        val evaluated = TrainerResponse.parseEvaluation(reply(withNote(evaluated(twoWeeks), note)), "a-model", ProgrammeAsk(2, 2), hadLast = true, today = TEST_EPOCH_DAY)
             as TrainerReply.Answered
         val adjusted = TrainerResponse.parseAdjusted(
             reply(withNote(weeksPlan(week(session()), week(session())), note)), "a-model", weeksLeft = 2, perWeek = 3, thisWeekMax = 1,
@@ -198,7 +204,7 @@ class TrainerResponseTest {
 
     @Test
     fun `an evaluation reply becomes an evaluation and a plan`() {
-        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2), hadLast = true) as TrainerReply.Answered
+        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2), hadLast = true, today = TEST_EPOCH_DAY) as TrainerReply.Answered
 
         assertThat(reply.value.evaluation.headline).isEqualTo("Invented headline")
         assertThat(reply.value.evaluation.sinceLast).isEmpty()
@@ -212,9 +218,9 @@ class TrainerResponseTest {
         val threeInOneWeek = weeksPlan(week(session(), session(), session()), week(session()))
         val anEmptyWeek = weeksPlan(week(), week(session()))
 
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(4, 2), hadLast = true))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(threeInOneWeek)), "a-model", ProgrammeAsk(2, 2), hadLast = true))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(anEmptyWeek)), "a-model", ProgrammeAsk(2, 2), hadLast = true))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(4, 2), hadLast = true, today = TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(threeInOneWeek)), "a-model", ProgrammeAsk(2, 2), hadLast = true, today = TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(anEmptyWeek)), "a-model", ProgrammeAsk(2, 2), hadLast = true, today = TEST_EPOCH_DAY))
     }
 
     @Test
@@ -225,11 +231,11 @@ class TrainerResponseTest {
             session().replace("30", "\"30\""), session().replace("Invented line", " "),
         ).forEach { bad ->
             assertUnreadable(
-                TrainerResponse.parseEvaluation(reply(evaluated(weeksPlan(week(bad), week(session())))), "a-model", ask, hadLast = true),
+                TrainerResponse.parseEvaluation(reply(evaluated(weeksPlan(week(bad), week(session())))), "a-model", ask, hadLast = true, today = TEST_EPOCH_DAY),
             )
         }
         assertUnreadable(
-            TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks).replace("Invented headline", "")), "a-model", ask, hadLast = true),
+            TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks).replace("Invented headline", "")), "a-model", ask, hadLast = true, today = TEST_EPOCH_DAY),
         )
     }
 
@@ -237,7 +243,7 @@ class TrainerResponseTest {
     fun `since_last is blanked when no last evaluation was sent, even if the model wrote one`() {
         val withSinceLast = evaluated(twoWeeks).replace("\"since_last\":\"\"", "\"since_last\":\"Invented change.\"")
 
-        val reply = TrainerResponse.parseEvaluation(reply(withSinceLast), "a-model", ProgrammeAsk(2, 2), hadLast = false) as TrainerReply.Answered
+        val reply = TrainerResponse.parseEvaluation(reply(withSinceLast), "a-model", ProgrammeAsk(2, 2), hadLast = false, today = TEST_EPOCH_DAY) as TrainerReply.Answered
 
         assertThat(reply.value.evaluation.sinceLast).isEmpty()
     }
@@ -246,7 +252,7 @@ class TrainerResponseTest {
     fun `since_last is kept when a last evaluation was sent`() {
         val withSinceLast = evaluated(twoWeeks).replace("\"since_last\":\"\"", "\"since_last\":\"Invented change.\"")
 
-        val reply = TrainerResponse.parseEvaluation(reply(withSinceLast), "a-model", ProgrammeAsk(2, 2), hadLast = true) as TrainerReply.Answered
+        val reply = TrainerResponse.parseEvaluation(reply(withSinceLast), "a-model", ProgrammeAsk(2, 2), hadLast = true, today = TEST_EPOCH_DAY) as TrainerReply.Answered
 
         assertThat(reply.value.evaluation.sinceLast).isEqualTo("Invented change.")
     }
@@ -264,7 +270,7 @@ class TrainerResponseTest {
 
     @Test
     fun `an evaluation and a plan survive being written for storage`() {
-        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2), hadLast = true) as TrainerReply.Answered
+        val reply = TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", ProgrammeAsk(2, 2), hadLast = true, today = TEST_EPOCH_DAY) as TrainerReply.Answered
 
         assertThat(TrainerResponse.readEvaluation(TrainerResponse.encodeEvaluation(reply.value.evaluation))).isEqualTo(reply.value.evaluation)
         assertThat(TrainerResponse.readWeeksPlan(TrainerResponse.encodeWeeksPlan(reply.value.plan))).isEqualTo(reply.value.plan)
@@ -279,7 +285,7 @@ class TrainerResponseTest {
 
     @Test
     fun `a goal's evaluation fills two weeks and keeps the outline for every week`() {
-        val reply = TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", goalAsk, hadLast = false)
+        val reply = TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", goalAsk, hadLast = false, today = TEST_EPOCH_DAY)
             as TrainerReply.Answered
 
         val plan = reply.value.plan
@@ -296,21 +302,21 @@ class TrainerResponseTest {
         val long = OUTLINE_15 + Block(Phase.TAPER, "Extra", listOf(target(90, 40)))
         val tooLong = OUTLINE_15.withTarget(3, target(600, 60))
 
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, short)), "a-model", goalAsk, hadLast = false))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, long)), "a-model", goalAsk, hadLast = false))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, tooLong)), "a-model", goalAsk, hadLast = false))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, short)), "a-model", goalAsk, hadLast = false, today = TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, long)), "a-model", goalAsk, hadLast = false, today = TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, tooLong)), "a-model", goalAsk, hadLast = false, today = TEST_EPOCH_DAY))
         val threeWeeks = weeksPlan(week(session()), week(session()), week(session()))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(threeWeeks, OUTLINE_15)), "a-model", goalAsk, hadLast = false))
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", goalAsk, hadLast = false))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(threeWeeks, OUTLINE_15)), "a-model", goalAsk, hadLast = false, today = TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", goalAsk, hadLast = false, today = TEST_EPOCH_DAY))
     }
 
     @Test
     fun `a steady rhythm's outline is exactly one block of four weeks`() {
         val steady = ProgrammeAsk(4, 3, goal = PlanGoal.Steady)
 
-        assertThat(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, STEADY_OUTLINE)), "a-model", steady, hadLast = false))
+        assertThat(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, STEADY_OUTLINE)), "a-model", steady, hadLast = false, today = TEST_EPOCH_DAY))
             .isInstanceOf(TrainerReply.Answered::class.java)
-        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", steady, hadLast = false))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", steady, hadLast = false, today = TEST_EPOCH_DAY))
     }
 
     @Test
@@ -362,5 +368,130 @@ class TrainerResponseTest {
         // A plan without an outline is read as it always was; targets sent anyway are ignored.
         val legacy = TrainerResponse.parseAdjusted(reply(rest(two, 3)), "a-model", weeksLeft = 2, perWeek = 3, thisWeekMax = 1) as TrainerReply.Answered
         assertThat(legacy.value.targets).isEmpty()
+    }
+
+    /** D127: a time goal is stored beside its plan and read back; the goals stored before it read as they did. */
+    @Test
+    fun `a time goal survives storage, and older goals still read`() {
+        val plan = TrainerResponse.readWeeksPlan(twoWeeks)!!
+        listOf(GOAL_150_MIN, GOAL_15K, PlanGoal.Steady).forEach { goal ->
+            assertThat(TrainerResponse.readGoal(TrainerResponse.encodeStoredWeeksPlan(plan, goal))).isEqualTo(TrainerResponse.StoredGoal.Read(goal))
+        }
+        assertThat(TrainerResponse.readGoal(TrainerResponse.encodeStoredWeeksPlan(plan, null))).isEqualTo(TrainerResponse.StoredGoal.None)
+        val stored = """{"title":"Invented plan","weeks":[],"why":"Invented.","goal":{"kind":"distance","sport":"walk","km":10.0,"by":"2026-12-13"}}"""
+        assertThat(TrainerResponse.readGoal(stored)).isEqualTo(TrainerResponse.StoredGoal.Read(PlanGoal.Distance(GoalSport.WALK, 10.0, GOAL_15K.byEpochDay)))
+        val tooFew = """{"title":"Invented plan","weeks":[],"why":"Invented.","goal":{"kind":"weekly_minutes","minutes":10,"by":"2026-12-13"}}"""
+        assertThat(TrainerResponse.readGoal(tooFew)).isEqualTo(TrainerResponse.StoredGoal.Unreadable)
+    }
+
+    /** D120, D127: a time goal's outline covers every week to the goal's week, as a distance's does. */
+    @Test
+    fun `a time goal's evaluation is checked for every week to the goal`() {
+        val ask = ProgrammeAsk(15, 3, goal = GOAL_150_MIN)
+
+        assertThat(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", ask, hadLast = false, today = TEST_EPOCH_DAY))
+            .isInstanceOf(TrainerReply.Answered::class.java)
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, STEADY_OUTLINE)), "a-model", ask, hadLast = false, today = TEST_EPOCH_DAY))
+    }
+
+    // --- D126: suggested goals. Today is Thursday 3 September 2026; every figure is invented. -------------------
+
+    private fun suggestion(goal: String, perWeek: Int = 3, title: String = "Invented title") =
+        """{"title":"$title","goal":$goal,"per_week":$perWeek,"why":"Invented why."}"""
+
+    private fun suggestions(vararg items: String, note: String? = null) =
+        """{"suggestions":[${items.joinToString(",")}]""" + (note?.let { ""","week_note":"$it"""" } ?: "") + "}"
+
+    @Test
+    fun `suggestions are read with their dates moved to the Sunday`() {
+        val reply = TrainerResponse.parseSuggestions(
+            reply(
+                suggestions(
+                    suggestion("""{"kind":"steady"}"""),
+                    suggestion("""{"kind":"weekly_minutes","minutes":150,"by":"2026-12-09"}""", perWeek = 2),
+                    suggestion("""{"kind":"distance","sport":"run","km":15.0,"by":"2026-12-13"}"""),
+                    note = "Invented note.",
+                ),
+            ),
+            "a-model", TEST_EPOCH_DAY,
+        ) as TrainerReply.Answered
+
+        assertThat(reply.value.map { it.goal }).containsExactly(PlanGoal.Steady, GOAL_150_MIN, GOAL_15K).inOrder()
+        assertThat(reply.value[1].perWeek).isEqualTo(2)
+        assertThat(reply.value[0].title).isEqualTo("Invented title")
+        assertThat(reply.weekNote).isEqualTo("Invented note.")
+    }
+
+    @Test
+    fun `a suggestion that does not fit is dropped, and a reply with none left is refused`() {
+        val good = suggestion("""{"kind":"steady"}""")
+        val tooSoon = suggestion("""{"kind":"weekly_minutes","minutes":150,"by":"2026-09-20"}""")
+        val tooMany = suggestion("""{"kind":"weekly_minutes","minutes":1000,"by":"2026-12-13"}""")
+        val oneSession = suggestion("""{"kind":"steady"}""", perWeek = 1)
+        val twoDecimals = suggestion("""{"kind":"distance","sport":"run","km":12.25,"by":"2026-12-13"}""")
+        val unknown = suggestion("""{"kind":"pace","by":"2026-12-13"}""")
+
+        val reply = TrainerResponse.parseSuggestions(reply(suggestions(tooSoon, good, tooMany, oneSession, twoDecimals, unknown)), "a-model", TEST_EPOCH_DAY)
+            as TrainerReply.Answered
+        assertThat(reply.value).hasSize(1)
+        assertThat(reply.weekNote).isNull()
+        assertUnreadable(TrainerResponse.parseSuggestions(reply(suggestions(tooSoon, tooMany)), "a-model", TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseSuggestions(reply(suggestions()), "a-model", TEST_EPOCH_DAY))
+        assertUnreadable(TrainerResponse.parseSuggestions(reply("""{"week_note":"Invented."}"""), "a-model", TEST_EPOCH_DAY))
+        val four = TrainerResponse.parseSuggestions(reply(suggestions(good, good, good, good)), "a-model", TEST_EPOCH_DAY) as TrainerReply.Answered
+        assertThat(four.value).hasSize(3)
+    }
+
+    // --- D129: the trainer's stand on the goal. Every word and figure is invented. ------------------------------
+
+    private fun withView(view: String) = withNote(outlined(twoWeeks, OUTLINE_15), "\"goal_view\":$view")
+
+    private fun view(verdict: String, instead: String = "null", says: String = "Invented stand.") =
+        """{"verdict":"$verdict","says":"$says","instead":$instead}"""
+
+    private fun evaluate(content: String) =
+        TrainerResponse.parseEvaluation(reply(content), "a-model", goalAsk, hadLast = false, today = TEST_EPOCH_DAY) as TrainerReply.Answered
+
+    @Test
+    fun `each verdict is read with what the trainer says`() {
+        val smaller = """{"kind":"distance","sport":"run","km":10.0,"by":"2026-12-13"}"""
+        assertThat(evaluate(withView(view("within_reach"))).value.goalView).isEqualTo(GoalView(GoalVerdict.WITHIN_REACH, "Invented stand."))
+        assertThat(evaluate(withView(view("stretch"))).value.goalView).isEqualTo(GoalView(GoalVerdict.STRETCH, "Invented stand."))
+        assertThat(evaluate(withView(view("too_big", smaller))).value.goalView)
+            .isEqualTo(GoalView(GoalVerdict.TOO_BIG, "Invented stand.", PlanGoal.Distance(GoalSport.RUN, 10.0, GOAL_15K.byEpochDay)))
+        assertThat(evaluate(withView(view("stretch", smaller))).value.goalView!!.instead).isNotNull()
+    }
+
+    @Test
+    fun `a goal_view that does not read is dropped, and the reply stands`() {
+        listOf(withView(view("easy")), withView(view("stretch", says = "")), withView("7"), outlined(twoWeeks, OUTLINE_15)).forEach { content ->
+            val reply = evaluate(content)
+            assertThat(reply.value.goalView).isNull()
+            assertThat(reply.value.plan.outline).isEqualTo(OUTLINE_15)
+        }
+    }
+
+    @Test
+    fun `an instead that does not fit is dropped alone, as is one beside a goal within reach`() {
+        val tooSoon = """{"kind":"weekly_minutes","minutes":120,"by":"2026-09-20"}"""
+        val tooFew = """{"kind":"weekly_minutes","minutes":10,"by":"2026-12-13"}"""
+        val fits = """{"kind":"weekly_minutes","minutes":120,"by":"2026-12-09"}"""
+
+        assertThat(evaluate(withView(view("too_big", tooSoon))).value.goalView).isEqualTo(GoalView(GoalVerdict.TOO_BIG, "Invented stand."))
+        assertThat(evaluate(withView(view("too_big", tooFew))).value.goalView!!.instead).isNull()
+        assertThat(evaluate(withView(view("too_big", fits))).value.goalView!!.instead).isEqualTo(GOAL_150_MIN.copy(minutes = 120))
+        assertThat(evaluate(withView(view("within_reach", fits))).value.goalView!!.instead).isNull()
+    }
+
+    @Test
+    fun `a goal_view is stored beside its evaluation, and an evaluation stored without one reads as before`() {
+        val evaluation = Evaluation("Invented headline", "Invented.", "Invented.", "")
+        val view = GoalView(GoalVerdict.TOO_BIG, "Invented stand.", GOAL_150_MIN)
+        val stored = TrainerResponse.encodeStoredEvaluation(evaluation, view)
+
+        assertThat(TrainerResponse.readEvaluation(stored)).isEqualTo(evaluation)
+        assertThat(TrainerResponse.readGoalView(stored)).isEqualTo(view)
+        assertThat(TrainerResponse.encodeStoredEvaluation(evaluation, null)).isEqualTo(TrainerResponse.encodeEvaluation(evaluation))
+        assertThat(TrainerResponse.readGoalView(TrainerResponse.encodeEvaluation(evaluation))).isNull()
     }
 }

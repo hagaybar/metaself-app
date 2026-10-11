@@ -22,6 +22,9 @@ import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Block
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.GoalBounds
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.WeekTarget
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -230,7 +233,7 @@ object TrainerPrompt {
 
     private val EVALUATE = """
         They are asking where they stand, and for a plan for the weeks ahead. The question gives their goal
-        (question.goal, below), how many weeks the plan runs (weeks: for a distance, from the date it starts
+        (question.goal, below), how many weeks the plan runs (weeks: for a distance or weekly_minutes, from the date it starts
         to the goal's week; for a steady rhythm, one block of four), how many sessions a week they can manage
         (sessions_a_week), any words of theirs, the date the plan starts (starts, a Monday; weeks run Monday
         to Sunday), and your last evaluation if there is one, with the plan that ran with it and how many of
@@ -302,15 +305,54 @@ object TrainerPrompt {
         why, one paragraph. Its weeks are filled in with sessions later, as they come.
     """.trimIndent() + "\n\n" + HOW_IT_WENT
 
+    /** D129: the stand on the goal, on the evaluate path (Plan ahead) only. */
+    internal val GOAL_VIEW = """
+        Take a stand on the goal before you plan for it. Judge question.goal against what the record shows — the
+        longest recent session, the weekly totals in the ledgers and in how past planned weeks went — and the
+        coaching conventions (load rising by about a tenth a week).
+        Give goal_view: verdict "within_reach", "stretch" or "too_big"; says, one or two sentences to them naming what
+        the record shows and the size of the jump, answering their words directly when they asked for something;
+        and instead: for too_big, and for stretch when you judge it useful, a more moderate goal of the same kind
+        with the same by, in the shape a goal is sent in but without weeks_to_go; null otherwise.
+        Be plain rather than polite about a big jump, and never pretend an unrealistic goal is fine.
+        The plan is still for the goal as asked: they decide.
+        When question.goal is null, give verdict "within_reach", says as an empty string and instead null.
+    """.trimIndent()
+
+    /** D126: three goals fitted to the record, before a plan is asked for. */
+    private val SUGGEST_GOALS = """
+        They are about to plan ahead and ask you to suggest goals. The question gives what their form already holds —
+        sessions_a_week (null when not chosen) and words (empty when they wrote none) — the date a plan kept today
+        would start (starts, a Monday), the window for a goal's date (earliest_by to latest_by, each a Sunday), the
+        running plan's goal and outline when one runs (running_plan, null otherwise), and your last evaluation with
+        the plan that ran with it and how each of its weeks went (last_evaluation, with how_it_went, below), or null.
+
+        Suggest exactly three goals. Where the record allows, they differ in kind: one about consistency (kind
+        "steady", a steady rhythm), one about building time (kind "weekly_minutes") and one about a distance in one
+        session (kind "distance"); otherwise they differ in ambition. Fit each to what the ledgers show was actually done, both
+        parts of each week counted, and keep each within reach by its date under the coaching conventions below.
+        When their words are given, they weigh more than the record.
+
+        Each suggestion has a title of at most eight words; the goal, in the shape a goal is sent in below but
+        without weeks_to_go — kind "steady"; or kind "distance" with sport, km (at most one decimal) and by; or kind
+        "weekly_minutes" with minutes (30 to 900, a multiple of 10) and by — where by is a Sunday from earliest_by to
+        latest_by; per_week, the sessions a week it asks for, from 2 to 5; and why: one sentence naming something
+        the record shows. No figure the app did not count.
+    """.trimIndent() + "\n\n" + HOW_IT_WENT
+
     /** D119, D120, D125: the goal and the outline, on the four plan paths. */
     private val GOALS = """
         question.goal is the plan's goal — not the weight goal above. It is null for a plan made before goals;
         otherwise either kind "steady" (keep a steady rhythm, with no end date, planned one block at a time)
         or kind "distance", with the sport (run, walk, swim or ride), km, by (the date, a Sunday) and
-        weeks_to_go (counted by the app, from this week to the goal's week). A plan's outline is its blocks in
+        weeks_to_go (counted by the app, from this week to the goal's week), or kind "weekly_minutes" (more time
+        each week), with minutes (a week's total), by and weeks_to_go as a distance has them. For weekly_minutes,
+        build the weekly total towards the goal's minutes, reaching it in the goal's week and holding it there —
+        no taper, there is no race; use base and build blocks, with the conventions' easier weeks. A plan's outline is its blocks in
         order, each with a phase (base, build, peak, taper or steady), a one-line focus and one target per
         week: minutes (the week's total), longest_minutes (its longest session) and easier (an easier week).
         filled_weeks lists the weeks, counted from 1, that carry sessions; the others carry their target only.
+        A distance goal is one session of that distance, not a total over the weeks.
     """.trimIndent()
 
     /**
@@ -353,6 +395,11 @@ object TrainerPrompt {
         return ChatRequest.body(model, profile, messages(request), "week_filled", FILL_SCHEMA)
     }
 
+    fun suggestGoalsBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
+        require(request.question is TrainerQuestion.SuggestGoals) { "goals are suggested for a suggest-goals question" }
+        return ChatRequest.body(model, profile, messages(request), "goal_suggestions", SUGGESTIONS_SCHEMA)
+    }
+
     fun nextBlockBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
         require(request.question is TrainerQuestion.NextBlock) { "a next block is asked with a next-block question" }
         return ChatRequest.body(model, profile, messages(request), "next_block", NEXT_BLOCK_SCHEMA)
@@ -368,13 +415,14 @@ object TrainerPrompt {
         COMMON + "\n\n" + SIX_WEEKS + "\n\n" + LEDGER + "\n\n" + WEEK_RULES + "\n\n" + when (path) {
             TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
             TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
-            TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE + PLANNING
+            TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE + "\n\n" + GOAL_VIEW + PLANNING
             TrainerPath.ADJUST -> VOICE + "\n\n" + ADJUST + PLANNING
             TrainerPath.FILL_WEEK -> VOICE + "\n\n" + FILL_WEEK + PLANNING
             TrainerPath.NEXT_BLOCK -> VOICE + "\n\n" + NEXT_BLOCK + PLANNING
+            TrainerPath.SUGGEST_GOALS -> VOICE + "\n\n" + SUGGEST_GOALS + PLANNING
         } + "\n\n" + WEEK_NOTE
 
-    /** D125: what the four plan paths add after their own task — the goal and outline, then the conventions. */
+    /** D125, D126: what the plan paths and suggesting goals add after their own task — the goal and outline, then the conventions. */
     private val PLANNING: String get() = "\n\n" + GOALS + "\n\n" + CONVENTIONS
 
     /** The user message every body sends: [request], serialised. Shared with the workbench (D106). */
@@ -467,18 +515,7 @@ object TrainerPrompt {
             put("sessions_a_week", question.ask.perWeek)
             put("words", question.ask.words.trim())
             put("starts", date(question.startEpochDay))
-            put(
-                "last_evaluation",
-                question.last?.let { last ->
-                    buildJsonObject {
-                        put("date", date(last.epochDay))
-                        put("evaluation", evaluationJson(last.evaluation))
-                        put("plan", weeksPlanJson(last.plan))
-                        putJsonArray("done_by_week") { last.doneByWeek.forEach { add(it) } }
-                        putJsonArray("how_it_went") { last.weeks.forEach { add(weekOutcome(it)) } }
-                    }
-                } ?: JsonNull,
-            )
+            put("last_evaluation", lastEvaluationJson(question.last))
         }
         is TrainerQuestion.Adjust -> buildJsonObject {
             put("kind", "adjust")
@@ -520,13 +557,42 @@ object TrainerPrompt {
             putJsonArray("done_by_week") { question.doneByWeek.forEach { add(it) } }
             putJsonArray("how_it_went") { question.howItWent.forEach { add(weekOutcome(it)) } }
         }
+        is TrainerQuestion.SuggestGoals -> buildJsonObject {
+            put("kind", "suggest_goals")
+            put("sessions_a_week", question.perWeek?.let(::JsonPrimitive) ?: JsonNull)
+            put("words", question.words.trim())
+            put("starts", date(question.startEpochDay))
+            put("earliest_by", date(GoalBounds.byDay(today, GoalBounds.WEEKS_AHEAD.first)))
+            put("latest_by", date(GoalBounds.byDay(today, GoalBounds.WEEKS_AHEAD.last)))
+            put(
+                "running_plan",
+                question.running?.let { running ->
+                    buildJsonObject {
+                        put("goal", sentGoal(running.goal, today))
+                        put("outline", running.outline?.let(::outlineJson) ?: JsonNull)
+                    }
+                } ?: JsonNull,
+            )
+            put("last_evaluation", lastEvaluationJson(question.last))
+        }
     }
 
-    /** D125: the goal as sent — as stored, and for a distance the weeks from this week to the goal's week, counted here. */
+    /** D93, D98: the last kept evaluation with its plan and how it went — on the evaluate and suggest-goals paths. */
+    private fun lastEvaluationJson(last: LastEvaluation?): JsonElement = last?.let {
+        buildJsonObject {
+            put("date", date(last.epochDay))
+            put("evaluation", evaluationJson(last.evaluation))
+            put("plan", weeksPlanJson(last.plan))
+            putJsonArray("done_by_week") { last.doneByWeek.forEach { add(it) } }
+            putJsonArray("how_it_went") { last.weeks.forEach { add(weekOutcome(it)) } }
+        }
+    } ?: JsonNull
+
+    /** D125, D127: the goal as sent — as stored, and for a dated goal the weeks from this week to the goal's week, counted here. */
     private fun sentGoal(goal: PlanGoal?, today: Long): JsonElement {
         if (goal == null) return JsonNull
         val stored = goalJson(goal)
-        if (goal !is PlanGoal.Distance) return stored
+        if (goal !is PlanGoal.Dated) return stored
         val weeksToGo = (MovementWeek.mondayOf(goal.byEpochDay) - MovementWeek.mondayOf(today)) / 7
         return JsonObject(stored + ("weeks_to_go" to JsonPrimitive(weeksToGo)))
     }
@@ -805,7 +871,19 @@ object TrainerPrompt {
                 put("km", goal.km)
                 put("by", date(goal.byEpochDay))
             }
+            is PlanGoal.WeeklyMinutes -> {
+                put("kind", "weekly_minutes")
+                put("minutes", goal.minutes)
+                put("by", date(goal.byEpochDay))
+            }
         }
+    }
+
+    /** D129: a goal_view in the reply schema's own shape, and as stored beside its evaluation. */
+    fun goalViewJson(view: GoalView): JsonObject = buildJsonObject {
+        put("verdict", view.verdict.name.lowercase())
+        put("says", view.says)
+        put("instead", view.instead?.let(::goalJson) ?: JsonNull)
     }
 
     /** An evaluation in the reply schema's own shape: sent as the last one, and what `TrainerResponse.encodeEvaluation` stores. */
@@ -912,6 +990,11 @@ object TrainerPrompt {
         ),
         "plan" to WEEKS_PLAN_SCHEMA,
         "outline" to strictObject("blocks" to arraySchema(BLOCK_SCHEMA)),
+        "goal_view" to strictObject(
+            "verdict" to enumOf("within_reach", "stretch", "too_big"),
+            "says" to string(),
+            "instead" to buildJsonObject { putJsonArray("anyOf") { goalOptions().forEach { add(it) }; add(buildJsonObject { put("type", "null") }) } },
+        ),
         "week_note" to string(),
     )
 
@@ -921,6 +1004,23 @@ object TrainerPrompt {
         "sessions" to arraySchema(PLANNED_SCHEMA),
         "target" to TARGET_SCHEMA,
         "target_why" to string(),
+        "week_note" to string(),
+    )
+
+    private fun number() = buildJsonObject { put("type", "number") }
+
+    /** D119, D127: a goal in its stored shape — one of three strict objects. A function: it is used before this point. */
+    private fun goalOptions(): List<JsonObject> = listOf(
+        strictObject("kind" to enumOf("steady")),
+        strictObject("kind" to enumOf("distance"), "sport" to enumOf("run", "walk", "swim", "ride"), "km" to number(), "by" to string()),
+        strictObject("kind" to enumOf("weekly_minutes"), "minutes" to integer(), "by" to string()),
+    )
+
+    private val GOAL_SCHEMA: JsonObject = buildJsonObject { putJsonArray("anyOf") { goalOptions().forEach { add(it) } } }
+
+    /** D126: the suggestions, and the week's note (D116). */
+    private val SUGGESTIONS_SCHEMA: JsonObject = strictObject(
+        "suggestions" to arraySchema(strictObject("title" to string(), "goal" to GOAL_SCHEMA, "per_week" to integer(), "why" to string())),
         "week_note" to string(),
     )
 

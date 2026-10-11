@@ -60,6 +60,11 @@ import com.metaself.app.domain.trainer.TileState
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TrainerPlan
+import com.metaself.app.domain.trainer.GoalSuggestion
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.domain.trainer.RunningGoal
+import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerReview
@@ -934,6 +939,59 @@ class AskTheTrainerTest {
 
         assertThat(ask().stepsFor(walk(id = 1, day = TEST_EPOCH_DAY))!!.id).isEqualTo(forFirst)
         assertThat(ask().stepsFor(swim)!!.id).isEqualTo(forSecond)
+    }
+
+    // --- D126: suggested goals. Every figure, title and word is invented. -------------------------------------
+
+    /** D126: one ask with the form's sessions a week and words, the running goal and outline; nothing stored but the note. */
+    @Test
+    fun `suggesting goals asks with the form and the running goal, keeps the note and stores nothing`() = runTest {
+        keptOutlined(filled = 1)
+        val suggested = GoalSuggestion("Invented title", GOAL_150_MIN, 3, "Invented why.")
+        trainer.suggestions += TrainerReply.Answered(listOf(suggested), "a-model", "Invented note.")
+        val before = programmes.all()
+
+        val outcome = ask().suggestGoals(3, " Invented words. ")
+
+        assertThat(outcome).isEqualTo(AskTheTrainer.Suggestions.Offered(listOf(suggested)))
+        val question = trainer.asked.single().question as TrainerQuestion.SuggestGoals
+        assertThat(question.perWeek).isEqualTo(3)
+        assertThat(question.words).isEqualTo("Invented words.")
+        assertThat(question.running).isEqualTo(RunningGoal(GOAL_15K, OUTLINE_15))
+        assertThat(question.startEpochDay).isEqualTo(MONDAY + 7)
+        assertThat(trainer.asked.single().weeks).hasSize(6)
+        assertThat(weekNotes.note.value!!.text).isEqualTo("Invented note.")
+        assertThat(programmes.all()).isEqualTo(before)
+
+        trainer.suggestions += TrainerReply.Failed(EstimateResult.NoKey)
+        assertThat(ask().suggestGoals(null, "")).isEqualTo(AskTheTrainer.Suggestions.Failed(EstimateResult.NoKey))
+    }
+
+    /** D126: with no plan running, no running goal is sent. */
+    @Test
+    fun `with no plan running, suggesting goals sends none`() = runTest {
+        trainer.suggestions += TrainerReply.Failed(EstimateResult.NoKey)
+
+        ask().suggestGoals(null, "")
+
+        val question = trainer.asked.single().question as TrainerQuestion.SuggestGoals
+        assertThat(question.running).isNull()
+        assertThat(question.perWeek).isNull()
+        assertThat(question.startEpochDay).isEqualTo(MONDAY)
+    }
+
+    /** D129: the trainer's stand on the goal is kept with the answer, and the plan page reads it with the evaluation. */
+    @Test
+    fun `the stand on the goal is stored with the answer and shown with the kept plan`() = runTest {
+        val view = GoalView(GoalVerdict.TOO_BIG, "Invented stand.", GOAL_150_MIN)
+        trainer.evaluations += TrainerReply.Answered(EvaluationAndPlan(EVALUATION, outlined(filled = 2), view), "a-model")
+
+        val offered = (ask().planAhead(PlanAheadAsk(GOAL_15K, 3)) as AskTheTrainer.Evaluated.Offered).programme
+        assertThat(offered.goalView).isEqualTo(view)
+        assertThat(programmes.all().single().goalView).isEqualTo(view)
+
+        ask().keepProgramme(offered.id)
+        assertThat(ask().planShown()!!.evaluation!!.goalView).isEqualTo(view)
     }
 
     // --- D119–D121, D124: goals and blocks. The goal fixture; every figure is invented. -----------------

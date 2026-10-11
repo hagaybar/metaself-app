@@ -28,8 +28,13 @@ sealed interface PlanGoal {
     /** No end date: the plan runs block after block. */
     data object Steady : PlanGoal
 
-    /** [km] by [byEpochDay] (a Sunday, as the form gives it); the plan ends on that day's week. */
-    data class Distance(val sport: GoalSport, val km: Double, val byEpochDay: Long) : PlanGoal {
+    /** D119, D127: a goal with a date — the plan ends on [byEpochDay]'s week (a Sunday, as the form gives it). */
+    sealed interface Dated : PlanGoal {
+        val byEpochDay: Long
+    }
+
+    /** [km] by [byEpochDay]. */
+    data class Distance(val sport: GoalSport, val km: Double, override val byEpochDay: Long) : Dated {
         init {
             require(km > 0.0 && km <= MAX_KM) { "a distance goal is more than 0 and at most $MAX_KM km, not $km" }
         }
@@ -39,15 +44,27 @@ sealed interface PlanGoal {
             const val MAX_KM = 1000.0
         }
     }
+
+    /** D127: more time each week — [minutes] a week, reached by [byEpochDay]'s week and held there. */
+    data class WeeklyMinutes(val minutes: Int, override val byEpochDay: Long) : Dated {
+        init {
+            require(minutes in MINUTES) { "a time goal is 30 to 900 minutes a week, not $minutes" }
+        }
+
+        companion object {
+            /** The form's bounds — a bound on choosing, not a measurement. */
+            val MINUTES = 30..900
+        }
+    }
 }
 
 /** D124: Plan ahead's form — the goal, sessions a week, words; the weeks follow from the goal. */
 data class PlanAheadAsk(val goal: PlanGoal, val perWeek: Int, val words: String = "") {
-    /** The stored ask for a plan starting on [start] (a Monday): steady, one block; a distance, to the goal's week. */
+    /** The stored ask for a plan starting on [start] (a Monday): steady, one block; a dated goal, to the goal's week. */
     fun toAsk(start: Long): ProgrammeAsk = ProgrammeAsk(
         weeks = when (goal) {
             PlanGoal.Steady -> BLOCK_WEEKS
-            is PlanGoal.Distance -> ProgrammeCalendar.weekIndex(start, goal.byEpochDay) + 1
+            is PlanGoal.Dated -> ProgrammeCalendar.weekIndex(start, goal.byEpochDay) + 1
         },
         perWeek = perWeek,
         words = words,
@@ -163,8 +180,17 @@ data class BlockAnswer(val block: Block, val why: String)
 /** D94: where the owner stands. [sinceLast] is "" when no earlier evaluation was sent. Advice (D4). */
 data class Evaluation(val headline: String, val goingWell: String, val toWorkOn: String, val sinceLast: String)
 
-/** One evaluate reply (D94). */
-data class EvaluationAndPlan(val evaluation: Evaluation, val plan: WeeksPlan)
+/** D129: the trainer's judgement of a goal against the record — its own, not the phone's. Sent and stored by name. */
+enum class GoalVerdict { WITHIN_REACH, STRETCH, TOO_BIG }
+
+/**
+ * D129: the trainer's stand on the goal asked for — its [verdict], what it [says] (one or two sentences), and, for a goal
+ * too big (or a stretch), a more moderate one [instead], checked as a suggestion is (D126); null otherwise. Advice (D4).
+ */
+data class GoalView(val verdict: GoalVerdict, val says: String, val instead: PlanGoal? = null)
+
+/** One evaluate reply (D94); [goalView] its stand on the goal (D129), null when the reply gave none that reads. */
+data class EvaluationAndPlan(val evaluation: Evaluation, val plan: WeeksPlan, val goalView: GoalView? = null)
 
 /** D98. There is no ENDED: a RUNNING plan past its last Sunday is ended by date. */
 enum class ProgrammeStatus { OFFERED, RUNNING, REPLACED, ADJUSTED, STOPPED }
@@ -185,6 +211,8 @@ data class Programme(
     val status: ProgrammeStatus = ProgrammeStatus.OFFERED,
     val stoppedEpochDay: Long? = null,
     val replacesId: Long? = null,
+    /** D129: the trainer's stand on the goal, stored with the evaluation; null for an adjusted version or an older answer. */
+    val goalView: GoalView? = null,
 )
 
 /** A planned session with its week, counted from 1 (D96), and how many weeks its plan has (D107). */

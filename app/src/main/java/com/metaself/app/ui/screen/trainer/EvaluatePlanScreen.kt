@@ -7,6 +7,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -22,6 +28,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.ui.theme.MetaSelfTint
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
@@ -60,6 +69,12 @@ fun EvaluatePlanScreen(
     onFill: () -> Unit = {},
     /** D121: Plan the next block. */
     onNextBlock: () -> Unit = {},
+    /** D126: Suggest goals. */
+    onSuggest: () -> Unit = {},
+    /** D126: a suggested goal's card, by its place in the list. */
+    onPick: (Int) -> Unit = {},
+    /** D129: Plan for the trainer's moderated goal instead. */
+    onPlanInstead: () -> Unit = {},
 ) {
     val shown = state.shown
     val planShown = state.planShown
@@ -107,9 +122,10 @@ fun EvaluatePlanScreen(
                     onFill, onNextBlock,
                 )
             }
-            shown == null -> EvaluateForm(state, onChange, onAsk)
+            shown == null -> EvaluateForm(state, onChange, onAsk, onSuggest, onPick)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
+                shown.goalView?.let { GoalViewCard(it, state.today, offerInstead = !state.kept, enabled = !state.writing, onPlanInstead) }
                 state.offered?.let { offered ->
                     // D124: the answer drawn as D118's weeks, with the Month view's outline above them.
                     offered.month?.let { PlanMonthView(it, state.today) }
@@ -152,11 +168,14 @@ private fun EvaluateForm(
     state: EvaluatePlanViewModel.State,
     onChange: (EvaluatePlanViewModel.Form) -> Unit,
     onAsk: () -> Unit,
+    onSuggest: () -> Unit,
+    onPick: (Int) -> Unit,
 ) {
     val form = state.form
     val open = !state.asking
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
         Text(stringResource(R.string.weeks_intro), style = MaterialTheme.typography.bodyMedium)
+        Suggestions(state, onSuggest, onPick)
         GoalRows(form, state.today, open, onChange)
         NumberRow(R.string.weeks_row_per_week, ProgrammeAsk.PER_WEEK.toList(), form.perWeek, { "$it" }, open) {
             onChange(form.copy(perWeek = it))
@@ -185,8 +204,8 @@ private fun EvaluateForm(
 }
 
 /**
- * D119, D124: the goal — Keep a steady rhythm, or A distance by a date; for a distance, what, how far, and by when: the
- * Sunday a whole number of weeks ahead, 6 to 30, moved a week at a time.
+ * D119, D124, D127, D128: the goal — Keep a steady rhythm, One long session, or More time each week; for a distance,
+ * what, how far, and by when; for more time, how many minutes a week (moved by ten) and by when.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -202,13 +221,31 @@ private fun GoalRows(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boo
                 FilterChip(
                     selected = form.goal == choice,
                     onClick = { onChange(form.copy(goal = choice)) },
-                    label = { Text(if (choice == EvaluatePlanViewModel.GoalChoice.STEADY) GoalWording.STEADY else GoalWording.DISTANCE) },
+                    label = { Text(goalChoice(choice)) },
                     enabled = enabled,
                 )
             }
         }
     }
+    if (form.goal == EvaluatePlanViewModel.GoalChoice.MINUTES) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            RowLabel(GoalWording.ROW_MINUTES)
+            Text(GoalWording.minutesLine(form.minutes), style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                OutlinedButton(
+                    onClick = { onChange(form.fewer()) },
+                    enabled = enabled && form.minutes > PlanGoal.WeeklyMinutes.MINUTES.first,
+                ) { Text(GoalWording.FEWER) }
+                OutlinedButton(
+                    onClick = { onChange(form.more()) },
+                    enabled = enabled && form.minutes < PlanGoal.WeeklyMinutes.MINUTES.last,
+                ) { Text(GoalWording.MORE) }
+            }
+        }
+        ByRow(form, today, enabled, onChange)
+    }
     if (form.goal == EvaluatePlanViewModel.GoalChoice.DISTANCE) {
+        Text(GoalWording.DISTANCE_LINE, style = MaterialTheme.typography.bodyMedium)
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             RowLabel(GoalWording.ROW_SPORT)
             FlowRow(
@@ -235,18 +272,98 @@ private fun GoalRows(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boo
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
         )
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            RowLabel(GoalWording.ROW_BY)
-            Text(GoalWording.byLine(GoalWording.byDay(today, form.weeksAhead), today), style = MaterialTheme.typography.bodyLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-                OutlinedButton(
-                    onClick = { onChange(form.earlier()) },
-                    enabled = enabled && form.weeksAhead > EvaluatePlanViewModel.Form.WEEKS_AHEAD.first,
-                ) { Text(GoalWording.EARLIER) }
-                OutlinedButton(
-                    onClick = { onChange(form.later()) },
-                    enabled = enabled && form.weeksAhead < EvaluatePlanViewModel.Form.WEEKS_AHEAD.last,
-                ) { Text(GoalWording.LATER) }
+        ByRow(form, today, enabled, onChange)
+    }
+}
+
+private fun goalChoice(choice: EvaluatePlanViewModel.GoalChoice): String = when (choice) {
+    EvaluatePlanViewModel.GoalChoice.STEADY -> GoalWording.STEADY
+    EvaluatePlanViewModel.GoalChoice.DISTANCE -> GoalWording.DISTANCE
+    EvaluatePlanViewModel.GoalChoice.MINUTES -> GoalWording.MINUTES
+}
+
+/** D119, D127: a dated goal's date — the Sunday a whole number of weeks ahead, 6 to 30, moved a week at a time. */
+@Composable
+private fun ByRow(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boolean, onChange: (EvaluatePlanViewModel.Form) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        RowLabel(GoalWording.ROW_BY)
+        Text(GoalWording.byLine(GoalWording.byDay(today, form.weeksAhead), today), style = MaterialTheme.typography.bodyLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            OutlinedButton(
+                onClick = { onChange(form.earlier()) },
+                enabled = enabled && form.weeksAhead > EvaluatePlanViewModel.Form.WEEKS_AHEAD.first,
+            ) { Text(GoalWording.EARLIER) }
+            OutlinedButton(
+                onClick = { onChange(form.later()) },
+                enabled = enabled && form.weeksAhead < EvaluatePlanViewModel.Form.WEEKS_AHEAD.last,
+            ) { Text(GoalWording.LATER) }
+        }
+    }
+}
+
+/**
+ * D126: Suggest goals — the outlined button, what it sends, a failure, and the cards. A card says its title, its goal
+ * line, sessions a week and why; tapping it fills the form, and it reads "Chosen" (so the choice is not only a colour).
+ */
+@Composable
+private fun Suggestions(state: EvaluatePlanViewModel.State, onSuggest: () -> Unit, onPick: (Int) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        OutlinedButton(onClick = onSuggest, enabled = !state.suggesting && !state.asking, modifier = Modifier.fillMaxWidth()) {
+            Text(if (state.suggesting) GoalWording.SUGGESTING else GoalWording.SUGGEST)
+        }
+        Text(
+            TrainerWording.privacySuggest(state.ceiling),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        state.suggestFailure?.let { Text(TrainerWording.failure(it), color = MaterialTheme.colorScheme.error) }
+        state.suggestions.forEachIndexed { index, suggestion ->
+            val chosen = state.chosen == index
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(selected = chosen, enabled = !state.asking, role = Role.Button, onClick = { onPick(index) }),
+                colors = if (chosen) {
+                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                } else {
+                    CardDefaults.outlinedCardColors()
+                },
+                border = if (chosen) null else CardDefaults.outlinedCardBorder(),
+            ) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+                    Text(suggestion.title, style = MaterialTheme.typography.titleMedium)
+                    GoalWording.goalLine(suggestion.goal, state.today)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                    Text(GoalWording.perWeek(suggestion.perWeek), style = MaterialTheme.typography.bodyMedium)
+                    Text(suggestion.why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (chosen) Text(GoalWording.CHOSEN, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * D129: the trainer's stand on the goal, above the evaluation — what it says, tinted when it judges the goal too big
+ * (the words carry the judgement; the tint only adds to them), and, when it gave one, Plan for its goal instead.
+ */
+@Composable
+private fun GoalViewCard(view: GoalView, today: Long, offerInstead: Boolean, enabled: Boolean, onPlanInstead: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = if (GoalWording.cautions(view.verdict)) {
+            CardDefaults.cardColors(containerColor = MetaSelfTint.caution, contentColor = MaterialTheme.colorScheme.onSurface)
+        } else {
+            CardDefaults.cardColors()
+        },
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(GoalWording.GOAL_VIEW, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(view.says, style = MaterialTheme.typography.bodyLarge)
+            val instead = view.instead
+            if (instead != null && offerInstead) {
+                OutlinedButton(onClick = onPlanInstead, enabled = enabled, modifier = Modifier.fillMaxWidth()) {
+                    Text(GoalWording.planInstead(instead, today))
+                }
             }
         }
     }

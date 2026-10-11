@@ -80,7 +80,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
                 TrainerPath.PLAN -> plan.answers()?.let { TrainerWorkbench.Inputs.Plan(it) }
                 TrainerPath.EVALUATE -> evaluate.steady()?.let { TrainerWorkbench.Inputs.Evaluate(it) }
                 TrainerPath.ADJUST -> if (planRuns) TrainerWorkbench.Inputs.Adjust(adjustWords) else null
-                TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK -> null
+                TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS -> null
             }
 
         val canSend: Boolean get() = loaded && !sending && inputs != null

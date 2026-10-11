@@ -15,6 +15,8 @@ import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.CountedPlan
 import com.metaself.app.domain.trainer.DatedEvaluation
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.GoalSuggestion
+import com.metaself.app.domain.trainer.RunningGoal
 import com.metaself.app.domain.trainer.LastEvaluation
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanCard
@@ -108,6 +110,12 @@ class AskTheTrainer @Inject constructor(
 
         /** Nothing to fill in, or no next block to plan, today: nothing was asked. */
         data object NotOffered : Filled
+    }
+
+    /** D126: the trainer's suggested goals — not stored; they live while the form is open. */
+    sealed interface Suggestions {
+        data class Offered(val suggestions: List<GoalSuggestion>) : Suggestions
+        data class Failed(val failure: EstimateResult) : Suggestions
     }
 
     sealed interface Reviewed {
@@ -213,6 +221,19 @@ class AskTheTrainer @Inject constructor(
      */
     suspend fun planAhead(ask: PlanAheadAsk): Evaluated = evaluate(ask.toAsk(planStart()))
 
+    /**
+     * D126: Suggest goals — one ask, only when tapped (D84), with what the form holds. Nothing is stored but the
+     * answer's week_note (D116).
+     */
+    suspend fun suggestGoals(perWeek: Int?, words: String): Suggestions =
+        when (val reply = trainer.suggestGoals(request(suggestGoalsQuestion(perWeek, words)))) {
+            is TrainerReply.Failed -> Suggestions.Failed(reply.failure)
+            is TrainerReply.Answered -> {
+                keepNote(reply.weekNote)
+                Suggestions.Offered(reply.value)
+            }
+        }
+
     /** The Monday an answer kept today starts on: next Monday while a plan runs (D124), else D94's. Reads only. */
     private suspend fun planStart(): Long = replacingFrom() ?: ProgrammeCalendar.startFor(today().toEpochDay())
 
@@ -222,7 +243,7 @@ class AskTheTrainer @Inject constructor(
             is TrainerReply.Failed -> Evaluated.Failed(reply.failure)
             is TrainerReply.Answered -> {
                 keepNote(reply.weekNote)
-                val programme = Programme(0, now(), ask, reply.value.evaluation, reply.value.plan, reply.model)
+                val programme = Programme(0, now(), ask, reply.value.evaluation, reply.value.plan, reply.model, goalView = reply.value.goalView)
                 Evaluated.Offered(programme.copy(id = programmes.add(programme)))
             }
         }
@@ -518,7 +539,7 @@ class AskTheTrainer @Inject constructor(
         val evaluated = Programmes.evaluatedOf(programme, programmes.all()) ?: return null
         val evaluation = evaluated.evaluation ?: return null
         val made = Instant.ofEpochMilli(evaluated.createdAtMillis).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
-        return DatedEvaluation(evaluation, made)
+        return DatedEvaluation(evaluation, made, evaluated.goalView)
     }
 
     // The question builders. The asks above and the workbench (D106) build their questions here and only
@@ -545,6 +566,13 @@ class AskTheTrainer @Inject constructor(
 
     /** D124: Plan ahead's question, its weeks counted from where the plan would start. */
     suspend fun planAheadQuestion(ask: PlanAheadAsk): TrainerQuestion.Evaluate = evaluateQuestion(ask.toAsk(planStart()))
+
+    /** D126: the form's sessions a week and words, how past planned weeks went, and the running plan's goal and outline. */
+    suspend fun suggestGoalsQuestion(perWeek: Int?, words: String): TrainerQuestion.SuggestGoals =
+        TrainerQuestion.SuggestGoals(
+            perWeek, words.trim(), planStart(), lastEvaluation(today().toEpochDay()),
+            running()?.programme?.let { RunningGoal(it.ask.goal, it.plan.outline) },
+        )
 
     /** D121: the week [PlanFilling] offers to fill in today, with how the weeks before it went; null when none. */
     suspend fun fillQuestion(): TrainerQuestion.FillWeek? = adjustable()?.let { fillQuestion(it) }

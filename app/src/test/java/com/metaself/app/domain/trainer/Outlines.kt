@@ -9,6 +9,9 @@ import com.metaself.app.domain.day.TEST_EPOCH_DAY
  */
 val GOAL_15K = PlanGoal.Distance(GoalSport.RUN, 15.0, TEST_EPOCH_DAY + 101L)
 
+/** D127: the time-goal fixture — **150 min a week by the same Sunday**, 13 December 2026. Invented and round. */
+val GOAL_150_MIN = PlanGoal.WeeklyMinutes(150, TEST_EPOCH_DAY + 101L)
+
 /** One week's target; every fourth week of a block easier. */
 fun target(minutes: Int, longest: Int, easier: Boolean = false) = WeekTarget(minutes, longest, easier)
 

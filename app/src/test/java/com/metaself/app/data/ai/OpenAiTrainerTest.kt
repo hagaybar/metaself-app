@@ -185,6 +185,17 @@ class OpenAiTrainerTest {
         assertThat((bad as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreadable::class.java)
     }
 
+    /** D126: suggesting goals is one call under its own schema, each suggestion checked against today. */
+    @Test
+    fun `suggesting goals is one call under its own schema`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_SUGGESTIONS)))
+
+        val reply = trainer().suggestGoals(SUGGEST_REQUEST)
+
+        assertThat((reply as TrainerReply.Answered).value.single().goal).isEqualTo(PlanGoal.Steady)
+        assertThat(server.takeRequest().body.readUtf8()).contains("goal_suggestions")
+    }
+
     @Test
     fun `the next block is one call under its own schema`() = runTest {
         server.enqueue(MockResponse().setBody(reply(GOOD_BLOCK)))
@@ -324,6 +335,11 @@ class OpenAiTrainerTest {
             "Invented.",
             OUTLINE_15,
         )
+
+        val SUGGEST_REQUEST = request(TrainerQuestion.SuggestGoals(3, "", TEST_EPOCH_DAY + 4, null, null))
+
+        const val GOOD_SUGGESTIONS =
+            """{"suggestions":[{"title":"Invented title","goal":{"kind":"steady"},"per_week":3,"why":"Invented why."}],"week_note":""}"""
 
         val FILL_REQUEST = request(
             TrainerQuestion.FillWeek(ProgrammeAsk(15, 2, goal = GOAL_15K), TEST_EPOCH_DAY - 3, OUTLINED, week = 1, weekIndex = 0, doneByWeek = emptyList(), howItWent = emptyList()),

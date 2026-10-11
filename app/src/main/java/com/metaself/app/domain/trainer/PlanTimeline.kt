@@ -123,7 +123,7 @@ data class PlanTimeline(
 }
 
 /** D93, D117: an evaluation with the day it was made, for "WHERE YOU STOOD". */
-data class DatedEvaluation(val evaluation: Evaluation, val epochDay: Long)
+data class DatedEvaluation(val evaluation: Evaluation, val epochDay: Long, val goalView: GoalView? = null)
 
 /**
  * D117: what the plan screen draws — the plan as its weeks, the running plan's card behind its buttons (null

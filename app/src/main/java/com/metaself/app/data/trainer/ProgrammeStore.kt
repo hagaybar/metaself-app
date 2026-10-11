@@ -111,12 +111,14 @@ fun TrainerProgrammeEntity.toProgramme(): Programme? {
     val readPlan = TrainerResponse.readWeeksPlan(plan) ?: return null
     val readEvaluation = if (evaluation == null) null else TrainerResponse.readEvaluation(evaluation) ?: return null
     val readStatus = ProgrammeStatus.entries.firstOrNull { it.name == status } ?: return null
-    return Programme(id, createdAtMillis, ask, readEvaluation, readPlan, model, startEpochDay, readStatus, stoppedEpochDay, replacesId)
+    // D129: a stand that does not read is no stand; the evaluation and its plan still read.
+    val goalView = evaluation?.let(TrainerResponse::readGoalView)
+    return Programme(id, createdAtMillis, ask, readEvaluation, readPlan, model, startEpochDay, readStatus, stoppedEpochDay, replacesId, goalView)
 }
 
 fun Programme.toEntity(): TrainerProgrammeEntity = TrainerProgrammeEntity(
     id = id, createdAtMillis = createdAtMillis, weeks = ask.weeks, perWeek = ask.perWeek,
-    words = ask.words.trim().ifEmpty { null }, evaluation = evaluation?.let(TrainerResponse::encodeEvaluation),
+    words = ask.words.trim().ifEmpty { null }, evaluation = evaluation?.let { TrainerResponse.encodeStoredEvaluation(it, goalView) },
     plan = TrainerResponse.encodeStoredWeeksPlan(plan, ask.goal), model = model, startEpochDay = startEpochDay,
     status = status.name, stoppedEpochDay = stoppedEpochDay, replacesId = replacesId,
 )

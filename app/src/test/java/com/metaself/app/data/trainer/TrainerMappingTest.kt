@@ -3,6 +3,15 @@ package com.metaself.app.data.trainer
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.TrainerResponse
 import com.metaself.app.domain.trainer.Feedback
+import com.metaself.app.domain.trainer.Evaluation
+import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GOAL_150_MIN
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.PlanActivity
@@ -18,6 +27,20 @@ import org.junit.jupiter.api.Test
 
 /** The trainer's rows and the domain, both ways (D88). Every title, sentence and figure is invented. */
 class TrainerMappingTest {
+
+    /** D129: the trainer's stand on the goal is stored with the evaluation and read back; an older row has none. */
+    @Test
+    fun `a plan's goal_view is stored with its evaluation and reads back`() {
+        val programme = Programme(
+            4, 1_000, ProgrammeAsk(15, 3, goal = GOAL_15K), Evaluation("Invented headline", "Invented.", "Invented.", ""),
+            WeeksPlan("Invented plan", List(15) { PlanWeek("", emptyList()) }, "Invented reason."), "a-model",
+            goalView = GoalView(GoalVerdict.TOO_BIG, "Invented stand.", GOAL_150_MIN),
+        )
+
+        assertThat(programme.toEntity().toProgramme()).isEqualTo(programme)
+        val older = programme.toEntity().copy(evaluation = TrainerResponse.encodeEvaluation(programme.evaluation!!))
+        assertThat(older.toProgramme()).isEqualTo(programme.copy(goalView = null))
+    }
 
     @Test
     fun `a stored plan reads back with its answers and its suggestion`() {

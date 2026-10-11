@@ -32,6 +32,8 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.GOAL_150_MIN
+import com.metaself.app.domain.trainer.RunningGoal
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.STEADY_OUTLINE
 import com.metaself.app.domain.trainer.ProgrammeStatus
@@ -713,6 +715,109 @@ class TrainerPromptTest {
         )
         assertThat(block.getValue("kind").jsonPrimitive.content).isEqualTo("next_block")
         assertThat(block.getValue("goal").jsonObject.getValue("kind").jsonPrimitive.content).isEqualTo("steady")
+    }
+
+    /** D127: a time goal is sent as stored — minutes and by — with the weeks to go counted by the phone. */
+    @Test
+    fun `a time goal is sent with its minutes, its date and its weeks to go`() {
+        val request = request(TrainerQuestion.Evaluate(ProgrammeAsk(15, 3, goal = GOAL_150_MIN), TEST_EPOCH_DAY - 3, null))
+        val question = Json.parseToJsonElement(TrainerPrompt.userMessage(request)).jsonObject.getValue("question").jsonObject
+        val goal = question.getValue("goal").jsonObject
+
+        assertThat(goal.keys).containsExactly("kind", "minutes", "by", "weeks_to_go").inOrder()
+        assertThat(goal.getValue("kind").jsonPrimitive.content).isEqualTo("weekly_minutes")
+        assertThat(goal.getValue("minutes").jsonPrimitive.int).isEqualTo(150)
+        assertThat(goal.getValue("by").jsonPrimitive.content).isEqualTo("2026-12-13")
+        assertThat(goal.getValue("weeks_to_go").jsonPrimitive.int).isEqualTo(14)
+        assertThat(TrainerPrompt.goalJson(GOAL_150_MIN).keys).containsExactly("kind", "minutes", "by").inOrder()
+    }
+
+    /** D129: Plan ahead's instructions take a stand on the goal; no other path's do. Its schema requires goal_view. */
+    @Test
+    fun `Plan ahead's instructions take a stand on the goal`() {
+        val system = TrainerPrompt.instructions(TrainerPath.EVALUATE)
+        assertThat(system).contains(TrainerPrompt.GOAL_VIEW)
+        assertThat(TrainerPrompt.GOAL_VIEW).contains("Take a stand on the goal before you plan for it.")
+        assertThat(TrainerPrompt.GOAL_VIEW).contains("Be plain rather than polite about a big jump, and never pretend an unrealistic goal is fine.")
+        assertThat(TrainerPrompt.GOAL_VIEW).contains("The plan is still for the goal as asked: they decide.")
+        TrainerPath.entries.filter { it != TrainerPath.EVALUATE }.forEach { assertThat(TrainerPrompt.instructions(it)).doesNotContain(TrainerPrompt.GOAL_VIEW) }
+        val schema = Json.parseToJsonElement(TrainerPrompt.evaluateBody("a-model", evaluateRequest(), RequestProfile.DETERMINISTIC)).jsonObject
+            .getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
+        assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).contains("goal_view")
+        val view = schema.getValue("properties").jsonObject.getValue("goal_view").jsonObject
+        assertThat(view.getValue("required").jsonArray.map { it.jsonPrimitive.content }).containsExactly("verdict", "says", "instead").inOrder()
+    }
+
+    /** D128: the plan paths, and suggesting goals, are told a distance goal is one session, not a total. */
+    @Test
+    fun `a distance goal is told as one session of that distance`() {
+        listOf(TrainerPath.EVALUATE, TrainerPath.ADJUST, TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS).forEach { path ->
+            assertThat(TrainerPrompt.instructions(path)).contains("A distance goal is one session of that distance, not a total over the weeks.")
+        }
+    }
+
+    /** D127: the plan paths are told how to build towards a time goal — reached in its week and held, no taper. */
+    @Test
+    fun `the plan paths carry the time goal's rule`() {
+        listOf(TrainerPath.EVALUATE, TrainerPath.ADJUST, TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK).forEach { path ->
+            val system = TrainerPrompt.instructions(path)
+            assertThat(system).contains("weekly_minutes")
+            assertThat(system).contains("reaching it in the goal's week and holding it there")
+            assertThat(system).contains("no taper, there is no race")
+        }
+    }
+
+    // --- D126: suggesting goals. Every figure is invented. ----------------------------------------------------
+
+    /** D126: the ask carries the ledgers, the form's words and sessions a week, the window, the running goal and outline. */
+    @Test
+    fun `a suggest-goals request carries the form, the window, the running goal and the last evaluation`() {
+        val request = request(
+            TrainerQuestion.SuggestGoals(3, " Invented words. ", TEST_EPOCH_DAY + 4, LAST, RunningGoal(GOAL_15K, OUTLINE_15)),
+        )
+        val body = Json.parseToJsonElement(TrainerPrompt.suggestGoalsBody("a-model", request, RequestProfile.DETERMINISTIC)).jsonObject
+        val user = Json.parseToJsonElement(userContent(body)).jsonObject
+        val question = user.getValue("question").jsonObject
+
+        assertThat(user.getValue("weeks").jsonArray).hasSize(6)
+        assertThat(question.keys).containsExactly(
+            "kind", "sessions_a_week", "words", "starts", "earliest_by", "latest_by", "running_plan", "last_evaluation",
+        ).inOrder()
+        assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("suggest_goals")
+        assertThat(question.getValue("sessions_a_week").jsonPrimitive.int).isEqualTo(3)
+        assertThat(question.getValue("words").jsonPrimitive.content).isEqualTo("Invented words.")
+        assertThat(question.getValue("earliest_by").jsonPrimitive.content).isEqualTo("2026-10-18")
+        assertThat(question.getValue("latest_by").jsonPrimitive.content).isEqualTo("2027-04-04")
+        val running = question.getValue("running_plan").jsonObject
+        assertThat(running.getValue("goal").jsonObject.getValue("weeks_to_go").jsonPrimitive.int).isEqualTo(14)
+        assertThat(running.getValue("outline").jsonObject.getValue("blocks").jsonArray).hasSize(4)
+        assertThat(question.getValue("last_evaluation").jsonObject.keys).contains("how_it_went")
+        assertThat(systemContent(TrainerPrompt.suggestGoalsBody("a-model", request, RequestProfile.DETERMINISTIC)))
+            .isEqualTo(TrainerPrompt.instructions(TrainerPath.SUGGEST_GOALS))
+        val schema = body.getValue("response_format").jsonObject.getValue("json_schema").jsonObject.getValue("schema").jsonObject
+        assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).containsExactly("suggestions", "week_note")
+
+        val empty = Json.parseToJsonElement(
+            TrainerPrompt.userMessage(request(TrainerQuestion.SuggestGoals(null, "", TEST_EPOCH_DAY + 4, null, null))),
+        ).jsonObject.getValue("question").jsonObject
+        assertThat(empty.getValue("sessions_a_week")).isEqualTo(JsonNull)
+        assertThat(empty.getValue("running_plan")).isEqualTo(JsonNull)
+        assertThat(empty.getValue("last_evaluation")).isEqualTo(JsonNull)
+    }
+
+    /** D126: three goals of differing kind, fitted to both ledgers, words first, within the conventions; not on the workbench. */
+    @Test
+    fun `the suggest-goals instructions ask for three goals of differing kind`() {
+        val system = TrainerPrompt.instructions(TrainerPath.SUGGEST_GOALS)
+
+        assertThat(system).contains("Suggest exactly three goals")
+        assertThat(system).contains("they differ in kind")
+        assertThat(system).contains("parts of each week counted")
+        assertThat(system).contains("they weigh more than the record")
+        assertThat(system).contains("a title of at most eight words")
+        assertThat(system).contains("No figure the app did not count")
+        assertThat(system).contains(TrainerPrompt.CONVENTIONS)
+        assertThat(TrainerPath.WORKBENCH).doesNotContain(TrainerPath.SUGGEST_GOALS)
     }
 
     /** D125: the conventions go to the four plan paths, labelled as conventions; never to a session or its feedback. */
