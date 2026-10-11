@@ -16,7 +16,7 @@ import javax.inject.Inject
  * The scheduled backup's Drive half: the daily file, then the detailed readings' months (D71) — a second call, so a
  * failed month never costs the daily file, and the daily file's failure never stops the months.
  *
- * **D139: a backup that fails for want of a connection is one line**, "no connection at 06:58; the next backup tries
+ * **D139: a backup that fails for want of a connection is one line**, "no connection at HH:mm; the next backup tries
  * again", and the months are not tried: they would fail the same way and say so a second time. Nothing is lost by
  * waiting — the daily file is a whole export, so the next one carries everything this one would have, and a month not
  * sent stays out of date until one is. Only that one day's dated file is never written.
