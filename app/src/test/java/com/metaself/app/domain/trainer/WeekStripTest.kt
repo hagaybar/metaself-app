@@ -3,6 +3,7 @@ package com.metaself.app.domain.trainer
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
+import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
@@ -116,6 +117,26 @@ class WeekStripTest {
         assertThat(ledger.minutes).isEqualTo(90)
         assertThat(ledger.sessions).isEqualTo(3)
         assertThat(week(emptyList(), emptyList()).ledger.sessions).isEqualTo(0)
+    }
+
+    /**
+     * D132: the strip card's movement — the ledger's sessions, this week's km to today, and the four weeks
+     * before it as Movement's "Last four weeks" counts them. 3 + 4 km this week; 10 + 6 km in two of the four
+     * weeks before; a day five weeks back is not among them. Invented.
+     */
+    @Test
+    fun `the movement summary is the ledger's sessions, this week's km and the four weeks before`() {
+        val days = listOf(
+            HealthDay(monday, distanceM = 3_000), HealthDay(TEST_EPOCH_DAY, distanceM = 4_000),
+            HealthDay(monday - 1, distanceM = 10_000), HealthDay(monday - 22, distanceM = 6_000),
+            HealthDay(monday - 29, distanceM = 99_000),
+        )
+        val sessions = listOf(session(1, monday), session(2, monday + 1, WorkoutKind.SWIM, minutes = 30))
+
+        val summary = TrainerWeek.of(monday, TEST_EPOCH_DAY, sessions, days, emptyMap(), targetKcal = null, plans = listOf(kept(plan(walk30)))).movement
+
+        assertThat(summary).isEqualTo(MovementSummary(sessions = 2, distanceM = 7_000, fourWeeksM = 16_000))
+        assertThat(week(emptyList(), emptyList()).movement).isEqualTo(MovementSummary(0, null, null))
     }
 
     private fun week(workouts: List<Workout>, plans: List<CountedPlan>) =

@@ -48,10 +48,24 @@ data class WeekStrip(val monday: Long, val today: Long, val days: List<StripDay>
     }
 }
 
-/** D114: this week as the Trainer page shows it — its ledger (D110) and its strip, counted from one read. */
-data class TrainerWeek(val ledger: WeekLedger, val strip: WeekStrip) {
+/**
+ * D132: the strip card's movement line — the ledger's counted [sessions] (D115), this week's km to today
+ * ([distanceM]), and the four weeks before this one ([fourWeeksM]) as Movement's "Last four weeks" counts them.
+ * Each distance is null when no day has one; a null is never zero.
+ */
+data class MovementSummary(val sessions: Int, val distanceM: Int?, val fourWeeksM: Int?)
+
+/**
+ * D114: this week as the Trainer page shows it — its ledger (D110) and its strip, counted from one read — and
+ * its movement (D132), counted by Movement's own functions.
+ */
+data class TrainerWeek(val ledger: WeekLedger, val strip: WeekStrip, val movement: MovementSummary) {
     companion object {
-        /** [WeekLedgers.of]'s arguments; the strip is counted from the same practice. */
+        /**
+         * [WeekLedgers.of]'s arguments; the strip is counted from the same practice. [days] must reach back
+         * [MovementWeek.PREVIOUS_WEEKS] weeks before [monday] for the four weeks' km (the ledger's usuals read
+         * as far).
+         */
         fun of(
             monday: Long,
             today: Long,
@@ -60,9 +74,17 @@ data class TrainerWeek(val ledger: WeekLedger, val strip: WeekStrip) {
             food: Map<Long, DayTotals>,
             targetKcal: Int?,
             plans: List<CountedPlan>,
-        ): TrainerWeek = TrainerWeek(
-            WeekLedgers.of(monday, today, workouts, days, food, targetKcal, plans),
-            WeekStrip.of(monday, today, workouts, WeekLedgers.practiceOf(monday, today, workouts, plans)),
-        )
+        ): TrainerWeek {
+            val ledger = WeekLedgers.of(monday, today, workouts, days, food, targetKcal, plans)
+            return TrainerWeek(
+                ledger,
+                WeekStrip.of(monday, today, workouts, WeekLedgers.practiceOf(monday, today, workouts, plans)),
+                MovementSummary(
+                    sessions = ledger.sessions,
+                    distanceM = MovementWeek.distanceOf(days, monday, minOf(today, monday + 6)),
+                    fourWeeksM = MovementWeek.fourWeeks(MovementWeek.previousWeeksOf(days, monday)),
+                ),
+            )
+        }
     }
 }

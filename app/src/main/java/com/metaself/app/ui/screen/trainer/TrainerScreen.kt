@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.MainAction
+import com.metaself.app.domain.trainer.MovementSummary
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.TrainerHome
 import com.metaself.app.domain.trainer.WeekLedger
@@ -106,7 +107,7 @@ fun TrainerScreen(
             else -> {
                 state.week?.let { week ->
                     WeekHeader(week.strip.monday, week.ledger)
-                    StripCard(week.strip, home.plan, state.answering, state.refused, onMovement, onAnswer)
+                    StripCard(week.strip, week.movement, home.plan, state.answering, state.refused, onMovement, onAnswer)
                     val boxes = TrainerWeekWording.boxes(week.ledger)
                     if (boxes.isNotEmpty()) Boxes(boxes)
                 }
@@ -141,13 +142,15 @@ private fun WeekHeader(monday: Long, ledger: WeekLedger) {
 }
 
 /**
- * D114 item 2: the strip, its day letters and legend — one tap target, which opens Movement — then the
- * shorter-session question (D105) for each planned session this week holding one, with Yes and No.
+ * D114 item 2, D132 item 1: the strip, its day letters, the week's movement line ending "Days ›", and the legend —
+ * one tap target, which opens Your movement on this week — then the shorter-session question (D105) for each
+ * planned session this week holding one, with Yes and No.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StripCard(
     strip: WeekStrip,
+    movement: MovementSummary,
     plan: PlanCard,
     answering: Set<Long>,
     refused: ActionRefused?,
@@ -165,6 +168,7 @@ private fun StripCard(
             ) {
                 Strip(strip)
                 DayLetters(strip)
+                MovementLine(movement)
                 FlowRow(
                     modifier = Modifier.padding(top = Spacing.Tight),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.Section),
@@ -258,6 +262,25 @@ private fun OpenBlock(minutes: Int, height: Dp) {
 
 private fun blockHeight(minutes: Int, scale: Int, full: Dp): Dp =
     WeekStrip.height(minutes, scale, full.value, LEAST_BLOCK.value).dp
+
+/** D132 item 1: "6 sessions · 21.4 km · 4 weeks: 78.0 km" (invented), each part only with something to say, then "Days ›". */
+@Composable
+private fun MovementLine(movement: MovementSummary) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = Spacing.Tight),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val line = TrainerWeekWording.movementLine(movement)
+        if (line != null) {
+            Text(line, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+        // Ink, not the green: the theme's green on a card is under the text floor (as "To do"'s label).
+        Text(TrainerWeekWording.DAYS, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
 
 /** M T W T F S S, and "To do": today's letter bold. */
 @Composable

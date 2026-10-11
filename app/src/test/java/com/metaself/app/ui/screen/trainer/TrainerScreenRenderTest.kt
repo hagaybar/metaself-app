@@ -167,12 +167,35 @@ class TrainerScreenRenderTest {
     }
 
     @Test
-    fun `the strip opens Movement`() {
+    fun `the strip opens Your movement`() {
         var opened = false
         draw(page(workouts = listOf(walk(1, MONDAY))), onMovement = { opened = true })
 
         render.clickDescribed(TrainerWeekWording.STRIP)
         assertThat(opened).isTrue()
+    }
+
+    /**
+     * D132 item 1: under the day letters and above the legend, this week's sessions and km and the four weeks'
+     * — two 3 km walks; 5 km on a day two weeks back — then "Days ›"; tapping it opens Your movement. Invented.
+     */
+    @Test
+    fun `the strip card says the week's movement, and the line opens Your movement`() {
+        var opened = 0
+        val days = listOf(HealthDay(MONDAY, distanceM = 6_000), HealthDay(MONDAY - 10, distanceM = 5_000))
+        val texts = draw(page(workouts = listOf(walk(1, MONDAY), walk(2, MONDAY + 1)), days = days), onMovement = { opened++ })
+
+        assertThat(texts).containsAtLeast("S", "2 sessions · 6.0 km · 4 weeks: 5.0 km", "Days ›", "Sessions").inOrder()
+        render.click("2 sessions · 6.0 km")
+        assertThat(opened).isEqualTo(1)
+    }
+
+    @Test
+    fun `with nothing to say, the line is only Days`() {
+        val texts = draw(page())
+
+        assertThat(texts).contains("Days ›")
+        assertThat(texts.none { Regex("^\\d+ sessions?").containsMatchIn(it) || it.contains("4 weeks") }).isTrue()
     }
 
     /** D114: the day letters always; "To do" and its minutes only with planned sessions open; the legend follows the plan. */

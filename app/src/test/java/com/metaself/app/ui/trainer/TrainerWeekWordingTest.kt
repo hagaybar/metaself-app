@@ -6,6 +6,7 @@ import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.BeyondPlan
 import com.metaself.app.domain.trainer.FoodContext
 import com.metaself.app.domain.trainer.KindLedger
+import com.metaself.app.domain.trainer.MovementSummary
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanWeek
@@ -169,6 +170,16 @@ class TrainerWeekWordingTest {
         const val MINUTE = 60_000L
         const val HOUR = 60 * MINUTE
         const val DAY = 24 * HOUR
+    }
+
+    /** D132: "6 sessions · 21.4 km · 4 weeks: 78.0 km" (invented), each part left out with nothing to say. */
+    @Test
+    fun `the movement line says the sessions, the week's km and the four weeks'`() {
+        assertThat(TrainerWeekWording.movementLine(MovementSummary(6, 21_400, 78_000))).isEqualTo("6 sessions · 21.4 km · 4 weeks: 78.0 km")
+        assertThat(TrainerWeekWording.movementLine(MovementSummary(1, null, 78_000))).isEqualTo("1 session · 4 weeks: 78.0 km")
+        assertThat(TrainerWeekWording.movementLine(MovementSummary(0, 21_400, null))).isEqualTo("21.4 km")
+        assertThat(TrainerWeekWording.movementLine(MovementSummary(0, null, null))).isNull()
+        assertThat(TrainerWeekWording.DAYS).isEqualTo("Days ›")
     }
 
     private fun walks(sessions: Int, minutes: Int) = KindLedger(WorkoutKind.WALK, sessions, minutes, null, null, emptyList())
