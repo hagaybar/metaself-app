@@ -3,6 +3,7 @@ package com.metaself.app.domain.trainer
 import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.WeekSessions
 import com.metaself.app.domain.movement.Workout
 
 /** D114: one counted session on the week strip; [ticked] when it ticked a planned session (the ledger's practice). */
@@ -33,9 +34,7 @@ data class WeekStrip(val monday: Long, val today: Long, val days: List<StripDay>
         fun of(monday: Long, today: Long, workouts: List<Workout>, practice: WeekProgress?): WeekStrip {
             require(MovementWeek.mondayOf(monday) == monday) { "not a Monday: $monday" }
             val ticked = practice?.ticks.orEmpty().mapNotNull { it.by?.id }.toSet()
-            val sessions = workouts
-                .filter { !it.hidden && it.counted && it.epochDay in monday..minOf(today, monday + 6) }
-                .sortedBy { it.startedAtMillis }
+            val sessions = WeekSessions.of(workouts, monday, today)
             val days = (0..6).map { offset ->
                 val day = monday + offset
                 StripDay(day, sessions.filter { it.epochDay == day }.map { StripBlock(it.id, it.durationMinutes, it.id in ticked) })

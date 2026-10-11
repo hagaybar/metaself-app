@@ -87,7 +87,7 @@ class MovementWeekTest {
     }
 
     @Test
-    fun `hidden workouts are left out of the count, the time and the day`() {
+    fun `hidden workouts are left out of the count, the minutes and the day`() {
         val workouts = listOf(
             workout(20_699, minutes = 30),
             workout(20_699, minutes = 45, hidden = true),
@@ -96,8 +96,8 @@ class MovementWeekTest {
 
         val week = MovementWeek.of(today, emptyList(), workouts, emptyMap())
 
-        assertThat(week.workoutCount).isEqualTo(2)
-        assertThat(week.workoutMinutes).isEqualTo(90)
+        assertThat(week.sessions).isEqualTo(2)
+        assertThat(week.minutes).isEqualTo(90)
         assertThat(week.days.first().workouts.map { it.durationMinutes }).containsExactly(30)
     }
 
@@ -105,13 +105,13 @@ class MovementWeekTest {
     fun `a workout before Monday is not this week's`() {
         val week = MovementWeek.of(today, emptyList(), listOf(workout(20_695, minutes = 60)), emptyMap())
 
-        assertThat(week.workoutCount).isEqualTo(0)
-        assertThat(week.workoutMinutes).isEqualTo(0)
+        assertThat(week.sessions).isEqualTo(0)
+        assertThat(week.minutes).isEqualTo(0)
     }
 
-    /** D78: walks are counted apart from workouts; the time is every session's. Invented minutes. */
+    /** D131: a walk is a session like any other; the minutes are every visible session's. Invented minutes. */
     @Test
-    fun `walks are counted apart from workouts, and the time is every session's`() {
+    fun `walks count as sessions, and the minutes are every session's`() {
         val workouts = listOf(
             workout(20_699, minutes = 30),
             workout(20_698, minutes = 45),
@@ -121,14 +121,13 @@ class MovementWeekTest {
 
         val week = MovementWeek.of(today, emptyList(), workouts, emptyMap())
 
-        assertThat(week.workoutCount).isEqualTo(2)
-        assertThat(week.walkCount).isEqualTo(1)
-        assertThat(week.workoutMinutes).isEqualTo(135)
+        assertThat(week.sessions).isEqualTo(3)
+        assertThat(week.minutes).isEqualTo(135)
     }
 
-    /** D81: a walk from an app switched off is left out as a hidden session is: rows, counts and time. */
+    /** D81: a walk from an app switched off is left out as a hidden session is: rows, count and minutes. */
     @Test
-    fun `a walk that does not count is left out of the rows, the counts and the time`() {
+    fun `a walk that does not count is left out of the rows, the count and the minutes`() {
         val workouts = listOf(
             workout(20_699, minutes = 30),
             workout(20_699, minutes = 40, kind = WorkoutKind.WALK, counted = false),
@@ -137,9 +136,8 @@ class MovementWeekTest {
 
         val week = MovementWeek.of(today, emptyList(), workouts, emptyMap())
 
-        assertThat(week.workoutCount).isEqualTo(1)
-        assertThat(week.walkCount).isEqualTo(1)
-        assertThat(week.workoutMinutes).isEqualTo(80)
+        assertThat(week.sessions).isEqualTo(2)
+        assertThat(week.minutes).isEqualTo(80)
         assertThat(week.days.first().workouts.map { it.durationMinutes }).containsExactly(30)
     }
 
@@ -196,6 +194,15 @@ class MovementWeekTest {
             .containsExactly(10_000, null, 10_000, 2_000).inOrder()
     }
 
+    /** D132: the four weeks' km, as the Trainer's summary says it — the weeks with a distance, summed. */
+    @Test
+    fun `the four weeks' distance is the weeks that have one, summed, and none when none has`() {
+        val days = listOf(day(20_690, distanceM = 10_000), day(20_676, distanceM = 4_000), day(20_668, distanceM = 2_000))
+
+        assertThat(MovementWeek.of(today, days, emptyList(), emptyMap()).fourWeeksM).isEqualTo(16_000)
+        assertThat(MovementWeek.of(today, listOf(day(20_699, distanceM = 1_000)), emptyList(), emptyMap()).fourWeeksM).isNull()
+    }
+
     /** D83: a past week is all seven days, newest first — Sunday down to Monday. */
     @Test
     fun `a past week is its seven days, Sunday first`() {
@@ -232,8 +239,8 @@ class MovementWeekTest {
 
         assertThat(week.distanceM).isEqualTo(5_000)
         assertThat(week.averageActiveKcal).isEqualTo(300)
-        assertThat(week.workoutCount).isEqualTo(1)
-        assertThat(week.workoutMinutes).isEqualTo(40)
+        assertThat(week.sessions).isEqualTo(1)
+        assertThat(week.minutes).isEqualTo(40)
         assertThat(week.days.first().workouts.map { it.durationMinutes }).containsExactly(40)
     }
 
