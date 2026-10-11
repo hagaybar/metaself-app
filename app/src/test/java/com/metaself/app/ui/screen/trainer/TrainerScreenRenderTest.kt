@@ -35,6 +35,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /**
  * JUnit 4 by necessity — Robolectric's runner is JUnit 4.
@@ -73,8 +74,8 @@ class TrainerScreenRenderTest {
 
         val order = listOf(
             "THIS WEEK · MON 31 AUG – SUN 6 SEP", "60 minutes moving this week.", "Planned, done", "Walking, 20 min — count it for this?",
-            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Plan the open walk", "WAITING FOR YOUR WORDS",
-            "Your plan · week 1 of 2", "Weekly letters", "Earlier sessions", "About me",
+            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Log a workout", "Plan the open walk", "WAITING FOR YOUR WORDS",
+            "Your plan · week 1 of 2", "Your movement", "Weekly letters", "Earlier sessions", "About me",
         )
         order.zipWithNext().forEach { (first, second) ->
             assertThat(render.isDrawnBefore(first, second)).isTrue()
@@ -126,6 +127,30 @@ class TrainerScreenRenderTest {
         assertThat(planned).isEqualTo(4)
     }
 
+    /** D132 item 2: Log a workout, outlined, beside the main button — on one row — in each of the main button's cases. */
+    @Test
+    // Tall, because a node scrolled out of the window reports no bounds; only relative geometry is asserted.
+    @Config(qualifiers = "+h8000dp")
+    fun `Log a workout shares the main button's row, and asks for the sheet`() {
+        var logged = 0
+        listOf(
+            page(running = RUNNING) to "Plan the open walk",
+            page(workouts = listOf(walk(1, MONDAY), walk(2, MONDAY + 1)), running = RUNNING) to "Plan my next session",
+            page() to "Plan ahead",
+        ).forEach { (state, main) ->
+            draw(state, onLogWorkout = { logged++ })
+
+            assertThat(render.roleOf("Log a workout")).isEqualTo(Role.Button)
+            assertThat(render.topDp("Log a workout")).isEqualTo(render.topDp(main))
+            assertThat(render.isDrawnBefore("Log a workout", main)).isTrue()
+            render.click("Log a workout")
+        }
+        assertThat(logged).isEqualTo(3)
+        // With Plan ahead, the session's action stays under the row.
+        assertThat(render.topDp("Plan ahead")).isGreaterThan(0)
+        assertThat(render.topDp("Plan my next session")).isGreaterThan(render.topDp("Plan ahead"))
+    }
+
     /** D105: a twenty-minute walk under a thirty-minute place is still asked about, now under the strip. Invented. */
     /** D121: an outlined plan whose week has begun empty — the main button opens the plan page, where it is planned. */
     @Test
@@ -167,12 +192,35 @@ class TrainerScreenRenderTest {
     }
 
     @Test
-    fun `the strip opens Movement`() {
+    fun `the strip opens Your movement`() {
         var opened = false
         draw(page(workouts = listOf(walk(1, MONDAY))), onMovement = { opened = true })
 
         render.clickDescribed(TrainerWeekWording.STRIP)
         assertThat(opened).isTrue()
+    }
+
+    /**
+     * D132 item 1: under the day letters and above the legend, this week's sessions and km and the four weeks'
+     * — two 3 km walks; 5 km on a day two weeks back — then "Days ›"; tapping it opens Your movement. Invented.
+     */
+    @Test
+    fun `the strip card says the week's movement, and the line opens Your movement`() {
+        var opened = 0
+        val days = listOf(HealthDay(MONDAY, distanceM = 6_000), HealthDay(MONDAY - 10, distanceM = 5_000))
+        val texts = draw(page(workouts = listOf(walk(1, MONDAY), walk(2, MONDAY + 1)), days = days), onMovement = { opened++ })
+
+        assertThat(texts).containsAtLeast("S", "2 sessions · 6.0 km · 4 weeks: 5.0 km", "Days ›", "Sessions").inOrder()
+        render.click("2 sessions · 6.0 km")
+        assertThat(opened).isEqualTo(1)
+    }
+
+    @Test
+    fun `with nothing to say, the line is only Days`() {
+        val texts = draw(page())
+
+        assertThat(texts).contains("Days ›")
+        assertThat(texts.none { Regex("^\\d+ sessions?").containsMatchIn(it) || it.contains("4 weeks") }).isTrue()
     }
 
     /** D114: the day letters always; "To do" and its minutes only with planned sessions open; the legend follows the plan. */
@@ -213,6 +261,18 @@ class TrainerScreenRenderTest {
         val none = draw(page())
         assertThat(none.none { it.startsWith("Written ") }).isTrue()
         assertThat(none).doesNotContain(TrainerWording.FROM_TRAINER)
+    }
+
+    /** D132 item 3: after Your plan, a row with its own line, opening Your movement on this week. */
+    @Test
+    fun `the Your movement row, with its line, opens Your movement`() {
+        var opened = 0
+        val texts = draw(page(running = RUNNING), onMovement = { opened++ })
+
+        assertThat(texts).containsAtLeast("Your plan · week 1 of 2", "Your movement", "Day by day, earlier weeks, import a file", "Weekly letters").inOrder()
+        assertThat(render.roleOf("Your movement")).isEqualTo(Role.Button)
+        render.click("Your movement")
+        assertThat(opened).isEqualTo(1)
     }
 
     @Test
@@ -267,6 +327,7 @@ class TrainerScreenRenderTest {
         onEarlier: () -> Unit = {},
         onMovement: () -> Unit = {},
         onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
+        onLogWorkout: () -> Unit = {},
     ): List<String> = render.texts {
         TrainerScreen(
             state = state,
@@ -280,6 +341,7 @@ class TrainerScreenRenderTest {
             onEarlier = onEarlier,
             onMovement = onMovement,
             onAnswer = onAnswer,
+            onLogWorkout = onLogWorkout,
         )
     }
 

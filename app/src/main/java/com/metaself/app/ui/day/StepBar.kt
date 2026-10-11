@@ -46,8 +46,8 @@ fun StepBar(
     today: MovementToday,
     modifier: Modifier = Modifier,
     /**
-     * Opens the Movement screen (D75, D49 item 8's rule: every line is a door). Null draws the line
-     * as it always was, with nothing to press.
+     * Opens Your movement on this week, today open (D75, D130; D49 item 8's rule: every line is a
+     * door). Null draws the line as it always was, with nothing to press.
      */
     onOpen: (() -> Unit)? = null,
 ) {

@@ -71,9 +71,9 @@ data class MovementDay(
  * "Visible" below means neither hidden nor a walk that does not count (D81).
  *
  * @property today the calendar's today, whose year a date is said against (D83, amended).
- * @property workoutCount visible sessions this week that are not walks (D78).
- * @property walkCount visible walks this week, counted apart from workouts (D78).
- * @property workoutMinutes every visible session's time, walks included (D78).
+ * @property sessions the week's visible sessions, walks included (D131), counted by [WeekSessions] — the
+ *   Trainer's own count (D115).
+ * @property minutes every one of those sessions' minutes (D131): the headline, and the verdict's figure.
  * @property days newest first: today back to Monday on this week; Sunday back to Monday on an
  *   earlier one, all seven (D83).
  * @property previousWeeksM the four weeks before the one shown, newest first; null for a week with no
@@ -85,14 +85,16 @@ data class MovementWeek(
     val today: Long,
     val distanceM: Int?,
     val averageActiveKcal: Int?,
-    val workoutCount: Int,
-    val walkCount: Int,
-    val workoutMinutes: Int,
+    val sessions: Int,
+    val minutes: Int,
     val days: List<MovementDay>,
     val previousWeeksM: List<Int?>,
 ) {
     /** The calendar's own week, rather than an earlier one stepped back to (D83). */
     val isCurrent: Boolean get() = monday == thisMonday
+
+    /** D132: the four weeks before this one, the weeks with a distance summed; null when none has one. */
+    val fourWeeksM: Int? get() = fourWeeks(previousWeeksM)
 
     companion object {
 
@@ -129,22 +131,17 @@ data class MovementWeek(
             val last = if (monday == thisMonday) today else monday + 6
             val byDay = days.associateBy { it.epochDay }
             val thisWeek = (monday..last).mapNotNull { byDay[it] }
-            val visible = workouts
-                .filter { !it.hidden && it.counted && it.epochDay in monday..last }
-                .sortedBy { it.startedAtMillis }
-            val distances = thisWeek.mapNotNull { it.distanceM }
+            val visible = WeekSessions.of(workouts, monday, today)
             val active = thisWeek.mapNotNull { it.activeKcal }
-            val week = weekOf(monday)
 
             return MovementWeek(
                 monday = monday,
                 thisMonday = thisMonday,
                 today = today,
-                distanceM = distances.takeIf { it.isNotEmpty() }?.sum(),
+                distanceM = distanceOf(days, monday, last),
                 averageActiveKcal = active.takeIf { it.isNotEmpty() }?.average()?.roundToInt(),
-                workoutCount = visible.count { it.kind != WorkoutKind.WALK },
-                walkCount = visible.count { it.kind == WorkoutKind.WALK },
-                workoutMinutes = visible.sumOf { it.durationMinutes },
+                sessions = visible.size,
+                minutes = WeekSessions.minutes(visible),
                 days = (last downTo monday).map { day ->
                     MovementDay(
                         epochDay = day,
@@ -153,14 +150,23 @@ data class MovementWeek(
                         eatenKcal = eaten(mealsByDay[day].orEmpty()),
                     )
                 },
-                previousWeeksM = (1..PREVIOUS_WEEKS).map { back ->
-                    days.filter { weekOf(it.epochDay) == week - back }
-                        .mapNotNull { it.distanceM }
-                        .takeIf { it.isNotEmpty() }
-                        ?.sum()
-                },
+                previousWeeksM = previousWeeksOf(days, monday),
             )
         }
+
+        /**
+         * The distance from [from] to [to]: the sum of the days' de-duplicated totals (D69) that have one; null
+         * when none has. The headline's figure (D74), and the Trainer's summary's (D132).
+         */
+        fun distanceOf(days: List<HealthDay>, from: Long, to: Long): Int? =
+            days.filter { it.epochDay in from..to }.mapNotNull { it.distanceM }.takeIf { it.isNotEmpty() }?.sum()
+
+        /** The [PREVIOUS_WEEKS] weeks before [monday]'s, newest first, each [distanceOf] its seven days. */
+        fun previousWeeksOf(days: List<HealthDay>, monday: Long): List<Int?> =
+            (1..PREVIOUS_WEEKS).map { back -> distanceOf(days, monday - 7L * back, monday - 7L * back + 6) }
+
+        /** D132: [previous]' weeks that have a distance, summed; null when none has. */
+        fun fourWeeks(previous: List<Int?>): Int? = previous.filterNotNull().takeIf { it.isNotEmpty() }?.sum()
 
         /**
          * The day screen's own sum (`DayTotals.of`), so the two screens cannot disagree. Null with no

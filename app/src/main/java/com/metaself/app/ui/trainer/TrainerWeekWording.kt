@@ -1,6 +1,7 @@
 package com.metaself.app.ui.trainer
 
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.MovementSummary
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlannedOutcome
 import com.metaself.app.domain.trainer.PracticeLedger
@@ -8,6 +9,7 @@ import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.WeekLedger
 import com.metaself.app.domain.trainer.WeekNote
 import com.metaself.app.domain.trainer.WeekNoteSource
+import com.metaself.app.ui.movement.MovementWeekWording
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -30,7 +32,14 @@ object TrainerWeekWording {
 
     /** The strip's description for a screen reader, and what its tap does. */
     const val STRIP = "This week's sessions, day by day"
-    const val OPEN_MOVEMENT = "open Movement"
+    const val OPEN_MOVEMENT = "open Your movement"
+
+    /** D132: the end of the strip card's movement line, which opens Your movement. */
+    const val DAYS = "Days ›"
+
+    /** D132 item 3: the row to Your movement, and its line. */
+    const val YOUR_MOVEMENT = "Your movement"
+    const val YOUR_MOVEMENT_LINE = "Day by day, earlier weeks, import a file"
 
     const val LETTERS = "Weekly letters"
     const val EARLIER = "Earlier sessions"
@@ -44,6 +53,16 @@ object TrainerWeekWording {
         val first = if (from.month == to.month) from.format(DAY_ONLY) else from.format(DAY_MONTH)
         return "THIS WEEK$SEP$first – ${to.format(DAY_MONTH)}".uppercase(Locale.US)
     }
+
+    /**
+     * D132: "6 sessions · 21.4 km · 4 weeks: 78.0 km" (invented) — this week's sessions and km, the four weeks'
+     * km — each part left out with nothing to say; null with none. Km as Movement says them.
+     */
+    fun movementLine(summary: MovementSummary): String? = listOfNotNull(
+        MovementWeekWording.sessionCount(summary.sessions),
+        summary.distanceM?.let(MovementWeekWording::km),
+        summary.fourWeeksM?.let { "4 weeks: " + MovementWeekWording.km(it) },
+    ).takeIf { it.isNotEmpty() }?.joinToString(SEP)
 
     /** D115: one sentence, two clauses at most, counted from the week's ledger; never the AI's. */
     fun verdict(ledger: WeekLedger): String = listOfNotNull(minutesClause(ledger), planClause(ledger.practice)).joinToString(" ")

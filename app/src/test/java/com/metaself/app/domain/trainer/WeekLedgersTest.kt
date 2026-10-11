@@ -5,6 +5,7 @@ import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
@@ -241,6 +242,36 @@ class WeekLedgersTest {
         assertThat(earlier.beyond.kinds.single().sessions).isEqualTo(2)
         assertThat(thisWeek.current).isTrue()
         assertThat(thisWeek.beyond.kinds.single().sessions).isEqualTo(1)
+    }
+
+    /**
+     * D131: Movement's headline and the verdict's minutes (D115) are one count — whatever ticked, attempted, or
+     * fell beyond the plan, and whatever was hidden, not counted, or of a kind this version does not know.
+     * Six visible, counted sessions: 40 + 10 + 20 + 25 + 30 + 15 = 140 minutes. The week before, one of 35.
+     */
+    @Test
+    fun `the verdict's minutes and sessions are Movement's, this week and an earlier one`() {
+        val sessions = listOf(
+            session(1, monday), // ticks the walk
+            session(2, monday + 1, minutes = 10, hour = 8), // no walk left to tick
+            session(3, monday + 2, minutes = 20), // nor here
+            session(4, monday + 1, WorkoutKind.RUN, minutes = 25, hour = 9), // ticks the run
+            session(5, monday + 2, WorkoutKind.SWIM, minutes = 30, hour = 9),
+            session(6, monday + 3, WorkoutKind.UNRECOGNISED, minutes = 15),
+            session(7, monday, minutes = 50, hour = 10).copy(hidden = true),
+            session(8, monday + 1, minutes = 50, hour = 11).copy(counted = false),
+            session(9, monday - 3, minutes = 35),
+        )
+        val plans = listOf(kept(plan(walk30, run20)))
+
+        listOf(monday to 140, monday - 7 to 35).forEach { (week, minutes) ->
+            val ledger = ledger(sessions, plans, week = week)
+            val movement = MovementWeek.of(TEST_EPOCH_DAY, emptyList(), sessions, emptyMap(), monday = week)
+
+            assertThat(ledger.minutes).isEqualTo(minutes)
+            assertThat(movement.minutes).isEqualTo(ledger.minutes)
+            assertThat(movement.sessions).isEqualTo(ledger.sessions)
+        }
     }
 
     /** Two weeks, each of [sessions]. */

@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.movement
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.day.MealRepository
@@ -56,7 +57,8 @@ import javax.inject.Inject
  * summed by `DayTotals`, so the two screens cannot disagree about a day.
  *
  * It also holds the log-a-workout sheet (D76): which workout it is for, what has been typed, and the
- * write that saves it. A typed workout reaches the week through the record it is written to, like any
+ * write that saves it. Opened from the Trainer's "Log a workout" ([OPEN_LOG], D132), the sheet starts open
+ * for today. A typed workout reaches the week through the record it is written to, like any
  * other workout. A typed workout deleted here can be put back with Undo, the app's rule for a thing it
  * can rebuild (the weight screen's `WeightViewModel.delete`).
  */
@@ -77,6 +79,8 @@ class MovementViewModel(
     private val trainer: TrainerReviews = TrainerReviews.NONE,
     /** "These are two sessions" (D92). */
     private val splits: SessionSplits = SessionSplits.NONE,
+    /** The destination's arguments: [OPEN_LOG] opens the sheet once (D132). */
+    private val savedState: SavedStateHandle = SavedStateHandle(),
 ) : ViewModel() {
 
     @Inject
@@ -91,7 +95,8 @@ class MovementViewModel(
         files: WorkoutFileImporter,
         trainer: TrainerReviews,
         splits: SessionSplits,
-    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer, splits)
+        savedState: SavedStateHandle,
+    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer, splits, savedState)
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
@@ -467,6 +472,15 @@ class MovementViewModel(
         null
     }
 
+    init {
+        // D132: "Log a workout" on the Trainer opens this page with the sheet open for today — once per visit.
+        // Marked in the entry's saved state, so the page rebuilt (a turn of the phone) does not open it again.
+        if (savedState.get<Boolean>(OPEN_LOG) == true && savedState.get<Boolean>(LOG_OPENED) != true) {
+            savedState[LOG_OPENED] = true
+            logWorkout()
+        }
+    }
+
     /** [split] is what the last split wrote, while its Undo is offered (D92). */
     private data class UndoState(val offered: Boolean = false, val failed: Boolean = false, val split: List<SessionSplit> = emptyList())
 
@@ -489,5 +503,11 @@ class MovementViewModel(
 
         /** A workout file's outcome, success or not (D82, amended). */
         const val IMPORT_KIND = "import"
+
+        /** D132: the destination's argument — opened from the Trainer's "Log a workout", the sheet opens at once. */
+        const val OPEN_LOG = "openLog"
+
+        /** Set once the sheet [OPEN_LOG] asked for has been opened, so it is opened once. */
+        private const val LOG_OPENED = "logOpened"
     }
 }

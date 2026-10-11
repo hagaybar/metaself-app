@@ -45,7 +45,7 @@ class MovementWeekWordingTest {
 
     private val week = MovementWeek(
         monday = 20_696, thisMonday = 20_696, today = TEST_EPOCH_DAY, distanceM = 42_600, averageActiveKcal = 355,
-        workoutCount = 4, walkCount = 0, workoutMinutes = 141,
+        sessions = 6, minutes = 156,
         days = emptyList(), previousWeeksM = listOf(38_100, 45_000, null, 44_700),
     )
 
@@ -83,32 +83,40 @@ class MovementWeekWordingTest {
         assertThat(MovementWeekWording.dayHeading(TEST_EPOCH_DAY, today = TEST_EPOCH_DAY)).isEqualTo("Thu 3 Sep")
     }
 
+    /** D131: the week's minutes moving, then the sessions, the km and the movement calories. */
     @Test
-    fun `the headline figures`() {
-        assertThat(MovementWeekWording.distance(week)).isEqualTo("42.6 km")
-        assertThat(MovementWeekWording.averageMovement(week)).isEqualTo("355 kcal of movement a day, on average")
-        assertThat(MovementWeekWording.workouts(week)).isEqualTo("4 workouts · 2 h 21")
+    fun `the headline is the week's minutes, and the line under it its sessions, km and movement`() {
+        assertThat(MovementWeekWording.minutes(week)).isEqualTo("156 min")
+        assertThat(MovementWeekWording.underHeadline(week)).isEqualTo("6 sessions · 42.6 km · 355 kcal of movement a day")
+    }
+
+    /** D131: no session is "0 min" — the headline is always there — and the line leaves the session count out. */
+    @Test
+    fun `a week with no session is 0 min, and its line has no session count`() {
+        val empty = week.copy(sessions = 0, minutes = 0)
+
+        assertThat(MovementWeekWording.minutes(empty)).isEqualTo("0 min")
+        assertThat(MovementWeekWording.underHeadline(empty)).isEqualTo("42.6 km · 355 kcal of movement a day")
     }
 
     @Test
-    fun `a headline figure that is not recorded is not said`() {
-        val empty = week.copy(distanceM = null, averageActiveKcal = null, workoutCount = 0, walkCount = 0, workoutMinutes = 0)
-
-        assertThat(MovementWeekWording.distance(empty)).isNull()
-        assertThat(MovementWeekWording.averageMovement(empty)).isNull()
-        assertThat(MovementWeekWording.workouts(empty)).isNull()
+    fun `each part of the line is left out when it has nothing to say, and the line with all three`() {
+        assertThat(MovementWeekWording.underHeadline(week.copy(distanceM = null))).isEqualTo("6 sessions · 355 kcal of movement a day")
+        assertThat(MovementWeekWording.underHeadline(week.copy(averageActiveKcal = null))).isEqualTo("6 sessions · 42.6 km")
+        assertThat(MovementWeekWording.underHeadline(week.copy(sessions = 0, minutes = 0, distanceM = null, averageActiveKcal = null))).isNull()
     }
 
     @Test
-    fun `one workout is one workout`() {
-        assertThat(MovementWeekWording.workouts(week.copy(workoutCount = 1, workoutMinutes = 45)))
-            .isEqualTo("1 workout · 45 min")
+    fun `one session is one session`() {
+        assertThat(MovementWeekWording.underHeadline(week.copy(sessions = 1, minutes = 45, distanceM = null, averageActiveKcal = null)))
+            .isEqualTo("1 session")
     }
 
     @Test
     fun `numbers have thousands separators`() {
-        assertThat(MovementWeekWording.averageMovement(week.copy(averageActiveKcal = 1_200)))
-            .isEqualTo("1,200 kcal of movement a day, on average")
+        assertThat(MovementWeekWording.minutes(week.copy(minutes = 1_020))).isEqualTo("1,020 min")
+        assertThat(MovementWeekWording.underHeadline(week.copy(averageActiveKcal = 1_200)))
+            .isEqualTo("6 sessions · 42.6 km · 1,200 kcal of movement a day")
         assertThat(MovementWeekWording.km(1_234_500)).isEqualTo("1,234.5 km")
     }
 
@@ -234,22 +242,6 @@ class MovementWeekWordingTest {
     fun `with no distance in any of the four weeks the line is not drawn`() {
         assertThat(MovementWeekWording.lastFourWeeks(week.copy(previousWeeksM = listOf(null, null, null, null))))
             .isNull()
-    }
-
-    /** D78: "2 workouts · 3 walks · 4 h 30" — 270 minutes, invented. */
-    @Test
-    fun `the headline counts walks apart from workouts, with every session's time`() {
-        val busy = week.copy(workoutCount = 2, walkCount = 3, workoutMinutes = 270)
-
-        assertThat(MovementWeekWording.workouts(busy)).isEqualTo("2 workouts · 3 walks · 4 h 30")
-    }
-
-    @Test
-    fun `either part is left out when it is zero, and one is one`() {
-        assertThat(MovementWeekWording.workouts(week.copy(workoutCount = 0, walkCount = 3, workoutMinutes = 270)))
-            .isEqualTo("3 walks · 4 h 30")
-        assertThat(MovementWeekWording.workouts(week.copy(workoutCount = 0, walkCount = 1, workoutMinutes = 45)))
-            .isEqualTo("1 walk · 45 min")
     }
 
     /** D78: 50 + 40 + 60 = 150 minutes, invented. */

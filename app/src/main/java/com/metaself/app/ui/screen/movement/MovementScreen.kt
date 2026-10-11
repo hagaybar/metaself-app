@@ -49,8 +49,8 @@ import com.metaself.app.ui.theme.Spacing
 import java.time.ZoneId
 
 /**
- * This week's movement (D73–D75): the week's distance as the one large figure, the average movement
- * calories and the workouts beneath it, a short row per day — today first — and the last four weeks
+ * Your movement (D73–D75, D130, D131): the week's minutes moving as the one large figure, its sessions, km
+ * and average movement calories beneath it, a short row per day — today first — and the last four weeks
  * at the foot.
  *
  * "Log a workout" sits at the bottom edge, where it cannot scroll away (D75, D76); a typed workout's
@@ -65,8 +65,9 @@ import java.time.ZoneId
  * something earlier, › only on an earlier week. An earlier week lists all seven days, Sunday first,
  * none open; there "Log a workout" needs a day opened to log onto, and says so above the rows.
  *
- * "Trainer" in the title bar opens the trainer (D85). Under each session in an open day, typed or
- * synced, one button says where its review stands — "How did it go?", "Get feedback" or "See
+ * It is the Trainer's detail page (D130): reached from the Trainer and from Today's step bar, its back
+ * arrow returns to whichever it was opened from, and its title bar has no Trainer button. Under each
+ * session in an open day, typed or synced, one button says where its review stands — "How did it go?", "Get feedback" or "See
  * feedback" (plan design question 7) — and opens that session's review.
  *
  * A session other workouts also recorded (D92) is one line, with "also recorded by 2 more" under it and
@@ -92,7 +93,6 @@ fun MovementScreen(
     onDismissFile: () -> Unit = {},
     onEarlierWeek: () -> Unit = {},
     onLaterWeek: () -> Unit = {},
-    onTrainer: () -> Unit = {},
     onReview: (Long) -> Unit = {},
     onSplit: (Workout) -> Unit = {},
     onUndoSplit: () -> Unit = {},
@@ -104,7 +104,6 @@ fun MovementScreen(
         title = stringResource(R.string.movement_title),
         modifier = modifier,
         onBack = onBack,
-        actions = { TextButton(onClick = onTrainer) { Text(stringResource(R.string.trainer_open)) } },
         belowBar = {
             if (state.canUndo) UndoLine(failed = state.undoFailed, onUndo = onUndoDelete)
             if (state.canUndoSplit) SplitUndoLine(onUndo = onUndoSplit)
@@ -285,7 +284,7 @@ private fun UndoLine(failed: Boolean, onUndo: () -> Unit) {
 }
 
 /**
- * D74 items 1–4: the kicker, the one large figure, and the two smaller lines beneath it. The kicker
+ * D74, D131: the kicker, the one large figure — the week's minutes — and the line beneath it. The kicker
  * sits between ‹ and › (D83); an arrow not offered leaves its width empty, so the kicker keeps its
  * place from week to week.
  */
@@ -317,23 +316,15 @@ private fun Headline(
                 Spacer(Modifier.size(ARROW_SIZE))
             }
         }
-        // The one number this screen exists to answer, in the app's display face (D48).
-        MovementWeekWording.distance(week)?.let { distance ->
-            Text(
-                text = distance,
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
-        }
-        MovementWeekWording.averageMovement(week)?.let { average ->
-            Text(text = average, style = MaterialTheme.typography.bodyLarge)
-        }
-        MovementWeekWording.workouts(week)?.let { workouts ->
-            Text(
-                text = workouts,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        // The one number this screen exists to answer, in the app's display face (D48): the week's minutes
+        // moving, counted as the Trainer's verdict counts them (D131).
+        Text(
+            text = MovementWeekWording.minutes(week),
+            style = MaterialTheme.typography.displayLarge,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+        MovementWeekWording.underHeadline(week)?.let { line ->
+            Text(text = line, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

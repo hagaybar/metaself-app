@@ -105,8 +105,14 @@ sealed class Destination(val route: String) {
     }
     data object Weight : Destination("weight")
 
-    /** This week's movement (D73–D75). */
-    data object Movement : Destination("movement")
+    /** Your movement (D73–D75, D130): the Trainer's detail page, also opened by Today's step line and a shared file. */
+    data object Movement : Destination("movement?${MovementViewModel.OPEN_LOG}={${MovementViewModel.OPEN_LOG}}") {
+        /** On this week, today open. */
+        fun thisWeek(): String = "movement"
+
+        /** D132: with the log-a-workout sheet open for today — the Trainer's "Log a workout". */
+        fun toLog(): String = "movement?${MovementViewModel.OPEN_LOG}=true"
+    }
 
     /** The trainer (D85). */
     data object Trainer : Destination("trainer")
@@ -303,7 +309,7 @@ fun MetaSelfNavHost(
     val sharedFile by sharedFileViewModel.pending.collectAsStateWithLifecycle()
     LaunchedEffect(sharedFile) {
         if (sharedFile != null && navController.currentDestination?.route != Destination.Movement.route) {
-            navController.navigate(Destination.Movement.route) { launchSingleTop = true }
+            navController.navigate(Destination.Movement.thisWeek()) { launchSingleTop = true }
         }
     }
 
@@ -353,7 +359,7 @@ fun MetaSelfNavHost(
                 onRepeat = { navController.navigate(Destination.Repeat.route) },
                 onScan = { navController.navigate(Destination.Scan.route) },
                 onOpenWeight = { navController.navigate(Destination.Weight.route) },
-                onOpenMovement = { navController.navigate(Destination.Movement.route) },
+                onOpenMovement = { navController.navigate(Destination.Movement.thisWeek()) },
                 onOpenTrainer = { navController.navigate(Destination.Trainer.route) },
                 onOpenSettings = { navController.navigate(Destination.Settings.route) },
                 onOpenWindowSettings = { navController.navigate(Destination.Settings.atWindow) },
@@ -413,7 +419,15 @@ fun MetaSelfNavHost(
             )
         }
 
-        composable(Destination.Movement.route) {
+        composable(
+            route = Destination.Movement.route,
+            arguments = listOf(
+                navArgument(MovementViewModel.OPEN_LOG) {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
+            ),
+        ) {
             val movementViewModel: MovementViewModel = hiltViewModel()
             val movementState by movementViewModel.state.collectAsStateWithLifecycle()
             // D82: the system's file picker, for a workout file already saved. The type is only a
@@ -449,7 +463,6 @@ fun MetaSelfNavHost(
                 onDismissFile = movementViewModel::dismissFile,
                 onEarlierWeek = movementViewModel::earlierWeek,
                 onLaterWeek = movementViewModel::laterWeek,
-                onTrainer = { navController.navigate(Destination.Trainer.route) },
                 onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
                 onSplit = movementViewModel::split,
                 onUndoSplit = movementViewModel::undoSplit,
@@ -475,8 +488,10 @@ fun MetaSelfNavHost(
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
                 onLetters = { navController.navigate(Destination.Letters.route) },
                 onEarlier = { navController.navigate(Destination.EarlierSessions.route) },
-                // D114: the strip opens Movement, which opens on this week.
-                onMovement = { navController.navigate(Destination.Movement.route) },
+                // D114, D132: the strip, its movement line and the Your movement row open it on this week.
+                onMovement = { navController.navigate(Destination.Movement.thisWeek()) },
+                // D132: Log a workout opens it with the sheet open for today; saving returns there.
+                onLogWorkout = { navController.navigate(Destination.Movement.toLog()) },
                 onAnswer = trainerViewModel::answer,
             )
         }

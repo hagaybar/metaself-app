@@ -24,9 +24,12 @@ class MetaSelfNavHostRenderTest {
         assertThat(Destination.EditEntry.of(itemId = 7)).isEqualTo("entry/edit/7")
     }
 
+    /** D130, D132: Your movement on this week, or with the log-a-workout sheet open (the Trainer's button). */
     @Test
-    fun `the Movement screen has its own route`() {
-        assertThat(Destination.Movement.route).isEqualTo("movement")
+    fun `Your movement has its own route, and one that opens the sheet`() {
+        assertThat(Destination.Movement.route).isEqualTo("movement?openLog={openLog}")
+        assertThat(Destination.Movement.thisWeek()).isEqualTo("movement")
+        assertThat(Destination.Movement.toLog()).isEqualTo("movement?openLog=true")
     }
 
     /** Settings is a nested graph (D79): an index and seven pages, each its own route. */

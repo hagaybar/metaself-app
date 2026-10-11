@@ -3,6 +3,7 @@ package com.metaself.app.domain.trainer
 import com.metaself.app.domain.day.DayTotals
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.MovementWeek
+import com.metaself.app.domain.movement.WeekSessions
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import kotlin.math.roundToInt
@@ -84,7 +85,10 @@ data class WeekLedger(
     val sessions: Int
         get() = practice?.sessions.orEmpty().count { it.outcome != PlannedOutcome.NOT_DONE } + beyond.kinds.sumOf { it.sessions }
 
-    /** D115: the week's minutes, summed over [sessions]. */
+    /**
+     * D115: the week's minutes, summed over [sessions] — equal to [WeekSessions.minutes] of the week's sessions,
+     * which Movement's headline shows (D131).
+     */
     val minutes: Int
         get() = practice?.sessions.orEmpty().sumOf { it.minutesDone ?: 0 } + beyond.kinds.sumOf { it.minutes }
 }
@@ -127,9 +131,8 @@ object WeekLedgers {
         require(monday <= MovementWeek.mondayOf(today)) { "a week after this one: $monday" }
         val last = minOf(today, monday + 6)
         val week = monday..last
-        val sessions = workouts
-            .filter { !it.hidden && it.counted && it.epochDay in week }
-            .sortedBy { it.startedAtMillis }
+        // D131: the same sessions Movement's headline counts; the partition below covers each exactly once.
+        val sessions = WeekSessions.of(workouts, monday, today)
         val practice = practiceWeek(plans, monday, last, workouts)
         val progress = practice?.second
         val ticked = progress?.ticks.orEmpty().mapNotNull { it.by?.id }.toSet()

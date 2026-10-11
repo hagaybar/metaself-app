@@ -69,23 +69,36 @@ class MovementScreenRenderTest {
         mealsByDay = emptyMap(),
     )
 
+    /** D130: the Trainer's detail page — its name, and a way back to wherever it was opened from. */
     @Test
-    fun `the screen is called Movement and has a way back`() {
+    fun `the screen is called Your movement and has a way back`() {
         val texts = draw()
 
-        assertThat(texts).contains("Movement")
+        assertThat(texts).contains("Your movement")
+        assertThat(texts).doesNotContain("Movement")
         assertThat(texts).contains("Back")
     }
 
-    /** D74: 8.0 + 4.4 km; (410 + 300) / 2 kcal; one run. */
+    /** D131: one 32-minute run; 8.0 + 4.4 km; (410 + 300) / 2 kcal. */
     @Test
-    fun `the headline is the week's distance, the average movement and the workouts`() {
+    fun `the headline is the week's minutes, with its sessions, km and movement under it`() {
         val texts = draw()
 
         assertThat(texts).contains("THIS WEEK · FROM MON 31 AUG")
-        assertThat(texts).contains("12.4 km")
-        assertThat(texts).contains("355 kcal of movement a day, on average")
-        assertThat(texts).contains("1 workout · 32 min")
+        assertThat(texts).contains("32 min")
+        assertThat(texts).contains("1 session · 12.4 km · 355 kcal of movement a day")
+        assertThat(render.isDrawnBefore("32 min", "1 session · 12.4 km")).isTrue()
+    }
+
+    /** D131: a week with nothing recorded still has its headline. */
+    @Test
+    fun `an empty week's headline is 0 min, with no line under it`() {
+        val empty = MovementWeek.of(today = TEST_EPOCH_DAY, days = emptyList(), workouts = emptyList(), mealsByDay = emptyMap())
+
+        val texts = draw(state = MovementUiState(week = empty, openDay = TEST_EPOCH_DAY, logDay = TEST_EPOCH_DAY))
+
+        assertThat(texts).contains("0 min")
+        assertThat(texts.filter { it.contains("kcal of movement a day") }).isEmpty()
     }
 
     @Test
@@ -457,8 +470,9 @@ class MovementScreenRenderTest {
         val texts = draw(state = MovementUiState(week = pastWeek, canGoEarlier = true, canGoLater = true), onLaterWeek = { later++ })
 
         assertThat(texts).contains("LAST WEEK · FROM MON 24 AUG")
-        assertThat(texts).contains("3.0 km")
-        assertThat(texts).contains("250 kcal of movement a day, on average")
+        // D131: that week's own minutes — none — not this week's 32.
+        assertThat(texts).contains("0 min")
+        assertThat(texts).contains("3.0 km · 250 kcal of movement a day")
         assertThat(render.isDrawnBefore("Sun 30 Aug", "Sat 29 Aug")).isTrue()
         assertThat(render.isDrawnBefore("Tue 25 Aug", "Mon 24 Aug")).isTrue()
         assertThat(texts.count { it == "nothing recorded" }).isEqualTo(6)
@@ -502,15 +516,10 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("Mon 16 Jun 2025")
     }
 
-    /** D85: the trainer is reached from Movement's top bar. */
+    /** D130: the page is reached from the Trainer, so its top bar no longer offers the Trainer. */
     @Test
-    fun `the top bar has Trainer, which asks for the trainer`() {
-        var asked = false
-        val texts = draw(onTrainer = { asked = true })
-
-        assertThat(texts).contains("Trainer")
-        render.click("Trainer")
-        assertThat(asked).isTrue()
+    fun `the top bar has no Trainer button`() {
+        assertThat(draw()).doesNotContain("Trainer")
     }
 
     /** D87, design question 7: a session with no review asks how it went. */
@@ -643,7 +652,6 @@ class MovementScreenRenderTest {
         onDismissFile: () -> Unit = {},
         onEarlierWeek: () -> Unit = {},
         onLaterWeek: () -> Unit = {},
-        onTrainer: () -> Unit = {},
         onReview: (Long) -> Unit = {},
         onSplit: (Workout) -> Unit = {},
         onUndoSplit: () -> Unit = {},
@@ -662,7 +670,6 @@ class MovementScreenRenderTest {
             onDismissFile = onDismissFile,
             onEarlierWeek = onEarlierWeek,
             onLaterWeek = onLaterWeek,
-            onTrainer = onTrainer,
             onReview = onReview,
             onSplit = onSplit,
             onUndoSplit = onUndoSplit,

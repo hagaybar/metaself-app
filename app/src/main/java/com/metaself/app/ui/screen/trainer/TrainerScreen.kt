@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -45,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.trainer.MainAction
+import com.metaself.app.domain.trainer.MovementSummary
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.TrainerHome
 import com.metaself.app.domain.trainer.WeekLedger
@@ -73,8 +75,8 @@ private val COLUMN_GAP = 6.dp
 /**
  * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
  * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116);
- * one main button; the session waiting for words; and four plain rows — Your plan,
- * Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
+ * one main button with Log a workout beside it (D132); the session waiting for words; and five plain rows —
+ * Your plan, Your movement (D132), Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
  * (InlineComposableReturnGuardTest).
  */
 @Composable
@@ -91,11 +93,13 @@ fun TrainerScreen(
     onLetters: () -> Unit,
     /** D114: the reviewed sessions, on their own page. */
     onEarlier: () -> Unit,
-    /** D114: the strip's tap — Movement, at this week. */
+    /** D114, D132: the strip's tap, its movement line and the Your movement row — Your movement, at this week. */
     onMovement: () -> Unit,
     modifier: Modifier = Modifier,
     /** D105: the owner's answer to "count it for this?" — the session's id, and Yes (true) or No. */
     onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
+    /** D132 item 2: Your movement, with the log-a-workout sheet open for today. */
+    onLogWorkout: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
@@ -106,20 +110,22 @@ fun TrainerScreen(
             else -> {
                 state.week?.let { week ->
                     WeekHeader(week.strip.monday, week.ledger)
-                    StripCard(week.strip, home.plan, state.answering, state.refused, onMovement, onAnswer)
+                    StripCard(week.strip, week.movement, home.plan, state.answering, state.refused, onMovement, onAnswer)
                     val boxes = TrainerWeekWording.boxes(week.ledger)
                     if (boxes.isNotEmpty()) Boxes(boxes)
                 }
                 state.note?.let { NoteView(it, zone) }
-                MainButton(home, onPlan, onPlanAhead, onSeePlan)
+                MainButton(home, onPlan, onPlanAhead, onSeePlan, onLogWorkout)
                 home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
                 // D122: the kept single session is on the plan page now (Your plan → Session), not here.
                 Rows(
-                    listOfNotNull(
-                        TrainerWeekWording.planRow(home.plan) to onSeePlan,
-                        LetterWording.LIST_TITLE to onLetters,
-                        TrainerWeekWording.EARLIER to onEarlier,
-                        TrainerWeekWording.ABOUT_ME to onAboutMe,
+                    listOf(
+                        PageRow(TrainerWeekWording.planRow(home.plan), onSeePlan),
+                        // D132 item 3: the day-by-day record, behind the Trainer now (D130).
+                        PageRow(TrainerWeekWording.YOUR_MOVEMENT, onMovement, TrainerWeekWording.YOUR_MOVEMENT_LINE),
+                        PageRow(LetterWording.LIST_TITLE, onLetters),
+                        PageRow(TrainerWeekWording.EARLIER, onEarlier),
+                        PageRow(TrainerWeekWording.ABOUT_ME, onAboutMe),
                     ),
                 )
             }
@@ -141,13 +147,15 @@ private fun WeekHeader(monday: Long, ledger: WeekLedger) {
 }
 
 /**
- * D114 item 2: the strip, its day letters and legend — one tap target, which opens Movement — then the
- * shorter-session question (D105) for each planned session this week holding one, with Yes and No.
+ * D114 item 2, D132 item 1: the strip, its day letters, the week's movement line ending "Days ›", and the legend —
+ * one tap target, which opens Your movement on this week — then the shorter-session question (D105) for each
+ * planned session this week holding one, with Yes and No.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StripCard(
     strip: WeekStrip,
+    movement: MovementSummary,
     plan: PlanCard,
     answering: Set<Long>,
     refused: ActionRefused?,
@@ -165,6 +173,7 @@ private fun StripCard(
             ) {
                 Strip(strip)
                 DayLetters(strip)
+                MovementLine(movement)
                 FlowRow(
                     modifier = Modifier.padding(top = Spacing.Tight),
                     horizontalArrangement = Arrangement.spacedBy(Spacing.Section),
@@ -258,6 +267,25 @@ private fun OpenBlock(minutes: Int, height: Dp) {
 
 private fun blockHeight(minutes: Int, scale: Int, full: Dp): Dp =
     WeekStrip.height(minutes, scale, full.value, LEAST_BLOCK.value).dp
+
+/** D132 item 1: "6 sessions · 21.4 km · 4 weeks: 78.0 km" (invented), each part only with something to say, then "Days ›". */
+@Composable
+private fun MovementLine(movement: MovementSummary) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = Spacing.Tight),
+        horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val line = TrainerWeekWording.movementLine(movement)
+        if (line != null) {
+            Text(line, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
+        // Ink, not the green: the theme's green on a card is under the text floor (as "To do"'s label).
+        Text(TrainerWeekWording.DAYS, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
 
 /** M T W T F S S, and "To do": today's letter bold. */
 @Composable
@@ -371,46 +399,62 @@ private fun NoteView(note: WeekNote, zone: ZoneId) {
 }
 
 /**
- * D114 item 5, D124: the next thing to do, filled. When it is Plan ahead, the session action stays under it,
- * outlined — "Plan the open walk" in a plan's last week, else Plan my next session, the one way to a single
- * session's plan with no weekly plan running.
+ * D114 item 5, D124: the next thing to do, filled — with Log a workout, outlined, beside it on one row (D132
+ * item 2). When it is Plan ahead or a plan-page button, the session action stays under the row, outlined — "Plan
+ * the open walk" in a plan's last week, else Plan my next session, the one way to a single session's plan with
+ * no weekly plan running.
  */
 @Composable
-private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onPlanAhead: () -> Unit, onSeePlan: () -> Unit) {
-    when (val main = home.main) {
-        is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(TrainerWeekWording.planOpen(main.kind))
-                home.next?.let { Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall) }
+private fun MainButton(
+    home: TrainerHome,
+    onPlan: () -> Unit,
+    onPlanAhead: () -> Unit,
+    onSeePlan: () -> Unit,
+    onLogWorkout: () -> Unit,
+) {
+    val main = home.main
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        // One height for both, so they read as one row whatever the main button holds.
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+        ) {
+            OutlinedButton(onClick = onLogWorkout, modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Text(stringResource(R.string.movement_log_workout), textAlign = TextAlign.Center)
+            }
+            val filled = Modifier.weight(1f).fillMaxHeight()
+            when (main) {
+                is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = filled) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(TrainerWeekWording.planOpen(main.kind), textAlign = TextAlign.Center)
+                        home.next?.let {
+                            Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+                MainAction.PlanNext -> Button(onClick = onPlan, modifier = filled) {
+                    Text(stringResource(R.string.trainer_plan_next), textAlign = TextAlign.Center)
+                }
+                MainAction.PlanAhead -> Button(onClick = onPlanAhead, modifier = filled) {
+                    Text(stringResource(R.string.trainer_evaluate), textAlign = TextAlign.Center)
+                }
+                // D121: the ask is on the plan page, beside its privacy line; this button takes him there.
+                MainAction.PlanThisWeek -> Button(onClick = onSeePlan, modifier = filled) {
+                    Text(PlanPageWording.PLAN_THIS_WEEK, textAlign = TextAlign.Center)
+                }
+                MainAction.FillNextWeek -> Button(onClick = onSeePlan, modifier = filled) {
+                    Text(PlanPageWording.FILL_NEXT_WEEK, textAlign = TextAlign.Center)
+                }
+                MainAction.NextBlock -> Button(onClick = onSeePlan, modifier = filled) {
+                    Text(PlanPageWording.NEXT_BLOCK, textAlign = TextAlign.Center)
+                }
             }
         }
-        MainAction.PlanNext -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.trainer_plan_next))
-        }
-        MainAction.PlanAhead -> WithSession(home, onPlan) {
-            Button(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_evaluate)) }
-        }
-        // D121: the ask is on the plan page, beside its privacy line; this button takes him there.
-        MainAction.PlanThisWeek -> WithSession(home, onPlan) {
-            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.PLAN_THIS_WEEK) }
-        }
-        MainAction.FillNextWeek -> WithSession(home, onPlan) {
-            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.FILL_NEXT_WEEK) }
-        }
-        MainAction.NextBlock -> WithSession(home, onPlan) {
-            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.NEXT_BLOCK) }
-        }
-    }
-}
-
-/** [main], then the session action under it, outlined — Plan the open walk, or Plan my next session. */
-@Composable
-private fun WithSession(home: TrainerHome, onPlan: () -> Unit, main: @Composable () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-        main()
-        OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-            val session = MainAction.session(home.next)
-            Text(if (session is MainAction.PlanOpen) TrainerWeekWording.planOpen(session.kind) else stringResource(R.string.trainer_plan_next))
+        if (main !is MainAction.PlanOpen && main != MainAction.PlanNext) {
+            OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
+                val session = MainAction.session(home.next)
+                Text(if (session is MainAction.PlanOpen) TrainerWeekWording.planOpen(session.kind) else stringResource(R.string.trainer_plan_next))
+            }
         }
     }
 }
@@ -434,21 +478,27 @@ private fun WaitingCard(session: Workout, today: Long, zone: ZoneId, onReview: (
     }
 }
 
+/** One of the plain rows: its name, what it opens, and a smaller line under the name when it has one (D132). */
+private class PageRow(val label: String, val open: () -> Unit, val line: String? = null)
+
 /** D114 item 8: plain rows, each opening what it names, with hairlines between. */
 @Composable
-private fun Rows(rows: List<Pair<String, () -> Unit>>) {
+private fun Rows(rows: List<PageRow>) {
     Column(Modifier.fillMaxWidth()) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        rows.forEach { (label, open) ->
+        rows.forEach { row ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .clickable(role = Role.Button, onClick = open)
+                    .clickable(role = Role.Button, onClick = row.open)
                     .padding(vertical = Spacing.Related),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text(row.label, style = MaterialTheme.typography.bodyLarge)
+                    row.line?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
                 Text("›", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

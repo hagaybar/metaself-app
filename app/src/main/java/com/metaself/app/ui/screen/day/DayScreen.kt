@@ -166,7 +166,7 @@ fun DayScreenContent(
     // two above are, and because the screen it opens is the next step: until it exists, a row is
     // still a real control and still says what it holds — it simply has nowhere to go yet.
     onOpenPart: (DayPart) -> Unit = {},
-    // The Movement screen (D75). Null — every caller written before it — leaves the step line a
+    // Your movement (D75, D130). Null — every caller written before it — leaves the step line a
     // line, not a door.
     onOpenMovement: (() -> Unit)? = null,
     // D103: the unread weekly letter's headline, noted on today until the letter is opened or the note
