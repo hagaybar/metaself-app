@@ -1,4 +1,4 @@
-# The letter sounds like a coach — D140 to D143
+# The letter sounds like a coach — D140 to D144
 
 > Written 2026-10-11 and approved the same day, from the mockup "The letter, rewritten". Amends D101
 > (what the letter is sent) and D102 (what it says, and how) and the letter page of D103. **Every figure
@@ -26,7 +26,9 @@ The reply's texts (all required, non-empty), and how the letter page shows them:
 | next_week | an outlined card, **FOR NEXT WEEK** |
 | close | one line in italics, set apart |
 
-Under "From your trainer · counted on your phone", above the parts. **The figures table (D103) moves
+Under "From your AI trainer · advice, not a measurement · the figures were counted on your phone", above
+the parts. *(Amended 2026-10-11: the attribution must still say it is AI advice, as D4 requires; the line
+first written here, "From your trainer · counted on your phone", dropped that by mistake.)* **The figures table (D103) moves
 behind "The week's figures ›"**, opening in place. The notification and the day's margin note use the
 headline, as now.
 
@@ -47,6 +49,10 @@ Besides D101's weekly figures, the ledger (D110) and the plan:
 - **The last three letters'** look_after and next_week (or D102's look_at and next_week for older
   letters), with their weeks.
 
+*Amended 2026-10-11:* **a day before the movement record begins** — the first day with a step count or a
+session, as Your movement's spans use it (D136) — **has no movement figures**: its planned and own minutes
+are sent as null, never 0. With no movement recorded at all, every day's are null.
+
 The "nothing else is sent" test is updated to exactly this list. Still never sent: a meal, a food's
 name, an amount, a time of eating, a weigh-in, raw readings.
 
@@ -57,9 +63,12 @@ rests on, and **only when each side rests on at least three**:
 
 1. **Sleep and sessions**: sessions after a night under the period's median sleep, against after a
    longer night — count and average minutes each.
-2. **Weekdays and weekends**: counted minutes a day on each.
+2. **Weekdays and weekends**: counted minutes a day on each — recorded days only.
 3. **Food on moving days**: calories logged a day on days with at least 20 counted minutes, against
-   days with fewer — logged days only.
+   days with fewer — logged days only, and recorded days only.
+
+*Amended 2026-10-11:* a day before the movement record begins (D141) is not a day of zero minutes; it is
+left out of patterns 2 and 3, and the at-least-three rule counts recorded days.
 4. **How sessions felt**: the share felt easy this week, against the four weeks before.
 5. **Longest run**: the longest stretch of consecutive days with at least one counted session.
 
@@ -84,6 +93,22 @@ rests on, and **only when each side rests on at least three**:
 - Nothing medical is diagnosed; an injury in his words is planned around (as D102).
 - week_note (D116) is still returned.
 
+## D144 — Writing the newest letter again
+
+*Added 2026-10-11*, so a letter in the new shape can be seen before Sunday.
+
+- On the letter page of the **newest** letter only, an outlined button **Write this letter again** at the
+  end — whatever the letter's shape.
+- Tapping it shows, in the page, "This asks the trainer again (one request) and replaces this letter."
+  with **Write it again** and **Keep this one**. Nothing is asked until Write it again.
+- Confirmed: the same request as the Sunday letter for that week — the same week, its figures recounted
+  now, the band's data not copied first (as Write it now). It counts against the day's ceiling (D57).
+- On success the new letter replaces the stored one for that week; the old one is discarded. It is
+  shown at once, already read, and no notification is posted.
+- On failure (or a week that has become quiet) the old letter stays, and the failure is said on the page
+  as the letters page says its failures, logged by kind only (D8).
+- Never automatic: only the tap writes again.
+
 ## Not built here
 
 A conversation with the trainer; letters on another day than Sunday; sending the letter's day rows to
@@ -99,3 +124,7 @@ any other trainer path.
   only for food.
 - D143: the instructions carry recognition first, the own-choice wording and its banned phrasings, the
   no-hedging rule, the figures rule.
+- D141, D142 (amended): a day before the record begins sends null minutes and is left out of patterns 2
+  and 3.
+- D144: the button only on the newest letter; the confirmation; replacement on success; the old letter
+  kept on failure; the "nothing else is sent" list unchanged.
