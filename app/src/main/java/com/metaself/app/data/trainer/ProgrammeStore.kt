@@ -26,8 +26,9 @@ interface ProgrammeStore {
     suspend fun add(programme: Programme): Long
 
     /**
-     * D94: [id] runs from [startEpochDay]; any other running plan stops [today], replaced. Refused (throws)
-     * unless [id] is an offered answer never run. One transaction.
+     * D94: [id] runs from [startEpochDay]; any other running plan stops, replaced — on the day before [startEpochDay]
+     * (its Sunday) when that is later than [today], so it counts through its week (release 1's limit 3), else [today].
+     * Refused (throws) unless [id] is an offered answer never run. One transaction.
      */
     suspend fun keep(id: Long, startEpochDay: Long, today: Long)
 
@@ -62,7 +63,7 @@ class RoomProgrammeStore @Inject constructor(
     )
 
     override suspend fun keep(id: Long, startEpochDay: Long, today: Long) = transaction.run {
-        dao.replaceRunning(id, today)
+        dao.replaceRunning(id, maxOf(today, startEpochDay - 1))
         // Only an offered answer starts; otherwise the throw rolls the replacement back.
         check(dao.runProgramme(id, startEpochDay) == 1) { "only an offered plan can be kept" }
     }
@@ -101,7 +102,12 @@ class RoomProgrammeStore @Inject constructor(
 
 /** Null when this version cannot read the row: such a plan is offered nowhere and sent nowhere. */
 fun TrainerProgrammeEntity.toProgramme(): Programme? {
-    val ask = runCatching { ProgrammeAsk(weeks, perWeek, words.orEmpty()) }.getOrNull() ?: return null
+    val goal = when (val stored = TrainerResponse.readGoal(plan)) {
+        TrainerResponse.StoredGoal.None -> null
+        TrainerResponse.StoredGoal.Unreadable -> return null
+        is TrainerResponse.StoredGoal.Read -> stored.goal
+    }
+    val ask = runCatching { ProgrammeAsk(weeks, perWeek, words.orEmpty(), goal) }.getOrNull() ?: return null
     val readPlan = TrainerResponse.readWeeksPlan(plan) ?: return null
     val readEvaluation = if (evaluation == null) null else TrainerResponse.readEvaluation(evaluation) ?: return null
     val readStatus = ProgrammeStatus.entries.firstOrNull { it.name == status } ?: return null
@@ -111,6 +117,6 @@ fun TrainerProgrammeEntity.toProgramme(): Programme? {
 fun Programme.toEntity(): TrainerProgrammeEntity = TrainerProgrammeEntity(
     id = id, createdAtMillis = createdAtMillis, weeks = ask.weeks, perWeek = ask.perWeek,
     words = ask.words.trim().ifEmpty { null }, evaluation = evaluation?.let(TrainerResponse::encodeEvaluation),
-    plan = TrainerResponse.encodeWeeksPlan(plan), model = model, startEpochDay = startEpochDay,
+    plan = TrainerResponse.encodeStoredWeeksPlan(plan, ask.goal), model = model, startEpochDay = startEpochDay,
     status = status.name, stoppedEpochDay = stoppedEpochDay, replacesId = replacesId,
 )

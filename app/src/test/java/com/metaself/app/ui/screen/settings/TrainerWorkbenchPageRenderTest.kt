@@ -110,10 +110,11 @@ class TrainerWorkbenchPageRenderTest {
     }
 
     @Test
-    fun `the weeks-ahead path draws its two row labels`() {
+    fun `the weeks-ahead path draws its goal and its row label`() {
         val texts = page(TrainerWorkbenchViewModel.State(loaded = true, path = TrainerPath.EVALUATE))
 
-        assertThat(texts).containsAtLeast("HOW MANY WEEKS", "SESSIONS A WEEK I CAN MANAGE").inOrder()
+        assertThat(texts).containsAtLeast("GOAL: Keep a steady rhythm", "SESSIONS A WEEK I CAN MANAGE").inOrder()
+        assertThat(texts).doesNotContain("HOW MANY WEEKS")
     }
 
     @Test

@@ -30,6 +30,8 @@ import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.PlannedTick
 import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.PlanAheadAsk
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.TimeAvailable
@@ -104,11 +106,11 @@ class TrainerWorkbenchTest {
     @Test
     fun `the evaluation's request is the real one, with the start and the last evaluation`() = runTest {
         planRunning()
-        val form = ProgrammeAsk(2, 2, "Invented words.")
+        val form = PlanAheadAsk(PlanGoal.Steady, 2, "Invented words.")
 
         val bench = workbench.request(TrainerWorkbench.Inputs.Evaluate(form))
         trainer.evaluations += TrainerReply.Answered(EvaluationAndPlan(EVALUATION, WEEKS), "a-model")
-        ask.evaluate(form)
+        ask.planAhead(form)
 
         assertThat(bench).isEqualTo(trainer.asked.single())
     }
@@ -154,7 +156,7 @@ class TrainerWorkbenchTest {
         val inputs = listOf(
             TrainerWorkbench.Inputs.Feedback(1),
             TrainerWorkbench.Inputs.Plan(ANSWERS),
-            TrainerWorkbench.Inputs.Evaluate(ProgrammeAsk(2, 2)),
+            TrainerWorkbench.Inputs.Evaluate(PlanAheadAsk(PlanGoal.Steady, 2)),
             TrainerWorkbench.Inputs.Adjust("Invented words."),
         )
         inputs.forEach { assertThat(workbench.send(it, SYSTEM)).isInstanceOf(TrainerWorkbench.Run.Replied::class.java) }

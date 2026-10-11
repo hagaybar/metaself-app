@@ -27,6 +27,7 @@ import com.metaself.app.ui.screen.trainer.ChoiceRow
 import com.metaself.app.ui.screen.trainer.EvaluatePlanViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.GoalWording
 import com.metaself.app.ui.trainer.TrainerWording
 import com.metaself.app.ui.trainer.WorkbenchWording
 import java.time.ZoneId
@@ -58,7 +59,7 @@ fun TrainerWorkbenchPage(
             Text(WorkbenchWording.INTRO, style = MaterialTheme.typography.bodyMedium)
             if (state.unreadable) Text(WorkbenchWording.RECORD_NOT_READ, color = MaterialTheme.colorScheme.error)
             val open = !state.sending
-            ChoiceRow(R.string.workbench_row_path, TrainerPath.entries, state.path, WorkbenchWording::path, open, onPath)
+            ChoiceRow(R.string.workbench_row_path, TrainerPath.WORKBENCH, state.path, WorkbenchWording::path, open, onPath)
             PathInputs(state, open, onSession, onPlan, onEvaluate, onAdjustWords)
 
             Text(WorkbenchWording.willSend(state.fileName), style = MaterialTheme.typography.titleSmall)
@@ -119,7 +120,8 @@ private fun PathInputs(
 
         TrainerPath.EVALUATE -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
             val form = state.evaluate
-            ChoiceRow(R.string.weeks_row_weeks, ProgrammeAsk.WEEKS, form.weeks, { "$it weeks" }, open) { onEvaluate(form.copy(weeks = it)) }
+            // Release 2's choice 14: the workbench tries a steady rhythm only.
+            Text("${GoalWording.ROW_GOAL}: ${GoalWording.STEADY}", style = MaterialTheme.typography.labelMedium)
             ChoiceRow(R.string.weeks_row_per_week, ProgrammeAsk.PER_WEEK.toList(), form.perWeek, { "$it" }, open) { onEvaluate(form.copy(perWeek = it)) }
             Words(R.string.plan_words, form.words, open) { onEvaluate(form.copy(words = it)) }
         }
@@ -129,6 +131,9 @@ private fun PathInputs(
         } else if (state.loaded) {
             Text(WorkbenchWording.NO_PLAN)
         }
+
+        // Not on the workbench (TrainerPath.WORKBENCH): never chosen here.
+        TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK -> Text(WorkbenchWording.NOT_HERE)
     }
 }
 

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
@@ -17,11 +18,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.trainer.PlanPlace
+import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.GoalWording
 import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.TrainerWording
 
@@ -52,6 +56,10 @@ fun EvaluatePlanScreen(
     onGetSteps: (PlanPlace) -> Unit = {},
     /** D124: Not now, under the replace sentence. */
     onCancelKeep: () -> Unit = {},
+    /** D121: Fill in next week, or Plan this week. */
+    onFill: () -> Unit = {},
+    /** D121: Plan the next block. */
+    onNextBlock: () -> Unit = {},
 ) {
     val shown = state.shown
     val planShown = state.planShown
@@ -70,7 +78,7 @@ fun EvaluatePlanScreen(
                 when (state.view) {
                     EvaluatePlanViewModel.PlanView.WEEK -> if (planShown != null) {
                         FromTrainerLabel()
-                        PlanShownView(planShown)
+                        PlanShownView(planShown, state.today)
                     } else {
                         Text(stringResource(R.string.weeks_not_running))
                         // D122: with no plan, the kept single session is not one view further away.
@@ -80,17 +88,33 @@ fun EvaluatePlanScreen(
                         }
                     }
                     EvaluatePlanViewModel.PlanView.SESSION -> SessionView(state.sessions, onGetSteps)
-                    EvaluatePlanViewModel.PlanView.MONTH -> Text(
-                        if (planShown != null) PlanPageWording.NO_OUTLINE else stringResource(R.string.weeks_not_running),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
+                    EvaluatePlanViewModel.PlanView.MONTH -> {
+                        val month = planShown?.month
+                        if (month != null) {
+                            FromTrainerLabel()
+                            PlanMonthView(month, state.today)
+                        } else {
+                            Text(
+                                if (planShown != null) PlanPageWording.NO_OUTLINE else stringResource(R.string.weeks_not_running),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    }
                 }
-                PlanButtons(planShown, onAdjust, onPlan, onPlanAhead)
+                PlanButtons(
+                    planShown, onAdjust, onPlan, onPlanAhead,
+                    FillButton(state.offer, state.filling, state.fillFailure, state.filledLine, state.ceiling),
+                    onFill, onNextBlock,
+                )
             }
             shown == null -> EvaluateForm(state, onChange, onAsk)
             else -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
                 FromTrainerLabel()
-                state.offered?.let { PlanShownView(it) }
+                state.offered?.let { offered ->
+                    // D124: the answer drawn as D118's weeks, with the Month view's outline above them.
+                    offered.month?.let { PlanMonthView(it, state.today) }
+                    PlanShownView(offered, state.today)
+                }
                 when {
                     state.kept -> Text(stringResource(R.string.weeks_kept), style = MaterialTheme.typography.bodyMedium)
                     // D124: drawn in place, not as a dialog, so what it says is on the page.
@@ -133,7 +157,7 @@ private fun EvaluateForm(
     val open = !state.asking
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Section)) {
         Text(stringResource(R.string.weeks_intro), style = MaterialTheme.typography.bodyMedium)
-        NumberRow(R.string.weeks_row_weeks, ProgrammeAsk.WEEKS, form.weeks, { "$it weeks" }, open) { onChange(form.copy(weeks = it)) }
+        GoalRows(form, state.today, open, onChange)
         NumberRow(R.string.weeks_row_per_week, ProgrammeAsk.PER_WEEK.toList(), form.perWeek, { "$it" }, open) {
             onChange(form.copy(perWeek = it))
         }
@@ -158,6 +182,79 @@ private fun EvaluateForm(
             state.failure?.let { Text(TrainerWording.failure(it), color = MaterialTheme.colorScheme.error) }
         }
     }
+}
+
+/**
+ * D119, D124: the goal — Keep a steady rhythm, or A distance by a date; for a distance, what, how far, and by when: the
+ * Sunday a whole number of weeks ahead, 6 to 30, moved a week at a time.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun GoalRows(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boolean, onChange: (EvaluatePlanViewModel.Form) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        RowLabel(GoalWording.ROW_GOAL)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+            verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+        ) {
+            EvaluatePlanViewModel.GoalChoice.entries.forEach { choice ->
+                FilterChip(
+                    selected = form.goal == choice,
+                    onClick = { onChange(form.copy(goal = choice)) },
+                    label = { Text(if (choice == EvaluatePlanViewModel.GoalChoice.STEADY) GoalWording.STEADY else GoalWording.DISTANCE) },
+                    enabled = enabled,
+                )
+            }
+        }
+    }
+    if (form.goal == EvaluatePlanViewModel.GoalChoice.DISTANCE) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            RowLabel(GoalWording.ROW_SPORT)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
+                verticalArrangement = Arrangement.spacedBy(Spacing.Tight),
+            ) {
+                GoalSport.entries.forEach { sport ->
+                    FilterChip(
+                        selected = form.sport == sport,
+                        onClick = { onChange(form.copy(sport = sport)) },
+                        label = { Text(GoalWording.sport(sport)) },
+                        enabled = enabled,
+                    )
+                }
+            }
+        }
+        OutlinedTextField(
+            value = form.km,
+            onValueChange = { onChange(form.copy(km = it)) },
+            enabled = enabled,
+            label = { Text(GoalWording.ROW_KM) },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            RowLabel(GoalWording.ROW_BY)
+            Text(GoalWording.byLine(GoalWording.byDay(today, form.weeksAhead), today), style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                OutlinedButton(
+                    onClick = { onChange(form.earlier()) },
+                    enabled = enabled && form.weeksAhead > EvaluatePlanViewModel.Form.WEEKS_AHEAD.first,
+                ) { Text(GoalWording.EARLIER) }
+                OutlinedButton(
+                    onClick = { onChange(form.later()) },
+                    enabled = enabled && form.weeksAhead < EvaluatePlanViewModel.Form.WEEKS_AHEAD.last,
+                ) { Text(GoalWording.LATER) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowLabel(text: String) {
+    Text(text, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 @OptIn(ExperimentalLayoutApi::class)

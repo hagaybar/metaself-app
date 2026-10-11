@@ -30,7 +30,7 @@ class FakeProgrammeStore : ProgrammeStore {
         rows.value = rows.value.map {
             when {
                 it.id == id -> it.copy(status = ProgrammeStatus.RUNNING, startEpochDay = startEpochDay, stoppedEpochDay = null)
-                it.status == ProgrammeStatus.RUNNING -> it.copy(status = ProgrammeStatus.REPLACED, stoppedEpochDay = today)
+                it.status == ProgrammeStatus.RUNNING -> it.copy(status = ProgrammeStatus.REPLACED, stoppedEpochDay = maxOf(today, startEpochDay - 1))
                 else -> it
             }
         }

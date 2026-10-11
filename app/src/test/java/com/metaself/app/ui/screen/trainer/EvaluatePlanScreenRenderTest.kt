@@ -2,12 +2,18 @@ package com.metaself.app.ui.screen.trainer
 
 import androidx.compose.ui.semantics.Role
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.DatedEvaluation
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.PlanCard
+import com.metaself.app.domain.trainer.PlanMonth
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.STEADY_OUTLINE
+import com.metaself.app.domain.trainer.OUTLINE_15
+import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.PlanCounting
 import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.PlanProgress
@@ -29,6 +35,7 @@ import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import com.metaself.app.ui.trainer.TrainerWording
 
 /**
  * JUnit 4 by necessity — Robolectric's runner is JUnit 4. Which words the evaluate page and the plan screen draw
@@ -48,22 +55,39 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
         assertThat(texts).contains("Plan ahead")
-        assertThat(texts).containsAtLeast("HOW MANY WEEKS", "2 weeks", "4 weeks", "6 weeks", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
+        assertThat(texts).containsAtLeast("GOAL", "Keep a steady rhythm", "A distance by a date", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
+        assertThat(texts).doesNotContain("HOW MANY WEEKS")
+        assertThat(texts).doesNotContain("DISTANCE (KM)")
         assertThat(texts.any { it.contains("your last evaluation and how its plan went") && it.endsWith("Never meals.") }).isTrue()
     }
 
-    /** As the approved mock-up: 4 weeks and 3 sessions a week are chosen, so Ask is ready at once. */
+    /** D124: a steady rhythm and 3 sessions a week are chosen, so Ask is ready at once. */
     @Test
-    fun `the form opens on 4 weeks and 3 sessions a week, ready to ask`() {
+    fun `the form opens on a steady rhythm and 3 sessions a week, ready to ask`() {
         draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
-        assertThat(render.isSelected("4 weeks")).isTrue()
-        assertThat(render.isSelected("2 weeks")).isFalse()
+        assertThat(render.isSelected("Keep a steady rhythm")).isTrue()
+        assertThat(render.isSelected("A distance by a date")).isFalse()
         assertThat(render.isSelected("3")).isTrue()
         assertThat(render.isEnabled("Ask the trainer")).isTrue()
 
-        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = EvaluatePlanViewModel.Form(weeks = 4)))
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = EvaluatePlanViewModel.Form()))
         assertThat(render.isEnabled("Ask the trainer")).isFalse()
+    }
+
+    /** D119: a distance asks what, how far and by when; Ask waits for the km. */
+    @Test
+    fun `a distance goal draws its rows, and its date in words`() {
+        val distance = EvaluatePlanViewModel.Form(goal = EvaluatePlanViewModel.GoalChoice.DISTANCE, perWeek = 3, weeksAhead = 14)
+        val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance))
+
+        assertThat(texts).containsAtLeast("GOAL", "WHAT", "Run", "Walk", "Swim", "Ride", "BY", "Sun 13 Dec · 14 weeks", "A week earlier", "A week later").inOrder()
+        assertThat(render.isEnabled("Ask the trainer")).isFalse()
+
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance.copy(km = "15")))
+        assertThat(render.isEnabled("Ask the trainer")).isTrue()
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance.copy(km = "15", weeksAhead = 30)))
+        assertThat(render.isEnabled("A week later")).isFalse()
     }
 
     @Test
@@ -160,7 +184,7 @@ class EvaluatePlanScreenRenderTest {
         assertThat(chosen).containsExactly(EvaluatePlanViewModel.PlanView.SESSION, EvaluatePlanViewModel.PlanView.MONTH).inOrder()
     }
 
-    /** D123, release 1: no plan has an outline yet. */
+    /** D123: a plan made before outlines says it has none. */
     @Test
     fun `Month says the plan has no outline`() {
         val texts = draw(running().copy(view = EvaluatePlanViewModel.PlanView.MONTH))
@@ -273,6 +297,127 @@ class EvaluatePlanScreenRenderTest {
         assertThat(render.isEnabled("Ask again")).isFalse()
     }
 
+    // --- D119–D123: goals and blocks. The goal fixture, kept from this Monday; every figure is invented. ----
+
+    @Test
+    fun `Month draws the goal line, each block's row and its bars in words`() {
+        val texts = draw(outlined(today = MONDAY + 10, workouts = listOf(TrainerScreens.walk(1, MONDAY))).copy(view = EvaluatePlanViewModel.PlanView.MONTH))
+
+        assertThat(texts).containsAtLeast(
+            "15 km run · by Sun 13 Dec · 13 weeks to go",
+            "Base · Easy rhythm", "Wk 1 · 120 min, 40 done", "Wk 2 · 130 min, you are here", "Wk 4 · 100 min, easier",
+            "Build · Longer runs", "Peak · Race distance", "Taper · Fresh legs", "Wk 15 · 90 min, easier",
+            "Adjust the plan",
+        ).inOrder()
+        assertThat(texts).doesNotContain("This plan has no outline — plan ahead to set a goal.")
+    }
+
+    @Test
+    fun `Week says the goal under the title and a week beyond the filled ones as its target`() {
+        val texts = draw(outlined())
+
+        assertThat(texts).containsAtLeast(
+            "Invented plan", "15 km run · by Sun 13 Dec · 14 weeks to go",
+            "Week 1 · settle in — this week", "Week 2 · add a walk", "Week 3", "about 140 min · longest 50′",
+            "Week 4", "about 100 min · longest 30′ · easier week",
+        ).inOrder()
+    }
+
+    /** D121: from Friday, Fill in next week, with its privacy line; an empty week begun, Plan this week. */
+    @Test
+    fun `the plan page offers to fill in a week, with what it sends`() {
+        var filled = 0
+        val friday = draw(outlined(today = MONDAY + 4, filled = 1), onFill = { filled++ })
+        assertThat(friday).containsAtLeast("Fill in next week", "Adjust the plan", "Plan ahead").inOrder()
+        assertThat(friday.any { it.startsWith("Sends to OpenAI") && it.contains("your plan with its goal and outline") }).isTrue()
+        render.click("Fill in next week")
+        assertThat(filled).isEqualTo(1)
+
+        assertThat(draw(outlined(filled = 0))).contains("Plan this week")
+        val thursday = draw(outlined(filled = 1))
+        assertThat(thursday).doesNotContain("Fill in next week")
+        assertThat(thursday.none { it.startsWith("Sends to OpenAI") }).isTrue()
+    }
+
+    @Test
+    fun `a fill under way, failed or done says so`() {
+        val asking = outlined(today = MONDAY + 4, filled = 1).copy(filling = true)
+        draw(asking)
+        assertThat(render.isEnabled("Asking the trainer…")).isFalse()
+
+        assertThat(draw(outlined(today = MONDAY + 4, filled = 1).copy(fillFailure = EstimateResult.NoKey))).contains(TrainerWording.failure(EstimateResult.NoKey))
+        assertThat(draw(outlined().copy(filledLine = "Filled in. Invented sentence."))).contains("Filled in. Invented sentence.")
+    }
+
+    @Test
+    fun `a steady plan's last week offers the next block`() {
+        var asked = 0
+        val steady = SHOWN.copy(
+            ask = ProgrammeAsk(4, 2, goal = PlanGoal.Steady),
+            plan = SHOWN.plan.copy(outline = STEADY_OUTLINE),
+        )
+        val texts = draw(outlined(today = START + 24, programme = steady, start = START), onNextBlock = { asked++ })
+
+        assertThat(texts).containsAtLeast("Plan the next block", "Plan ahead").inOrder()
+        render.click("Plan the next block")
+        assertThat(asked).isEqualTo(1)
+    }
+
+    /** Release 1's limit 3: an old plan finishing its week says when the new one starts, and offers no Adjust. */
+    @Test
+    fun `a plan replaced from next Monday says when the new one starts, and cannot be adjusted`() {
+        val replaced = SHOWN.copy(startEpochDay = START, status = ProgrammeStatus.REPLACED, stoppedEpochDay = MONDAY + 6)
+        val counting = PlanCounting(1, 0, emptyMap())
+        val progress = PlanProgress.of(replaced.plan, START, emptyList(), TEST_EPOCH_DAY, counting)
+        val card = PlanCard.of(replaced, emptyList(), TEST_EPOCH_DAY, counting) as PlanCard.Running
+        val shown = PlanShown(PlanTimeline.of(replaced, START, TEST_EPOCH_DAY, progress, emptyMap()), card, null)
+
+        val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, onRunning = true, planShown = shown))
+
+        assertThat(texts).containsAtLeast("Your new plan starts Mon 7 Sep.", "Plan the open walk", "Plan ahead").inOrder()
+        assertThat(texts).doesNotContain("Adjust the plan")
+        assertThat(texts).doesNotContain("Week 3 · hold it")
+    }
+
+    /** D124: the answer to Plan ahead draws the Month above its weeks. */
+    @Test
+    fun `an answer with an outline draws its Month above its weeks`() {
+        val answer = SHOWN.copy(ask = ProgrammeAsk(15, 2, goal = GOAL_15K), plan = outlinedPlan(filled = 2))
+
+        val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, shown = answer))
+
+        assertThat(texts).containsAtLeast(
+            "15 km run · by Sun 13 Dec · 14 weeks to go", "Base · Easy rhythm", "Invented plan", "Week 1 · settle in — this week", "Keep this plan",
+        ).inOrder()
+    }
+
+    /** The goal fixture's fifteen weeks; the first [filled] carry SHOWN's sessions. */
+    private fun outlinedPlan(filled: Int) = WeeksPlan(
+        "Invented plan",
+        List(15) { if (it < filled) SHOWN.plan.weeks[it] else PlanWeek("", emptyList()) },
+        "Invented reason.",
+        OUTLINE_15,
+    )
+
+    /** The goal fixture's plan kept from this Monday (or [programme] from [start]), as the plan page reads it on [today]. */
+    private fun outlined(
+        today: Long = TEST_EPOCH_DAY,
+        filled: Int = 2,
+        workouts: List<Workout> = emptyList(),
+        programme: Programme = SHOWN.copy(ask = ProgrammeAsk(15, 2, goal = GOAL_15K), plan = outlinedPlan(filled)),
+        start: Long = MONDAY,
+    ): EvaluatePlanViewModel.State {
+        val kept = programme.copy(startEpochDay = start, status = ProgrammeStatus.RUNNING)
+        val counting = PlanCounting(1, 0, emptyMap())
+        val progress = PlanProgress.of(kept.plan, start, workouts, Programmes.countedUntil(kept, today), counting)
+        val card = PlanCard.of(kept, workouts, today, counting) as PlanCard.Running
+        val shown = PlanShown(
+            PlanTimeline.of(kept, start, today, progress, emptyMap()), card, null,
+            goal = kept.ask.goal, month = PlanMonth.of(kept, start, today, workouts),
+        )
+        return EvaluatePlanViewModel.State(today = today, onRunning = true, planShown = shown)
+    }
+
     private fun draw(
         state: EvaluatePlanViewModel.State,
         onKeep: () -> Unit = {},
@@ -282,11 +427,13 @@ class EvaluatePlanScreenRenderTest {
         onChoose: (EvaluatePlanViewModel.PlanView) -> Unit = {},
         onGetSteps: (PlanPlace) -> Unit = {},
         onCancelKeep: () -> Unit = {},
+        onFill: () -> Unit = {},
+        onNextBlock: () -> Unit = {},
     ): List<String> = render.texts {
         EvaluatePlanScreen(
             state = state, onBack = {}, onChange = {}, onAsk = {}, onKeep = onKeep, onAskAgain = {},
             onAdjust = onAdjust, onPlan = onPlan, onPlanAhead = onPlanAhead, onChoose = onChoose, onGetSteps = onGetSteps,
-            onCancelKeep = onCancelKeep,
+            onCancelKeep = onCancelKeep, onFill = onFill, onNextBlock = onNextBlock,
         )
     }
 

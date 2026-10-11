@@ -15,7 +15,11 @@ import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.OUTLINE_15
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.STEADY_OUTLINE
 import com.metaself.app.domain.trainer.Recovery
 import com.metaself.app.domain.trainer.Rhythm
 import com.metaself.app.domain.trainer.SessionFacts
@@ -146,7 +150,7 @@ class OpenAiTrainerTest {
 
         val reply = trainer().adjust(ADJUST_REQUEST)
 
-        assertThat((reply as TrainerReply.Answered).value.weeks).hasSize(2)
+        assertThat((reply as TrainerReply.Answered).value.plan.weeks).hasSize(2)
         assertThat(server.takeRequest().body.readUtf8()).contains("weeks_plan")
     }
 
@@ -165,6 +169,30 @@ class OpenAiTrainerTest {
 
         assertThat(twoWeekReply).isInstanceOf(TrainerReply.Answered::class.java)
         assertThat((fourWeekReply as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreadable::class.java)
+    }
+
+    /** D121: filling in a week is one call under its own schema, checked against sessions a week. */
+    @Test
+    fun `a fill is one call, checked against sessions a week`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_FILL)))
+        server.enqueue(MockResponse().setBody(reply(GOOD_FILL.replace("\"longest_minutes\":40", "\"longest_minutes\":400"))))
+
+        val good = trainer().fill(FILL_REQUEST)
+        val bad = trainer().fill(FILL_REQUEST)
+
+        assertThat((good as TrainerReply.Answered).value.week.sessions).hasSize(1)
+        assertThat(server.takeRequest().body.readUtf8()).contains("week_filled")
+        assertThat((bad as TrainerReply.Failed).failure).isInstanceOf(EstimateResult.Unreadable::class.java)
+    }
+
+    @Test
+    fun `the next block is one call under its own schema`() = runTest {
+        server.enqueue(MockResponse().setBody(reply(GOOD_BLOCK)))
+
+        val reply = trainer().nextBlock(BLOCK_REQUEST)
+
+        assertThat((reply as TrainerReply.Answered).value.block.weeks).hasSize(4)
+        assertThat(server.takeRequest().body.readUtf8()).contains("next_block")
     }
 
     private fun trainer(
@@ -288,6 +316,32 @@ class OpenAiTrainerTest {
         val MID_PLAN_ADJUST_REQUEST = request(
             TrainerQuestion.Adjust(ProgrammeAsk(6, 2), TEST_EPOCH_DAY - 3, FOUR_WEEK_PLAN, 2, emptyList(), emptyList(), 1, "Invented.", emptyList()),
         )
+
+        /** The goal fixture's plan, its first week filled. */
+        private val OUTLINED = WeeksPlan(
+            "Invented",
+            List(15) { if (it == 0) PlanWeek("w", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))) else PlanWeek("", emptyList()) },
+            "Invented.",
+            OUTLINE_15,
+        )
+
+        val FILL_REQUEST = request(
+            TrainerQuestion.FillWeek(ProgrammeAsk(15, 2, goal = GOAL_15K), TEST_EPOCH_DAY - 3, OUTLINED, week = 1, weekIndex = 0, doneByWeek = emptyList(), howItWent = emptyList()),
+        )
+
+        val BLOCK_REQUEST = request(
+            TrainerQuestion.NextBlock(
+                ProgrammeAsk(4, 2, goal = PlanGoal.Steady), TEST_EPOCH_DAY - 24,
+                OUTLINED.copy(weeks = OUTLINED.weeks.take(4), outline = STEADY_OUTLINE), weekIndex = 3, doneByWeek = emptyList(), howItWent = emptyList(),
+            ),
+        )
+
+        val GOOD_FILL = """{"focus":"Invented","sessions":[{"kind":"walk","minutes":30,"effort":"easy","what":"Walk"}],
+            "target":{"minutes":60,"longest_minutes":40,"easier":false},"target_why":""}"""
+
+        val GOOD_BLOCK = """{"block":{"phase":"steady","focus":"Invented","weeks":[
+            {"minutes":60,"longest_minutes":30,"easier":false},{"minutes":70,"longest_minutes":30,"easier":false},
+            {"minutes":80,"longest_minutes":40,"easier":false},{"minutes":50,"longest_minutes":30,"easier":true}]},"why":"Invented."}"""
 
         val FOUR_WEEK_REST = """{"title":"Invented","weeks":[
             {"focus":"a","sessions":[{"kind":"run","minutes":20,"effort":"push","what":"Run"}]},

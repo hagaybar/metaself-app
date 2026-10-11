@@ -15,10 +15,25 @@ import com.metaself.app.domain.trainer.SessionPlan
 import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WeeksPlan
+import com.metaself.app.domain.trainer.AdjustedRest
+import com.metaself.app.domain.trainer.Block
+import com.metaself.app.domain.trainer.BlockAnswer
+import com.metaself.app.domain.trainer.FILLED_AT_FIRST
+import com.metaself.app.domain.trainer.FilledWeek
+import com.metaself.app.domain.trainer.PlanAheadAsk
+import com.metaself.app.domain.trainer.withOutline
+import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.Outline
+import com.metaself.app.domain.trainer.Phase
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.WeekTarget
+import java.time.LocalDate
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
@@ -56,14 +71,75 @@ object TrainerResponse {
      * the model wrote one — D94 says it is empty when there is none, and the answer is not failed for it.
      */
     fun parseEvaluation(body: String, model: String, ask: ProgrammeAsk, hadLast: Boolean): TrainerReply<EvaluationAndPlan> =
-        content(body)?.let(::readEvaluationAndPlan)?.takeIf { it.plan.fits(ask) }
+        content(body)?.let { content -> if (ask.goal == null) readEvaluationAndPlan(content)?.takeIf { it.plan.fits(ask) } else readOutlined(content, ask) }
             ?.let { if (hadLast) it else it.copy(evaluation = it.evaluation.copy(sinceLast = "")) }
             ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
-    /** D97: this week and the weeks after, [fitting the rest][WeeksPlan.fitsRest]. */
-    fun parseAdjusted(body: String, model: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): TrainerReply<WeeksPlan> =
-        content(body)?.let(::readWeeksPlan)?.takeIf { it.fitsRest(weeksLeft, perWeek, thisWeekMax) }
+    /**
+     * D120, D121: a goal's evaluation — sessions for the plan's first two weeks (one, for a one-week plan), each with
+     * one to sessions-a-week; an outline covering every week of [ask] within the bounds — composed into the whole plan,
+     * its later weeks empty. Null for anything else.
+     */
+    private fun readOutlined(content: String, ask: ProgrammeAsk): EvaluationAndPlan? = runCatching {
+        val reply = readEvaluationAndPlan(content)!!
+        val outline = outline(json.parseToJsonElement(content).jsonObject.getValue("outline").jsonObject)
+        val first = reply.plan.weeks
+        val fits = first.size == minOf(FILLED_AT_FIRST, ask.weeks) && first.all { it.sessions.size in 1..ask.perWeek } &&
+            outline.covers(ask.weeks) && outline.fits(ask.perWeek)
+        if (fits) reply.copy(plan = reply.plan.copy(outline = null).withOutline(outline)) else null
+    }.getOrNull()
+
+    /**
+     * D97: this week and the weeks after, [fitting the rest][WeeksPlan.fitsRest]. For a plan with an outline
+     * ([outlined], D121): this week and next week only (this week alone when it is the last), and a target in bounds
+     * for every week left.
+     */
+    fun parseAdjusted(
+        body: String,
+        model: String,
+        weeksLeft: Int,
+        perWeek: Int,
+        thisWeekMax: Int,
+        outlined: Boolean = false,
+    ): TrainerReply<AdjustedRest> =
+        content(body)?.let { content -> if (outlined) readOutlinedRest(content, weeksLeft, perWeek, thisWeekMax) else readRest(content, weeksLeft, perWeek, thisWeekMax) }
+            ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    private fun readRest(content: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): AdjustedRest? =
+        readWeeksPlan(content)?.takeIf { it.fitsRest(weeksLeft, perWeek, thisWeekMax) }?.let { AdjustedRest(it.copy(outline = null)) }
+
+    private fun readOutlinedRest(content: String, weeksLeft: Int, perWeek: Int, thisWeekMax: Int): AdjustedRest? = runCatching {
+        val plan = readWeeksPlan(content)!!.copy(outline = null)
+        val targets = json.parseToJsonElement(content).jsonObject.getValue("targets").jsonArray.map { target(it.jsonObject) }
+        val fits = plan.fitsRest(minOf(FILLED_AT_FIRST, weeksLeft), perWeek, thisWeekMax) &&
+            targets.size == weeksLeft && targets.all { it.fits(perWeek) }
+        if (fits) AdjustedRest(plan, targets) else null
+    }.getOrNull()
+
+    /** D121: one week filled in — one to [perWeek] sessions, its target in bounds, and why ("" when unchanged). */
+    fun parseFill(body: String, model: String, perWeek: Int): TrainerReply<FilledWeek> =
+        content(body)?.let { content ->
+            runCatching {
+                val payload = json.parseToJsonElement(content).jsonObject
+                val week = PlanWeek(payload.text("focus"), payload.getValue("sessions").jsonArray.map { planned(it.jsonObject) })
+                val filled = FilledWeek(week, target(payload.getValue("target").jsonObject), payload.text("target_why"))
+                filled.takeIf { week.sessions.size in 1..perWeek && it.target.fits(perWeek) }
+            }.getOrNull()
+        }
+            ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
+    /** D121: the next block — four weeks of targets in bounds — and why. */
+    fun parseNextBlock(body: String, model: String, perWeek: Int): TrainerReply<BlockAnswer> =
+        content(body)?.let { content ->
+            runCatching {
+                val payload = json.parseToJsonElement(content).jsonObject
+                val answer = BlockAnswer(block(payload.getValue("block").jsonObject), payload.text("why"))
+                answer.takeIf { it.block.weeks.size == PlanAheadAsk.BLOCK_WEEKS && it.block.weeks.all { week -> week.fits(perWeek) } && it.why.isNotEmpty() }
+            }.getOrNull()
+        }
             ?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
@@ -178,8 +254,70 @@ object TrainerResponse {
             val week = element.jsonObject
             PlanWeek(week.text("focus"), week.getValue("sessions").jsonArray.map { planned(it.jsonObject) })
         }
-        return WeeksPlan(payload.text("title"), weeks, payload.text("why"))
+        // D120: an outline present must read; absent, the plan was made before outlines.
+        val outline = payload["outline"]?.let { outline(it.jsonObject) }
+        return WeeksPlan(payload.text("title"), weeks, payload.text("why"), outline)
             .takeIf { it.title.isNotEmpty() && it.why.isNotEmpty() && it.weeks.isNotEmpty() }
+    }
+
+    /** D120: an outline in the reply's shape; throws on anything else. Its coverage and bounds are the caller's. */
+    private fun outline(payload: JsonObject): Outline = Outline(payload.getValue("blocks").jsonArray.map { block(it.jsonObject) })
+
+    private fun block(payload: JsonObject): Block = Block(
+        phase = Phase.entries.first { it.name.lowercase() == payload.text("phase") },
+        focus = payload.text("focus"),
+        weeks = payload.getValue("weeks").jsonArray.map { target(it.jsonObject) },
+    )
+
+    private fun target(payload: JsonObject): WeekTarget = WeekTarget(
+        minutes = payload.minute("minutes"),
+        longest = payload.minute("longest_minutes"),
+        easier = payload.flag("easier"),
+    )
+
+    /** A JSON boolean: "true" in quotes is text. */
+    private fun JsonObject.flag(name: String): Boolean {
+        val value = getValue(name).jsonPrimitive
+        require(!value.isString) { "$name is not a boolean" }
+        return value.boolean
+    }
+
+    /**
+     * D119: a plan's row as stored — the plan's own shape ([encodeWeeksPlan]) and, when it has a goal, the goal
+     * under [GOAL]. [readWeeksPlan] ignores the extra key.
+     */
+    fun encodeStoredWeeksPlan(plan: WeeksPlan, goal: PlanGoal?): String {
+        val shape = TrainerPrompt.weeksPlanJson(plan)
+        if (goal == null) return shape.toString()
+        return JsonObject(shape + (GOAL to TrainerPrompt.goalJson(goal))).toString()
+    }
+
+    /**
+     * D119: the goal stored beside a plan — [StoredGoal.None] when there is none (a plan made before goals), and
+     * [StoredGoal.Unreadable] when the key is there but does not read, which makes the row unreadable.
+     */
+    fun readGoal(content: String?): StoredGoal = runCatching {
+        val payload = json.parseToJsonElement(content!!).jsonObject[GOAL]?.jsonObject ?: return@runCatching StoredGoal.None
+        StoredGoal.Read(goal(payload))
+    }.getOrDefault(StoredGoal.Unreadable)
+
+    /** What [readGoal] found. */
+    sealed interface StoredGoal {
+        data object None : StoredGoal
+        data object Unreadable : StoredGoal
+        data class Read(val goal: PlanGoal) : StoredGoal
+    }
+
+    private const val GOAL = "goal"
+
+    private fun goal(payload: JsonObject): PlanGoal = when (payload.text("kind")) {
+        "steady" -> PlanGoal.Steady
+        "distance" -> PlanGoal.Distance(
+            sport = GoalSport.entries.first { it.name.lowercase() == payload.text("sport") },
+            km = payload.getValue("km").jsonPrimitive.also { require(!it.isString) { "km is not a number" } }.double,
+            byEpochDay = LocalDate.parse(payload.text("by")).toEpochDay(),
+        )
+        else -> throw IllegalArgumentException("not a goal")
     }
 
     /** Throws on anything unknown; [PlannedSession]'s own checks refuse minutes out of 5..180. */

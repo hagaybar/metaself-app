@@ -25,6 +25,7 @@ import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.profile.TEST_YEAR
 import com.metaself.app.domain.profile.aProfile
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.MainAction
 import com.metaself.app.domain.trainer.PlanCard
 import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanWeek
@@ -166,6 +167,23 @@ class TrainerViewModelTest {
 
         val card = viewModel.state.value.home!!.plan as PlanCard.Running
         assertThat(card.progress.weeks.first().done).isEqualTo(1)
+    }
+
+    /** Release 1's limit 3: replaced on Thursday, the old plan is still this week's card until Sunday. Invented. */
+    @Test
+    fun `a plan replaced from next Monday is still the card this week`() = runTest {
+        val viewModel = viewModel()
+        backgroundScope.launch { viewModel.state.collect {} }
+        val old = programmes.add(RUNNING_PLAN)
+        programmes.keep(old, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        val new = programmes.add(RUNNING_PLAN.copy(createdAtMillis = NOW))
+        programmes.keep(new, TEST_EPOCH_DAY + 4, TEST_EPOCH_DAY)
+        advanceUntilIdle()
+
+        val card = viewModel.state.value.home!!.plan as PlanCard.Running
+        assertThat(card.programme.id).isEqualTo(old)
+        assertThat(card.replacedFrom).isEqualTo(TEST_EPOCH_DAY + 4)
+        assertThat(viewModel.state.value.home!!.main).isEqualTo(MainAction.PlanOpen(WorkoutKind.WALK))
     }
 
     /** D105: a session that started before the plan was kept ticks nothing. Invented. */

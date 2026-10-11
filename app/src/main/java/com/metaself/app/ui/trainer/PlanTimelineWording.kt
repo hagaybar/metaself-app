@@ -46,6 +46,25 @@ object PlanTimelineWording {
     /** "Easy 30′ · Steady 45′ · Push 20′" (invented). */
     fun aheadLine(sessions: List<PlannedSession>): String = sessions.joinToString(SEP) { tileTitle(it) }
 
+    /**
+     * D117, D123: the line under a week ahead, or under this week when it has no sessions — its sessions on one line,
+     * or, with none and an outline, its target ("about 150 min · longest 60′ · easier week", invented); "" otherwise.
+     * A past week's line is [pastLine].
+     */
+    fun weekLine(week: TimelineWeek): String {
+        val sessions = when (val place = week.place) {
+            is TimelinePlace.Ahead -> place.sessions
+            is TimelinePlace.ThisWeek -> place.tiles.map { it.planned }
+            is TimelinePlace.Past -> return pastLine(place)
+        }
+        val target = week.target
+        return when {
+            sessions.isNotEmpty() -> aheadLine(sessions)
+            target != null -> GoalWording.targetLine(target)
+            else -> ""
+        }
+    }
+
     /** "Easy 30′". */
     fun tileTitle(session: PlannedSession): String = "${ProgrammeWording.effort(session.effort)} ${session.minutes}′"
 

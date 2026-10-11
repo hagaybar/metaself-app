@@ -7,7 +7,15 @@ import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.Block
+import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.OUTLINE_15
+import com.metaself.app.domain.trainer.Outline
+import com.metaself.app.domain.trainer.Phase
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.STEADY_OUTLINE
+import com.metaself.app.domain.trainer.target
 import com.metaself.app.domain.trainer.TrainerReply
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Test
@@ -261,5 +269,98 @@ class TrainerResponseTest {
         assertThat(TrainerResponse.readEvaluation(TrainerResponse.encodeEvaluation(reply.value.evaluation))).isEqualTo(reply.value.evaluation)
         assertThat(TrainerResponse.readWeeksPlan(TrainerResponse.encodeWeeksPlan(reply.value.plan))).isEqualTo(reply.value.plan)
         assertThat(TrainerResponse.readWeeksPlan("not json")).isNull()
+    }
+
+    // --- D119–D121: goals, outlines, filling in. The goal fixture's outline; every figure is invented. ---------
+
+    private fun outlined(plan: String, outline: Outline) = """{"evaluation":$evaluation,"plan":$plan,"outline":${TrainerPrompt.outlineJson(outline)}}"""
+
+    private val goalAsk = ProgrammeAsk(15, 3, goal = GOAL_15K)
+
+    @Test
+    fun `a goal's evaluation fills two weeks and keeps the outline for every week`() {
+        val reply = TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", goalAsk, hadLast = false)
+            as TrainerReply.Answered
+
+        val plan = reply.value.plan
+        assertThat(plan.weeks).hasSize(15)
+        assertThat(plan.weeks.take(2).map { it.sessions.size }).containsExactly(2, 1).inOrder()
+        assertThat(plan.weeks.drop(2).all { it.sessions.isEmpty() && it.focus.isEmpty() }).isTrue()
+        assertThat(plan.outline).isEqualTo(OUTLINE_15)
+        assertThat(TrainerResponse.readWeeksPlan(TrainerResponse.encodeWeeksPlan(plan))).isEqualTo(plan)
+    }
+
+    @Test
+    fun `an outline that misses or adds a week, a target out of bounds, or a third filled week is unreadable`() {
+        val short = Outline(OUTLINE_15.blocks.dropLast(1) + Block(Phase.TAPER, "Fresh legs", listOf(target(90, 40))))
+        val long = OUTLINE_15 + Block(Phase.TAPER, "Extra", listOf(target(90, 40)))
+        val tooLong = OUTLINE_15.withTarget(3, target(600, 60))
+
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, short)), "a-model", goalAsk, hadLast = false))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, long)), "a-model", goalAsk, hadLast = false))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, tooLong)), "a-model", goalAsk, hadLast = false))
+        val threeWeeks = weeksPlan(week(session()), week(session()), week(session()))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(threeWeeks, OUTLINE_15)), "a-model", goalAsk, hadLast = false))
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(evaluated(twoWeeks)), "a-model", goalAsk, hadLast = false))
+    }
+
+    @Test
+    fun `a steady rhythm's outline is exactly one block of four weeks`() {
+        val steady = ProgrammeAsk(4, 3, goal = PlanGoal.Steady)
+
+        assertThat(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, STEADY_OUTLINE)), "a-model", steady, hadLast = false))
+            .isInstanceOf(TrainerReply.Answered::class.java)
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", steady, hadLast = false))
+    }
+
+    @Test
+    fun `a filled week has one to sessions-a-week sessions and a target in bounds, with its sentence`() {
+        fun filled(sessions: String, aim: String, why: String = "Invented reason.") =
+            """{"focus":"Invented focus","sessions":[$sessions],"target":$aim,"target_why":"$why"}"""
+        val inBounds = """{"minutes":120,"longest_minutes":40,"easier":false}"""
+
+        val reply = TrainerResponse.parseFill(reply(filled(session() + "," + session(minutes = 40), inBounds)), "a-model", perWeek = 3)
+            as TrainerReply.Answered
+        assertThat(reply.value.week.sessions).hasSize(2)
+        assertThat(reply.value.target).isEqualTo(target(120, 40))
+        assertThat(reply.value.why).isEqualTo("Invented reason.")
+        assertThat((TrainerResponse.parseFill(reply(filled(session(), inBounds, "")), "a-model", 3) as TrainerReply.Answered).value.why).isEmpty()
+        assertUnreadable(TrainerResponse.parseFill(reply(filled("", inBounds)), "a-model", 3))
+        assertUnreadable(TrainerResponse.parseFill(reply(filled(List(4) { session() }.joinToString(","), inBounds)), "a-model", 3))
+        assertUnreadable(TrainerResponse.parseFill(reply(filled(session(), """{"minutes":120,"longest_minutes":200,"easier":false}""")), "a-model", 3))
+        assertUnreadable(TrainerResponse.parseFill(reply(filled(session(), """{"minutes":120,"longest_minutes":40,"easier":"no"}""")), "a-model", 3))
+    }
+
+    @Test
+    fun `the next block is four weeks of targets in bounds`() {
+        fun next(block: Block) = """{"block":${TrainerPrompt.blockJson(block)},"why":"Invented reason."}"""
+        val block = STEADY_OUTLINE.blocks.single()
+
+        val reply = TrainerResponse.parseNextBlock(reply(next(block)), "a-model", perWeek = 3) as TrainerReply.Answered
+        assertThat(reply.value.block).isEqualTo(block)
+        assertThat(reply.value.why).isEqualTo("Invented reason.")
+        assertUnreadable(TrainerResponse.parseNextBlock(reply(next(block.copy(weeks = block.weeks.take(3)))), "a-model", 3))
+        assertUnreadable(TrainerResponse.parseNextBlock(reply(next(block.copy(weeks = block.weeks.dropLast(1) + target(10, 20)))), "a-model", 3))
+    }
+
+    @Test
+    fun `an adjusted rest of an outlined plan is the filled weeks and a target for every week left`() {
+        fun rest(weeks: String, targets: Int) =
+            weeksPlan(*weeks.split("|").toTypedArray()).removeSuffix("}") +
+                ""","targets":[${List(targets) { TrainerPrompt.targetJson(target(100, 30)) }.joinToString(",")}]}"""
+        val two = week(session()) + "|" + week(session())
+
+        val reply = TrainerResponse.parseAdjusted(reply(rest(two, 5)), "a-model", weeksLeft = 5, perWeek = 3, thisWeekMax = 1, outlined = true)
+            as TrainerReply.Answered
+        assertThat(reply.value.plan.weeks).hasSize(2)
+        assertThat(reply.value.targets).hasSize(5)
+        assertUnreadable(TrainerResponse.parseAdjusted(reply(rest(two, 4)), "a-model", 5, 3, 1, outlined = true))
+        assertUnreadable(TrainerResponse.parseAdjusted(reply(rest(two + "|" + week(session()), 5)), "a-model", 5, 3, 1, outlined = true))
+        // In the plan's last week only this week is filled.
+        assertThat(TrainerResponse.parseAdjusted(reply(rest(week(session()), 1)), "a-model", 1, 3, 1, outlined = true))
+            .isInstanceOf(TrainerReply.Answered::class.java)
+        // A plan without an outline is read as it always was; targets sent anyway are ignored.
+        val legacy = TrainerResponse.parseAdjusted(reply(rest(two, 3)), "a-model", weeksLeft = 2, perWeek = 3, thisWeekMax = 1) as TrainerReply.Answered
+        assertThat(legacy.value.targets).isEmpty()
     }
 }

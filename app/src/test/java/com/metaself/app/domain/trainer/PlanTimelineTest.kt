@@ -142,6 +142,20 @@ class PlanTimelineTest {
         assertThat(marked.weeks[0]).isEqualTo(timeline().weeks[0])
     }
 
+    /** D123: a week of an outlined plan carries its target; a plan without an outline, none. */
+    @Test
+    fun `an outlined plan's weeks carry their targets, an empty week ahead or this week among them`() {
+        val outline = Outline(listOf(Block(Phase.STEADY, "Invented", List(4) { WeekTarget(100 + 10 * it, 40, it == 3) })))
+        val outlined = kept.copy(plan = plan.copy(weeks = plan.weeks.take(1) + List(3) { PlanWeek("", emptyList()) }, outline = outline))
+
+        val timeline = PlanTimeline.of(outlined, start, TEST_EPOCH_DAY, progress(outlined, emptyList()), emptyMap())
+
+        assertThat(timeline.weeks.map { it.target }).isEqualTo(outline.targets)
+        assertThat((timeline.weeks[1].place as TimelinePlace.ThisWeek).tiles).isEmpty()
+        assertThat((timeline.weeks[2].place as TimelinePlace.Ahead).sessions).isEmpty()
+        assertThat(timeline().weeks.all { it.target == null }).isTrue()
+    }
+
     private fun timeline(today: Long = TEST_EPOCH_DAY) = PlanTimeline.of(kept, start, today, progress(kept, emptyList(), today), emptyMap())
 
     private fun progress(programme: Programme, sessions: List<Workout>, today: Long = TEST_EPOCH_DAY) =

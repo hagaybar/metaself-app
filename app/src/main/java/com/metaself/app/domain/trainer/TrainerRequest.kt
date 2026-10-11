@@ -58,6 +58,40 @@ sealed interface TrainerQuestion {
             require(thisWeekMax >= 0) { "thisWeekMax cannot be negative, not $thisWeekMax" }
         }
     }
+
+    /**
+     * D121: fill in [week] (from 0) of the running [plan], which has an outline — next week, or this week once begun
+     * empty. [weekIndex] is the week the owner is in (−1 before the plan starts); [doneByWeek] and [howItWent] cover
+     * each week begun before [week] (D105).
+     */
+    data class FillWeek(
+        val ask: ProgrammeAsk,
+        val startEpochDay: Long,
+        val plan: WeeksPlan,
+        val week: Int,
+        val weekIndex: Int,
+        val doneByWeek: List<Int>,
+        val howItWent: List<WeekOutcome>,
+    ) : TrainerQuestion {
+        init {
+            require(week in plan.weeks.indices) { "week must name one of the plan's weeks, not $week" }
+            require(plan.outline != null) { "only a plan with an outline is filled in" }
+        }
+    }
+
+    /** D121: a steady plan's next four weeks, from how its block went; [weekIndex] is its last week. */
+    data class NextBlock(
+        val ask: ProgrammeAsk,
+        val startEpochDay: Long,
+        val plan: WeeksPlan,
+        val weekIndex: Int,
+        val doneByWeek: List<Int>,
+        val howItWent: List<WeekOutcome>,
+    ) : TrainerQuestion {
+        init {
+            require(plan.outline != null) { "only a plan with an outline has blocks" }
+        }
+    }
 }
 
 /** One session as D84 sends it. [title] and [origin] of the workout are deliberately absent. */
@@ -248,6 +282,15 @@ interface Trainer {
     /** [request]'s question must be [TrainerQuestion.Evaluate] (D93). */
     suspend fun evaluate(request: TrainerRequest): TrainerReply<EvaluationAndPlan>
 
-    /** [request]'s question must be [TrainerQuestion.Adjust] (D97). The reply is this week and the weeks after. */
-    suspend fun adjust(request: TrainerRequest): TrainerReply<WeeksPlan>
+    /**
+     * [request]'s question must be [TrainerQuestion.Adjust] (D97). The reply is this week and the weeks after — for a
+     * plan with an outline, the weeks it fills and every week's target from this one (D121).
+     */
+    suspend fun adjust(request: TrainerRequest): TrainerReply<AdjustedRest>
+
+    /** [request]'s question must be [TrainerQuestion.FillWeek] (D121). */
+    suspend fun fill(request: TrainerRequest): TrainerReply<FilledWeek>
+
+    /** [request]'s question must be [TrainerQuestion.NextBlock] (D121). */
+    suspend fun nextBlock(request: TrainerRequest): TrainerReply<BlockAnswer>
 }

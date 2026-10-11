@@ -101,8 +101,13 @@ class TrainerViewModel @Inject constructor(
     /** The running plan, the record over its weeks, and what it counts from (D105). */
     private data class RunningPlan(val programme: Programme?, val workouts: List<Workout>, val counting: PlanCounting?)
 
-    /** D95: the running plan and the record over its weeks, so a session synced mid-plan ticks at once. */
-    private val plan: Flow<RunningPlan> = programmes.observeRunning().flatMapLatest { programme ->
+    /**
+     * D95: the plan in effect and the record over its weeks, so a session synced mid-plan ticks at once — a plan
+     * replaced from next Monday until its Sunday (release 1's limit 3), read again when the running plan or the day
+     * changes.
+     */
+    private val plan: Flow<RunningPlan> = combine(programmes.observeRunning(), calendarToday) { _, day -> day }.flatMapLatest { day ->
+        val programme = Programmes.inEffect(programmes.all(), day)
         val start = programme?.startEpochDay
         if (programme == null || start == null) {
             flowOf(RunningPlan(programme, emptyList(), null))

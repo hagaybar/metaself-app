@@ -20,7 +20,14 @@ import com.metaself.app.domain.trainer.PlanWeek
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
+import com.metaself.app.domain.trainer.FilledWeek
+import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.PlanOffer
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.STEADY_OUTLINE
+import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.SessionSlot
 import com.metaself.app.domain.trainer.TileState
@@ -72,12 +79,12 @@ class EvaluatePlanViewModelTest {
         trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
         val viewModel = watched()
 
-        viewModel.change(EvaluatePlanViewModel.Form(weeks = 2))
+        viewModel.change(EvaluatePlanViewModel.Form())
         viewModel.ask()
         advanceUntilIdle()
         assertThat(trainer.asked).isEmpty()
 
-        viewModel.change(EvaluatePlanViewModel.Form(weeks = 2, perWeek = 2, words = "Invented words."))
+        viewModel.change(EvaluatePlanViewModel.Form(perWeek = 2, words = "Invented words."))
         viewModel.ask()
         viewModel.ask()
         advanceUntilIdle()
@@ -91,20 +98,20 @@ class EvaluatePlanViewModelTest {
     fun `a failure says why and keeps the form`() = runTest {
         trainer.evaluations += TrainerReply.Failed(EstimateResult.NoKey)
         val viewModel = watched()
-        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.change(EvaluatePlanViewModel.Form(perWeek = 2))
 
         viewModel.ask()
         advanceUntilIdle()
 
         assertThat(viewModel.state.value.failure).isEqualTo(EstimateResult.NoKey)
-        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(2, 2))
+        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(perWeek = 2))
     }
 
     @Test
     fun `keep makes it the running plan, and ask again returns to the form with the answers`() = runTest {
         trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
         val viewModel = watched()
-        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.change(EvaluatePlanViewModel.Form(perWeek = 2))
         viewModel.ask()
         advanceUntilIdle()
 
@@ -116,7 +123,7 @@ class EvaluatePlanViewModelTest {
         viewModel.askAgain()
         advanceUntilIdle()
         assertThat(viewModel.state.value.shown).isNull()
-        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(2, 2))
+        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(perWeek = 2))
     }
 
     @Test
@@ -172,7 +179,7 @@ class EvaluatePlanViewModelTest {
     fun `an answer is drawn as its weeks before it is kept`() = runTest {
         trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
         val viewModel = watched()
-        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.change(EvaluatePlanViewModel.Form(perWeek = 2))
         viewModel.ask()
         advanceUntilIdle()
 
@@ -187,17 +194,74 @@ class EvaluatePlanViewModelTest {
         assertThat(viewModel.state.value.offered).isNull()
     }
 
-    /** As the approved mock-up: the form opens on 4 weeks and 3 sessions a week, and both still change. */
+    /** D124: the form opens on a steady rhythm and 3 sessions a week, ready; no number of weeks is asked. */
     @Test
-    fun `the form opens ready to ask, and its rows still change`() = runTest {
+    fun `the form opens ready to ask a steady rhythm, and asks with the goal`() = runTest {
+        trainer.evaluations += TrainerReply.Failed(EstimateResult.NoKey)
         val viewModel = watched()
         advanceUntilIdle()
-        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(weeks = 4, perWeek = 3))
+        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(perWeek = 3))
         assertThat(viewModel.state.value.canAsk).isTrue()
 
-        viewModel.change(viewModel.state.value.form.copy(weeks = 6))
+        viewModel.ask()
         advanceUntilIdle()
-        assertThat(viewModel.state.value.form).isEqualTo(EvaluatePlanViewModel.Form(weeks = 6, perWeek = 3))
+
+        val question = trainer.asked.single().question as TrainerQuestion.Evaluate
+        assertThat(question.ask).isEqualTo(ProgrammeAsk(4, 3, goal = PlanGoal.Steady))
+    }
+
+    /** D119: a distance needs its km; its date moves a week at a time, 6 to 30 weeks ahead. */
+    @Test
+    fun `a distance goal is ready once its km reads, and its date stays 6 to 30 weeks ahead`() = runTest {
+        trainer.evaluations += TrainerReply.Failed(EstimateResult.NoKey)
+        val viewModel = watched()
+        val distance = EvaluatePlanViewModel.Form(goal = EvaluatePlanViewModel.GoalChoice.DISTANCE, perWeek = 3, weeksAhead = 14)
+
+        listOf("", "0", "abc", "1001", "12.34", "-3").forEach { km ->
+            viewModel.change(distance.copy(km = km))
+            advanceUntilIdle()
+            assertThat(viewModel.state.value.canAsk).isFalse()
+        }
+        viewModel.change(distance.copy(km = "15"))
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.canAsk).isTrue()
+        assertThat(distance.copy(km = "21.1").ask(TEST_EPOCH_DAY)!!.goal).isEqualTo(PlanGoal.Distance(GoalSport.RUN, 21.1, GOAL_15K.byEpochDay))
+        assertThat(distance.copy(weeksAhead = 6).earlier().weeksAhead).isEqualTo(6)
+        assertThat(distance.copy(weeksAhead = 30).later().weeksAhead).isEqualTo(30)
+        assertThat(distance.later().weeksAhead).isEqualTo(15)
+
+        viewModel.ask()
+        advanceUntilIdle()
+
+        val question = trainer.asked.single().question as TrainerQuestion.Evaluate
+        assertThat(question.ask).isEqualTo(ProgrammeAsk(15, 3, goal = GOAL_15K))
+    }
+
+    /** D121: the plan page offers to fill in a week; the answer is kept and the page read again, its sentence said. */
+    @Test
+    fun `the plan page fills in an empty week, says the trainer's sentence, and shows the week`() = runTest {
+        val plan = WeeksPlan("Invented plan", List(4) { PlanWeek("", emptyList()) }, "Invented reason.", STEADY_OUTLINE)
+        val id = programmes.add(Programme(0, 0, ProgrammeAsk(4, 3, goal = PlanGoal.Steady), ANSWER.evaluation, plan, "a-model"))
+        programmes.keep(id, TEST_EPOCH_DAY - 3, TEST_EPOCH_DAY)
+        trainer.fills += TrainerReply.Failed(EstimateResult.NoKey)
+        trainer.fills += TrainerReply.Answered(FilledWeek(PlanWeek("Invented", listOf(WALK)), STEADY_OUTLINE.target(0)!!, "Invented sentence."), "a-model")
+        val viewModel = watched(ON_PLAN)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.offer).isEqualTo(PlanOffer.PlanThisWeek(0))
+
+        viewModel.fill()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.fillFailure).isEqualTo(EstimateResult.NoKey)
+
+        viewModel.fill()
+        viewModel.fill()
+        advanceUntilIdle()
+
+        assertThat(trainer.asked).hasSize(2)
+        assertThat(viewModel.state.value.fillFailure).isNull()
+        assertThat(viewModel.state.value.filledLine).isEqualTo("Filled in. Invented sentence.")
+        assertThat(viewModel.state.value.offer).isNull()
+        assertThat((viewModel.state.value.planShown!!.timeline.weeks[0].place as TimelinePlace.ThisWeek).tiles).hasSize(1)
     }
 
     /** A second tap on Keep before the first has written is ignored: one write, and no refusal said. */
@@ -205,7 +269,7 @@ class EvaluatePlanViewModelTest {
     fun `a double tap on keep writes once and says no refusal`() = runTest {
         trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
         val viewModel = watched()
-        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.change(EvaluatePlanViewModel.Form(perWeek = 2))
         viewModel.ask()
         advanceUntilIdle()
 
@@ -223,7 +287,7 @@ class EvaluatePlanViewModelTest {
     fun `a failed keep is said`() = runTest {
         trainer.evaluations += TrainerReply.Answered(ANSWER, "a-model")
         val viewModel = watched()
-        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.change(EvaluatePlanViewModel.Form(perWeek = 2))
         viewModel.ask()
         advanceUntilIdle()
         programmes.failing = true
@@ -288,7 +352,7 @@ class EvaluatePlanViewModelTest {
         val viewModel = watched()
         advanceUntilIdle()
         assertThat(viewModel.state.value.replacingFrom).isEqualTo(TEST_EPOCH_DAY + 4)
-        viewModel.change(EvaluatePlanViewModel.Form(2, 2))
+        viewModel.change(EvaluatePlanViewModel.Form(perWeek = 2))
         viewModel.ask()
         advanceUntilIdle()
         assertThat(viewModel.state.value.startIfKept).isEqualTo(TEST_EPOCH_DAY + 4)

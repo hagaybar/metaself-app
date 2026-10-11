@@ -41,6 +41,8 @@ import com.metaself.app.domain.trainer.WorkbenchReply
 import com.metaself.app.domain.trainer.WorkbenchSender
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
+import com.metaself.app.domain.trainer.PlanAheadAsk
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.ui.screen.trainer.EvaluatePlanViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.RecordingProblemLog
@@ -338,6 +340,8 @@ class TrainerWorkbenchViewModelTest {
         val programmes = FakeProgrammeStore()
         val vm = opened(programmes = object : ProgrammeStore by programmes {
             override suspend fun running(): Programme? = throw IllegalStateException("invented")
+            // The plan in effect is read from every row (release 1's limit 3).
+            override suspend fun all(): List<Programme> = throw IllegalStateException("invented")
         })
 
         assertThat(vm.state.value.unreadable).isTrue()
@@ -363,6 +367,16 @@ class TrainerWorkbenchViewModelTest {
         assertThat(vm.state.value.canSend).isTrue()
     }
 
+    /** Release 2's choice 14: the workbench tries Plan ahead with a steady rhythm, its sessions a week and words. */
+    @Test
+    fun `the plan-ahead path sends a steady rhythm`() = runTest {
+        val vm = opened()
+        vm.pickPath(TrainerPath.EVALUATE)
+        vm.changeEvaluate(EvaluatePlanViewModel.Form(perWeek = 2, words = "Invented ask."))
+
+        assertThat(vm.state.value.inputs).isEqualTo(TrainerWorkbench.Inputs.Evaluate(PlanAheadAsk(PlanGoal.Steady, 2, "Invented ask.")))
+    }
+
     /**
      * Amends D106: the path and every input outlive Android closing the app in the background (the
      * file picker open, say); a loaded file's text does not, and the page returns to the app's own.
@@ -374,7 +388,7 @@ class TrainerWorkbenchViewModelTest {
         first.pickPath(TrainerPath.ADJUST)
         first.pickSession(7)
         first.changePlan(FORM.copy(words = "Invented plan words."))
-        first.changeEvaluate(EvaluatePlanViewModel.Form(weeks = 2, perWeek = 1, words = "Invented ask."))
+        first.changeEvaluate(EvaluatePlanViewModel.Form(perWeek = 2, words = "Invented ask."))
         first.changeAdjustWords("Invented change.")
         first.load("content://invented/one"); advanceUntilIdle()
         assertThat(first.state.value.fileName).isEqualTo("invented.txt")
@@ -384,7 +398,7 @@ class TrainerWorkbenchViewModelTest {
         assertThat(again.path).isEqualTo(TrainerPath.ADJUST)
         assertThat(again.workoutId).isEqualTo(7L)
         assertThat(again.plan).isEqualTo(FORM.copy(words = "Invented plan words."))
-        assertThat(again.evaluate).isEqualTo(EvaluatePlanViewModel.Form(weeks = 2, perWeek = 1, words = "Invented ask."))
+        assertThat(again.evaluate).isEqualTo(EvaluatePlanViewModel.Form(perWeek = 2, words = "Invented ask."))
         assertThat(again.adjustWords).isEqualTo("Invented change.")
         assertThat(again.fileName).isNull()
         assertThat(again.instructions).isNull()
@@ -401,9 +415,9 @@ class TrainerWorkbenchViewModelTest {
         assertThat(fresh.evaluate).isEqualTo(EvaluatePlanViewModel.PRESET)
         assertThat(fresh.adjustWords).isEmpty()
 
-        opened(savedState = saved).changeEvaluate(EvaluatePlanViewModel.Form(weeks = null, perWeek = 3))
+        opened(savedState = saved).changeEvaluate(EvaluatePlanViewModel.Form(perWeek = null))
 
-        assertThat(opened(savedState = saved).state.value.evaluate).isEqualTo(EvaluatePlanViewModel.Form(weeks = null, perWeek = 3))
+        assertThat(opened(savedState = saved).state.value.evaluate).isEqualTo(EvaluatePlanViewModel.Form(perWeek = null))
     }
 
     @Test

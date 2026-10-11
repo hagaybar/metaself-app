@@ -3,7 +3,11 @@ package com.metaself.app.data.trainer
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.day.DatabaseTransaction
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.OUTLINE_15
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.PlanWeek
+import com.metaself.app.domain.trainer.STEADY_OUTLINE
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
@@ -33,6 +37,14 @@ class RoomProgrammeStoreWritesTest {
         store().keep(id = 4, startEpochDay = 20_696, today = 20_699)
 
         assertThat(log).containsExactly("begin", "replaceRunning(4, 20699)", "runProgramme(4, 20696)", "commit").inOrder()
+    }
+
+    /** Release 1's limit 3: kept from next Monday, the running plan stops on the Sunday before it, not today. */
+    @Test
+    fun `keeping a plan from next Monday stops the running one on its Sunday`() = runTest {
+        store().keep(4, startEpochDay = 20_703, today = 20_699)
+
+        assertThat(log).containsExactly("begin", "replaceRunning(4, 20702)", "runProgramme(4, 20703)", "commit").inOrder()
     }
 
     @Test
@@ -98,6 +110,34 @@ class RoomProgrammeStoreWritesTest {
         assertThat(row.copy(plan = "not json").toProgramme()).isNull()
         assertThat(row.copy(status = "SOMETHING_NEW").toProgramme()).isNull()
         assertThat(row.copy(weeks = 3).toProgramme()).isNull()
+    }
+
+    @Test
+    fun `a plan with a goal and an outline reads back with both, in the plan's own JSON`() {
+        val goal = PROGRAMME.copy(
+            id = 8, ask = ProgrammeAsk(15, 3, "Invented.", GOAL_15K),
+            plan = PROGRAMME.plan.copy(weeks = PROGRAMME.plan.weeks + List(13) { PlanWeek("", emptyList()) }, outline = OUTLINE_15),
+        )
+        val steady = goal.copy(id = 9, ask = ProgrammeAsk(4, 3, goal = PlanGoal.Steady), plan = goal.plan.copy(weeks = goal.plan.weeks.take(4), outline = STEADY_OUTLINE))
+
+        assertThat(goal.toEntity().toProgramme()).isEqualTo(goal)
+        assertThat(steady.toEntity().toProgramme()).isEqualTo(steady)
+        assertThat(goal.toEntity().weeks).isEqualTo(15)
+    }
+
+    @Test
+    fun `a row written before goals reads with none and writes back the same, and a malformed outline is unreadable`() {
+        val row = PROGRAMME.copy(id = 7).toEntity()
+
+        assertThat(row.toProgramme()!!.ask.goal).isNull()
+        assertThat(row.toProgramme()!!.plan.outline).isNull()
+        assertThat(row.plan).doesNotContain("outline")
+        assertThat(row.plan).doesNotContain("goal")
+        assertThat(row.toProgramme()!!.toEntity()).isEqualTo(row)
+        val broken = row.copy(plan = row.plan.dropLast(1) + ""","outline":{"blocks":[{"phase":"base"}]}}""")
+        assertThat(broken.toProgramme()).isNull()
+        val badGoal = row.copy(plan = row.plan.dropLast(1) + ""","goal":{"kind":"distance"}}""")
+        assertThat(badGoal.toProgramme()).isNull()
     }
 
     private fun store() = RoomProgrammeStore(dao(), Transaction())

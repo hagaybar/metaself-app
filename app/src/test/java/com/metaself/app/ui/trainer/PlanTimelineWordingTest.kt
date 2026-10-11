@@ -8,6 +8,7 @@ import com.metaself.app.domain.trainer.PlanTile
 import com.metaself.app.domain.trainer.PlanTimeline
 import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
+import com.metaself.app.domain.trainer.WeekTarget
 import com.metaself.app.domain.trainer.TileState
 import com.metaself.app.domain.trainer.TimelinePlace
 import com.metaself.app.domain.trainer.TimelineWeek
@@ -58,6 +59,17 @@ class PlanTimelineWordingTest {
         // D122: an open session with its steps kept.
         assertThat(PlanTimelineWording.tileLine(PlanTile(walk30, TileState.OPEN, stepsReady = true))).isEqualTo("Steps ready")
         assertThat(PlanTimelineWording.tileLine(PlanTile(walk30, TileState.DONE, monday, 30, stepsReady = true))).isEqualTo("Done Mon")
+    }
+
+    /** D123: a week beyond the filled-in ones says its target instead of sessions. */
+    @Test
+    fun `a week with a target and no sessions says its target`() {
+        val target = WeekTarget(150, 60, easier = true)
+
+        assertThat(PlanTimelineWording.weekLine(TimelineWeek(3, "", TimelinePlace.Ahead(emptyList()), target))).isEqualTo("about 150 min · longest 60′ · easier week")
+        assertThat(PlanTimelineWording.weekLine(TimelineWeek(2, "", TimelinePlace.ThisWeek(emptyList()), target))).isEqualTo("about 150 min · longest 60′ · easier week")
+        assertThat(PlanTimelineWording.weekLine(TimelineWeek(3, "w", TimelinePlace.Ahead(listOf(walk30)), target))).isEqualTo("Easy 30′")
+        assertThat(PlanTimelineWording.weekLine(TimelineWeek(3, "w", TimelinePlace.Ahead(emptyList()), null))).isEqualTo("")
     }
 
     @Test

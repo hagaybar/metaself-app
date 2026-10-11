@@ -55,6 +55,7 @@ import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.letter.LetterWording
 import com.metaself.app.ui.theme.MetaSelfTint
 import com.metaself.app.ui.theme.Spacing
+import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.ProgrammeWording
 import com.metaself.app.ui.trainer.TrainerWeekWording
 import com.metaself.app.ui.trainer.TrainerWording
@@ -110,7 +111,7 @@ fun TrainerScreen(
                     if (boxes.isNotEmpty()) Boxes(boxes)
                 }
                 state.note?.let { NoteView(it, zone) }
-                MainButton(home, onPlan, onPlanAhead)
+                MainButton(home, onPlan, onPlanAhead, onSeePlan)
                 home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
                 // D122: the kept single session is on the plan page now (Your plan → Session), not here.
                 Rows(
@@ -375,7 +376,7 @@ private fun NoteView(note: WeekNote, zone: ZoneId) {
  * session's plan with no weekly plan running.
  */
 @Composable
-private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onPlanAhead: () -> Unit) {
+private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onPlanAhead: () -> Unit, onSeePlan: () -> Unit) {
     when (val main = home.main) {
         is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -386,12 +387,30 @@ private fun MainButton(home: TrainerHome, onPlan: () -> Unit, onPlanAhead: () ->
         MainAction.PlanNext -> Button(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.trainer_plan_next))
         }
-        MainAction.PlanAhead -> Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        MainAction.PlanAhead -> WithSession(home, onPlan) {
             Button(onClick = onPlanAhead, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.trainer_evaluate)) }
-            OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
-                val session = MainAction.session(home.next)
-                Text(if (session is MainAction.PlanOpen) TrainerWeekWording.planOpen(session.kind) else stringResource(R.string.trainer_plan_next))
-            }
+        }
+        // D121: the ask is on the plan page, beside its privacy line; this button takes him there.
+        MainAction.PlanThisWeek -> WithSession(home, onPlan) {
+            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.PLAN_THIS_WEEK) }
+        }
+        MainAction.FillNextWeek -> WithSession(home, onPlan) {
+            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.FILL_NEXT_WEEK) }
+        }
+        MainAction.NextBlock -> WithSession(home, onPlan) {
+            Button(onClick = onSeePlan, modifier = Modifier.fillMaxWidth()) { Text(PlanPageWording.NEXT_BLOCK) }
+        }
+    }
+}
+
+/** [main], then the session action under it, outlined — Plan the open walk, or Plan my next session. */
+@Composable
+private fun WithSession(home: TrainerHome, onPlan: () -> Unit, main: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+        main()
+        OutlinedButton(onClick = onPlan, modifier = Modifier.fillMaxWidth()) {
+            val session = MainAction.session(home.next)
+            Text(if (session is MainAction.PlanOpen) TrainerWeekWording.planOpen(session.kind) else stringResource(R.string.trainer_plan_next))
         }
     }
 }

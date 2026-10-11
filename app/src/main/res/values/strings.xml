@@ -235,7 +235,6 @@
     <string name="trainer_adjust_plan">Adjust the plan</string>
     <string name="weeks_title">Plan ahead</string>
     <string name="weeks_intro">The trainer reads your record — a year of monthly lines, six weeks of sessions, your note — says where you stand, then plans the weeks ahead.</string>
-    <string name="weeks_row_weeks">HOW MANY WEEKS</string>
     <string name="weeks_row_per_week">SESSIONS A WEEK I CAN MANAGE</string>
     <string name="weeks_result_title">Evaluation and plan</string>
     <string name="weeks_running_title">Your plan</string>

@@ -19,9 +19,11 @@ data class TrainerHome(
     val plan: PlanCard = PlanCard.None,
     /** D96: the running plan's next session this week, for Plan my next session. */
     val next: PlannedTick? = null,
+    /** The day the home was read for, which D121's offers depend on; null reads as no offer. */
+    val today: Long? = null,
 ) {
-    /** D114, D124: the page's one main button — the open planned session, the next session, or Plan ahead. */
-    val main: MainAction get() = MainAction.of(plan, next)
+    /** D114, D121, D124: the page's one main button — a week to fill in, the open planned session, the next session, or Plan ahead. */
+    val main: MainAction get() = MainAction.of(plan, next, today)
 
     companion object {
         /** Today, yesterday and the day before (design question 10). */
@@ -47,7 +49,7 @@ data class TrainerHome(
                 .mapNotNull { workout -> byWorkout[workout.id]?.let { ReviewedSession(workout, it) } }
                 .sortedByDescending { it.workout.startedAtMillis }
             val plan = if (counting == null) PlanCard.None else PlanCard.of(running, planWorkouts, today, counting)
-            return TrainerHome(waiting, earlier, plan, (plan as? PlanCard.Running)?.next)
+            return TrainerHome(waiting, earlier, plan, (plan as? PlanCard.Running)?.next, today)
         }
     }
 }
@@ -63,12 +65,28 @@ sealed interface MainAction {
     /** No plan runs, it has ended, or this week is its last: "Plan ahead" (D124). */
     data object PlanAhead : MainAction
 
+    /** D121: this week has begun with no sessions: "Plan this week", on the plan page. */
+    data object PlanThisWeek : MainAction
+
+    /** D121: Sunday, and next week has no sessions: "Fill in next week", on the plan page. */
+    data object FillNextWeek : MainAction
+
+    /** D121: a steady plan's last week: "Plan the next block", on the plan page — a steady plan does not end. */
+    data object NextBlock : MainAction
+
     companion object {
-        /** D114, D124: the next thing to do, for [plan] and its running week's [next] open session. */
-        fun of(plan: PlanCard, next: PlannedTick?): MainAction = when {
-            plan !is PlanCard.Running -> PlanAhead
-            plan.weekIndex == plan.progress.weeks.lastIndex -> PlanAhead
-            else -> session(next)
+        /** D114, D121, D124: the next thing to do, for [plan], its running week's [next] open session, and [today]. */
+        fun of(plan: PlanCard, next: PlannedTick?, today: Long? = null): MainAction {
+            if (plan !is PlanCard.Running) return PlanAhead
+            // The next plan is already kept; this one's open sessions are what is left to do.
+            if (plan.replacedFrom != null) return session(next)
+            when (val offer = today?.let { PlanFilling.offer(plan, it) }) {
+                is PlanOffer.PlanThisWeek -> return PlanThisWeek
+                is PlanOffer.FillNextWeek -> if (today != null && PlanFilling.sunday(today)) return FillNextWeek
+                PlanOffer.NextBlock -> return NextBlock
+                null -> Unit
+            }
+            return if (plan.weekIndex == plan.progress.weeks.lastIndex) PlanAhead else session(next)
         }
 
         /** D117: the session action — the open session's kind, or the next session — the plan screen's, whatever the week. */
@@ -81,8 +99,16 @@ sealed interface PlanCard {
     /** No plan runs, or one ended more than fourteen days ago: the card offers an evaluation. */
     data object None : PlanCard
 
-    /** [weekIndex] is 0 for week 1, and -1 before it starts (kept Friday to Sunday). */
-    data class Running(val programme: Programme, val progress: PlanProgress, val weekIndex: Int) : PlanCard {
+    /**
+     * [weekIndex] is 0 for week 1, and -1 before it starts (kept Friday to Sunday). [replacedFrom]: a plan replaced
+     * from next Monday still runs this week (release 1's limit 3); the Monday the new one takes over, else null.
+     */
+    data class Running(
+        val programme: Programme,
+        val progress: PlanProgress,
+        val weekIndex: Int,
+        val replacedFrom: Long? = null,
+    ) : PlanCard {
         /** This week's first unticked planned session, with its week counted from 1; none before week 1. */
         val next: PlannedTick?
             get() = if (weekIndex in progress.weeks.indices) {
@@ -99,11 +125,15 @@ sealed interface PlanCard {
         /** [workouts]: the record over the plan's weeks; only its counted sessions after [counting]'s moment tick (D95, D105). */
         fun of(running: Programme?, workouts: List<Workout>, today: Long, counting: PlanCounting): PlanCard {
             val start = running?.startEpochDay
-            if (running == null || start == null || running.status != ProgrammeStatus.RUNNING) return None
+            if (running == null || start == null) return None
+            // Release 1's limit 3: a version replaced from next Monday runs to its stop day, its Sunday.
+            val finishing = Programmes.finishing(running, today)
+            if (running.status != ProgrammeStatus.RUNNING && !finishing) return None
             val last = ProgrammeCalendar.lastDay(start, running.ask.weeks)
             val progress = PlanProgress.of(running.plan, start, workouts, minOf(today, last), counting)
+            val replacedFrom = if (finishing) running.stoppedEpochDay!! + 1 else null
             return when {
-                today <= last -> Running(running, progress, ProgrammeCalendar.weekIndex(start, today).coerceAtLeast(-1))
+                today <= last -> Running(running, progress, ProgrammeCalendar.weekIndex(start, today).coerceAtLeast(-1), replacedFrom)
                 ProgrammeCalendar.endedShown(start, running.ask.weeks, today) -> Ended(running, progress)
                 else -> None
             }
