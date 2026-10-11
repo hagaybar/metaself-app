@@ -230,7 +230,7 @@ object TrainerPrompt {
 
     private val EVALUATE = """
         They are asking where they stand, and for a plan for the weeks ahead. The question gives their goal
-        (question.goal, below), how many weeks the plan runs (weeks: for a distance, from the date it starts
+        (question.goal, below), how many weeks the plan runs (weeks: for a distance or weekly_minutes, from the date it starts
         to the goal's week; for a steady rhythm, one block of four), how many sessions a week they can manage
         (sessions_a_week), any words of theirs, the date the plan starts (starts, a Monday; weeks run Monday
         to Sunday), and your last evaluation if there is one, with the plan that ran with it and how many of
@@ -307,7 +307,10 @@ object TrainerPrompt {
         question.goal is the plan's goal — not the weight goal above. It is null for a plan made before goals;
         otherwise either kind "steady" (keep a steady rhythm, with no end date, planned one block at a time)
         or kind "distance", with the sport (run, walk, swim or ride), km, by (the date, a Sunday) and
-        weeks_to_go (counted by the app, from this week to the goal's week). A plan's outline is its blocks in
+        weeks_to_go (counted by the app, from this week to the goal's week), or kind "weekly_minutes" (more time
+        each week), with minutes (a week's total), by and weeks_to_go as a distance has them. For weekly_minutes,
+        build the weekly total towards the goal's minutes, reaching it in the goal's week and holding it there —
+        no taper, there is no race; use base and build blocks, with the conventions' easier weeks. A plan's outline is its blocks in
         order, each with a phase (base, build, peak, taper or steady), a one-line focus and one target per
         week: minutes (the week's total), longest_minutes (its longest session) and easier (an easier week).
         filled_weeks lists the weeks, counted from 1, that carry sessions; the others carry their target only.
@@ -522,11 +525,11 @@ object TrainerPrompt {
         }
     }
 
-    /** D125: the goal as sent — as stored, and for a distance the weeks from this week to the goal's week, counted here. */
+    /** D125, D127: the goal as sent — as stored, and for a dated goal the weeks from this week to the goal's week, counted here. */
     private fun sentGoal(goal: PlanGoal?, today: Long): JsonElement {
         if (goal == null) return JsonNull
         val stored = goalJson(goal)
-        if (goal !is PlanGoal.Distance) return stored
+        if (goal !is PlanGoal.Dated) return stored
         val weeksToGo = (MovementWeek.mondayOf(goal.byEpochDay) - MovementWeek.mondayOf(today)) / 7
         return JsonObject(stored + ("weeks_to_go" to JsonPrimitive(weeksToGo)))
     }
@@ -803,6 +806,11 @@ object TrainerPrompt {
                 put("kind", "distance")
                 put("sport", goal.sport.name.lowercase())
                 put("km", goal.km)
+                put("by", date(goal.byEpochDay))
+            }
+            is PlanGoal.WeeklyMinutes -> {
+                put("kind", "weekly_minutes")
+                put("minutes", goal.minutes)
                 put("by", date(goal.byEpochDay))
             }
         }

@@ -3,6 +3,7 @@ package com.metaself.app.ui.trainer
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.MonthWeek
 import com.metaself.app.domain.trainer.Phase
@@ -40,5 +41,16 @@ class GoalWordingTest {
     fun `the form's date says the Sunday and the weeks`() {
         assertThat(GoalWording.byLine(GOAL_15K.byEpochDay, TEST_EPOCH_DAY)).isEqualTo("Sun 13 Dec · 14 weeks")
         assertThat(GoalWording.byDay(TEST_EPOCH_DAY, 14)).isEqualTo(GOAL_15K.byEpochDay)
+    }
+
+    /** D127: "150 min a week · by Sun 13 Dec · 14 weeks to go", then goal week and goal date passed (invented). */
+    @Test
+    fun `a time goal's line says the minutes, the date and the weeks to go`() {
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY)).isEqualTo("150 min a week · by Sun 13 Dec · 14 weeks to go")
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY + 7 * 13)).isEqualTo("150 min a week · by Sun 13 Dec · 1 week to go")
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY + 7 * 14)).isEqualTo("150 min a week · by Sun 13 Dec · goal week")
+        assertThat(GoalWording.goalLine(GOAL_150_MIN, TEST_EPOCH_DAY + 7 * 15)).isEqualTo("150 min a week · by Sun 13 Dec · goal date passed")
+        assertThat(GoalWording.minutesLine(150)).isEqualTo("150 min a week")
+        assertThat(GoalWording.MINUTES).isEqualTo("More time each week")
     }
 }

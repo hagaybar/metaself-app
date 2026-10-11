@@ -28,8 +28,13 @@ sealed interface PlanGoal {
     /** No end date: the plan runs block after block. */
     data object Steady : PlanGoal
 
-    /** [km] by [byEpochDay] (a Sunday, as the form gives it); the plan ends on that day's week. */
-    data class Distance(val sport: GoalSport, val km: Double, val byEpochDay: Long) : PlanGoal {
+    /** D119, D127: a goal with a date — the plan ends on [byEpochDay]'s week (a Sunday, as the form gives it). */
+    sealed interface Dated : PlanGoal {
+        val byEpochDay: Long
+    }
+
+    /** [km] by [byEpochDay]. */
+    data class Distance(val sport: GoalSport, val km: Double, override val byEpochDay: Long) : Dated {
         init {
             require(km > 0.0 && km <= MAX_KM) { "a distance goal is more than 0 and at most $MAX_KM km, not $km" }
         }
@@ -39,15 +44,27 @@ sealed interface PlanGoal {
             const val MAX_KM = 1000.0
         }
     }
+
+    /** D127: more time each week — [minutes] a week, reached by [byEpochDay]'s week and held there. */
+    data class WeeklyMinutes(val minutes: Int, override val byEpochDay: Long) : Dated {
+        init {
+            require(minutes in MINUTES) { "a time goal is 30 to 900 minutes a week, not $minutes" }
+        }
+
+        companion object {
+            /** The form's bounds — a bound on choosing, not a measurement. */
+            val MINUTES = 30..900
+        }
+    }
 }
 
 /** D124: Plan ahead's form — the goal, sessions a week, words; the weeks follow from the goal. */
 data class PlanAheadAsk(val goal: PlanGoal, val perWeek: Int, val words: String = "") {
-    /** The stored ask for a plan starting on [start] (a Monday): steady, one block; a distance, to the goal's week. */
+    /** The stored ask for a plan starting on [start] (a Monday): steady, one block; a dated goal, to the goal's week. */
     fun toAsk(start: Long): ProgrammeAsk = ProgrammeAsk(
         weeks = when (goal) {
             PlanGoal.Steady -> BLOCK_WEEKS
-            is PlanGoal.Distance -> ProgrammeCalendar.weekIndex(start, goal.byEpochDay) + 1
+            is PlanGoal.Dated -> ProgrammeCalendar.weekIndex(start, goal.byEpochDay) + 1
         },
         perWeek = perWeek,
         words = words,

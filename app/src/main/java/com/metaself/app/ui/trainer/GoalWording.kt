@@ -19,6 +19,7 @@ object GoalWording {
 
     const val STEADY = "Keep a steady rhythm"
     const val DISTANCE = "A distance by a date"
+    const val MINUTES = "More time each week"
     const val HERE = "you are here"
 
     /** Plan ahead's form (D124). */
@@ -26,6 +27,9 @@ object GoalWording {
     const val ROW_SPORT = "WHAT"
     const val ROW_KM = "DISTANCE (KM)"
     const val ROW_BY = "BY"
+    const val ROW_MINUTES = "MINUTES A WEEK"
+    const val FEWER = "10 min less"
+    const val MORE = "10 min more"
     const val EARLIER = "A week earlier"
     const val LATER = "A week later"
 
@@ -44,18 +48,28 @@ object GoalWording {
         Phase.STEADY -> "Steady"
     }
 
-    /** D119: "15 km run · by Sun 13 Dec · 14 weeks to go", or "Keep a steady rhythm" (invented); null without a goal. */
+    /**
+     * D119, D127: "15 km run · by Sun 13 Dec · 14 weeks to go", "150 min a week · by Sun 13 Dec · 14 weeks to go", or
+     * "Keep a steady rhythm" (invented); null without a goal.
+     */
     fun goalLine(goal: PlanGoal?, today: Long): String? = when (goal) {
         null -> null
         PlanGoal.Steady -> STEADY
-        is PlanGoal.Distance -> "${km(goal.km)} km ${sport(goal.sport).lowercase(Locale.US)}${SEP}by ${dayDate(goal.byEpochDay)}$SEP" +
-            when (val weeks = weeksBetween(today, goal.byEpochDay)) {
-                0L -> "goal week"
-                1L -> "1 week to go"
-                in 2..Long.MAX_VALUE -> "$weeks weeks to go"
-                else -> "goal date passed"
-            }
+        is PlanGoal.Distance -> "${km(goal.km)} km ${sport(goal.sport).lowercase(Locale.US)}" + dated(goal, today)
+        is PlanGoal.WeeklyMinutes -> minutesLine(goal.minutes) + dated(goal, today)
     }
+
+    /** " · by Sun 13 Dec · 14 weeks to go", "· 1 week to go", "· goal week", "· goal date passed" (invented). */
+    private fun dated(goal: PlanGoal.Dated, today: Long): String = "${SEP}by ${dayDate(goal.byEpochDay)}$SEP" +
+        when (val weeks = weeksBetween(today, goal.byEpochDay)) {
+            0L -> "goal week"
+            1L -> "1 week to go"
+            in 2..Long.MAX_VALUE -> "$weeks weeks to go"
+            else -> "goal date passed"
+        }
+
+    /** D127: "150 min a week" (invented). */
+    fun minutesLine(minutes: Int): String = "$minutes min a week"
 
     /** "15" for 15.0, "42.5" for 42.5. */
     fun km(km: Double): String = if (km % 1.0 == 0.0) km.toLong().toString() else km.toString()

@@ -65,4 +65,17 @@ class OutlineTest {
         assertThat(PlanAheadAsk(GOAL_15K, 3).toAsk(monday + 7).weeks).isEqualTo(14)
         assertThat(PlanAheadAsk(PlanGoal.Steady, 2).toAsk(monday)).isEqualTo(ProgrammeAsk(4, 2, goal = PlanGoal.Steady))
     }
+
+    /** D127: a time goal is 30 to 900 minutes a week, and its plan runs to the goal's week, as a distance's does. */
+    @Test
+    fun `a time goal's plan runs to its week, and its minutes are 30 to 900`() {
+        val monday = TEST_EPOCH_DAY - 3L
+
+        assertThat(PlanAheadAsk(GOAL_150_MIN, 3).toAsk(monday)).isEqualTo(ProgrammeAsk(15, 3, goal = GOAL_150_MIN))
+        assertThat(PlanAheadAsk(GOAL_150_MIN, 3).toAsk(monday + 7).weeks).isEqualTo(14)
+        assertThat(PlanGoal.WeeklyMinutes(30, GOAL_150_MIN.byEpochDay).minutes).isEqualTo(30)
+        assertThat(PlanGoal.WeeklyMinutes(900, GOAL_150_MIN.byEpochDay).minutes).isEqualTo(900)
+        assertThrows<IllegalArgumentException> { PlanGoal.WeeklyMinutes(20, GOAL_150_MIN.byEpochDay) }
+        assertThrows<IllegalArgumentException> { PlanGoal.WeeklyMinutes(910, GOAL_150_MIN.byEpochDay) }
+    }
 }

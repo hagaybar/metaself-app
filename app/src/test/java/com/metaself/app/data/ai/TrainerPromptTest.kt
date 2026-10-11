@@ -32,6 +32,7 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.GOAL_15K
 import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.PlanGoal
+import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.STEADY_OUTLINE
 import com.metaself.app.domain.trainer.ProgrammeStatus
@@ -713,6 +714,32 @@ class TrainerPromptTest {
         )
         assertThat(block.getValue("kind").jsonPrimitive.content).isEqualTo("next_block")
         assertThat(block.getValue("goal").jsonObject.getValue("kind").jsonPrimitive.content).isEqualTo("steady")
+    }
+
+    /** D127: a time goal is sent as stored — minutes and by — with the weeks to go counted by the phone. */
+    @Test
+    fun `a time goal is sent with its minutes, its date and its weeks to go`() {
+        val request = request(TrainerQuestion.Evaluate(ProgrammeAsk(15, 3, goal = GOAL_150_MIN), TEST_EPOCH_DAY - 3, null))
+        val question = Json.parseToJsonElement(TrainerPrompt.userMessage(request)).jsonObject.getValue("question").jsonObject
+        val goal = question.getValue("goal").jsonObject
+
+        assertThat(goal.keys).containsExactly("kind", "minutes", "by", "weeks_to_go").inOrder()
+        assertThat(goal.getValue("kind").jsonPrimitive.content).isEqualTo("weekly_minutes")
+        assertThat(goal.getValue("minutes").jsonPrimitive.int).isEqualTo(150)
+        assertThat(goal.getValue("by").jsonPrimitive.content).isEqualTo("2026-12-13")
+        assertThat(goal.getValue("weeks_to_go").jsonPrimitive.int).isEqualTo(14)
+        assertThat(TrainerPrompt.goalJson(GOAL_150_MIN).keys).containsExactly("kind", "minutes", "by").inOrder()
+    }
+
+    /** D127: the plan paths are told how to build towards a time goal — reached in its week and held, no taper. */
+    @Test
+    fun `the plan paths carry the time goal's rule`() {
+        listOf(TrainerPath.EVALUATE, TrainerPath.ADJUST, TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK).forEach { path ->
+            val system = TrainerPrompt.instructions(path)
+            assertThat(system).contains("weekly_minutes")
+            assertThat(system).contains("reaching it in the goal's week and holding it there")
+            assertThat(system).contains("no taper, there is no race")
+        }
     }
 
     /** D125: the conventions go to the four plan paths, labelled as conventions; never to a session or its feedback. */

@@ -317,6 +317,10 @@ object TrainerResponse {
             km = payload.getValue("km").jsonPrimitive.also { require(!it.isString) { "km is not a number" } }.double,
             byEpochDay = LocalDate.parse(payload.text("by")).toEpochDay(),
         )
+        "weekly_minutes" -> PlanGoal.WeeklyMinutes(
+            minutes = payload.minute("minutes"),
+            byEpochDay = LocalDate.parse(payload.text("by")).toEpochDay(),
+        )
         else -> throw IllegalArgumentException("not a goal")
     }
 

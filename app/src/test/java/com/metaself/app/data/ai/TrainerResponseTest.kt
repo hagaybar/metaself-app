@@ -9,6 +9,8 @@ import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Block
 import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GOAL_150_MIN
+import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.OUTLINE_15
 import com.metaself.app.domain.trainer.Outline
 import com.metaself.app.domain.trainer.Phase
@@ -362,5 +364,29 @@ class TrainerResponseTest {
         // A plan without an outline is read as it always was; targets sent anyway are ignored.
         val legacy = TrainerResponse.parseAdjusted(reply(rest(two, 3)), "a-model", weeksLeft = 2, perWeek = 3, thisWeekMax = 1) as TrainerReply.Answered
         assertThat(legacy.value.targets).isEmpty()
+    }
+
+    /** D127: a time goal is stored beside its plan and read back; the goals stored before it read as they did. */
+    @Test
+    fun `a time goal survives storage, and older goals still read`() {
+        val plan = TrainerResponse.readWeeksPlan(twoWeeks)!!
+        listOf(GOAL_150_MIN, GOAL_15K, PlanGoal.Steady).forEach { goal ->
+            assertThat(TrainerResponse.readGoal(TrainerResponse.encodeStoredWeeksPlan(plan, goal))).isEqualTo(TrainerResponse.StoredGoal.Read(goal))
+        }
+        assertThat(TrainerResponse.readGoal(TrainerResponse.encodeStoredWeeksPlan(plan, null))).isEqualTo(TrainerResponse.StoredGoal.None)
+        val stored = """{"title":"Invented plan","weeks":[],"why":"Invented.","goal":{"kind":"distance","sport":"walk","km":10.0,"by":"2026-12-13"}}"""
+        assertThat(TrainerResponse.readGoal(stored)).isEqualTo(TrainerResponse.StoredGoal.Read(PlanGoal.Distance(GoalSport.WALK, 10.0, GOAL_15K.byEpochDay)))
+        val tooFew = """{"title":"Invented plan","weeks":[],"why":"Invented.","goal":{"kind":"weekly_minutes","minutes":10,"by":"2026-12-13"}}"""
+        assertThat(TrainerResponse.readGoal(tooFew)).isEqualTo(TrainerResponse.StoredGoal.Unreadable)
+    }
+
+    /** D120, D127: a time goal's outline covers every week to the goal's week, as a distance's does. */
+    @Test
+    fun `a time goal's evaluation is checked for every week to the goal`() {
+        val ask = ProgrammeAsk(15, 3, goal = GOAL_150_MIN)
+
+        assertThat(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, OUTLINE_15)), "a-model", ask, hadLast = false))
+            .isInstanceOf(TrainerReply.Answered::class.java)
+        assertUnreadable(TrainerResponse.parseEvaluation(reply(outlined(twoWeeks, STEADY_OUTLINE)), "a-model", ask, hadLast = false))
     }
 }
