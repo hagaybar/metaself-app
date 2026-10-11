@@ -24,7 +24,13 @@ sealed interface DriveOutcome {
      */
     data class NeedsConsent(val request: android.content.IntentSender) : DriveOutcome
 
-    data class Failed(val reason: String) : DriveOutcome
+    /** [noConnection]: for want of a connection ([DriveConnection]); not logged here, the caller says it once (D139). */
+    data class Failed(val reason: String, val noConnection: Boolean = false) : DriveOutcome
+}
+
+/** The daily copy into Drive, as [DriveCopies] asks for it; a fake in tests. */
+fun interface DriveCopy {
+    suspend fun write(today: LocalDate, nowMillis: Long): DriveOutcome
 }
 
 /**
@@ -44,15 +50,15 @@ class DriveBackup @Inject constructor(
     private val access: DriveAccess,
     private val problems: ProblemLog,
     private val http: DriveHttp,
-) {
+) : DriveCopy {
 
-    suspend fun write(today: LocalDate, nowMillis: Long): DriveOutcome =
+    override suspend fun write(today: LocalDate, nowMillis: Long): DriveOutcome =
         withContext(Dispatchers.IO) {
             val token = when (val auth = access.authorise()) {
                 is DriveAuth.Token -> auth.accessToken
                 is DriveAuth.NeedsConsent ->
                     return@withContext DriveOutcome.NeedsConsent(auth.request)
-                is DriveAuth.Failed -> return@withContext DriveOutcome.Failed(auth.reason)
+                is DriveAuth.Failed -> return@withContext DriveOutcome.Failed(auth.reason, auth.noConnection)
             }
 
             val fileName = BackupSchedule.fileNameFor(today.toString())
@@ -70,6 +76,8 @@ class DriveBackup @Inject constructor(
                 val gone = DriveFiles.toDelete(list(token)).count { delete(it.id, token) }
                 DriveOutcome.Written(fileName, gone)
             }.getOrElse { error ->
+                // D139: for want of a connection, the caller writes the one line; nothing here.
+                if (DriveConnection.lost(error)) return@withContext DriveOutcome.Failed(NO_CONNECTION, noConnection = true)
                 problems.record(
                     kind = "drive",
                     detail = "upload failed: ${error::class.java.simpleName} ${error.message}",
@@ -85,4 +93,9 @@ class DriveBackup @Inject constructor(
         http.upload(fileName, contents.toByteArray(Charsets.UTF_8), "application/json; charset=utf-8", token)
 
     private fun delete(id: String, token: String): Boolean = http.delete(id, token)
+
+    companion object {
+        /** What the screen says in brackets after "Could not write to Drive" when there was no connection. */
+        const val NO_CONNECTION = "no connection"
+    }
 }

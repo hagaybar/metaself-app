@@ -1,8 +1,7 @@
 package com.metaself.app.data.backup
 
 import android.net.Uri
-import com.metaself.app.data.drive.DriveBackup
-import com.metaself.app.data.health.ReadingsArchive
+import com.metaself.app.data.drive.DriveCopies
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.domain.backup.BackupSchedule
 import kotlinx.coroutines.flow.first
@@ -36,9 +35,8 @@ class AutomaticBackup @Inject constructor(
     private val profiles: ProfileRepository,
     private val backups: BackupRepository,
     private val folder: BackupFolder,
-    private val drive: DriveBackup,
-    /** The detailed readings' month files (D71). Defaulted so tests need not supply one. */
-    private val archive: ReadingsArchive = ReadingsArchive.NONE,
+    /** Drive's daily file and the detailed readings' month files (D71, D139). */
+    private val drive: DriveCopies,
 ) : DailyBackup {
 
     override suspend fun runIfDue(today: LocalDate, nowMillis: Long): BackupOutcome? {
@@ -57,10 +55,8 @@ class AutomaticBackup @Inject constructor(
         // folder copy worked, and its failure cannot cost him the local one — a backup with a
         // single way to fail is not a backup.
         if (profiles.driveBackupOn.first()) {
-            runCatching { drive.write(today, nowMillis) }
-            // The detailed readings, month by month (D71). A second call, so a failed month never
-            // costs the daily file, and the daily file's failure never stops the months.
-            runCatching { archive.writeOutOfDate() }
+            // The daily file, then the detailed readings month by month (D71); without a connection, one line (D139).
+            drive.write(today, nowMillis)
         }
 
         // Only a written file counts. A failure must leave the date alone, or one bad day would

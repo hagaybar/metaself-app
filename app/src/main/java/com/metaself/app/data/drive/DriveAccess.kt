@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.IntentSender
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
 import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
 import com.metaself.app.data.diagnostics.ProblemLog
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,7 +23,8 @@ sealed interface DriveAuth {
     /** Google wants the owner to agree first; this is the screen to show him. */
     data class NeedsConsent(val request: IntentSender) : DriveAuth
 
-    data class Failed(val reason: String) : DriveAuth
+    /** [noConnection]: Google could not be reached (D139); not logged, the caller says it once. */
+    data class Failed(val reason: String, val noConnection: Boolean = false) : DriveAuth
 }
 
 /**
@@ -74,6 +77,11 @@ class DriveAccess @Inject constructor(
                 )
             }
             .addOnFailureListener { error ->
+                // D139: for want of a connection, the daily copy writes one line for the whole backup.
+                if (DriveConnection.lost(error) || (error as? ApiException)?.statusCode == CommonStatusCodes.NETWORK_ERROR) {
+                    waiting.resume(DriveAuth.Failed(DriveBackup.NO_CONNECTION, noConnection = true))
+                    return@addOnFailureListener
+                }
                 problems.record(
                     kind = "drive",
                     detail = "authorisation failed: ${error::class.java.simpleName} " +
