@@ -55,9 +55,10 @@ class EvaluatePlanScreenRenderTest {
         val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY))
 
         assertThat(texts).contains("Plan ahead")
-        assertThat(texts).containsAtLeast("GOAL", "Keep a steady rhythm", "A distance by a date", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
+        assertThat(texts).containsAtLeast("GOAL", "Keep a steady rhythm", "A distance by a date", "More time each week", "SESSIONS A WEEK I CAN MANAGE", "2", "5").inOrder()
         assertThat(texts).doesNotContain("HOW MANY WEEKS")
         assertThat(texts).doesNotContain("DISTANCE (KM)")
+        assertThat(texts).doesNotContain("MINUTES A WEEK")
         assertThat(texts.any { it.contains("your last evaluation and how its plan went") && it.endsWith("Never meals.") }).isTrue()
     }
 
@@ -88,6 +89,21 @@ class EvaluatePlanScreenRenderTest {
         assertThat(render.isEnabled("Ask the trainer")).isTrue()
         draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = distance.copy(km = "15", weeksAhead = 30)))
         assertThat(render.isEnabled("A week later")).isFalse()
+    }
+
+    /** D127: More time each week asks how many minutes, moved by ten, and by when. */
+    @Test
+    fun `a time goal draws its minutes and its date`() {
+        val minutes = EvaluatePlanViewModel.Form(goal = EvaluatePlanViewModel.GoalChoice.MINUTES, perWeek = 3, weeksAhead = 14)
+        val texts = draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = minutes))
+
+        assertThat(render.isSelected("More time each week")).isTrue()
+        assertThat(texts).containsAtLeast("GOAL", "MINUTES A WEEK", "150 min a week", "10 min less", "10 min more", "BY", "Sun 13 Dec · 14 weeks").inOrder()
+        assertThat(texts).doesNotContain("DISTANCE (KM)")
+        assertThat(render.isEnabled("Ask the trainer")).isTrue()
+        draw(EvaluatePlanViewModel.State(today = TEST_EPOCH_DAY, form = minutes.copy(minutes = 900)))
+        assertThat(render.isEnabled("10 min more")).isFalse()
+        assertThat(render.isEnabled("10 min less")).isTrue()
     }
 
     @Test

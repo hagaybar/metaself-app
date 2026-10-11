@@ -58,18 +58,20 @@ class EvaluatePlanViewModel @Inject constructor(
     /** D123: the plan page's three views. */
     enum class PlanView { MONTH, WEEK, SESSION }
 
-    /** D119: the form's two goals. */
-    enum class GoalChoice { STEADY, DISTANCE }
+    /** D119, D127: the form's three goals. */
+    enum class GoalChoice { STEADY, DISTANCE, MINUTES }
 
     /**
      * D124: Plan ahead's form — the goal (for a distance: the sport, km as typed, and the date as whole weeks after
-     * this one), sessions a week (null until answered) and words. The page opens on [PRESET].
+     * this one; for more time each week, D127: minutes a week and the same date), sessions a week (null until
+     * answered) and words. The page opens on [PRESET].
      */
     data class Form(
         val goal: GoalChoice = GoalChoice.STEADY,
         val sport: GoalSport = GoalSport.RUN,
         val km: String = "",
         val weeksAhead: Int = DEFAULT_WEEKS_AHEAD,
+        val minutes: Int = DEFAULT_MINUTES,
         val perWeek: Int? = null,
         val words: String = "",
     ) {
@@ -83,6 +85,10 @@ class EvaluatePlanViewModel @Inject constructor(
                     if (weeksAhead !in WEEKS_AHEAD) return null
                     PlanGoal.Distance(sport, km, GoalWording.byDay(today, weeksAhead))
                 }
+                GoalChoice.MINUTES -> {
+                    if (weeksAhead !in WEEKS_AHEAD || minutes !in PlanGoal.WeeklyMinutes.MINUTES) return null
+                    PlanGoal.WeeklyMinutes(minutes, GoalWording.byDay(today, weeksAhead))
+                }
             }
             return PlanAheadAsk(goal, perWeek, words)
         }
@@ -93,12 +99,20 @@ class EvaluatePlanViewModel @Inject constructor(
         fun earlier(): Form = copy(weeksAhead = (weeksAhead - 1).coerceIn(WEEKS_AHEAD))
         fun later(): Form = copy(weeksAhead = (weeksAhead + 1).coerceIn(WEEKS_AHEAD))
 
+        /** D127: ten minutes a week less, or more, within [PlanGoal.WeeklyMinutes.MINUTES]. */
+        fun fewer(): Form = copy(minutes = (minutes - MINUTES_STEP).coerceIn(PlanGoal.WeeklyMinutes.MINUTES))
+        fun more(): Form = copy(minutes = (minutes + MINUTES_STEP).coerceIn(PlanGoal.WeeklyMinutes.MINUTES))
+
         companion object {
             /** D119: a distance's date is 6 to 30 weeks ahead. */
             val WEEKS_AHEAD = 6..30
 
             /** Where the date row opens — a starting point, not a recommendation. */
             const val DEFAULT_WEEKS_AHEAD = 12
+
+            /** D127: where the minutes row opens, and its step — a starting point, not a recommendation. */
+            const val DEFAULT_MINUTES = 150
+            const val MINUTES_STEP = 10
 
             private val KM = Regex("""\d{1,4}([.,]\d)?""")
 

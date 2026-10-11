@@ -22,6 +22,7 @@ import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.FilledWeek
 import com.metaself.app.domain.trainer.GOAL_15K
+import com.metaself.app.domain.trainer.GOAL_150_MIN
 import com.metaself.app.domain.trainer.GoalSport
 import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.PlanOffer
@@ -235,6 +236,30 @@ class EvaluatePlanViewModelTest {
 
         val question = trainer.asked.single().question as TrainerQuestion.Evaluate
         assertThat(question.ask).isEqualTo(ProgrammeAsk(15, 3, goal = GOAL_15K))
+    }
+
+    /** D127: a time goal starts at 150 minutes a week, moves by 10 within 30 to 900, and shares the distance's date. */
+    @Test
+    fun `a time goal moves by ten minutes within its bounds and asks with its date`() = runTest {
+        trainer.evaluations += TrainerReply.Failed(EstimateResult.NoKey)
+        val viewModel = watched()
+        val minutes = EvaluatePlanViewModel.Form(goal = EvaluatePlanViewModel.GoalChoice.MINUTES, perWeek = 3, weeksAhead = 14)
+
+        assertThat(minutes.minutes).isEqualTo(150)
+        assertThat(minutes.more().minutes).isEqualTo(160)
+        assertThat(minutes.fewer().minutes).isEqualTo(140)
+        assertThat(minutes.copy(minutes = 30).fewer().minutes).isEqualTo(30)
+        assertThat(minutes.copy(minutes = 900).more().minutes).isEqualTo(900)
+        assertThat(minutes.ask(TEST_EPOCH_DAY)!!.goal).isEqualTo(GOAL_150_MIN)
+
+        viewModel.change(minutes)
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.canAsk).isTrue()
+        viewModel.ask()
+        advanceUntilIdle()
+
+        val question = trainer.asked.single().question as TrainerQuestion.Evaluate
+        assertThat(question.ask).isEqualTo(ProgrammeAsk(15, 3, goal = GOAL_150_MIN))
     }
 
     /** D121: the plan page offers to fill in a week; the answer is kept and the page read again, its sentence said. */

@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import com.metaself.app.R
 import com.metaself.app.domain.trainer.PlanPlace
 import com.metaself.app.domain.trainer.GoalSport
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
@@ -185,8 +186,8 @@ private fun EvaluateForm(
 }
 
 /**
- * D119, D124: the goal — Keep a steady rhythm, or A distance by a date; for a distance, what, how far, and by when: the
- * Sunday a whole number of weeks ahead, 6 to 30, moved a week at a time.
+ * D119, D124, D127: the goal — Keep a steady rhythm, A distance by a date, or More time each week; for a distance,
+ * what, how far, and by when; for more time, how many minutes a week (moved by ten) and by when.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -202,11 +203,28 @@ private fun GoalRows(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boo
                 FilterChip(
                     selected = form.goal == choice,
                     onClick = { onChange(form.copy(goal = choice)) },
-                    label = { Text(if (choice == EvaluatePlanViewModel.GoalChoice.STEADY) GoalWording.STEADY else GoalWording.DISTANCE) },
+                    label = { Text(goalChoice(choice)) },
                     enabled = enabled,
                 )
             }
         }
+    }
+    if (form.goal == EvaluatePlanViewModel.GoalChoice.MINUTES) {
+        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            RowLabel(GoalWording.ROW_MINUTES)
+            Text(GoalWording.minutesLine(form.minutes), style = MaterialTheme.typography.bodyLarge)
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+                OutlinedButton(
+                    onClick = { onChange(form.fewer()) },
+                    enabled = enabled && form.minutes > PlanGoal.WeeklyMinutes.MINUTES.first,
+                ) { Text(GoalWording.FEWER) }
+                OutlinedButton(
+                    onClick = { onChange(form.more()) },
+                    enabled = enabled && form.minutes < PlanGoal.WeeklyMinutes.MINUTES.last,
+                ) { Text(GoalWording.MORE) }
+            }
+        }
+        ByRow(form, today, enabled, onChange)
     }
     if (form.goal == EvaluatePlanViewModel.GoalChoice.DISTANCE) {
         Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
@@ -235,19 +253,31 @@ private fun GoalRows(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boo
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             modifier = Modifier.fillMaxWidth(),
         )
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-            RowLabel(GoalWording.ROW_BY)
-            Text(GoalWording.byLine(GoalWording.byDay(today, form.weeksAhead), today), style = MaterialTheme.typography.bodyLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-                OutlinedButton(
-                    onClick = { onChange(form.earlier()) },
-                    enabled = enabled && form.weeksAhead > EvaluatePlanViewModel.Form.WEEKS_AHEAD.first,
-                ) { Text(GoalWording.EARLIER) }
-                OutlinedButton(
-                    onClick = { onChange(form.later()) },
-                    enabled = enabled && form.weeksAhead < EvaluatePlanViewModel.Form.WEEKS_AHEAD.last,
-                ) { Text(GoalWording.LATER) }
-            }
+        ByRow(form, today, enabled, onChange)
+    }
+}
+
+private fun goalChoice(choice: EvaluatePlanViewModel.GoalChoice): String = when (choice) {
+    EvaluatePlanViewModel.GoalChoice.STEADY -> GoalWording.STEADY
+    EvaluatePlanViewModel.GoalChoice.DISTANCE -> GoalWording.DISTANCE
+    EvaluatePlanViewModel.GoalChoice.MINUTES -> GoalWording.MINUTES
+}
+
+/** D119, D127: a dated goal's date — the Sunday a whole number of weeks ahead, 6 to 30, moved a week at a time. */
+@Composable
+private fun ByRow(form: EvaluatePlanViewModel.Form, today: Long, enabled: Boolean, onChange: (EvaluatePlanViewModel.Form) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+        RowLabel(GoalWording.ROW_BY)
+        Text(GoalWording.byLine(GoalWording.byDay(today, form.weeksAhead), today), style = MaterialTheme.typography.bodyLarge)
+        Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            OutlinedButton(
+                onClick = { onChange(form.earlier()) },
+                enabled = enabled && form.weeksAhead > EvaluatePlanViewModel.Form.WEEKS_AHEAD.first,
+            ) { Text(GoalWording.EARLIER) }
+            OutlinedButton(
+                onClick = { onChange(form.later()) },
+                enabled = enabled && form.weeksAhead < EvaluatePlanViewModel.Form.WEEKS_AHEAD.last,
+            ) { Text(GoalWording.LATER) }
         }
     }
 }
