@@ -1,6 +1,9 @@
 package com.metaself.app.ui.movement
 
 import com.metaself.app.domain.movement.AddedFigures
+import com.metaself.app.domain.movement.FileWorkout
+import com.metaself.app.domain.movement.FilledLater
+import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
@@ -44,39 +47,33 @@ object WorkoutFileWording {
             "No session matches this file exactly (${outcome.file.writtenAt.format(WHEN)}). Is it one of these?"
         }
         is ImportOutcome.Several -> "Several workouts match this file; choose one."
+        is ImportOutcome.Waiting -> WAITING
         is ImportOutcome.AddedWorkout ->
             "Added ${MovementWeekWording.name(outcome.workout)}, ${start(outcome.workout, zone)}, from the file."
         ImportOutcome.Failed -> "The file could not be added; Recent problems says why."
     }
 
     /**
-     * The problem log's line for [outcome] (kind "import", D82 as amended): one short line saying what
-     * happened — a success in the words of a success. Which figures a fill added, never their values;
-     * a stored workout by its name and day, and a file by the wall-clock time it gives, as the screen
-     * says it. [today] decides whether a date needs its year, by [MovementWeekWording]'s rule — this
-     * line outlives the screen (it sits in Recent problems), so a date read much later still says which
-     * year it was.
+     * The problem log's line for [outcome] (kind "import"), or null when it is not a problem (D139): a file filled,
+     * nothing new, no match, several, added as a workout, or waiting is not written — Recent problems holds problems.
+     * A refused file and a failed write are. A file that waited out its days is written by [neverFound].
      *
-     * **Amended:** [WorkoutFileRefusal.UNREADABLE] no longer repeats the screen's "Recent problems says
-     * why" — this line IS that entry, so pointing at itself said nothing; the failure it followed is
-     * its own, separate log line (kind "workout file"), so this one is self-contained instead.
+     * [WorkoutFileRefusal.UNREADABLE] does not repeat the screen's "Recent problems says why" — this line IS that
+     * entry; the failure it followed is its own, separate line (kind "workout file").
      */
-    fun logLine(outcome: ImportOutcome, today: Long): String = when (outcome) {
+    fun logLine(outcome: ImportOutcome): String? = when (outcome) {
         is ImportOutcome.Refused -> if (outcome.reason == WorkoutFileRefusal.UNREADABLE) {
             "refused: the file could not be opened"
         } else {
             "refused: " + reason(outcome.reason).removeSuffix(".").replaceFirstChar { it.lowercaseChar() }
         }
-        is ImportOutcome.Filled -> "added ${figureNames(outcome.added)} to ${onDay(outcome.workout, today)}"
-        is ImportOutcome.Unchanged -> "nothing new for ${onDay(outcome.workout, today)}"
-        is ImportOutcome.NoMatch -> "no workout matches a file from ${whenOf(outcome.file.writtenAt, today)}"
-        is ImportOutcome.Several -> "${outcome.choices.size} workouts match a file from ${whenOf(outcome.file.writtenAt, today)}"
-        is ImportOutcome.AddedWorkout -> "added ${onDay(outcome.workout, today)} from a file"
         ImportOutcome.Failed -> "not added: a write failed"
+        is ImportOutcome.Filled, is ImportOutcome.Unchanged, is ImportOutcome.NoMatch, is ImportOutcome.Several,
+        is ImportOutcome.AddedWorkout, is ImportOutcome.Waiting -> null
     }
 
-    private fun onDay(workout: Workout, today: Long): String =
-        "${MovementWeekWording.name(workout)} on ${dayOf(workout.epochDay, today)}"
+    /** D138: the problem log's line for a file that waited out its days. */
+    fun neverFound(file: FileWorkout, today: Long): String = "a file from ${whenOf(file.writtenAt, today)} never found its session"
 
     private fun dayOf(epochDay: Long, today: Long): String {
         val date = LocalDate.ofEpochDay(epochDay)
@@ -86,16 +83,31 @@ object WorkoutFileWording {
     private fun whenOf(writtenAt: LocalDateTime, today: Long): String =
         writtenAt.format(if (writtenAt.year == LocalDate.ofEpochDay(today).year) WHEN else WHEN_WITH_YEAR)
 
-    private fun figureNames(added: AddedFigures): String = andList(
-        listOfNotNull(
-            added.distanceM?.let { "distance" },
-            added.steps?.let { "steps" },
-            added.kcal?.let { "calories" },
-        ),
-    )
-
     private fun andList(list: List<String>): String =
         if (list.size <= 1) list.joinToString() else list.dropLast(1).joinToString(", ") + " and " + list.last()
+
+    /** D138: the outcome's line when the file waits for its session. */
+    const val WAITING = "The band's session for this file hasn't reached the phone yet. It will be filled in when it does."
+
+    /** D138: a waiting file's line on Your movement. */
+    fun waiting(file: FileWorkout, today: Long): String = "A file from ${whenOf(file.writtenAt, today)} is waiting for the band's session"
+
+    /** D138: under the first three waiting files, the rest. */
+    fun andMore(count: Int): String = "and $count more"
+
+    /** D138: said once, the next time Your movement opens, for a file that filled its session in the background. */
+    fun filledLater(filled: FilledLater, today: Long): String =
+        "Filled in your ${kindNoun(filled.kind)} of ${dayOf(filled.epochDay, today)} from the file that was waiting."
+
+    /** A session of [kind], as "your …" names it. */
+    private fun kindNoun(kind: WorkoutKind): String = when (kind) {
+        WorkoutKind.WALK -> "walk"
+        WorkoutKind.RUN -> "run"
+        WorkoutKind.CYCLE -> "ride"
+        WorkoutKind.SWIM -> "swim"
+        WorkoutKind.STRENGTH -> "weights session"
+        WorkoutKind.OTHER, WorkoutKind.UNRECOGNISED -> "workout"
+    }
 
     /** D91: above "Add it as a workout", when sessions of the file's kind were offered first. */
     const val OR_ADD = "Or, if it is a session the record does not have:"

@@ -7,6 +7,7 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.FakeTypedWorkouts
 import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.health.SessionSplits
+import com.metaself.app.data.health.WaitingFiles
 import com.metaself.app.data.health.WorkoutFileImporter
 import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.FakeProfileRepository
@@ -20,6 +21,9 @@ import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import com.metaself.app.domain.movement.FileWorkout
+import com.metaself.app.domain.movement.FilledLater
+import com.metaself.app.domain.movement.WaitingFile
+import com.metaself.app.domain.movement.WaitingLine
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.SessionSplit
 import com.metaself.app.domain.movement.SessionWitnesses
@@ -643,11 +647,11 @@ class MovementViewModelTest {
         job.cancel()
     }
 
-    /** D82 amended: every outcome also goes to the problem log, as kind "import". */
+    /** D139: Recent problems holds problems — a refused file and a failed write are written; the rest are not. */
     @Test
-    fun `every file outcome is written to the problem log as an import`() = runTest {
+    fun `only a refused file or a failed write is written to the problem log`() = runTest {
         val problems = RecordingProblemLog()
-        val importer = FakeImporter(ImportOutcome.NoMatch(aFile))
+        val importer = FakeImporter(ImportOutcome.Waiting(aFile))
         val model = viewModel(importer = importer, problems = problems)
         val job = launch { model.state.collect {} }
 
@@ -659,13 +663,92 @@ class MovementViewModelTest {
         importer.next = ImportOutcome.Refused(WorkoutFileRefusal.NOTHING_TO_ADD)
         model.importFile("content://example/c.tcx")
         advanceUntilIdle()
+        importer.next = ImportOutcome.Failed
+        model.importFile("content://example/d.tcx")
+        advanceUntilIdle()
 
-        assertThat(problems.recorded.map { it.kind }).containsExactly("import", "import", "import")
-        assertThat(problems.recorded.map { it.detail }).containsExactly(
-            "no workout matches a file from Thu 3 Sep 10:00",
-            "added Walking on Thu 3 Sep from a file",
-            "refused: the file has no distance, steps or calories to add",
+        assertThat(problems.recorded.map { it.kind to it.detail }).containsExactly(
+            "import" to "refused: the file has no distance, steps or calories to add",
+            "import" to "not added: a write failed",
         ).inOrder()
+        job.cancel()
+    }
+
+    /** D138: a waiting file can still be added at once, and "None of these" asks it to wait. */
+    @Test
+    fun `a waiting file can be added now, and None of these makes the file wait`() = runTest {
+        val importer = FakeImporter(ImportOutcome.Waiting(aFile))
+        val model = viewModel(importer = importer)
+        val job = launch { model.state.collect {} }
+
+        model.importFile("content://example/b.tcx")
+        advanceUntilIdle()
+        model.addFromFile()
+        advanceUntilIdle()
+        importer.next = ImportOutcome.NoMatch(aFile, listOf(aTypedWorkout(id = 7, kind = WorkoutKind.WALK)))
+        model.importFile("content://example/b.tcx")
+        advanceUntilIdle()
+        importer.next = ImportOutcome.Waiting(aFile)
+        model.waitForBand()
+        advanceUntilIdle()
+
+        assertThat(importer.calls).containsExactly(
+            "import content://example/b.tcx", "add", "import content://example/b.tcx", "wait",
+        ).inOrder()
+        assertThat(model.state.value.fileImport?.outcome).isEqualTo(ImportOutcome.Waiting(aFile))
+        job.cancel()
+    }
+
+    @Test
+    fun `None of these does nothing without sessions offered`() = runTest {
+        val importer = FakeImporter(ImportOutcome.Waiting(aFile))
+        val model = viewModel(importer = importer)
+
+        model.waitForBand()
+        advanceUntilIdle()
+
+        assertThat(importer.calls).isEmpty()
+    }
+
+    /** D138: the waiting files are on the page, each can be added, chosen for or dropped. */
+    @Test
+    fun `waiting files are shown, and each can be added, chosen for or dropped`() = runTest {
+        val waiting = FakeWaitingFiles()
+        val other = aFile.copy(seconds = 1_500)
+        waiting.lines.value = listOf(
+            WaitingLine(WaitingFile(aFile, 0)),
+            WaitingLine(WaitingFile(other, 0), listOf(aTypedWorkout(id = 4), aTypedWorkout(id = 5))),
+        )
+        val importer = FakeImporter(ImportOutcome.AddedWorkout(aTypedWorkout(id = 9)))
+        val model = viewModel(importer = importer, waiting = waiting)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(model.state.value.waiting).isEqualTo(waiting.lines.value)
+
+        model.addWaiting(aFile)
+        advanceUntilIdle()
+        model.chooseForWaiting(other, 5)
+        advanceUntilIdle()
+        model.dropWaiting(aFile)
+        advanceUntilIdle()
+
+        assertThat(importer.calls).containsExactly("add", "choose 5").inOrder()
+        assertThat(waiting.dropped).containsExactly(aFile)
+        job.cancel()
+    }
+
+    /** D138: a file filled in the background is said once — what the page was given as it opened. */
+    @Test
+    fun `files filled in the background are said, asked for once as the page opens`() = runTest {
+        val waiting = FakeWaitingFiles()
+        waiting.notes += FilledLater(WorkoutKind.WALK, TEST_EPOCH_DAY - 1)
+        val model = viewModel(waiting = waiting)
+        val job = launch { model.state.collect {} }
+        advanceUntilIdle()
+
+        assertThat(model.state.value.filledLater).containsExactly(FilledLater(WorkoutKind.WALK, TEST_EPOCH_DAY - 1))
+        assertThat(waiting.opened).isEqualTo(1)
         job.cancel()
     }
 
@@ -1228,6 +1311,21 @@ class MovementViewModelTest {
         override suspend fun import(uri: String): ImportOutcome = next.also { calls += "import $uri" }
         override suspend fun choose(file: FileWorkout, id: Long): ImportOutcome = next.also { calls += "choose $id" }
         override suspend fun add(file: FileWorkout): ImportOutcome = next.also { calls += "add" }
+        override suspend fun wait(file: FileWorkout): ImportOutcome = next.also { calls += "wait" }
+    }
+
+    private class FakeWaitingFiles : WaitingFiles {
+        override val lines = MutableStateFlow<List<WaitingLine>>(emptyList())
+        val notes = mutableListOf<FilledLater>()
+        val dropped = mutableListOf<FileWorkout>()
+        var opened = 0
+        override suspend fun opened(): List<FilledLater> {
+            opened++
+            return notes.toList().also { notes.clear() }
+        }
+        override suspend fun drop(file: FileWorkout) {
+            dropped += file
+        }
     }
 
     private fun viewModel(
@@ -1240,7 +1338,8 @@ class MovementViewModelTest {
         splits: SessionSplits = SessionSplits.NONE,
         savedState: SavedStateHandle = SavedStateHandle(),
         plans: KeptPlans = KeptPlans.NONE,
-    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer, splits, savedState, plans)
+        waiting: WaitingFiles = WaitingFiles.NONE,
+    ) = MovementViewModel(record, InMemoryMealRepository(), today, problems, typed, profiles, now, importer, dispatcher, trainer, splits, savedState, plans, waiting)
 
     private class FakeRecord : MovementRecord {
         val days = MutableStateFlow<List<HealthDay>>(emptyList())

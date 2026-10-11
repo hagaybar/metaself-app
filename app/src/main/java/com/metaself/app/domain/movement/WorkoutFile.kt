@@ -83,9 +83,28 @@ sealed interface ImportOutcome {
     /** More than one workout matches; the screen lists them to choose from. */
     data class Several(val file: FileWorkout, val choices: List<Workout>) : ImportOutcome
 
+    /**
+     * D138: nothing matches and nothing of the file's kind is on its day — or the owner chose "None of these —
+     * wait for the band". The file's figures are kept waiting ([WaitingFile]); "Add it as a workout now" is still
+     * offered.
+     */
+    data class Waiting(val file: FileWorkout) : ImportOutcome
+
     /** The file was added as a workout of its own. */
     data class AddedWorkout(val workout: Workout) : ImportOutcome
 
     /** A write failed; logged (D8). */
     data object Failed : ImportOutcome
 }
+
+/**
+ * D138: a file whose session has not reached the phone yet — its figures (never the file), and since when it has
+ * waited. Kept on the phone only, never in a backup.
+ */
+data class WaitingFile(val file: FileWorkout, val sinceMillis: Long)
+
+/** D138: one waiting file on Your movement; [choices] are the sessions it matches when there are several. */
+data class WaitingLine(val waiting: WaitingFile, val choices: List<Workout> = emptyList())
+
+/** D138: a waiting file filled a session in the background — said once, the next time Your movement opens. */
+data class FilledLater(val kind: WorkoutKind, val epochDay: Long)

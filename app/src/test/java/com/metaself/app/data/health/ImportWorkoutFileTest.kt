@@ -6,11 +6,10 @@ import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.AddedFigures
 import com.metaself.app.domain.movement.EnergySource
-import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.ImportOutcome
+import com.metaself.app.domain.movement.WaitingFile
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
-import com.metaself.app.domain.movement.WorkoutFileMatch
 import com.metaself.app.domain.movement.WorkoutFileRefusal
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
@@ -29,9 +28,21 @@ class ImportWorkoutFileTest {
 
     private val zone = ZoneOffset.ofHours(5)
     private val files = FakeFiles()
-    private val store = FakeStore()
+    private val store = FakeWorkoutFileStore()
     private val problems = RecordingProblems()
-    private val import = ImportWorkoutFile(files, store, problems) { zone }
+    private val waiting = InMemoryWaitingFileStore()
+    private val copies = mutableListOf<String>()
+
+    /** D138: the copy from Health Connect, run before a file is matched; [arriving] is what it brings. */
+    private var arriving: Workout? = null
+    private var copyFails = false
+    private val copier = HealthRecordCopier {
+        copies += "copy"
+        if (copyFails) throw IllegalStateException("no client")
+        arriving?.let { store.rows += it }
+    }
+    private val nowMillis = 1_000_000L
+    private val import = ImportWorkoutFile(files, store, problems, copier, waiting, { nowMillis }) { zone }
 
     /** The synced walk the file belongs to: 10:00 local is 05:00 UTC. */
     private val walk = Workout(
@@ -69,18 +80,19 @@ class ImportWorkoutFileTest {
     }
 
     @Test
-    fun `no match offers adding it, which adds a typed workout the same file then finds`() = runTest {
+    fun `no match waits and offers adding it, which adds a typed workout the same file then finds`() = runTest {
         files.texts[URI] = tcx(metres = 3_000, steps = 4_000)
 
         val none = import.import(URI)
-        assertThat(none).isInstanceOf(ImportOutcome.NoMatch::class.java)
+        assertThat(none).isInstanceOf(ImportOutcome.Waiting::class.java)
         assertThat(store.rows).isEmpty()
 
-        val added = import.add((none as ImportOutcome.NoMatch).file)
+        val added = import.add((none as ImportOutcome.Waiting).file)
         assertThat(added).isInstanceOf(ImportOutcome.AddedWorkout::class.java)
         val stored = store.rows.single()
         assertThat(stored.source).isEqualTo(WorkoutSource.TYPED)
         assertThat(stored.fromFile).isTrue()
+        assertThat(waiting.all()).isEmpty()
 
         assertThat(import.import(URI)).isInstanceOf(ImportOutcome.Unchanged::class.java)
         assertThat(store.rows).hasSize(1)
@@ -90,11 +102,12 @@ class ImportWorkoutFileTest {
     @Test
     fun `adding a file that now matches fills the match instead`() = runTest {
         files.texts[URI] = tcx(metres = 3_000)
-        val none = import.import(URI) as ImportOutcome.NoMatch
+        val none = import.import(URI) as ImportOutcome.Waiting
         store.rows += walk
 
         assertThat(import.add(none.file)).isInstanceOf(ImportOutcome.Filled::class.java)
         assertThat(store.rows).hasSize(1)
+        assertThat(waiting.all()).isEmpty()
     }
 
     @Test
@@ -145,12 +158,96 @@ class ImportWorkoutFileTest {
         assertThat(store.rows.single().distanceM).isNull()
     }
 
+    /** D138: nothing of its kind that day — the file waits for its session, from the moment it was imported. */
     @Test
-    fun `no match on a day with no session of its kind offers none`() = runTest {
+    fun `no match on a day with no session of its kind keeps the file waiting`() = runTest {
         store.rows += walk.copy(durationMinutes = 60, kind = WorkoutKind.RUN)
         files.texts[URI] = tcx(metres = 3_000)
 
-        assertThat((import.import(URI) as ImportOutcome.NoMatch).sameKind).isEmpty()
+        val outcome = import.import(URI)
+
+        assertThat(outcome).isInstanceOf(ImportOutcome.Waiting::class.java)
+        assertThat(waiting.all().single()).isEqualTo(WaitingFile((outcome as ImportOutcome.Waiting).file, nowMillis))
+        assertThat(problems.logged).isEmpty()
+    }
+
+    /** D138: D91's offer does not wait by itself; "None of these — wait for the band" does. */
+    @Test
+    fun `no match with a session of its kind waits only when asked to`() = runTest {
+        store.rows += walk.copy(durationMinutes = 60)
+        files.texts[URI] = tcx(metres = 3_000)
+
+        val none = import.import(URI) as ImportOutcome.NoMatch
+        assertThat(waiting.all()).isEmpty()
+
+        assertThat(import.wait(none.file)).isEqualTo(ImportOutcome.Waiting(none.file))
+        assertThat(waiting.all().map { it.file }).containsExactly(none.file)
+    }
+
+    /** D138: a session of the file's kind chosen fills it, and a file that was waiting stops. */
+    @Test
+    fun `choosing a session for a waiting file stops it waiting`() = runTest {
+        store.rows += walk.copy(durationMinutes = 60)
+        files.texts[URI] = tcx(metres = 3_000)
+        val none = import.import(URI) as ImportOutcome.NoMatch
+        import.wait(none.file)
+
+        assertThat(import.choose(none.file, 1)).isInstanceOf(ImportOutcome.Filled::class.java)
+        assertThat(waiting.all()).isEmpty()
+    }
+
+    /** D138: fetch first — a session the copy brings is matched at once. */
+    @Test
+    fun `the copy runs before matching, so a session it brings is filled`() = runTest {
+        arriving = walk
+        files.texts[URI] = tcx(metres = 3_000)
+
+        assertThat(import.import(URI)).isInstanceOf(ImportOutcome.Filled::class.java)
+        assertThat(copies).containsExactly("copy")
+        assertThat(waiting.all()).isEmpty()
+    }
+
+    @Test
+    fun `a copy that fails is logged and the import goes on`() = runTest {
+        copyFails = true
+        store.rows += walk
+        files.texts[URI] = tcx(metres = 3_000)
+
+        assertThat(import.import(URI)).isInstanceOf(ImportOutcome.Filled::class.java)
+        assertThat(problems.logged.single().detail).contains("IllegalStateException no client")
+    }
+
+    @Test
+    fun `a file refused for its content asks for no copy`() = runTest {
+        files.texts[URI] = "not a workout"
+
+        import.import(URI)
+
+        assertThat(copies).isEmpty()
+    }
+
+    /** A waiting file imported again once its session is there: filled, and no longer waiting. */
+    @Test
+    fun `a waiting file imported again after its session arrived is filled and stops waiting`() = runTest {
+        files.texts[URI] = tcx(metres = 3_000)
+        import.import(URI)
+        store.rows += walk
+
+        assertThat(import.import(URI)).isInstanceOf(ImportOutcome.Filled::class.java)
+        assertThat(waiting.all()).isEmpty()
+    }
+
+    /** The file cannot be kept waiting: it is offered to add as before, and the failure is logged. */
+    @Test
+    fun `a file that cannot be kept waiting is offered to add, and logged`() = runTest {
+        waiting.failing = true
+        files.texts[URI] = tcx(metres = 3_000)
+
+        val outcome = import.import(URI)
+
+        assertThat(outcome).isInstanceOf(ImportOutcome.NoMatch::class.java)
+        assertThat((outcome as ImportOutcome.NoMatch).sameKind).isEmpty()
+        assertThat(problems.logged.single().detail).contains("IllegalStateException disk full")
     }
 
     @Test
@@ -207,29 +304,6 @@ class ImportWorkoutFileTest {
             failure?.let { throw it }
             refusals[uri]?.let { return FileText.Refused(it) }
             return FileText.Text(texts.getValue(uri))
-        }
-    }
-
-    private class FakeStore : WorkoutFileStore {
-        val rows = mutableListOf<Workout>()
-        val daysAsked = mutableListOf<Set<Long>>()
-        var failing = false
-        override suspend fun on(days: Set<Long>): List<Workout> {
-            daysAsked += days
-            return rows.filter { it.epochDay in days }
-        }
-        override suspend fun fill(id: Long, file: FileWorkout): WorkoutFileMatch.Filling? {
-            if (failing) throw IllegalStateException("disk full")
-            val index = rows.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return null
-            val filling = WorkoutFileMatch.fill(rows[index], file)
-            rows[index] = filling.workout
-            return filling
-        }
-        override suspend fun add(workout: Workout): Long {
-            if (failing) throw IllegalStateException("disk full")
-            val id = (rows.maxOfOrNull { it.id } ?: 0) + 100
-            rows += workout.copy(id = id)
-            return id
         }
     }
 
