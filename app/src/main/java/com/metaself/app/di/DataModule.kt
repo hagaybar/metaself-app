@@ -89,6 +89,8 @@ import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.RoomProgrammeStore
 import com.metaself.app.data.trainer.RoomTrainerStore
 import com.metaself.app.data.trainer.TrainerDao
+import com.metaself.app.data.trainer.KeptPlans
+import com.metaself.app.data.trainer.StoredKeptPlans
 import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.data.trainer.TrainerStore
 import com.metaself.app.data.trainer.InstructionFiles
@@ -310,6 +312,10 @@ object DataModule {
 
     @Provides
     fun provideTrainerReviews(store: TrainerStore): TrainerReviews = store
+
+    /** D136: the kept weekly plans, which Your movement's charts count "planned" by. */
+    @Provides
+    fun provideKeptPlans(plans: StoredKeptPlans): KeptPlans = plans
 
     /** The zone the health record files rows under (D68). A lambda, so a travelling phone uses the
      * zone it is in now, never the one it was installed in. */

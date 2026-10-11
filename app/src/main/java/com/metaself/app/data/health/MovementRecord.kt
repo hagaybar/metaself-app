@@ -38,6 +38,12 @@ interface MovementRecord {
      * or null when it holds nothing. How far back the screen can step (D83).
      */
     fun observeEarliestDay(): Flow<Long?>
+
+    /**
+     * D136: the first day the record holds any movement — a day with a step count, or a workout — or null when
+     * none. A week or month before it is blank, never zero. Unless overridden, [observeEarliestDay].
+     */
+    fun observeEarliestMovementDay(): Flow<Long?> = observeEarliestDay()
 }
 
 /** D92: the session a stored workout is a witness of. */
@@ -90,6 +96,11 @@ class RoomMovementRecord @Inject constructor(
     override fun observeEarliestDay(): Flow<Long?> =
         combine(days.observeEarliest(), workouts.observeEarliest()) { summary, workout ->
             listOfNotNull(summary, workout).minOrNull()
+        }
+
+    override fun observeEarliestMovementDay(): Flow<Long?> =
+        combine(days.observeEarliestWithSteps(), workouts.observeEarliest()) { steps, workout ->
+            listOfNotNull(steps, workout).minOrNull()
         }
 }
 

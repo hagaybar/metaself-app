@@ -36,4 +36,8 @@ interface HealthDayDao {
 
     @Query("SELECT MIN(epochDay) FROM health_days")
     fun observeEarliest(): Flow<Long?>
+
+    /** D136: the first day with a step count — where the record of movement starts, with the first workout. */
+    @Query("SELECT MIN(epochDay) FROM health_days WHERE steps IS NOT NULL")
+    fun observeEarliestWithSteps(): Flow<Long?>
 }
