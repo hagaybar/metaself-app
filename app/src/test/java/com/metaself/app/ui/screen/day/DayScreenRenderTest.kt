@@ -688,7 +688,7 @@ class DayScreenRenderTest {
 
     /** D75: the step line is a door to the Movement screen; nothing new is drawn on the day. */
     @Test
-    fun `the step line is a door to the Movement screen`() {
+    fun `the step line is a door to Your movement`() {
         var opened = false
         draw(
             meals = emptyList(),
@@ -697,7 +697,7 @@ class DayScreenRenderTest {
         )
 
         assertThat(render.roleOf("3,100 steps")).isEqualTo(Role.Button)
-        assertThat(render.clickLabelOf("3,100 steps")).isEqualTo("open Movement")
+        assertThat(render.clickLabelOf("3,100 steps")).isEqualTo("open Your movement")
         render.click("3,100 steps")
         assertThat(opened).isTrue()
     }

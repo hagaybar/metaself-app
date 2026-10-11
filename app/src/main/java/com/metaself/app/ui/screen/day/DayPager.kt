@@ -80,7 +80,7 @@ fun DayPager(
     onRepeat: () -> Unit,
     onScan: () -> Unit,
     onOpenWeight: () -> Unit,
-    /** The Movement screen (D75): from the top-right menu and from the day's step line. */
+    /** Your movement (D75, D130): from the day's step line; no longer from the menu. */
     onOpenMovement: () -> Unit,
     onOpenSettings: () -> Unit,
     /** The day's window marks: Settings at the page window settings are on (D79). */
@@ -148,7 +148,7 @@ private fun DayPagerOn(
     onRepeat: () -> Unit,
     onScan: () -> Unit,
     onOpenWeight: () -> Unit,
-    /** The Movement screen (D75): from the top-right menu and from the day's step line. */
+    /** Your movement (D75, D130): from the day's step line; no longer from the menu. */
     onOpenMovement: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenWindowSettings: () -> Unit,
@@ -202,7 +202,6 @@ private fun DayPagerOn(
             TodayActions(
                 onOpenTrainer = onOpenTrainer,
                 onOpenWeight = onOpenWeight,
-                onOpenMovement = onOpenMovement,
                 onOpenProfile = onOpenProfile,
                 onOpenManager = onOpenManager,
                 onOpenSettings = onOpenSettings,
@@ -354,7 +353,6 @@ internal fun AddSomethingButton(onClick: () -> Unit) {
 internal fun TodayActions(
     onOpenTrainer: () -> Unit,
     onOpenWeight: () -> Unit,
-    onOpenMovement: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenManager: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -372,7 +370,6 @@ internal fun TodayActions(
             onChosen = { showingMenu = false },
             onOpenTrainer = onOpenTrainer,
             onOpenWeight = onOpenWeight,
-            onOpenMovement = onOpenMovement,
             onOpenProfile = onOpenProfile,
             onOpenManager = onOpenManager,
             onOpenSettings = onOpenSettings,
@@ -381,15 +378,15 @@ internal fun TodayActions(
 }
 
 /**
- * The menu's items, in order: Weight, Movement, Trainer (D113), Your numbers, Foods & meals, Settings. Each
- * calls [onChosen] — which closes the menu — before it opens its page.
+ * The menu's items, in order: Weight, Trainer (D113), Your numbers, Foods & meals, Settings. Movement is not
+ * among them (D130): it is Your movement, behind the Trainer, and the day's step line opens it. Each calls
+ * [onChosen] — which closes the menu — before it opens its page.
  */
 @Composable
 internal fun TodayMenuItems(
     onChosen: () -> Unit,
     onOpenTrainer: () -> Unit,
     onOpenWeight: () -> Unit,
-    onOpenMovement: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenManager: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -399,13 +396,6 @@ internal fun TodayMenuItems(
         onClick = {
             onChosen()
             onOpenWeight()
-        },
-    )
-    DropdownMenuItem(
-        text = { Text(stringResource(R.string.movement_open)) },
-        onClick = {
-            onChosen()
-            onOpenMovement()
         },
     )
     DropdownMenuItem(

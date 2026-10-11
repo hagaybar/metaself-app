@@ -105,7 +105,7 @@ sealed class Destination(val route: String) {
     }
     data object Weight : Destination("weight")
 
-    /** This week's movement (D73–D75). */
+    /** Your movement (D73–D75, D130): the Trainer's detail page, also opened by Today's step line and a shared file. */
     data object Movement : Destination("movement")
 
     /** The trainer (D85). */
@@ -449,7 +449,6 @@ fun MetaSelfNavHost(
                 onDismissFile = movementViewModel::dismissFile,
                 onEarlierWeek = movementViewModel::earlierWeek,
                 onLaterWeek = movementViewModel::laterWeek,
-                onTrainer = { navController.navigate(Destination.Trainer.route) },
                 onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
                 onSplit = movementViewModel::split,
                 onUndoSplit = movementViewModel::undoSplit,

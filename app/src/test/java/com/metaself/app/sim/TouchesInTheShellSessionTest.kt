@@ -31,7 +31,7 @@ class TouchesInTheShellSessionTest {
         session.press("More")
 
         assertThat(session.actions().map { it.label })
-            .containsExactly("Weight", "Movement", "Trainer", "Your numbers", "Foods & meals", "Settings")
+            .containsExactly("Weight", "Trainer", "Your numbers", "Foods & meals", "Settings")
             .inOrder()
     }
 

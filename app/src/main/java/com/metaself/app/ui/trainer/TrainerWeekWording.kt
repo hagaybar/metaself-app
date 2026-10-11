@@ -30,7 +30,7 @@ object TrainerWeekWording {
 
     /** The strip's description for a screen reader, and what its tap does. */
     const val STRIP = "This week's sessions, day by day"
-    const val OPEN_MOVEMENT = "open Movement"
+    const val OPEN_MOVEMENT = "open Your movement"
 
     const val LETTERS = "Weekly letters"
     const val EARLIER = "Earlier sessions"

@@ -65,8 +65,9 @@ import java.time.ZoneId
  * something earlier, › only on an earlier week. An earlier week lists all seven days, Sunday first,
  * none open; there "Log a workout" needs a day opened to log onto, and says so above the rows.
  *
- * "Trainer" in the title bar opens the trainer (D85). Under each session in an open day, typed or
- * synced, one button says where its review stands — "How did it go?", "Get feedback" or "See
+ * It is the Trainer's detail page (D130): reached from the Trainer and from Today's step bar, its back
+ * arrow returns to whichever it was opened from, and its title bar has no Trainer button. Under each
+ * session in an open day, typed or synced, one button says where its review stands — "How did it go?", "Get feedback" or "See
  * feedback" (plan design question 7) — and opens that session's review.
  *
  * A session other workouts also recorded (D92) is one line, with "also recorded by 2 more" under it and
@@ -92,7 +93,6 @@ fun MovementScreen(
     onDismissFile: () -> Unit = {},
     onEarlierWeek: () -> Unit = {},
     onLaterWeek: () -> Unit = {},
-    onTrainer: () -> Unit = {},
     onReview: (Long) -> Unit = {},
     onSplit: (Workout) -> Unit = {},
     onUndoSplit: () -> Unit = {},
@@ -104,7 +104,6 @@ fun MovementScreen(
         title = stringResource(R.string.movement_title),
         modifier = modifier,
         onBack = onBack,
-        actions = { TextButton(onClick = onTrainer) { Text(stringResource(R.string.trainer_open)) } },
         belowBar = {
             if (state.canUndo) UndoLine(failed = state.undoFailed, onUndo = onUndoDelete)
             if (state.canUndoSplit) SplitUndoLine(onUndo = onUndoSplit)

@@ -69,11 +69,13 @@ class MovementScreenRenderTest {
         mealsByDay = emptyMap(),
     )
 
+    /** D130: the Trainer's detail page — its name, and a way back to wherever it was opened from. */
     @Test
-    fun `the screen is called Movement and has a way back`() {
+    fun `the screen is called Your movement and has a way back`() {
         val texts = draw()
 
-        assertThat(texts).contains("Movement")
+        assertThat(texts).contains("Your movement")
+        assertThat(texts).doesNotContain("Movement")
         assertThat(texts).contains("Back")
     }
 
@@ -514,15 +516,10 @@ class MovementScreenRenderTest {
         assertThat(texts).contains("Mon 16 Jun 2025")
     }
 
-    /** D85: the trainer is reached from Movement's top bar. */
+    /** D130: the page is reached from the Trainer, so its top bar no longer offers the Trainer. */
     @Test
-    fun `the top bar has Trainer, which asks for the trainer`() {
-        var asked = false
-        val texts = draw(onTrainer = { asked = true })
-
-        assertThat(texts).contains("Trainer")
-        render.click("Trainer")
-        assertThat(asked).isTrue()
+    fun `the top bar has no Trainer button`() {
+        assertThat(draw()).doesNotContain("Trainer")
     }
 
     /** D87, design question 7: a session with no review asks how it went. */
@@ -655,7 +652,6 @@ class MovementScreenRenderTest {
         onDismissFile: () -> Unit = {},
         onEarlierWeek: () -> Unit = {},
         onLaterWeek: () -> Unit = {},
-        onTrainer: () -> Unit = {},
         onReview: (Long) -> Unit = {},
         onSplit: (Workout) -> Unit = {},
         onUndoSplit: () -> Unit = {},
@@ -674,7 +670,6 @@ class MovementScreenRenderTest {
             onDismissFile = onDismissFile,
             onEarlierWeek = onEarlierWeek,
             onLaterWeek = onLaterWeek,
-            onTrainer = onTrainer,
             onReview = onReview,
             onSplit = onSplit,
             onUndoSplit = onUndoSplit,

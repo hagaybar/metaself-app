@@ -171,9 +171,8 @@
     <string name="weight_trend_caption">The line is the trend; the dots are what the scale actually said.</string>
     <string name="weight_open">Weight</string>
 
-    <string name="movement_title">Movement</string>
-    <string name="movement_open">Movement</string>
-    <string name="movement_open_label">open Movement</string>
+    <string name="movement_title">Your movement</string>
+    <string name="movement_open_label">open Your movement</string>
     <string name="movement_day_open">open</string>
     <string name="movement_day_closed">closed</string>
     <string name="movement_day_show">show this day</string>
