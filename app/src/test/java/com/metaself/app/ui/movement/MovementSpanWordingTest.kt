@@ -49,6 +49,27 @@ class MovementSpanWordingTest {
     }
 
     @Test
+    fun `the week still under way is left out of the twelve-week headline`() {
+        val chart = weeks(List(11) { 150 } + 20, km = List(11) { 18_200 } + 1_000, steps = List(11) { 8_900 } + 2_000)
+
+        assertThat(MovementSpanWording.headline(chart, SpanMeasure.MINUTES)).isEqualTo("150 min a week")
+        assertThat(MovementSpanWording.headline(chart, SpanMeasure.KM)).isEqualTo("18.2 km a week")
+        assertThat(MovementSpanWording.headline(chart, SpanMeasure.STEPS)).isEqualTo("8,900 steps a day")
+    }
+
+    @Test
+    fun `with only the week under way recorded the headline says it so far`() {
+        val chart = weeks(List(11) { null } + 85, km = List(11) { null } + 4_200, steps = List(11) { null } + 9_000)
+
+        assertThat(MovementSpanWording.headline(chart, SpanMeasure.MINUTES)).isEqualTo("85 min so far")
+        assertThat(MovementSpanWording.headline(chart, SpanMeasure.KM)).isEqualTo("4.2 km so far")
+        assertThat(MovementSpanWording.headline(chart, SpanMeasure.STEPS)).isEqualTo("9,000 steps a day so far")
+        assertThat(MovementSpanWording.headline(weeks(List(11) { null } + 85), SpanMeasure.KM)).isEqualTo("No km recorded")
+        assertThat(MovementSpanWording.twelveWeeksLine(chart, SpanMeasure.MINUTES)).isNull()
+        assertThat(MovementSpanWording.legend(chart, SpanMeasure.MINUTES)).doesNotContain("Average")
+    }
+
+    @Test
     fun `a span wholly before the record has no headline`() {
         val chart = weeks(List(12) { null })
 
@@ -57,26 +78,39 @@ class MovementSpanWordingTest {
     }
 
     @Test
-    fun `the twelve-week line compares the last four weeks with the four before`() {
-        val up = weeks(List(4) { 100 } + List(4) { 120 } + List(4) { 165 })
+    fun `the twelve-week line compares the last four complete weeks with the four before`() {
+        // The last bar is the week under way, at 10 so far: left out.
+        val up = weeks(List(3) { 100 } + List(4) { 120 } + List(4) { 165 } + 10)
         assertThat(MovementSpanWording.twelveWeeksLine(up, SpanMeasure.MINUTES))
             .isEqualTo("The last 4 weeks averaged 165, up from 120 the 4 before.")
 
-        val down = weeks(List(8) { 120 } + List(4) { 90 })
+        val down = weeks(List(7) { 120 } + List(4) { 90 } + 10)
         assertThat(MovementSpanWording.twelveWeeksLine(down, SpanMeasure.MINUTES))
             .isEqualTo("The last 4 weeks averaged 90, down from 120 the 4 before.")
 
         // A tenth either way, at the edge, is about the same.
-        val edge = weeks(List(8) { 120 } + List(4) { 132 })
+        val edge = weeks(List(7) { 120 } + List(4) { 132 } + 10)
         assertThat(MovementSpanWording.twelveWeeksLine(edge, SpanMeasure.MINUTES))
             .isEqualTo("The last 4 weeks averaged 132, about the same as 120 the 4 before.")
-        val past = weeks(List(8) { 120 } + List(4) { 133 })
+        val past = weeks(List(7) { 120 } + List(4) { 133 } + 10)
         assertThat(MovementSpanWording.twelveWeeksLine(past, SpanMeasure.MINUTES)).contains("up from 120")
     }
 
     @Test
+    fun `browsing back, the twelve-week line compares the span's own newest four`() {
+        val earlier = SpanChart(
+            MovementSpan.TWELVE_WEEKS, TEST_EPOCH_DAY,
+            weekBars(List(4) { 100 } + List(4) { 120 } + List(4) { 165 }, lastMonday = monday - 7L * 12),
+        )
+
+        assertThat(MovementSpanWording.twelveWeeksLine(earlier, SpanMeasure.MINUTES))
+            .isEqualTo("The last 4 weeks averaged 165, up from 120 the 4 before.")
+        assertThat(MovementSpanWording.headline(earlier, SpanMeasure.MINUTES)).isEqualTo("128 min a week")
+    }
+
+    @Test
     fun `km and steps say the same in their units`() {
-        val chart = weeks(List(12) { 0 }, km = List(8) { 15_000 } + List(4) { 18_200 }, steps = List(8) { 7_100 } + List(4) { 8_900 })
+        val chart = weeks(List(12) { 0 }, km = List(7) { 15_000 } + List(4) { 18_200 } + 1_000, steps = List(7) { 7_100 } + List(4) { 8_900 } + 2_000)
 
         assertThat(MovementSpanWording.twelveWeeksLine(chart, SpanMeasure.KM))
             .isEqualTo("The last 4 weeks averaged 18.2 km, up from 15.0 the 4 before.")
@@ -86,10 +120,11 @@ class MovementSpanWordingTest {
 
     @Test
     fun `with too little record the line says how many weeks it is over`() {
-        val sixWeeks = weeks(List(6) { null } + List(6) { 100 })
+        // The week under way is not counted among them.
+        val sixWeeks = weeks(List(5) { null } + List(7) { 100 })
 
         assertThat(MovementSpanWording.twelveWeeksLine(sixWeeks, SpanMeasure.MINUTES)).isEqualTo("Over the 6 weeks recorded.")
-        assertThat(MovementSpanWording.twelveWeeksLine(weeks(List(11) { null } + 100), SpanMeasure.MINUTES))
+        assertThat(MovementSpanWording.twelveWeeksLine(weeks(List(10) { null } + 100 + 100), SpanMeasure.MINUTES))
             .isEqualTo("Over the one week recorded.")
     }
 

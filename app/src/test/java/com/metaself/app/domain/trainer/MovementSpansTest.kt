@@ -149,17 +149,57 @@ class MovementSpansTest {
 
     @Test
     fun `a week before the record is blank, not zero, and out of the average`() {
-        // The record starts on the Wednesday of the week before last: that week is recorded, those before it are not.
-        val sessions = listOf(session(1, monday - 14 + 2, minutes = 60), session(2, monday, minutes = 30))
+        // The span ends last week, and the record starts on the Wednesday of the week before: those two weeks are
+        // recorded, the ten before them are not.
+        val sessions = listOf(session(1, monday - 14 + 2, minutes = 60), session(2, monday - 7 + 1, minutes = 20))
 
-        val chart = weeks(sessions, recordStart = monday - 12)
+        val chart = MovementSpans.weeks(monday - 7, TEST_EPOCH_DAY, sessions, emptyList(), emptyList(), recordStart = monday - 12)
 
-        assertThat(chart.bars.take(9).none { it.recorded }).isTrue()
-        assertThat(chart.bars.take(9).map { it.value(SpanMeasure.MINUTES) }.distinct()).containsExactly(null)
-        assertThat(chart.bars.drop(9).all { it.recorded }).isTrue()
-        // 60, 0 and 30: the average of the three recorded weeks.
-        assertThat(chart.average(SpanMeasure.MINUTES)).isEqualTo(30.0)
+        assertThat(chart.bars.take(10).none { it.recorded }).isTrue()
+        assertThat(chart.bars.take(10).map { it.value(SpanMeasure.MINUTES) }.distinct()).containsExactly(null)
+        assertThat(chart.bars.drop(10).all { it.recorded }).isTrue()
+        // 60 and 20: the average of the two recorded weeks.
+        assertThat(chart.average(SpanMeasure.MINUTES)).isEqualTo(40.0)
         assertThat(chart.nothingRecorded).isFalse()
+    }
+
+    @Test
+    fun `the week holding today is drawn but left out of the twelve-week average`() {
+        // 60 and 20 in the two weeks before; 200 so far this week.
+        val sessions = listOf(session(1, monday - 14, minutes = 60), session(2, monday - 7, minutes = 20), session(3, monday, minutes = 200))
+        val days = listOf(HealthDay(monday - 14, steps = 6_000), HealthDay(monday - 7, steps = 8_000), HealthDay(monday, steps = 20_000))
+
+        val chart = weeks(sessions, days = days, recordStart = monday - 14)
+
+        assertThat(chart.bars.last().value(SpanMeasure.MINUTES)).isEqualTo(200.0)
+        assertThat(chart.averaged(SpanMeasure.MINUTES)).containsExactly(60.0, 20.0).inOrder()
+        assertThat(chart.average(SpanMeasure.MINUTES)).isEqualTo(40.0)
+        assertThat(chart.average(SpanMeasure.STEPS)).isEqualTo(7_000.0)
+        assertThat(chart.soFar(SpanMeasure.MINUTES)).isNull()
+    }
+
+    @Test
+    fun `twelve weeks before today's week average all twelve`() {
+        // The span ends the week before this one: its last week is complete, and counted.
+        val sessions = listOf(session(1, monday - 14, minutes = 60), session(2, monday - 7, minutes = 20))
+
+        val chart = MovementSpans.weeks(monday - 7, TEST_EPOCH_DAY, sessions, emptyList(), emptyList(), recordStart = monday - 14)
+
+        assertThat(chart.bars.none { it.current }).isTrue()
+        assertThat(chart.averaged(SpanMeasure.MINUTES)).containsExactly(60.0, 20.0).inOrder()
+    }
+
+    @Test
+    fun `with no complete week recorded twelve weeks says the current week so far`() {
+        val sessions = listOf(session(1, monday, minutes = 85))
+        val days = listOf(HealthDay(monday, steps = 9_000))
+
+        val chart = weeks(sessions, days = days, recordStart = monday)
+
+        assertThat(chart.average(SpanMeasure.MINUTES)).isNull()
+        assertThat(chart.soFar(SpanMeasure.MINUTES)).isEqualTo(85.0)
+        assertThat(chart.soFar(SpanMeasure.STEPS)).isEqualTo(9_000.0)
+        assertThat(chart.soFar(SpanMeasure.KM)).isNull()
     }
 
     @Test
@@ -179,7 +219,7 @@ class MovementSpansTest {
 
         assertThat(chart.average(SpanMeasure.MINUTES)).isEqualTo(400.0)
         assertThat(chart.averaged(SpanMeasure.MINUTES)).hasSize(2)
-        assertThat(chart.soFar).isNull()
+        assertThat(chart.soFar(SpanMeasure.MINUTES)).isNull()
     }
 
     @Test
@@ -190,7 +230,7 @@ class MovementSpansTest {
         )
 
         assertThat(chart.average(SpanMeasure.MINUTES)).isNull()
-        assertThat(chart.soFar).isEqualTo(85)
+        assertThat(chart.soFar(SpanMeasure.MINUTES)).isEqualTo(85.0)
         assertThat(chart.bars.last().current).isTrue()
     }
 
@@ -218,17 +258,29 @@ class MovementSpansTest {
 
     @Test
     fun `the twelve-week trend needs all eight weeks recorded`() {
-        // The four before at 120 minutes, the last four at 160.
-        val sessions = (0 until 8).map { back -> session(back + 1L, monday - 7L * back, minutes = if (back < 4) 160 else 120) }
+        // The four before at 120 minutes, the last four complete weeks at 160, and 10 so far this week.
+        val sessions = (1..8).map { back -> session(back.toLong(), monday - 7L * back, minutes = if (back <= 4) 160 else 120) } +
+            session(9, monday, minutes = 10)
 
-        val trend = weeks(sessions, recordStart = monday - 7L * 7).trend(SpanMeasure.MINUTES)!!
+        val trend = weeks(sessions, recordStart = monday - 7L * 8).trend(SpanMeasure.MINUTES)!!
         assertThat(trend.last).isEqualTo(160.0)
         assertThat(trend.before).isEqualTo(120.0)
         assertThat(trend.against).isEqualTo(Against.ABOVE)
 
-        assertThat(weeks(sessions, recordStart = monday - 7L * 6).trend(SpanMeasure.MINUTES)).isNull()
+        assertThat(weeks(sessions, recordStart = monday - 7L * 7).trend(SpanMeasure.MINUTES)).isNull()
         // Km needs a figure in all eight, too.
         assertThat(weeks(sessions, recordStart = monday - 365).trend(SpanMeasure.KM)).isNull()
+    }
+
+    @Test
+    fun `twelve weeks before today's week compare their own last eight`() {
+        // The span ends the week before this one: its last four are its own four newest weeks.
+        val sessions = (1..8).map { back -> session(back.toLong(), monday - 7L * back, minutes = if (back <= 4) 90 else 120) }
+
+        val trend = MovementSpans.weeks(monday - 7, TEST_EPOCH_DAY, sessions, emptyList(), emptyList(), recordStart = monday - 7L * 8)
+            .trend(SpanMeasure.MINUTES)!!
+        assertThat(trend.last).isEqualTo(90.0)
+        assertThat(trend.before).isEqualTo(120.0)
     }
 
     private fun weeks(

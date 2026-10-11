@@ -74,26 +74,31 @@ data class SpanChart(val span: MovementSpan, val today: Long, val bars: List<Spa
     /** D136: a span wholly before the record says so, and draws nothing. */
     val nothingRecorded: Boolean get() = bars.none { it.recorded }
 
-    /** The bars [average] is taken over: every recorded week; on Year, the complete recorded months. */
-    fun averaged(measure: SpanMeasure): List<Double> = bars
-        .filter { span == MovementSpan.TWELVE_WEEKS || !it.current }
-        .mapNotNull { it.value(measure) }
+    /**
+     * The bars [average] and [trend] are taken over: the complete recorded weeks or months — the one holding today is
+     * unfinished, so it is drawn but left out (D136, amended 2026-10-11).
+     */
+    fun averaged(measure: SpanMeasure): List<Double> = complete().mapNotNull { it.value(measure) }
+
+    private fun complete(): List<SpanBar> = bars.filter { !it.current }
 
     /** D136: the headline's average and the dashed line; null when no bar counts towards it. */
     fun average(measure: SpanMeasure): Double? = averaged(measure).takeIf { it.isNotEmpty() }?.average()
 
-    /** D136: Year with no complete month recorded — the current month's minutes, said "so far"; else null. */
-    val soFar: Int?
-        get() = if (span != MovementSpan.YEAR || average(SpanMeasure.MINUTES) != null) null
-        else bars.lastOrNull { it.current && it.recorded }?.minutes
+    /**
+     * D136: no complete week or month with a figure in [measure] — the current one's figure, said "so far"; else null.
+     * Year's is in minutes.
+     */
+    fun soFar(measure: SpanMeasure): Double? =
+        if (average(measure) != null) null else bars.lastOrNull { it.current }?.value(measure)
 
     /**
-     * D137: the last four weeks against the four before, when all eight have a figure in [measure]; null
-     * otherwise, and on Year.
+     * D137: the last four complete weeks against the four before, when all eight have a figure in [measure]; null
+     * otherwise, and on Year. The week holding today is left out (amended 2026-10-11).
      */
     fun trend(measure: SpanMeasure): SpanTrend? {
         if (span != MovementSpan.TWELVE_WEEKS) return null
-        val values = bars.takeLast(2 * MovementSpans.COMPARE_WEEKS).map { it.value(measure) }
+        val values = complete().takeLast(2 * MovementSpans.COMPARE_WEEKS).map { it.value(measure) }
         if (values.size < 2 * MovementSpans.COMPARE_WEEKS || values.any { it == null }) return null
         val before = values.take(MovementSpans.COMPARE_WEEKS).filterNotNull().average()
         val last = values.takeLast(MovementSpans.COMPARE_WEEKS).filterNotNull().average()
