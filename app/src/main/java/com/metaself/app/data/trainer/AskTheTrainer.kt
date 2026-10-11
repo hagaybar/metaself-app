@@ -683,13 +683,7 @@ class AskTheTrainer @Inject constructor(
     }
 
     /** D110: every kept version of a weekly plan, each counted from its chain's first keep (D105). */
-    private suspend fun countedPlans(): List<CountedPlan> {
-        val all = programmes.all()
-        return all.filter { it.status != ProgrammeStatus.OFFERED && it.startEpochDay != null }.map { programme ->
-            val root = Programmes.rootOf(programme, all)
-            CountedPlan(programme, PlanCounting(root.id, root.createdAtMillis, programmes.confirmations(root.id)))
-        }
-    }
+    private suspend fun countedPlans(): List<CountedPlan> = keptPlansOf(programmes)
 
     companion object {
         /**

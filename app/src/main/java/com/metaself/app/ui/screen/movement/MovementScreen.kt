@@ -4,33 +4,30 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.movement.ImportOutcome
@@ -41,6 +38,10 @@ import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.MetaSelfScreen
+import com.metaself.app.domain.trainer.MovementSpan
+import com.metaself.app.domain.trainer.SpanBar
+import com.metaself.app.domain.trainer.SpanMeasure
+import com.metaself.app.ui.movement.MovementSpanWording
 import com.metaself.app.ui.movement.MovementWeekWording
 import com.metaself.app.ui.movement.WorkoutFileWording
 import com.metaself.app.ui.screen.day.UndoRow
@@ -73,6 +74,10 @@ import java.time.ZoneId
  * A session other workouts also recorded (D92) is one line, with "also recorded by 2 more" under it and
  * "These are two sessions", which parts it; Undo is then offered under the title bar, and a session
  * parted from one it still overlaps offers "Put back together".
+ *
+ * D135–D137: under the title bar, Week · 12 weeks · Year. Week is the page above with the Trainer's strip for the week
+ * as its chart; 12 weeks and Year are one chart each, whose bars open a week or a month's weeks. A sideways swipe does
+ * what the arrows do ([onEarlierWeek] and [onLaterWeek] step one span, whichever is shown). "Log a workout" is on Week.
  */
 @Composable
 fun MovementScreen(
@@ -97,21 +102,47 @@ fun MovementScreen(
     onSplit: (Workout) -> Unit = {},
     onUndoSplit: () -> Unit = {},
     onPutBack: (Workout) -> Unit = {},
+    onSpan: (MovementSpan) -> Unit = {},
+    onMeasure: (SpanMeasure) -> Unit = {},
+    onBar: (SpanBar) -> Unit = {},
 ) {
-    val readable = state.week != null
+    val onWeek = state.week != null
+    val readable = onWeek || state.chart != null
     val canLog = state.logDay != null
+    // D135: a sideways swipe does what the arrows do. Read through the latest state, so the gesture handler
+    // installed once never acts on an arrow that has since gone.
+    val earlier by rememberUpdatedState(if (state.canGoEarlier) onEarlierWeek else null)
+    val later by rememberUpdatedState(if (state.canGoLater) onLaterWeek else null)
     MetaSelfScreen(
         title = stringResource(R.string.movement_title),
-        modifier = modifier,
+        modifier = modifier.pointerInput(Unit) {
+            val threshold = SWIPE_DISTANCE.toPx()
+            var dragged = 0f
+            detectHorizontalDragGestures(
+                onDragStart = { dragged = 0f },
+                onDragEnd = {
+                    when {
+                        dragged > threshold -> earlier?.invoke()
+                        dragged < -threshold -> later?.invoke()
+                    }
+                },
+                onHorizontalDrag = { change, amount ->
+                    change.consume()
+                    dragged += amount
+                },
+            )
+        },
         onBack = onBack,
         belowBar = {
             if (state.canUndo) UndoLine(failed = state.undoFailed, onUndo = onUndoDelete)
             if (state.canUndoSplit) SplitUndoLine(onUndo = onUndoSplit)
         },
-        hasFloatingButton = readable,
-        floatingActionButton = { if (readable) LogWorkoutButton(onClick = onLogWorkout, enabled = canLog) },
+        hasFloatingButton = onWeek,
+        floatingActionButton = { if (onWeek) LogWorkoutButton(onClick = onLogWorkout, enabled = canLog) },
     ) {
+        SpanSwitch(state.span, onSpan)
         val week = state.week
+        val chart = state.chart
         when {
             state.unreadable -> Text(
                 text = stringResource(R.string.movement_unreadable),
@@ -119,16 +150,32 @@ fun MovementScreen(
                 color = MaterialTheme.colorScheme.error,
             )
 
+            chart != null -> {
+                SpanArrows(
+                    text = MovementSpanWording.spanLine(chart),
+                    canGoEarlier = state.canGoEarlier,
+                    canGoLater = state.canGoLater,
+                    earlierSaid = MovementSpanWording.earlierSaid(chart.span),
+                    laterSaid = MovementSpanWording.laterSaid(chart.span),
+                    onEarlier = onEarlierWeek,
+                    onLater = onLaterWeek,
+                )
+                ChartSpan(chart, state.measure, onMeasure, onBar)
+            }
+
             week == null -> Unit
 
             else -> {
                 Headline(
                     week = week,
+                    usual = state.usualWeek,
                     canGoEarlier = state.canGoEarlier,
                     canGoLater = state.canGoLater,
                     onEarlier = onEarlierWeek,
                     onLater = onLaterWeek,
                 )
+
+                state.strip?.let { WeekChartCard(it) }
 
                 if (!canLog) {
                     // D83: why the button at the foot is greyed, drawn where the day to open is.
@@ -284,38 +331,28 @@ private fun UndoLine(failed: Boolean, onUndo: () -> Unit) {
 }
 
 /**
- * D74, D131: the kicker, the one large figure — the week's minutes — and the line beneath it. The kicker
- * sits between ‹ and › (D83); an arrow not offered leaves its width empty, so the kicker keeps its
- * place from week to week.
+ * D74, D131, D137: the kicker, the one large figure — the week's minutes — and the line beneath it, ending with the
+ * week against the usual one. The kicker sits between ‹ and › (D83).
  */
 @Composable
 private fun Headline(
     week: MovementWeek,
+    usual: Double?,
     canGoEarlier: Boolean,
     canGoLater: Boolean,
     onEarlier: () -> Unit,
     onLater: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            if (canGoEarlier) {
-                WeekArrow(Icons.AutoMirrored.Filled.KeyboardArrowLeft, stringResource(R.string.movement_week_earlier), onEarlier)
-            } else {
-                Spacer(Modifier.size(ARROW_SIZE))
-            }
-            Text(
-                text = MovementWeekWording.kicker(week.monday, week.thisMonday, week.today),
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-            if (canGoLater) {
-                WeekArrow(Icons.AutoMirrored.Filled.KeyboardArrowRight, stringResource(R.string.movement_week_later), onLater)
-            } else {
-                Spacer(Modifier.size(ARROW_SIZE))
-            }
-        }
+        SpanArrows(
+            text = MovementWeekWording.kicker(week.monday, week.thisMonday, week.today),
+            canGoEarlier = canGoEarlier,
+            canGoLater = canGoLater,
+            earlierSaid = stringResource(R.string.movement_week_earlier),
+            laterSaid = stringResource(R.string.movement_week_later),
+            onEarlier = onEarlier,
+            onLater = onLater,
+        )
         // The one number this screen exists to answer, in the app's display face (D48): the week's minutes
         // moving, counted as the Trainer's verdict counts them (D131).
         Text(
@@ -323,22 +360,14 @@ private fun Headline(
             style = MaterialTheme.typography.displayLarge,
             color = MaterialTheme.colorScheme.onBackground,
         )
-        MovementWeekWording.underHeadline(week)?.let { line ->
+        MovementSpanWording.weekLine(week, usual)?.let { line ->
             Text(text = line, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
 
-/** One of the week's two arrows (D83): Material's icon button, 48 dp of touch, named for a screen reader. */
-@Composable
-private fun WeekArrow(icon: ImageVector, said: String, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.size(ARROW_SIZE)) {
-        Icon(imageVector = icon, contentDescription = said)
-    }
-}
-
-/** An arrow's width, and the gap an absent one leaves (D83). */
-private val ARROW_SIZE = 48.dp
+/** D135: how far a sideways drag must go to move a span — further than a scroll's wobble. */
+private val SWIPE_DISTANCE = 64.dp
 
 /** Material's own figure for disabled content. */
 private const val DISABLED_ALPHA = 0.38f

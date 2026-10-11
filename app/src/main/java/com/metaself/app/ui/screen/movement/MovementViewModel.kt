@@ -12,6 +12,7 @@ import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.KeptPlans
 import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.movement.ImportOutcome
@@ -20,8 +21,15 @@ import com.metaself.app.domain.movement.SessionSplit
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
 import com.metaself.app.domain.movement.WorkoutSource
+import com.metaself.app.domain.trainer.MovementSpan
+import com.metaself.app.domain.trainer.MovementSpans
 import com.metaself.app.domain.trainer.SessionReviews
+import com.metaself.app.domain.trainer.SpanBar
+import com.metaself.app.domain.trainer.SpanChart
+import com.metaself.app.domain.trainer.SpanMeasure
 import com.metaself.app.domain.trainer.TrainerReview
+import com.metaself.app.domain.trainer.WeekLedgers
+import com.metaself.app.domain.trainer.WeekStrip
 import com.metaself.app.ui.movement.WorkoutFileWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -61,6 +69,10 @@ import javax.inject.Inject
  * for today. A typed workout reaches the week through the record it is written to, like any
  * other workout. A typed workout deleted here can be put back with Undo, the app's rule for a thing it
  * can rebuild (the weight screen's `WeightViewModel.delete`).
+ *
+ * D135–D137: the span shown — Week, 12 weeks or Year — and the day in view, which a span switch keeps. Each span is
+ * one read of the record over its days, never one per week; "planned" is counted from the kept plans ([KeptPlans]),
+ * read with it.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
@@ -81,6 +93,8 @@ class MovementViewModel(
     private val splits: SessionSplits = SessionSplits.NONE,
     /** The destination's arguments: [OPEN_LOG] opens the sheet once (D132). */
     private val savedState: SavedStateHandle = SavedStateHandle(),
+    /** The kept weekly plans, which "planned" is counted by (D110, D135, D136). */
+    private val plans: KeptPlans = KeptPlans.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -96,7 +110,8 @@ class MovementViewModel(
         trainer: TrainerReviews,
         splits: SessionSplits,
         savedState: SavedStateHandle,
-    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer, splits, savedState)
+        plans: KeptPlans,
+    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer, splits, savedState, plans)
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
@@ -105,6 +120,15 @@ class MovementViewModel(
 
     /** The Monday of the week shown; null is this week, whichever week that is by now (D83). */
     private val shownMonday = MutableStateFlow<Long?>(null)
+
+    /** D135: the span shown; Week each time the page opens. */
+    private val span = MutableStateFlow(MovementSpan.WEEK)
+
+    /** D135: the day in view on 12 weeks and Year; null is today, whichever day that is by now. */
+    private val chartEnd = MutableStateFlow<Long?>(null)
+
+    /** D136: what the 12-week bars count. */
+    private val measure = MutableStateFlow(SpanMeasure.MINUTES)
 
     /** The log-a-workout sheet, when it is open (D76). */
     private val sheet = MutableStateFlow<WorkoutSheetState?>(null)
@@ -124,45 +148,117 @@ class MovementViewModel(
     /** Every sheet this screen has opened gets the next one of these (see [WorkoutSheetState.token]). */
     private var nextSheetToken = 0L
 
-    /** The week shown and the record's earliest day, which bounds how far back ‹ goes (D83). */
-    private data class Read(val week: MovementWeek, val earliest: Long?, val reviews: Map<Long, TrainerReview>?)
+    /**
+     * One span's read (D83, D135): the week shown with its strip and usual week, or the 12-week or Year chart; and
+     * whether ‹ and › are drawn.
+     */
+    private data class Read(
+        val week: MovementWeek? = null,
+        val reviews: Map<Long, TrainerReview>? = emptyMap(),
+        val strip: WeekStrip? = null,
+        val usual: Double? = null,
+        val chart: SpanChart? = null,
+        val canGoEarlier: Boolean = false,
+        val canGoLater: Boolean = false,
+    )
+
+    private data class Shown(val day: Long, val monday: Long?, val span: MovementSpan, val end: Long?)
 
     /**
-     * Null means the read failed; the failure is logged where it happened, below. The earliest day
-     * is part of the same read, so it fails the way the rest does (D8).
+     * Null means the read failed; the failure is logged where it happened, below. The earliest day and the kept
+     * plans are part of the same read, so they fail the way the rest does (D8).
      */
-    private val week: Flow<Read?> = combine(calendarToday, shownMonday) { day, chosen -> day to chosen }
-        .flatMapLatest { (day, chosen) ->
-            val monday = chosen ?: MovementWeek.mondayOf(day)
-            // This week stops at today; an earlier one is all seven days.
-            val last = if (chosen == null) day else monday + 6
-            val built: Flow<Read?> = combine(
-                // Five weeks: the one shown, and the four the foot of the screen sums (D74).
-                record.observeDays(monday - 7L * MovementWeek.PREVIOUS_WEEKS, last),
-                record.observeWorkouts(monday, last),
-                mealsOn((monday..last).toList()),
-                record.observeEarliestDay(),
-                reviews(),
-            ) { days, workouts, mealsByDay, earliest, reviews ->
-                // D92: a combined session's review may sit on another of its witnesses.
-                Read(MovementWeek.of(day, days, workouts, mealsByDay, monday), earliest, reviews?.let { SessionReviews.bySession(workouts, it) })
-            }
-            built
+    private val week: Flow<Read?> = combine(calendarToday, shownMonday, span, chartEnd) { day, chosen, shownSpan, end -> Shown(day, chosen, shownSpan, end) }
+        .flatMapLatest { shown ->
+            if (shown.span == MovementSpan.WEEK) weekRead(shown.day, shown.monday) else chartRead(shown.day, shown.span, shown.end ?: shown.day)
         }
         .catch { failure ->
             problems.record(PROBLEM_KIND, failure.message ?: failure::class.java.simpleName)
             emit(null)
         }
 
-    val state: StateFlow<MovementUiState> = combine(week, openDay, sheet, undo, fileImport) { read, open, sheetNow, undoNow, file ->
-        if (read == null) {
-            MovementUiState(unreadable = true, openDay = open, sheet = sheetNow, fileImport = file)
-        } else {
-            val built = read.week
-            MovementUiState(
+    private fun weekRead(day: Long, chosen: Long?): Flow<Read?> {
+        val monday = chosen ?: MovementWeek.mondayOf(day)
+        // This week stops at today; an earlier one is all seven days.
+        val last = if (chosen == null) day else monday + 6
+        return combine(
+            // Five weeks: the one shown, and the four the foot of the screen sums (D74).
+            record.observeDays(monday - 7L * MovementWeek.PREVIOUS_WEEKS, last),
+            // The week's sessions, and the four weeks' before it its usual is counted over (D137).
+            record.observeWorkouts(monday - 7L * MovementSpans.USUAL_WEEKS, last),
+            mealsOn((monday..last).toList()),
+            combine(record.observeEarliestDay(), record.observeEarliestMovementDay()) { earliest, start -> earliest to start },
+            reviews(),
+        ) { days, workouts, mealsByDay, (earliest, start), reviews ->
+            val built = MovementWeek.of(day, days, workouts, mealsByDay, monday)
+            // D135: the Trainer's strip for this week, counted from the same practice; no "To do" here.
+            val practice = WeekLedgers.practiceOf(monday, day, workouts, plans.counted())
+            Read(
                 week = built,
-                canGoEarlier = read.earliest != null && MovementWeek.mondayOf(read.earliest) < built.monday,
+                // D92: a combined session's review may sit on another of its witnesses.
+                reviews = reviews?.let { SessionReviews.bySession(workouts, it) },
+                strip = WeekStrip.of(monday, day, workouts, practice).copy(toDo = emptyList()),
+                usual = MovementSpans.usualWeek(monday, day, workouts, start),
+                canGoEarlier = earliest != null && MovementWeek.mondayOf(earliest) < monday,
                 canGoLater = !built.isCurrent,
+            )
+        }
+    }
+
+    /** D136: the span's whole record in one read — its days and sessions, from its first week's Monday. */
+    private fun chartRead(day: Long, shownSpan: MovementSpan, end: Long): Flow<Read?> {
+        val from = MovementSpans.readFrom(shownSpan, end)
+        val to = minOf(MovementSpans.lastDay(shownSpan, end), day)
+        return combine(
+            record.observeDays(from, to),
+            record.observeWorkouts(from, to),
+            record.observeEarliestMovementDay(),
+        ) { days, workouts, start ->
+            val kept = plans.counted()
+            val chart = if (shownSpan == MovementSpan.TWELVE_WEEKS) {
+                MovementSpans.weeks(end, day, workouts, days, kept, start)
+            } else {
+                MovementSpans.months(end, day, workouts, days, kept, start)
+            }
+            Read(
+                chart = chart,
+                canGoEarlier = MovementSpans.canGoEarlier(shownSpan, end, start),
+                canGoLater = !MovementSpans.holdsToday(shownSpan, end, day),
+            )
+        }
+    }
+
+    private data class Choices(val file: FileImportState?, val span: MovementSpan, val measure: SpanMeasure)
+
+    val state: StateFlow<MovementUiState> = combine(
+        week,
+        openDay,
+        sheet,
+        undo,
+        combine(fileImport, span, measure) { file, shownSpan, counted -> Choices(file, shownSpan, counted) },
+    ) { read, open, sheetNow, undoNow, choices ->
+        val file = choices.file
+        val built = read?.week
+        when {
+            read == null -> MovementUiState(unreadable = true, openDay = open, sheet = sheetNow, fileImport = file, span = choices.span, measure = choices.measure)
+            built == null -> MovementUiState(
+                chart = read.chart,
+                span = choices.span,
+                measure = choices.measure,
+                canGoEarlier = read.canGoEarlier,
+                canGoLater = read.canGoLater,
+                openDay = open,
+                sheet = sheetNow,
+                canUndo = undoNow.offered,
+                undoFailed = undoNow.failed,
+                canUndoSplit = undoNow.split.isNotEmpty(),
+                fileImport = file,
+                logDay = null,
+            )
+            else -> MovementUiState(
+                week = built,
+                canGoEarlier = read.canGoEarlier,
+                canGoLater = read.canGoLater,
                 // D76 on this week; on an earlier one only an open day will do (D83).
                 logDay = open ?: built.days.firstOrNull()?.epochDay?.takeIf { built.isCurrent },
                 openDay = open,
@@ -172,6 +268,10 @@ class MovementViewModel(
                 canUndoSplit = undoNow.split.isNotEmpty(),
                 fileImport = file,
                 reviews = read.reviews,
+                span = choices.span,
+                measure = choices.measure,
+                strip = read.strip,
+                usualWeek = read.usual,
             )
         }
     }
@@ -227,6 +327,73 @@ class MovementViewModel(
         openDay.update { open -> if (open == epochDay) null else epochDay }
     }
 
+    /** D135: ‹, or a swipe right — one span back, as the arrow does, and only when it is drawn. */
+    fun earlier() {
+        val shownSpan = span.value
+        if (shownSpan == MovementSpan.WEEK) return earlierWeek()
+        if (!state.value.canGoEarlier || state.value.span != shownSpan) return
+        chartEnd.value = MovementSpans.earlier(shownSpan, chartEnd.value ?: calendarToday.value)
+    }
+
+    /** D135: ›, or a swipe left — one span forward; never past the span holding today. */
+    fun later() {
+        val shownSpan = span.value
+        if (shownSpan == MovementSpan.WEEK) return laterWeek()
+        val end = chartEnd.value ?: return
+        chartEnd.value = MovementSpans.later(shownSpan, end, calendarToday.value)
+    }
+
+    /**
+     * D135: the switch. The day in view is kept — Week's Sunday, or the chart's last day — so 12 weeks ends on the week
+     * that was shown, and Week shows the last week of the 12. A span reaching today follows the calendar.
+     */
+    fun chooseSpan(next: MovementSpan) {
+        val shownSpan = span.value
+        if (next == shownSpan) return
+        val end = if (shownSpan == MovementSpan.WEEK) shownMonday.value?.let { it + 6 } else chartEnd.value
+        if (next == MovementSpan.WEEK) {
+            showWeek(end?.let(MovementWeek::mondayOf))
+        } else {
+            chartEnd.value = end?.takeUnless { MovementSpans.holdsToday(next, it, calendarToday.value) }
+        }
+        span.value = next
+    }
+
+    /** D136: the 12-week chips. */
+    fun chooseMeasure(next: SpanMeasure) {
+        measure.value = next
+    }
+
+    /**
+     * D136: a bar was tapped. A week opens in Week; a month opens 12 weeks ending with its last week. A bar before the
+     * record opens nothing.
+     */
+    fun openBar(bar: SpanBar) {
+        if (!bar.recorded) return
+        when (span.value) {
+            MovementSpan.TWELVE_WEEKS -> {
+                showWeek(MovementWeek.mondayOf(bar.first))
+                span.value = MovementSpan.WEEK
+            }
+            MovementSpan.YEAR -> {
+                chartEnd.value = bar.last.takeUnless { MovementSpans.holdsToday(MovementSpan.TWELVE_WEEKS, it, calendarToday.value) }
+                span.value = MovementSpan.TWELVE_WEEKS
+            }
+            MovementSpan.WEEK -> Unit
+        }
+    }
+
+    /** [monday]'s week, none open; this week (null, or today's Monday) with today open, as the page opens. */
+    private fun showWeek(monday: Long?) {
+        if (monday == null || monday >= MovementWeek.mondayOf(calendarToday.value)) {
+            shownMonday.value = null
+            openDay.value = calendarToday.value
+        } else {
+            shownMonday.value = monday
+            openDay.value = null
+        }
+    }
+
     /**
      * ‹ (D83): the week before, with no day open — only while the record goes back that far, as the
      * last state read it; the arrow is drawn from that same state.
@@ -262,6 +429,7 @@ class MovementViewModel(
         if (now == calendarToday.value) return
         openDay.value = now
         shownMonday.value = null
+        chartEnd.value = null
         calendarToday.value = now
     }
 

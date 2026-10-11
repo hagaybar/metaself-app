@@ -20,6 +20,7 @@ data class ChangeLogEntry(
 object ChangeLog {
 
     val entries: List<ChangeLogEntry> = listOf(
+        entry("0.82.0", 10, 11, "Your movement shows Week, 12 weeks and Year, as charts you can swipe through."),
         entry("0.81.0", 10, 11, "Your numbers moved into Settings, and this page says what each version changed."),
         entry("0.80.0", 10, 11, "Movement moved under the Trainer, with Log a workout on the Trainer page."),
         entry("0.79.0", 10, 11, "Suggested goals, a goal of more time each week, and the trainer says when a goal is too big."),
