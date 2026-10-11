@@ -75,7 +75,7 @@ class TrainerScreenRenderTest {
         val order = listOf(
             "THIS WEEK · MON 31 AUG – SUN 6 SEP", "60 minutes moving this week.", "Planned, done", "Walking, 20 min — count it for this?",
             "STEPS", "SLEEP", "FOOD", "Invented week note.", "Log a workout", "Plan the open walk", "WAITING FOR YOUR WORDS",
-            "Your plan · week 1 of 2", "Weekly letters", "Earlier sessions", "About me",
+            "Your plan · week 1 of 2", "Your movement", "Weekly letters", "Earlier sessions", "About me",
         )
         order.zipWithNext().forEach { (first, second) ->
             assertThat(render.isDrawnBefore(first, second)).isTrue()
@@ -261,6 +261,18 @@ class TrainerScreenRenderTest {
         val none = draw(page())
         assertThat(none.none { it.startsWith("Written ") }).isTrue()
         assertThat(none).doesNotContain(TrainerWording.FROM_TRAINER)
+    }
+
+    /** D132 item 3: after Your plan, a row with its own line, opening Your movement on this week. */
+    @Test
+    fun `the Your movement row, with its line, opens Your movement`() {
+        var opened = 0
+        val texts = draw(page(running = RUNNING), onMovement = { opened++ })
+
+        assertThat(texts).containsAtLeast("Your plan · week 1 of 2", "Your movement", "Day by day, earlier weeks, import a file", "Weekly letters").inOrder()
+        assertThat(render.roleOf("Your movement")).isEqualTo(Role.Button)
+        render.click("Your movement")
+        assertThat(opened).isEqualTo(1)
     }
 
     @Test

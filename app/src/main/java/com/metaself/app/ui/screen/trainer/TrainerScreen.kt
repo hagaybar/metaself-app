@@ -75,8 +75,8 @@ private val COLUMN_GAP = 6.dp
 /**
  * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
  * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116);
- * one main button; the session waiting for words; and four plain rows — Your plan,
- * Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
+ * one main button with Log a workout beside it (D132); the session waiting for words; and five plain rows —
+ * Your plan, Your movement (D132), Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
  * (InlineComposableReturnGuardTest).
  */
 @Composable
@@ -119,11 +119,13 @@ fun TrainerScreen(
                 home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
                 // D122: the kept single session is on the plan page now (Your plan → Session), not here.
                 Rows(
-                    listOfNotNull(
-                        TrainerWeekWording.planRow(home.plan) to onSeePlan,
-                        LetterWording.LIST_TITLE to onLetters,
-                        TrainerWeekWording.EARLIER to onEarlier,
-                        TrainerWeekWording.ABOUT_ME to onAboutMe,
+                    listOf(
+                        PageRow(TrainerWeekWording.planRow(home.plan), onSeePlan),
+                        // D132 item 3: the day-by-day record, behind the Trainer now (D130).
+                        PageRow(TrainerWeekWording.YOUR_MOVEMENT, onMovement, TrainerWeekWording.YOUR_MOVEMENT_LINE),
+                        PageRow(LetterWording.LIST_TITLE, onLetters),
+                        PageRow(TrainerWeekWording.EARLIER, onEarlier),
+                        PageRow(TrainerWeekWording.ABOUT_ME, onAboutMe),
                     ),
                 )
             }
@@ -476,21 +478,27 @@ private fun WaitingCard(session: Workout, today: Long, zone: ZoneId, onReview: (
     }
 }
 
+/** One of the plain rows: its name, what it opens, and a smaller line under the name when it has one (D132). */
+private class PageRow(val label: String, val open: () -> Unit, val line: String? = null)
+
 /** D114 item 8: plain rows, each opening what it names, with hairlines between. */
 @Composable
-private fun Rows(rows: List<Pair<String, () -> Unit>>) {
+private fun Rows(rows: List<PageRow>) {
     Column(Modifier.fillMaxWidth()) {
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        rows.forEach { (label, open) ->
+        rows.forEach { row ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
-                    .clickable(role = Role.Button, onClick = open)
+                    .clickable(role = Role.Button, onClick = row.open)
                     .padding(vertical = Spacing.Related),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                Column(Modifier.weight(1f)) {
+                    Text(row.label, style = MaterialTheme.typography.bodyLarge)
+                    row.line?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
                 Text("›", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

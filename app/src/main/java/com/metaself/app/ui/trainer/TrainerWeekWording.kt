@@ -37,6 +37,10 @@ object TrainerWeekWording {
     /** D132: the end of the strip card's movement line, which opens Your movement. */
     const val DAYS = "Days ›"
 
+    /** D132 item 3: the row to Your movement, and its line. */
+    const val YOUR_MOVEMENT = "Your movement"
+    const val YOUR_MOVEMENT_LINE = "Day by day, earlier weeks, import a file"
+
     const val LETTERS = "Weekly letters"
     const val EARLIER = "Earlier sessions"
     const val ABOUT_ME = "About me"
