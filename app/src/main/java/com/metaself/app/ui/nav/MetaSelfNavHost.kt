@@ -156,7 +156,7 @@ sealed class Destination(val route: String) {
 
     /**
      * Settings is a nested graph (D79): [route] is the graph's, and opens its [index]; each of the
-     * seven pages has its own route under it.
+     * pages (D79, D134) has its own route under it.
      */
     data object Settings : Destination("settings") {
         const val index: String = "settings/index"
@@ -284,6 +284,9 @@ fun MetaSelfNavHost(
     onEditProfile: () -> Unit,
     /** The profile editor, opened straight away: where the goal weight and weekly rate are set. */
     onEditGoal: () -> Unit,
+    /** The installed version and build, for Settings' About this app (D134). */
+    versionName: String,
+    versionCode: Int,
     dayViewModel: DayViewModel = hiltViewModel(),
     weightViewModel: WeightViewModel = hiltViewModel(),
     sharedFileViewModel: SharedFileViewModel = hiltViewModel(),
@@ -723,13 +726,20 @@ fun MetaSelfNavHost(
             }
         }
 
-        // Settings is a nested graph (D79): the menu's bare route opens the index, and each of the
-        // seven pages is its own destination, all sharing the one view model on the graph's entry.
+        // Settings is a nested graph (D79): the menu's bare route opens the index, and each of its
+        // pages is its own destination, all sharing the one view model on the graph's entry.
         // "What the band sends" (D80) is one more destination in it, reached from Movement.
         settingsGraph(
             navController,
             content = { page, here, graph ->
-                SettingsDestination(page = page, here = here, graph = graph, navController = navController)
+                SettingsDestination(
+                    page = page,
+                    here = here,
+                    graph = graph,
+                    navController = navController,
+                    versionName = versionName,
+                    versionCode = versionCode,
+                )
             },
             bandReport = { here, graph ->
                 BandReportDestination(here = here, graph = graph, navController = navController)

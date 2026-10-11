@@ -46,9 +46,13 @@ class HomeScreenRenderTest {
         assertThat(texts).contains("Carbohydrate: 230 g")
     }
 
+    /** D133: the version line went to Settings' About this app; nothing on this page names a build. */
     @Test
-    fun `still says which build this is`() {
-        assertThat(drawWith(aProfile())).contains("v0.1.0-rc1 (1)")
+    fun `says nothing about which build this is`() {
+        val texts = drawWith(aProfile())
+
+        assertThat(texts.filter { Regex("""\d+\.\d+\.\d+""").containsMatchIn(it) }).isEmpty()
+        assertThat(texts.filter { it.startsWith("Build ") }).isEmpty()
     }
 
     @Test
@@ -93,8 +97,6 @@ class HomeScreenRenderTest {
         HomeScreen(
             profile = profile,
             target = DailyTargetCalculator.of(profile, TEST_YEAR),
-            versionName = "0.1.0-rc1",
-            versionCode = 1,
             measuredBurn = measuredBurn,
             burnAdjustmentKcal = burnAdjustmentKcal,
             daysLoggedRecently = daysLoggedRecently,

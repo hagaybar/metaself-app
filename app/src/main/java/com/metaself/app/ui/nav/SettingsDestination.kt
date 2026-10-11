@@ -21,6 +21,7 @@ import com.metaself.app.data.health.HealthPermissions
 import com.metaself.app.ui.health.BandReportWording
 import com.metaself.app.ui.screen.letter.LetterSettingsSection
 import com.metaself.app.ui.screen.letter.LetterSettingsViewModel
+import com.metaself.app.ui.screen.settings.AboutSettingsPage
 import com.metaself.app.ui.screen.settings.AiSettingsPage
 import com.metaself.app.ui.screen.settings.BandReportPage
 import com.metaself.app.ui.screen.settings.BandReportViewModel
@@ -52,6 +53,9 @@ internal fun SettingsDestination(
     here: NavBackStackEntry,
     graph: NavBackStackEntry,
     navController: NavController,
+    /** The installed version and build, for About this app (D134). */
+    versionName: String,
+    versionCode: Int,
 ) {
     val settingsViewModel: SettingsViewModel = hiltViewModel(graph)
     val settingsState by settingsViewModel.state.collectAsStateWithLifecycle()
@@ -98,6 +102,7 @@ internal fun SettingsDestination(
     when (page) {
         null -> SettingsScreen(
             state = settingsState,
+            versionName = versionName,
             onOpen = { navController.openSettingsPage(here, it) },
             onBack = onBack,
         )
@@ -280,6 +285,12 @@ internal fun SettingsDestination(
                 onBack = onBack,
             )
         }
+
+        SettingsPage.ABOUT -> AboutSettingsPage(
+            versionName = versionName,
+            versionCode = versionCode,
+            onBack = onBack,
+        )
     }
 }
 

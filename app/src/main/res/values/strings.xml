@@ -599,6 +599,9 @@
     <string name="settings_page_ai">AI estimates</string>
     <string name="settings_page_food">Food database</string>
     <string name="settings_page_trainer_instructions">Test the trainer\'s instructions</string>
+    <string name="settings_page_about">About this app</string>
+    <!-- D134: the kicker over the change log; upper case supplied here, as every kicker's is. -->
+    <string name="about_what_changed">WHAT CHANGED</string>
     <string name="workbench_row_path">WHAT TO TEST</string>
     <string name="workbench_row_session">SESSION</string>
     <string name="settings_window_title">When you eat</string>

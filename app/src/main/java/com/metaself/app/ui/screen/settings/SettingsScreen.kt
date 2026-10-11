@@ -18,8 +18,9 @@ import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 
 /**
- * Settings: a short list of seven rows, each its title and one line saying the current state, each
- * opening its own page (D79). The controls are all on the pages; this screen holds none.
+ * Settings: a short list of rows, each its title and one line saying the current state, each opening
+ * its own page (D79) — the last, About this app (D134). The controls are all on the pages; this screen
+ * holds none.
  *
  * One row is one tap target, title and status together, so a screen reader reads a row as one
  * thing and a tap anywhere on it opens the page.
@@ -27,6 +28,8 @@ import com.metaself.app.ui.theme.Spacing
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
+    /** The installed version, for About this app's line (D134). */
+    versionName: String,
     onOpen: (SettingsPage) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -55,7 +58,7 @@ fun SettingsScreen(
                     // so the row keeps the same height it will have once there is something to say
                     // instead of growing under him a moment later.
                     Text(
-                        text = SettingsIndexWording.statusOf(page, state).orEmpty(),
+                        text = SettingsIndexWording.statusOf(page, state, versionName).orEmpty(),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MetaSelfInk.two,
                     )

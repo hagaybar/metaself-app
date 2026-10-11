@@ -3,6 +3,7 @@ package com.metaself.app.ui.settings
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.domain.reminder.Reminder
 import com.metaself.app.domain.window.WindowRule
+import com.metaself.app.ui.about.AboutWording
 import com.metaself.app.ui.day.ReminderWording
 import com.metaself.app.ui.screen.settings.SettingsPage
 import com.metaself.app.ui.screen.settings.SettingsUiState
@@ -93,8 +94,11 @@ object SettingsIndexWording {
      * Eating waits further, for [SettingsUiState.windowRead], and Movement for
      * [SettingsUiState.stepsRead]: those two lines come from a read the page does for itself after it
      * opens, and are false exactly as long as the others until that read finishes.
+     *
+     * [versionName] is the installed app's, for About this app (D134); it waits with the rest, so the
+     * rows fill together.
      */
-    fun statusOf(page: SettingsPage, state: SettingsUiState): String? {
+    fun statusOf(page: SettingsPage, state: SettingsUiState, versionName: String): String? {
         if (!state.loaded) return null
         return when (page) {
             SettingsPage.EATING ->
@@ -115,6 +119,7 @@ object SettingsIndexWording {
             SettingsPage.FOOD_DATABASE -> foodDatabase(state.hasOffPassword)
             SettingsPage.PROBLEMS -> problems(state.problems.size)
             SettingsPage.TRAINER_INSTRUCTIONS -> TRAINER_INSTRUCTIONS
+            SettingsPage.ABOUT -> AboutWording.indexLine(versionName)
         }
     }
 

@@ -8,6 +8,7 @@ import com.metaself.app.domain.reminder.Reminder
 import com.metaself.app.domain.window.EatingWindow
 import com.metaself.app.domain.window.WindowRule
 import com.metaself.app.ui.ComposeRender
+import com.metaself.app.ui.about.AboutWording
 import com.metaself.app.ui.settings.SettingsIndexWording
 import java.time.LocalDate
 import org.junit.After
@@ -16,8 +17,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 /**
- * The Settings index (D79): seven rows in order, each its title with its one status line straight
- * after, each opening its page — and none of any page's controls. Order in the drawn tree is what a
+ * The Settings index (D79): its rows in order, About this app last (D134), each its title with its one
+ * status line straight after, each opening its page — and none of any page's controls. Order in the drawn tree is what a
  * render test here can say about position; nothing about size (`CLAUDE.md`). Figures invented.
  *
  * JUnit 4 because Robolectric's runner is.
@@ -51,7 +52,7 @@ class SettingsIndexRenderTest {
     fun tearDown() = render.dispose()
 
     @Test
-    fun `seven rows, in order, each with its status line straight after its title`() {
+    fun `every row, in order, each with its status line straight after its title`() {
         val texts = draw()
 
         val rows = listOf(
@@ -62,6 +63,7 @@ class SettingsIndexRenderTest {
             "Food database" to SettingsIndexWording.foodDatabase(true),
             "Recent problems" to SettingsIndexWording.problems(2),
             "Test the trainer's instructions" to SettingsIndexWording.TRAINER_INSTRUCTIONS,
+            "About this app" to AboutWording.indexLine(VERSION),
         )
         assertThat(texts).containsAtLeastElementsIn(rows.flatMap { listOf(it.first, it.second) })
             .inOrder()
@@ -83,6 +85,7 @@ class SettingsIndexRenderTest {
             "Open Food Facts · signed in",
             "2 recent",
             "A testing tool · stores nothing",
+            "Version 0.1.0 · what changed",
         ).inOrder()
     }
 
@@ -92,7 +95,7 @@ class SettingsIndexRenderTest {
 
         listOf(
             "Eating", "Movement and health", "Backups", "AI estimates", "Food database",
-            "Recent problems", "Test the trainer's instructions",
+            "Recent problems", "Test the trainer's instructions", "About this app",
         ).forEach(render::click)
 
         assertThat(opened).containsExactlyElementsIn(SettingsPage.entries).inOrder()
@@ -116,7 +119,7 @@ class SettingsIndexRenderTest {
     @Test
     fun `nothing is said about any row before the page has read anything`() {
         val texts = render.texts {
-            SettingsScreen(state = SettingsUiState(), onOpen = { opened += it }, onBack = {})
+            SettingsScreen(state = SettingsUiState(), versionName = VERSION, onOpen = { opened += it }, onBack = {})
         }
 
         assertThat(texts).containsNoneOf(
@@ -130,6 +133,11 @@ class SettingsIndexRenderTest {
     }
 
     private fun draw(): List<String> = render.texts {
-        SettingsScreen(state = state, onOpen = { opened += it }, onBack = {})
+        SettingsScreen(state = state, versionName = VERSION, onOpen = { opened += it }, onBack = {})
+    }
+
+    private companion object {
+        /** An invented version name. */
+        const val VERSION = "0.1.0"
     }
 }

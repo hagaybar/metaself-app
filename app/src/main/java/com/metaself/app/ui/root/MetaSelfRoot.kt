@@ -118,8 +118,6 @@ fun MetaSelfRoot(
                         HomeScreen(
                             profile = current.profile,
                             target = current.target,
-                            versionName = versionName,
-                            versionCode = versionCode,
                             measuredBurn = current.measuredBurn,
                             burnAdjustmentKcal = current.burnAdjustmentKcal,
                             daysLoggedRecently = current.daysLoggedRecently,
@@ -149,6 +147,8 @@ fun MetaSelfRoot(
             },
         ) {
             MetaSelfNavHost(
+                versionName = versionName,
+                versionCode = versionCode,
                 onEditProfile = { showingProfile = true },
                 // Straight to the editor, where the goal weight and the weekly rate are set, and
                 // back to the weight screen when it closes (public issue #11): with the profile

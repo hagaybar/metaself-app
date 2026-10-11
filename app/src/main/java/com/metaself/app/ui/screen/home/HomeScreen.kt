@@ -25,7 +25,6 @@ import com.metaself.app.domain.target.DailyTarget
 import com.metaself.app.domain.target.MeasuredBurn
 import com.metaself.app.ui.target.BurnWording
 import com.metaself.app.ui.MetaSelfScreen
-import com.metaself.app.ui.VersionMarker
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.target.ExplanationLine
@@ -42,8 +41,6 @@ import com.metaself.app.ui.target.TargetWording
 fun HomeScreen(
     profile: Profile,
     target: DailyTarget,
-    versionName: String,
-    versionCode: Int,
     weightUsedLine: String,
     measuredBurn: MeasuredBurn?,
     burnAdjustmentKcal: Int,
@@ -132,12 +129,7 @@ fun HomeScreen(
 
         Button(onClick = onEdit) { Text(stringResource(R.string.home_edit)) }
 
-        // A colophon: the caption step, not the ink the numbers above are set in.
-        Text(
-            text = VersionMarker.line(versionName, versionCode),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        // No version line here any more: it is Settings' About this app (D134).
     }
 }
 

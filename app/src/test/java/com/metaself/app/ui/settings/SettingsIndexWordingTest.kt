@@ -123,7 +123,7 @@ class SettingsIndexWordingTest {
     @Test
     fun `no row has a status before the page has loaded anything`() {
         SettingsPage.entries.forEach { page ->
-            assertThat(SettingsIndexWording.statusOf(page, SettingsUiState())).isNull()
+            assertThat(SettingsIndexWording.statusOf(page, SettingsUiState(), VERSION)).isNull()
         }
     }
 
@@ -131,26 +131,27 @@ class SettingsIndexWordingTest {
     fun `eating has no status until the window has been read, even once loaded`() {
         val state = SettingsUiState(loaded = true, windowRead = false)
 
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.EATING, state)).isNull()
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.EATING, state, VERSION)).isNull()
     }
 
     @Test
     fun `movement has no status until steps have been read, even once loaded`() {
         val state = SettingsUiState(loaded = true, stepsRead = false)
 
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.MOVEMENT, state)).isNull()
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.MOVEMENT, state, VERSION)).isNull()
     }
 
-    /** Backups, AI, Food database, Problems and the trainer's instructions need only [SettingsUiState.loaded]. */
+    /** Backups, AI, Food database, Problems, the trainer's instructions and About need only [SettingsUiState.loaded]. */
     @Test
     fun `the other rows show as soon as the page has loaded`() {
         val state = SettingsUiState(loaded = true, windowRead = false, stepsRead = false, hasKey = true, dailyCeiling = 20)
 
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.BACKUPS, state)).isEqualTo("Not set up")
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.AI, state)).isEqualTo("Key saved · up to 20 a day")
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.FOOD_DATABASE, state)).isEqualTo("Not signed in")
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.PROBLEMS, state)).isEqualTo("None")
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.TRAINER_INSTRUCTIONS, state)).isEqualTo("A testing tool · stores nothing")
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.BACKUPS, state, VERSION)).isEqualTo("Not set up")
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.AI, state, VERSION)).isEqualTo("Key saved · up to 20 a day")
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.FOOD_DATABASE, state, VERSION)).isEqualTo("Not signed in")
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.PROBLEMS, state, VERSION)).isEqualTo("None")
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.TRAINER_INSTRUCTIONS, state, VERSION)).isEqualTo("A testing tool · stores nothing")
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.ABOUT, state, VERSION)).isEqualTo("Version 0.1.0 · what changed")
     }
 
     @Test
@@ -166,9 +167,14 @@ class SettingsIndexWordingTest {
             healthRecord = HealthRecordState(days = 5, notAllowed = setOf(HealthKind.HEART_RATE)),
         )
 
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.EATING, state))
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.EATING, state, VERSION))
             .isEqualTo("10:00–18:00 · reminder off")
-        assertThat(SettingsIndexWording.statusOf(SettingsPage.MOVEMENT, state))
+        assertThat(SettingsIndexWording.statusOf(SettingsPage.MOVEMENT, state, VERSION))
             .isEqualTo("On · health record 5 days · some not allowed")
+    }
+
+    private companion object {
+        /** An invented version name. */
+        const val VERSION = "0.1.0"
     }
 }
