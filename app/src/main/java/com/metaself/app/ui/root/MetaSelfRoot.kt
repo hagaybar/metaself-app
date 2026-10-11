@@ -17,6 +17,7 @@ import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.metaself.app.ui.nav.MetaSelfNavHost
+import com.metaself.app.ui.settings.SettingsIndexWording
 import com.metaself.app.ui.target.RevisionWording
 import com.metaself.app.ui.screen.home.HomeScreen
 import com.metaself.app.ui.screen.setup.SetupFormState
@@ -118,8 +119,6 @@ fun MetaSelfRoot(
                         HomeScreen(
                             profile = current.profile,
                             target = current.target,
-                            versionName = versionName,
-                            versionCode = versionCode,
                             measuredBurn = current.measuredBurn,
                             burnAdjustmentKcal = current.burnAdjustmentKcal,
                             daysLoggedRecently = current.daysLoggedRecently,
@@ -149,7 +148,12 @@ fun MetaSelfRoot(
             },
         ) {
             MetaSelfNavHost(
-                onEditProfile = { showingProfile = true },
+                versionName = versionName,
+                versionCode = versionCode,
+                // Settings' first row (D133). The page is drawn over the app, which AppOrCover keeps
+                // where it was — so closing it, by its arrow or by system back, lands on Settings.
+                onOpenYourNumbers = { showingProfile = true },
+                yourNumbers = SettingsIndexWording.yourNumbers(current.target, current.profile),
                 // Straight to the editor, where the goal weight and the weekly rate are set, and
                 // back to the weight screen when it closes (public issue #11): with the profile
                 // page not open underneath, closing the editor falls through to the app, which

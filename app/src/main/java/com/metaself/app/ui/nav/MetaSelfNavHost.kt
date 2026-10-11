@@ -92,8 +92,8 @@ import com.metaself.app.ui.screen.trainer.TrainerViewModel
 /**
  * The places this host can be.
  *
- * The profile is not one of them: it is the root's business, reached through `onEditProfile` (and
- * its editor through `onEditGoal`), for the same reason step 2 gave — it is chosen by data rather
+ * The profile is not one of them: it is the root's business, reached through `onOpenYourNumbers` from
+ * Settings' first row (D133) (and its editor through `onEditGoal`), for the same reason step 2 gave — it is chosen by data rather
  * than pushed onto a stack.
  */
 sealed class Destination(val route: String) {
@@ -156,7 +156,7 @@ sealed class Destination(val route: String) {
 
     /**
      * Settings is a nested graph (D79): [route] is the graph's, and opens its [index]; each of the
-     * seven pages has its own route under it.
+     * pages (D79, D134) has its own route under it.
      */
     data object Settings : Destination("settings") {
         const val index: String = "settings/index"
@@ -281,9 +281,15 @@ private val describeRoute = Destination.Describe.route + "?text={text}&from={fro
  */
 @Composable
 fun MetaSelfNavHost(
-    onEditProfile: () -> Unit,
+    /** Your numbers (D133), the root's cover; closing it comes back to the Settings index it was opened from. */
+    onOpenYourNumbers: () -> Unit,
+    /** Your numbers' status line on the Settings index: the target and the goal (D133). */
+    yourNumbers: String,
     /** The profile editor, opened straight away: where the goal weight and weekly rate are set. */
     onEditGoal: () -> Unit,
+    /** The installed version and build, for Settings' About this app (D134). */
+    versionName: String,
+    versionCode: Int,
     dayViewModel: DayViewModel = hiltViewModel(),
     weightViewModel: WeightViewModel = hiltViewModel(),
     sharedFileViewModel: SharedFileViewModel = hiltViewModel(),
@@ -343,7 +349,6 @@ fun MetaSelfNavHost(
             }
             DayPager(
                 viewModel = dayViewModel,
-                onOpenProfile = onEditProfile,
                 // Correcting a row is no longer reached from the day: the day draws parts of the
                 // clock (D51) and the rows live on the record screen (D50), which is where the way
                 // to the editor goes. The editor itself, and its route below, are untouched.
@@ -723,13 +728,22 @@ fun MetaSelfNavHost(
             }
         }
 
-        // Settings is a nested graph (D79): the menu's bare route opens the index, and each of the
-        // seven pages is its own destination, all sharing the one view model on the graph's entry.
+        // Settings is a nested graph (D79): the menu's bare route opens the index, and each of its
+        // pages is its own destination, all sharing the one view model on the graph's entry.
         // "What the band sends" (D80) is one more destination in it, reached from Movement.
         settingsGraph(
             navController,
             content = { page, here, graph ->
-                SettingsDestination(page = page, here = here, graph = graph, navController = navController)
+                SettingsDestination(
+                    page = page,
+                    here = here,
+                    graph = graph,
+                    navController = navController,
+                    yourNumbers = yourNumbers,
+                    onOpenYourNumbers = onOpenYourNumbers,
+                    versionName = versionName,
+                    versionCode = versionCode,
+                )
             },
             bandReport = { here, graph ->
                 BandReportDestination(here = here, graph = graph, navController = navController)

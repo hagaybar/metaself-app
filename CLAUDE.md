@@ -137,3 +137,6 @@ cite this repository's issues as "public issue #N", so they cannot be mistaken f
 One step = one plan = one branch. Branch names describe the behaviour that changes, not an issue
 number. Test first where the test is about behaviour. Report what was *not* built — work quietly
 trimmed is worse than work openly refused.
+
+Every version bump adds its entry at the top of the change log (`ui/about/ChangeLog.kt`, D134); a
+test fails without it.

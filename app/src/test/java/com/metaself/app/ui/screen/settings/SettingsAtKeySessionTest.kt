@@ -45,7 +45,7 @@ class SettingsAtKeySessionTest {
     /** From the menu Settings opens at its index, where there is no key section at all (D79). */
     @Test
     fun `opened from the menu, it opens at the index and the key is on a page of its own`() {
-        session.start { SettingsScreen(state = SettingsUiState(), onOpen = {}, onBack = {}) }
+        session.start { SettingsScreen(state = SettingsUiState(), yourNumbers = "", versionName = "0.1.0", onOpenYourNumbers = {}, onOpen = {}, onBack = {}) }
 
         compose.onNodeWithText(KEY_TITLE).assertDoesNotExist()
         compose.onNodeWithText(AI_ESTIMATES).assertExists().assertIsDisplayed()

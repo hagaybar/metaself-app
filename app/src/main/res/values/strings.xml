@@ -59,7 +59,8 @@
     <string name="today_logged_dismiss">Got it</string>
     <string name="today_more">More</string>
     <string name="today_got_it">Got it</string>
-    <string name="today_profile">Your numbers</string>
+    <!-- D133: Settings' first row, and the title of the page it opens. -->
+    <string name="your_numbers">Your numbers</string>
 
     <string name="day_meal_adjusted">Changed for this day</string>
     <string name="day_meal_open">Open · %1$s</string>
@@ -599,6 +600,9 @@
     <string name="settings_page_ai">AI estimates</string>
     <string name="settings_page_food">Food database</string>
     <string name="settings_page_trainer_instructions">Test the trainer\'s instructions</string>
+    <string name="settings_page_about">About this app</string>
+    <!-- D134: the kicker over the change log; upper case supplied here, as every kicker's is. -->
+    <string name="about_what_changed">WHAT CHANGED</string>
     <string name="workbench_row_path">WHAT TO TEST</string>
     <string name="workbench_row_session">SESSION</string>
     <string name="settings_window_title">When you eat</string>

@@ -30,6 +30,9 @@ import org.robolectric.RobolectricTestRunner
  * stack, saved and restored by Navigation's own saver — standing in for `MetaSelfNavHost`, which
  * cannot be drawn without Hilt.
  *
+ * Your numbers is the same cover, opened from Settings' first row (D133); closing it is the same way back,
+ * to the Settings index.
+ *
  * JUnit 4, because Compose's rule demands it: `org.junit.Test`, never `org.junit.jupiter.api.Test`.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -46,7 +49,7 @@ class AppOrCoverSessionTest {
 
         session.press("Open weight")
         val covered = session.press("Change your goal")
-        assertThat(covered).contains("The editor")
+        assertThat(covered).contains("The cover")
         assertThat(covered).doesNotContain("The weight screen")
 
         val back = session.press("Done")
@@ -65,6 +68,19 @@ class AppOrCoverSessionTest {
         assertThat(session.press("Back to the day")).contains("The day")
     }
 
+    @Test
+    fun `Your numbers, opened from Settings, closes back onto Settings`() {
+        session.start { Root() }
+
+        session.press("Open settings")
+        val covered = session.press("Your numbers")
+        assertThat(covered).contains("The cover")
+        assertThat(covered).doesNotContain("The Settings index")
+
+        assertThat(session.press("Done")).contains("The Settings index")
+        assertThat(session.press("Back to the day")).contains("The day")
+    }
+
     @Composable
     private fun Root() {
         var covered by remember { mutableStateOf(false) }
@@ -72,7 +88,7 @@ class AppOrCoverSessionTest {
             cover = if (covered) {
                 {
                     Column {
-                        Text("The editor")
+                        Text("The cover")
                         TextButton(onClick = { covered = false }) { Text("Done") }
                     }
                 }
@@ -86,6 +102,14 @@ class AppOrCoverSessionTest {
                     Column {
                         Text("The day")
                         TextButton(onClick = { nav.navigate("weight") }) { Text("Open weight") }
+                        TextButton(onClick = { nav.navigate("settings") }) { Text("Open settings") }
+                    }
+                }
+                composable("settings") {
+                    Column {
+                        Text("The Settings index")
+                        TextButton(onClick = { covered = true }) { Text("Your numbers") }
+                        TextButton(onClick = { nav.popBackStack() }) { Text("Back to the day") }
                     }
                 }
                 composable("weight") {

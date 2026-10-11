@@ -89,15 +89,25 @@ object TargetWording {
         ),
     )
 
+    /**
+     * The goal in a few words: "lose 0.5 kg a week", "hold your weight", "gain 0.25 kg a week". The goal
+     * line below is built on it, and Settings' Your numbers row says it (D133), so the two cannot drift.
+     */
+    fun goal(profile: Profile): String = when (profile.goal.direction) {
+        GoalDirection.HOLD -> "hold your weight"
+        GoalDirection.LOSE -> "lose ${rate(profile.goal.kgPerWeek)} kg a week"
+        GoalDirection.GAIN -> "gain ${rate(profile.goal.kgPerWeek)} kg a week"
+    }
+
     private fun goalLine(target: DailyTarget, profile: Profile): ExplanationLine =
         when (profile.goal.direction) {
             GoalDirection.HOLD -> ExplanationLine(
-                heading = "To hold your weight: no change",
+                heading = "To ${goal(profile)}: no change",
                 detail = "A normal day is the target.",
             )
 
             GoalDirection.LOSE -> ExplanationLine(
-                heading = "To lose ${rate(profile.goal.kgPerWeek)} kg a week: " +
+                heading = "To ${goal(profile)}: " +
                     "−${target.goalShiftKcal.absoluteText()} kcal",
                 detail = "A kilogram of body fat is about " +
                     "${grouped(DailyTargetCalculator.KCAL_PER_KG_BODY_FAT.toInt())} kcal, spread " +
@@ -105,7 +115,7 @@ object TargetWording {
             )
 
             GoalDirection.GAIN -> ExplanationLine(
-                heading = "To gain ${rate(profile.goal.kgPerWeek)} kg a week: " +
+                heading = "To ${goal(profile)}: " +
                     "+${target.goalShiftKcal.absoluteText()} kcal",
                 detail = "A kilogram is about " +
                     "${grouped(DailyTargetCalculator.KCAL_PER_KG_BODY_FAT.toInt())} kcal, spread " +
