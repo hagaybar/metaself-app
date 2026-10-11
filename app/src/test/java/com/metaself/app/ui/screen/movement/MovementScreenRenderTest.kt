@@ -20,6 +20,11 @@ import com.metaself.app.domain.movement.WorkoutSource
 import com.metaself.app.domain.movement.aTypedWorkout
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.Felt
+import com.metaself.app.domain.trainer.MovementSpan
+import com.metaself.app.domain.trainer.MovementSpans
+import com.metaself.app.domain.trainer.SpanBar
+import com.metaself.app.domain.trainer.SpanMeasure
+import com.metaself.app.domain.trainer.WeekStrip
 import com.metaself.app.domain.trainer.PlanFollowed
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.ui.ComposeRender
@@ -638,6 +643,109 @@ class MovementScreenRenderTest {
         assertThat(texts).doesNotContain("How did it go?")
     }
 
+    // D135–D137: the spans.
+
+    @Test
+    fun `the switch is drawn with Week chosen, and asks for another span`() {
+        var asked: MovementSpan? = null
+        val texts = draw(onSpan = { asked = it })
+
+        // Not in order: the chosen segment is drawn above its neighbours, which moves it in the semantic order.
+        assertThat(texts).containsAtLeast("Week", "12 weeks", "Year")
+        assertThat(render.isSelected("Week")).isTrue()
+        assertThat(render.isSelected("Year")).isFalse()
+        assertThat(render.isDrawnBefore("12 weeks", "THIS WEEK")).isTrue()
+        render.click("Year")
+        assertThat(asked).isEqualTo(MovementSpan.YEAR)
+    }
+
+    @Test
+    fun `Week draws the week's chart above the day rows, and the usual week on the line`() {
+        val strip = WeekStrip.of(20_696, TEST_EPOCH_DAY, week.days.flatMap { it.workouts }, null)
+        val texts = draw(state = MovementUiState(week = week, openDay = TEST_EPOCH_DAY, logDay = TEST_EPOCH_DAY, strip = strip, usualWeek = 30.0))
+
+        assertThat(render.describedCount("The week's sessions, day by day")).isEqualTo(1)
+        assertThat(texts).contains("1 session · 12.4 km · 355 kcal of movement a day · about your usual week")
+        // The strip's own day letters, without "To do".
+        assertThat(texts).doesNotContain("To do")
+        assertThat(render.isDrawnBefore("M", "Thu 3 Sep")).isTrue()
+    }
+
+    @Test
+    fun `12 weeks draws its span, headline, line, chips and one bar per week`() {
+        val chart = chart(minutes = List(12) { 120 })
+        val texts = draw(state = MovementUiState(span = MovementSpan.TWELVE_WEEKS, chart = chart, canGoEarlier = true))
+
+        assertThat(texts).contains("15 JUN – 3 SEP")
+        assertThat(texts).contains("120 min a week")
+        assertThat(texts).contains("The last 4 weeks averaged 120, about the same as 120 the 4 before.")
+        assertThat(texts).containsAtLeast("Minutes", "Km", "Steps").inOrder()
+        assertThat(texts).contains("avg 120")
+        assertThat(texts).contains("Tap a week to see its days.")
+        assertThat(render.describedCount("Week of 31 Aug: 120 min")).isEqualTo(1)
+        assertThat(render.describedCount("Previous 12 weeks")).isEqualTo(1)
+        assertThat(render.describedCount("Next 12 weeks")).isEqualTo(0)
+        // Week's own parts are not drawn.
+        assertThat(texts).doesNotContain("Log a workout")
+    }
+
+    @Test
+    fun `tapping a week's bar asks for that week, and a bar before the record is not a button`() {
+        var opened: SpanBar? = null
+        val chart = chart(minutes = List(6) { null } + List(6) { 90 })
+        draw(state = MovementUiState(span = MovementSpan.TWELVE_WEEKS, chart = chart), onBar = { opened = it })
+
+        render.clickDescribed("Week of 31 Aug: 90 min")
+        assertThat(opened).isEqualTo(chart.bars.last())
+        assertThat(render.describedCount("Week of 15 Jun: before the record")).isEqualTo(1)
+        assertThat(runCatching { render.clickDescribed("Week of 15 Jun: before the record") }.isFailure).isTrue()
+    }
+
+    @Test
+    fun `a chip asks for its measure`() {
+        var asked: SpanMeasure? = null
+        draw(state = MovementUiState(span = MovementSpan.TWELVE_WEEKS, chart = chart(minutes = List(12) { 60 })), onMeasure = { asked = it })
+
+        render.click("Km")
+
+        assertThat(asked).isEqualTo(SpanMeasure.KM)
+    }
+
+    @Test
+    fun `a span wholly before the record says so and draws no bars`() {
+        val texts = draw(state = MovementUiState(span = MovementSpan.TWELVE_WEEKS, chart = chart(minutes = List(12) { null })))
+
+        assertThat(texts).contains("Nothing recorded this far back.")
+        assertThat(render.describedCount("Week of 31 Aug: before the record")).isEqualTo(0)
+        assertThat(texts.filter { it.endsWith("a week") }).isEmpty()
+    }
+
+    @Test
+    fun `Year draws its months and the current one so far`() {
+        val year = MovementSpans.months(
+            TEST_EPOCH_DAY, TEST_EPOCH_DAY,
+            listOf(aTypedWorkout(id = 1, epochDay = TEST_EPOCH_DAY, minutes = 85)), emptyList(), emptyList(), recordStart = 20_697,
+        )
+        val texts = draw(state = MovementUiState(span = MovementSpan.YEAR, chart = year, canGoLater = false))
+
+        assertThat(texts).contains("OCT 2025 – SEP 2026")
+        assertThat(texts).contains("85 min so far")
+        assertThat(texts).contains("September so far")
+        assertThat(texts).contains("Tap a month to see its weeks.")
+        assertThat(render.describedCount("September so far: 85 min")).isEqualTo(1)
+        assertThat(render.describedCount("Next year")).isEqualTo(0)
+    }
+
+    /** Twelve invented weeks ending this week; a null is a week before the record. */
+    private fun chart(minutes: List<Int?>): com.metaself.app.domain.trainer.SpanChart {
+        val bars = minutes.mapIndexed { index, value ->
+            val first = 20_696L - 7L * (11 - index)
+            SpanBar(first, first + 6, TEST_EPOCH_DAY in first..first + 6, value != null, 0, value ?: 0, null, null)
+        }
+        return com.metaself.app.domain.trainer.SpanChart(MovementSpan.TWELVE_WEEKS, TEST_EPOCH_DAY, bars)
+    }
+
+
     private fun draw(
         openDay: Long? = TEST_EPOCH_DAY,
         // This week: with every day closed, Log a workout still logs onto today (D76).
@@ -656,6 +764,9 @@ class MovementScreenRenderTest {
         onSplit: (Workout) -> Unit = {},
         onUndoSplit: () -> Unit = {},
         onPutBack: (Workout) -> Unit = {},
+        onSpan: (MovementSpan) -> Unit = {},
+        onMeasure: (SpanMeasure) -> Unit = {},
+        onBar: (SpanBar) -> Unit = {},
     ): List<String> = render.texts {
         MovementScreen(
             state = state,
@@ -674,6 +785,9 @@ class MovementScreenRenderTest {
             onSplit = onSplit,
             onUndoSplit = onUndoSplit,
             onPutBack = onPutBack,
+            onSpan = onSpan,
+            onMeasure = onMeasure,
+            onBar = onBar,
         )
     }
 

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,13 +17,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -39,9 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
 import com.metaself.app.domain.movement.Workout
@@ -62,15 +56,6 @@ import com.metaself.app.ui.trainer.ProgrammeWording
 import com.metaself.app.ui.trainer.TrainerWeekWording
 import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
-
-/** The strip's height, as in the approved mockup; the top [TICK_ROOM] of it holds the ticks. */
-private val STRIP_HEIGHT = 140.dp
-private val TICK_ROOM = 22.dp
-
-/** A block is never shorter than this: a short session in a long week is still seen (D114). */
-private val LEAST_BLOCK = 8.dp
-private val BLOCK_GAP = 3.dp
-private val COLUMN_GAP = 6.dp
 
 /**
  * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
@@ -171,8 +156,7 @@ private fun StripCard(
                     .semantics { contentDescription = TrainerWeekWording.STRIP },
                 verticalArrangement = Arrangement.spacedBy(Spacing.Related),
             ) {
-                Strip(strip)
-                DayLetters(strip)
+                WeekStripChart(strip)
                 MovementLine(movement)
                 FlowRow(
                     modifier = Modifier.padding(top = Spacing.Tight),
@@ -195,79 +179,6 @@ private fun StripCard(
     }
 }
 
-/** Seven columns, and "To do" when planned sessions are open; each column's blocks newest on top. */
-@Composable
-private fun Strip(strip: WeekStrip) {
-    val scale = strip.scaleMinutes
-    // Room for the tick and for the gaps of the column with the most blocks, so the tallest column fits.
-    val most = maxOf(strip.days.maxOf { it.blocks.size }, strip.toDo.size)
-    val full = STRIP_HEIGHT - TICK_ROOM - BLOCK_GAP * most
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(STRIP_HEIGHT),
-        horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP),
-    ) {
-        strip.days.forEach { day ->
-            StripColumn {
-                if (day.ticked) {
-                    Box(Modifier.fillMaxWidth().height(TICK_ROOM), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-                    }
-                }
-                day.blocks.asReversed().forEach { block ->
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(blockHeight(block.minutes, scale, full))
-                            .background(
-                                if (block.ticked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primaryContainer,
-                                RoundedCornerShape(6.dp),
-                            ),
-                    )
-                }
-                if (day.blocks.isEmpty() && !strip.isAfterToday(day)) {
-                    Box(Modifier.fillMaxWidth().height(2.dp).background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(1.dp)))
-                }
-            }
-        }
-        if (strip.toDo.isNotEmpty()) {
-            StripColumn {
-                strip.toDo.forEach { minutes -> OpenBlock(minutes, blockHeight(minutes, scale, full)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RowScope.StripColumn(content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .fillMaxHeight(),
-        verticalArrangement = Arrangement.spacedBy(BLOCK_GAP, Alignment.Bottom),
-    ) { content() }
-}
-
-/** An open planned session: a dashed outline in the dark green, labelled with its minutes ("40′"). */
-@Composable
-private fun OpenBlock(minutes: Int, height: Dp) {
-    val outline = MaterialTheme.colorScheme.primary
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(height)
-            .dashedOutline(outline, corner = 6.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        // Ink, not the green: the theme's green on a card is under the text floor; the outline carries the colour.
-        Text(TrainerWeekWording.openMinutes(minutes), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface)
-    }
-}
-
-private fun blockHeight(minutes: Int, scale: Int, full: Dp): Dp =
-    WeekStrip.height(minutes, scale, full.value, LEAST_BLOCK.value).dp
-
 /** D132 item 1: "6 sessions · 21.4 km · 4 weeks: 78.0 km" (invented), each part only with something to say, then "Days ›". */
 @Composable
 private fun MovementLine(movement: MovementSummary) {
@@ -284,33 +195,6 @@ private fun MovementLine(movement: MovementSummary) {
         }
         // Ink, not the green: the theme's green on a card is under the text floor (as "To do"'s label).
         Text(TrainerWeekWording.DAYS, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
-    }
-}
-
-/** M T W T F S S, and "To do": today's letter bold. */
-@Composable
-private fun DayLetters(strip: WeekStrip) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP)) {
-        strip.days.forEach { day ->
-            val today = day.epochDay == strip.today
-            Text(
-                TrainerWeekWording.dayLetter(day.epochDay),
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = if (today) FontWeight.SemiBold else null,
-                color = if (today) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (strip.toDo.isNotEmpty()) {
-            Text(
-                TrainerWeekWording.TO_DO,
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 

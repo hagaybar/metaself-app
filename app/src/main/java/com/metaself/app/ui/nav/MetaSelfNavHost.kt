@@ -466,12 +466,15 @@ fun MetaSelfNavHost(
                 onAddFromFile = movementViewModel::addFromFile,
                 onChooseForFile = movementViewModel::chooseForFile,
                 onDismissFile = movementViewModel::dismissFile,
-                onEarlierWeek = movementViewModel::earlierWeek,
-                onLaterWeek = movementViewModel::laterWeek,
+                onEarlierWeek = movementViewModel::earlier,
+                onLaterWeek = movementViewModel::later,
                 onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
                 onSplit = movementViewModel::split,
                 onUndoSplit = movementViewModel::undoSplit,
                 onPutBack = movementViewModel::putBackTogether,
+                onSpan = movementViewModel::chooseSpan,
+                onMeasure = movementViewModel::chooseMeasure,
+                onBar = movementViewModel::openBar,
             )
         }
 

@@ -30,6 +30,16 @@ object MovementSpanWording {
     const val PLANNED = "Planned"
     const val YOUR_OWN = "Your own"
     const val AVERAGE = "Average"
+    const val WEEK_CHART = "The week's sessions, day by day"
+    const val TAP_A_WEEK = "Tap a week to see its days."
+    const val TAP_A_MONTH = "Tap a month to see its weeks."
+
+    /** What tapping a bar does, for a screen reader (D136). */
+    fun openBar(span: MovementSpan): String = if (span == MovementSpan.YEAR) "open its weeks" else "open its days"
+
+    /** The arrows' names on 12 weeks and Year (D135); Week's are the page's own. */
+    fun earlierSaid(span: MovementSpan): String = if (span == MovementSpan.YEAR) "Previous year" else "Previous 12 weeks"
+    fun laterSaid(span: MovementSpan): String = if (span == MovementSpan.YEAR) "Next year" else "Next 12 weeks"
 
     /** The three-way switch (D135). */
     fun spanName(span: MovementSpan): String = when (span) {
