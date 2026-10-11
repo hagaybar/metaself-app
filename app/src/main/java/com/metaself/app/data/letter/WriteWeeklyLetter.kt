@@ -14,14 +14,20 @@ import com.metaself.app.data.trainer.WeekNoteStore
 import com.metaself.app.data.weight.WeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.DayTotals
+import com.metaself.app.domain.letter.LetterDays
 import com.metaself.app.domain.letter.LetterFigures
+import com.metaself.app.domain.letter.LetterPatterns
 import com.metaself.app.domain.letter.LetterReply
 import com.metaself.app.domain.letter.LetterRequest
 import com.metaself.app.domain.letter.LetterWriter
+import com.metaself.app.domain.letter.PastLetter
+import com.metaself.app.domain.letter.PlanRequestWords
 import com.metaself.app.domain.letter.PlanWeekFigures
+import com.metaself.app.domain.letter.SessionWords
 import com.metaself.app.domain.letter.WeekFigures
 import com.metaself.app.domain.letter.WeeklyLetter
 import com.metaself.app.domain.movement.HealthDay
+import com.metaself.app.domain.movement.WeekSessions
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.profile.ageYears
 import com.metaself.app.domain.target.CurrentTarget
@@ -34,12 +40,16 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeCalendar
 import com.metaself.app.domain.trainer.ProgrammeStatus
 import com.metaself.app.domain.trainer.Programmes
+import com.metaself.app.domain.trainer.SessionReviews
 import com.metaself.app.domain.trainer.TrainerRequest
+import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.WeekNote
 import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeekLedgers
 import com.metaself.app.domain.weight.WeightTrend
 import kotlinx.coroutines.flow.first
+import java.time.Instant
+import java.time.ZoneId
 import javax.inject.Inject
 
 /**
@@ -128,20 +138,34 @@ class WriteWeeklyLetter @Inject constructor(
         }
         val figures = LetterFigures(figuresWeek, (1..LetterFigures.WEEKS_BEFORE).map { counted.week(weekMonday - 7L * it) }, target)
         val running = CountedPlan.covering(counted.kept, weekMonday)?.programme
+        // D141: the 35 day rows, and D142's patterns over them.
+        val dayRows = LetterDays.of(sunday, workouts, counted.kept, counted.reviews, counted.days, counted.food)
+        val weekSessions = WeekSessions.between(workouts, weekMonday, sunday)
+        val reviewed = SessionReviews.bySession(weekSessions, counted.reviews)
         val request = LetterRequest(
             figures = figures,
             // D110, D111: the week's ledger, counted to its Sunday.
             ledger = WeekLedgers.of(weekMonday, sunday, workouts, counted.days, counted.food, target, counted.kept),
-            sessions = workouts
-                .filter { !it.hidden && it.counted && it.epochDay in weekMonday..sunday }
-                .sortedBy { it.startedAtMillis }
-                .map { TrainerRequest.session(it, review = null, plan = null) },
+            sessions = weekSessions.map { TrainerRequest.session(it, review = null, plan = null) },
             aboutMe = aboutMe.note.first().trim().ifEmpty { null },
             goal = profile?.let { GoalFacts(it.goal.direction, it.goal.kgPerWeek) },
             body = profile?.let { BodyFacts(it.ageYears(year()), it.sex, it.heightCm) },
             planTitle = running?.plan?.title,
             planWeek = running?.let { p -> p.plan.weeks.getOrNull(ProgrammeCalendar.weekIndex(p.startEpochDay!!, weekMonday)) },
-            lastNextWeek = letters.of(weekMonday - 7)?.texts?.nextWeek,
+            days = dayRows,
+            patterns = LetterPatterns.of(dayRows, weekMonday),
+            // D141: this week's answers to "How did it go?" that have words.
+            sessionWords = weekSessions.mapNotNull { session ->
+                reviewed[session.id]?.words?.trim()?.ifEmpty { null }?.let { SessionWords(session.epochDay, session.kind, reviewed[session.id]?.felt, it) }
+            },
+            planWords = planWords(counted.programmes, weekMonday - WeekLedgers.USUAL_DAYS, sunday),
+            planGoal = running?.ask?.goal,
+            goalView = running?.let { Programmes.rootOf(it, counted.programmes).goalView ?: it.goalView },
+            lastLetters = letters.observeAll().first()
+                .filter { it.weekMonday < weekMonday }
+                .sortedByDescending { it.weekMonday }
+                .take(LetterRequest.LAST_LETTERS)
+                .map { PastLetter(it.weekMonday, it.texts.lookAfter, it.texts.nextWeek) },
         )
         return when (val reply = writer.write(request)) {
             is LetterReply.Failed -> failed(reply)
@@ -173,6 +197,8 @@ class WriteWeeklyLetter @Inject constructor(
         val days: List<HealthDay>,
         val food: Map<Long, DayTotals>,
         val kept: List<CountedPlan>,
+        val reviews: List<TrainerReview>,
+        val programmes: List<Programme>,
         val week: (Long) -> WeekFigures,
     )
 
@@ -188,10 +214,22 @@ class WriteWeeklyLetter @Inject constructor(
         val all = programmes.all()
         val kept = all.filter { it.status != ProgrammeStatus.OFFERED && it.startEpochDay != null }
             .map { CountedPlan(it, counting(it, all)) }
-        return Counted(workouts, days, foodByDay, kept) { monday ->
+        return Counted(workouts, days, foodByDay, kept, allReviews, all) { monday ->
             WeekFigures.of(monday, foodByDay, trend, workouts, allReviews, days, planWeek(kept, workouts, monday))
         }
     }
+
+    /**
+     * D141: the words given with a plan request or an adjustment made [from] to [to], oldest first; the same
+     * words carried into a later version are sent once.
+     */
+    private fun planWords(all: List<Programme>, from: Long, to: Long): List<PlanRequestWords> = all
+        .sortedBy { it.createdAtMillis }
+        .mapNotNull { p ->
+            val day = Instant.ofEpochMilli(p.createdAtMillis).atZone(ZoneId.systemDefault()).toLocalDate().toEpochDay()
+            p.ask.words.trim().ifEmpty { null }?.takeIf { day in from..to }?.let { PlanRequestWords(day, p.replacesId != null, it) }
+        }
+        .distinctBy { it.words }
 
     /** D105: a version counts from its chain's first keep, with the answers stored under that first version. */
     private suspend fun counting(programme: Programme, all: List<Programme>): PlanCounting {

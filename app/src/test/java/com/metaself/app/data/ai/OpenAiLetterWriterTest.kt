@@ -8,7 +8,9 @@ import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.letter.FoodWeek
 import com.metaself.app.domain.letter.LetterFigures
 import com.metaself.app.domain.letter.LetterReply
+import com.metaself.app.domain.letter.LetterPatterns
 import com.metaself.app.domain.letter.LetterRequest
+import com.metaself.app.domain.letter.PastLetter
 import com.metaself.app.domain.letter.LetterTexts
 import com.metaself.app.domain.letter.MovementFigures
 import com.metaself.app.domain.letter.WeekFigures
@@ -55,7 +57,7 @@ class OpenAiLetterWriterTest {
         val reply = writer(settings = settings).write(REQUEST)
 
         assertThat(reply).isEqualTo(
-            LetterReply.Written(LetterTexts("Invented", "Invented a.", "Invented b.", "Invented c.", "Invented d.", "Invented e."), AiSettings().model),
+            LetterReply.Written(LetterTexts.Coach("Invented", "Invented a.", "Invented b.", "Invented c.", "Invented f.", "Invented d.", "Invented e."), AiSettings().model),
         )
         assertThat(server.requestCount).isEqualTo(1)
         assertThat(settings.calls).isEqualTo(1)
@@ -156,8 +158,8 @@ class OpenAiLetterWriterTest {
         const val NOTE = "Invented note that must not reach the log"
         const val LAST_LINE = "Invented line that must not reach the log"
 
-        const val GOOD_LETTER = """{"headline":"Invented","effort":"Invented a.","progress":"Invented b.",
-            "look_at":"Invented c.","next_week":"Invented d.","close":"Invented e."}"""
+        const val GOOD_LETTER = """{"headline":"Invented","recognition":"Invented a.","paying_off":"Invented b.",
+            "look_after":"Invented c.","rests_on":"Invented f.","next_week":"Invented d.","close":"Invented e."}"""
 
         private val MONDAY = MovementWeek.mondayOf(TEST_EPOCH_DAY)
 
@@ -172,7 +174,9 @@ class OpenAiLetterWriterTest {
                 food = FoodContext(0, null, null, 2_100), recovery = Recovery(null, null, null, null, null, null),
             ),
             sessions = emptyList(), aboutMe = NOTE, goal = null, body = null,
-            planTitle = null, planWeek = null, lastNextWeek = LAST_LINE,
+            planTitle = null, planWeek = null, days = emptyList(), patterns = LetterPatterns(null, null, null, null, null),
+            sessionWords = emptyList(), planWords = emptyList(), planGoal = null, goalView = null,
+            lastLetters = listOf(PastLetter(MONDAY - 7, "Invented look.", LAST_LINE)),
         )
     }
 }

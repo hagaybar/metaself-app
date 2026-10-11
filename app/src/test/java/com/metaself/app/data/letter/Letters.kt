@@ -28,11 +28,15 @@ fun anEmptyWeek(monday: Long) = WeekFigures(
 fun someFigures(monday: Long = LETTER_MONDAY, week: (Long) -> WeekFigures = ::aFullWeek, targetKcal: Int? = 2_100) =
     LetterFigures(week(monday), List(LetterFigures.WEEKS_BEFORE) { week(monday - 7L * (it + 1)) }, targetKcal)
 
+/** An invented coach's letter (D140). */
+fun aCoachLetter(lookAfter: String = "Invented.", nextWeek: String = "Invented.") =
+    LetterTexts.Coach("Invented headline.", "Invented.", "Invented.", lookAfter, "Invented.", nextWeek, "Invented.")
+
 /** An invented letter for [weekMonday]. */
-fun aWeeklyLetter(weekMonday: Long = LETTER_MONDAY) = WeeklyLetter(
+fun aWeeklyLetter(weekMonday: Long = LETTER_MONDAY, texts: LetterTexts = aCoachLetter()) = WeeklyLetter(
     weekMonday = weekMonday,
     createdAtMillis = 1_000,
     figures = someFigures(weekMonday),
-    texts = LetterTexts("Invented headline.", "Invented.", "Invented.", "Invented.", "Invented.", "Invented."),
+    texts = texts,
     model = "a-model",
 )
