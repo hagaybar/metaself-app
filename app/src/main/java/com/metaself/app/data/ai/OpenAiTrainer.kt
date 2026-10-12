@@ -85,6 +85,11 @@ class OpenAiTrainer(
         }
     }
 
+    override suspend fun talk(request: TrainerRequest): TrainerReply<String> {
+        require(request.question is TrainerQuestion.Talk) { "a reply is asked with a talk question" }
+        return ask({ model, profile -> TrainerPrompt.talkBody(model, request, profile) }, TrainerResponse::parseTalk)
+    }
+
     private suspend fun <T> ask(
         build: (String, RequestProfile) -> String,
         parse: (String, String) -> TrainerReply<T>,

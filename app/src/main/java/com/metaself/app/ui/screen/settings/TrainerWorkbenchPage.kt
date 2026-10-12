@@ -133,7 +133,7 @@ private fun PathInputs(
         }
 
         // Not on the workbench (TrainerPath.WORKBENCH): never chosen here.
-        TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS -> Text(WorkbenchWording.NOT_HERE)
+        TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS, TrainerPath.TALK -> Text(WorkbenchWording.NOT_HERE)
     }
 }
 

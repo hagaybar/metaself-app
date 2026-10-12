@@ -105,6 +105,22 @@ sealed interface TrainerQuestion {
         val last: LastEvaluation?,
         val running: RunningGoal?,
     ) : TrainerQuestion
+
+    /**
+     * D147: a reply in the conversation. [conversation] is the last 14 days of it, word for word and oldest first, cut
+     * to the newest 24,000 characters ([Conversation.window]) — the owner's messages, the trainer's replies, and the
+     * feedback and letters in their place; [replyTo] is the owner's message being answered (the newest, unless it is
+     * tried again after a later one); [plan] the running weekly plan, its week and its goal, null when none runs.
+     */
+    data class Talk(
+        val conversation: List<ConversationLine>,
+        val replyTo: ConversationLine,
+        val plan: TalkPlan?,
+    ) : TrainerQuestion {
+        init {
+            require(replyTo.fromOwner && replyTo.kind == LineKind.MESSAGE) { "a reply answers one of the owner's messages" }
+        }
+    }
 }
 
 /** One session as D84 sends it. [title] and [origin] of the workout are deliberately absent. */
@@ -143,7 +159,7 @@ data class Rhythm(val sessionsSoFar: Int, val daysLeft: Int)
 
 /**
  * Everything one trainer request holds (D84, amended by D111) — built fresh from the stored record every
- * time; no conversation is kept or replayed. There is deliberately no field for a meal, a food, a single
+ * time; the only conversation it carries is a reply's question's (D147), never on any other path. There is deliberately no field for a meal, a food, a single
  * night's sleep or a single day's heart rate, a raw reading, a single weigh-in, a target weight, a name, or
  * an app or device name; a week's food and recovery go only as averages in its ledger (D110).
  * `TrainerRequestTest` fails if a field is added.
@@ -309,4 +325,7 @@ interface Trainer {
 
     /** [request]'s question must be [TrainerQuestion.SuggestGoals] (D126). One to three suggestions, each checked. */
     suspend fun suggestGoals(request: TrainerRequest): TrainerReply<List<GoalSuggestion>>
+
+    /** [request]'s question must be [TrainerQuestion.Talk] (D147). The reply's words, never blank. */
+    suspend fun talk(request: TrainerRequest): TrainerReply<String>
 }

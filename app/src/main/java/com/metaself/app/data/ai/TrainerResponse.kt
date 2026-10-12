@@ -64,6 +64,14 @@ object TrainerResponse {
         content(body)?.let(::readPlan)?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }
             ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
 
+    /** D147: a reply in the conversation — its words, trimmed; a blank or missing one is unreadable. */
+    fun parseTalk(body: String, model: String): TrainerReply<String> =
+        content(body)?.let { content ->
+            runCatching { json.parseToJsonElement(content).jsonObject.text("reply").trim() }.getOrNull()?.takeIf { it.isNotEmpty() }
+        }
+            ?.let { TrainerReply.Answered(it, model) }
+            ?: TrainerReply.Failed(EstimateResult.Unreadable(NOT_THE_SHAPE, content(body) ?: body))
+
     /** D108: a reply is a headline and a note; the four parts are only ever read from storage. */
     fun parseFeedback(body: String, model: String): TrainerReply<Feedback> =
         content(body)?.let(::readFeedback)?.takeIf { it.note != null }?.let { TrainerReply.Answered(it, model, readWeekNote(content(body))) }

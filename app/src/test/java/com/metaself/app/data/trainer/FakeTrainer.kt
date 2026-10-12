@@ -28,6 +28,8 @@ class FakeTrainer : Trainer {
     val fills = mutableListOf<TrainerReply<FilledWeek>>()
     val blocks = mutableListOf<TrainerReply<BlockAnswer>>()
     val suggestions = mutableListOf<TrainerReply<List<GoalSuggestion>>>()
+    /** D147: the replies in the conversation, in order. */
+    val talks = mutableListOf<TrainerReply<String>>()
     val asked = mutableListOf<TrainerRequest>()
 
     override suspend fun suggest(request: TrainerRequest): TrainerReply<SessionPlan> {
@@ -67,5 +69,10 @@ class FakeTrainer : Trainer {
     override suspend fun suggestGoals(request: TrainerRequest): TrainerReply<List<GoalSuggestion>> {
         asked += request
         return suggestions.removeAt(0)
+    }
+
+    override suspend fun talk(request: TrainerRequest): TrainerReply<String> {
+        asked += request
+        return talks.removeAt(0)
     }
 }

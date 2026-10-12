@@ -36,9 +36,10 @@ object WorkbenchWording {
         TrainerPath.FILL_WEEK -> "Fill in next week"
         TrainerPath.NEXT_BLOCK -> "Plan the next block"
         TrainerPath.SUGGEST_GOALS -> "Suggest goals"
+        TrainerPath.TALK -> "Talk to your trainer"
     }
 
-    /** A path the workbench does not try (D121's two asks). */
+    /** A path the workbench does not try (D121's two asks, D126, D147). */
     const val NOT_HERE = "This one is not tried here."
 
     /** The line that always says which instructions Send will use. */

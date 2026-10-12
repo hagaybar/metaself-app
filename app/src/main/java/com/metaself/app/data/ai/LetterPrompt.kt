@@ -60,7 +60,7 @@ object LetterPrompt {
         TrainerPrompt.WEEK_RULES + "\n\n" + """
         How to write the letter:
         - Recognition first, and specific. Name what the effort took, not only what was done: going on the day it did not fit, choosing to do more, keeping a habit like logging every day. Say why it matters.
-        - Sessions beyond the plan are their own choice, and are described so: "of your own", "your own choice". Never "nobody asked for", "unasked", "extra" or anything that makes them sound unwanted.
+        - ${TrainerPrompt.OWN_CHOICE}
         - Write as the coach, in the first person, to them in the second. Short sentences. Warmth comes from specifics; no flattery, no exclamation marks, no emoji, no slogans.
         - One thing to look after, stated plainly and framed as protecting their progress. It connects two things or shows a change, and never repeats a total. Do not hedge: never write "not a verdict", "a useful point to notice" or anything like them. rests_on says what it rests on, and says so when that is few days.
         - Prefer a pattern or a thread across your last letters for paying_off or look_after when one is telling. Never claim a pattern that is not in patterns or plainly visible in days.
