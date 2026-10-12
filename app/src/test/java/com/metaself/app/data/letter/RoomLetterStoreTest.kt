@@ -16,6 +16,7 @@ import java.lang.reflect.Proxy
 class RoomLetterStoreTest {
 
     private val inserted = mutableListOf<WeeklyLetterEntity>()
+    private val replaced = mutableListOf<WeeklyLetterEntity>()
     private var rows = listOf<WeeklyLetterEntity>()
 
     @Test
@@ -27,6 +28,15 @@ class RoomLetterStoreTest {
         assertThat(inserted.single().id).isEqualTo(0)
         rows = listOf(inserted.single().copy(id = 9))
         assertThat(RoomLetterStore(dao()).of(letter.weekMonday)).isEqualTo(letter)
+    }
+
+    /** D144: one REPLACE on the unique week, with no id of its own — the old row goes, the new one is numbered afresh. */
+    @Test
+    fun `a letter written again replaces the week's row in one statement`() = runTest {
+        RoomLetterStore(dao()).replace(aWeeklyLetter().copy(id = 9))
+
+        assertThat(replaced.single().id).isEqualTo(0)
+        assertThat(replaced.single().weekMonday).isEqualTo(LETTER_MONDAY)
     }
 
     @Test
@@ -47,6 +57,10 @@ class RoomLetterStoreTest {
                 "equals" -> false
                 "insertLetter" -> {
                     inserted += args[0] as WeeklyLetterEntity
+                    1L
+                }
+                "replaceLetter" -> {
+                    replaced += args[0] as WeeklyLetterEntity
                     1L
                 }
                 "letterOf" -> rows.firstOrNull { it.weekMonday == args[0] as Long }

@@ -589,7 +589,7 @@ object TrainerPrompt {
     } ?: JsonNull
 
     /** D125, D127: the goal as sent — as stored, and for a dated goal the weeks from this week to the goal's week, counted here. */
-    private fun sentGoal(goal: PlanGoal?, today: Long): JsonElement {
+    internal fun sentGoal(goal: PlanGoal?, today: Long): JsonElement {
         if (goal == null) return JsonNull
         val stored = goalJson(goal)
         if (goal !is PlanGoal.Dated) return stored
@@ -894,7 +894,7 @@ object TrainerPrompt {
         put("since_last", evaluation.sinceLast)
     }
 
-    private fun kind(kind: WorkoutKind): String = when (kind) {
+    internal fun kind(kind: WorkoutKind): String = when (kind) {
         WorkoutKind.RUN -> "run"
         WorkoutKind.WALK -> "walk"
         WorkoutKind.CYCLE -> "cycle"

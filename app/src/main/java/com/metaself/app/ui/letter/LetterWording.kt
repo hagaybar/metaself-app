@@ -22,7 +22,25 @@ object LetterWording {
     /** D4: first under the headline, before anything the model wrote. */
     const val FROM_TRAINER = "From the AI trainer · advice, not a measurement. The figures were counted on your phone."
 
+    /** D4, D140: under the headline of a letter written as the coach, above its parts — still the AI's advice. */
+    const val FROM_COACH = "From your AI trainer · advice, not a measurement · the figures were counted on your phone"
+
     const val PAGE_TITLE = "Weekly letter"
+
+    /** D140's headings. */
+    const val RECOGNITION = "WHAT YOU DID THIS WEEK"
+    const val LOOK_AFTER = "ONE THING I WANT TO LOOK AFTER"
+
+    /** D140: the figures table, closed behind this until tapped. */
+    const val FIGURES = "The week's figures ›"
+
+    /** D144: the newest letter, written again on a tap and a confirmation. */
+    const val WRITE_AGAIN = "Write this letter again"
+    const val CONFIRM_AGAIN = "This asks the trainer again (one request) and replaces this letter."
+    const val YES_AGAIN = "Write it again"
+    const val KEEP = "Keep this one"
+
+    /** D102's headings, for a letter written before D140 — drawn as it was. */
     const val EFFORT = "WHAT YOU PUT IN"
     const val PROGRESS = "WHERE IT'S TAKING YOU"
     const val LOOK_AT = "ONE THING TO LOOK AT"
@@ -71,6 +89,25 @@ object LetterWording {
     }
 
     fun dayNote(headline: String): String = "Your week is in: $headline"
+
+    /** D140: "Rests on 5 of 7 days logged"; the model's words kept when they already say "Rests on". */
+    fun restsOn(text: String): String = if (text.startsWith(RESTS_ON, ignoreCase = true)) text.replaceFirstChar { it.uppercase() } else "$RESTS_ON $text"
+
+    /** D140: recognition's paragraphs — split at line breaks, blank ones dropped. */
+    fun paragraphs(text: String): List<String> = text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+
+    /**
+     * D140: paying_off's first words, shown in bold — its first sentence — and the rest. When the text is one
+     * sentence there is nothing to set apart, and the first part is empty.
+     */
+    fun lead(text: String): Pair<String, String> {
+        val match = FIRST_SENTENCE.find(text) ?: return "" to text
+        val rest = text.substring(match.range.last + 1)
+        return if (rest.isBlank()) "" to text else match.value to rest
+    }
+
+    private const val RESTS_ON = "Rests on"
+    private val FIRST_SENTENCE = Regex("^.+?[.?!](?=\\s)", RegexOption.DOT_MATCHES_ALL)
 
     /** One row of the box: its name, this week's figure and the four weeks' average. */
     data class Row(val name: String, val thisWeek: String, val average: String)
@@ -143,13 +180,15 @@ object LetterWording {
 
     fun hour(hour: Int): String = String.format(Locale.US, "%02d:00", hour)
 
-    /** What Write it now sends, said beside it (D16, D101). */
+    /** What Write it now sends, said beside it (D16, D101, D141). */
     fun privacyLetter(ceiling: Int): String =
-        "Sends to the AI provider, with your key: your week's food as averages a day, your weight trend, your " +
-            "sessions and steps, your week's averages of sleep, resting heart rate and heart-rate variability with " +
-            "their usual levels, your weekly plan's title and this week's planned sessions, your note about " +
-            "yourself, your goal, age, sex and height, and last week's \"for next week\" line. Never a meal or " +
-            "a food. One of today's $ceiling AI requests."
+        "Sends to the AI provider, with your key: your week's food as averages a day, and each day's calories and " +
+            "protein over the last five weeks; your weight trend; each day's sessions, minutes, steps and sleep over " +
+            "those weeks, and patterns your phone works out from them; your week's averages of sleep, resting heart " +
+            "rate and heart-rate variability with their usual levels; your weekly plan, its goal and the trainer's " +
+            "view of it; what you wrote after this week's sessions and when asking for plans; your note about " +
+            "yourself; your goal, age, sex and height; and the trainer's last three letters. Never a meal or a " +
+            "food. One of today's $ceiling AI requests."
 
     private fun Int?.or(format: (Int) -> String): String = this?.let(format) ?: DASH
 

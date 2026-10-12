@@ -135,12 +135,39 @@ class LetterWordingTest {
         assertThat(LetterWording.EMPTY).isEqualTo("Your first letter comes on Sunday evening.")
         assertThat(LetterWording.QUIET).isEqualTo("Nothing was logged that week, so there is nothing to write.")
         assertThat(LetterWording.privacyLetter(20)).isEqualTo(
-            "Sends to the AI provider, with your key: your week's food as averages a day, your weight trend, your " +
-                "sessions and steps, your week's averages of sleep, resting heart rate and heart-rate variability with " +
-                "their usual levels, your weekly plan's title and this week's planned sessions, your note about " +
-                "yourself, your goal, age, sex and height, and last week's \"for next week\" line. Never a meal or " +
-                "a food. One of today's 20 AI requests.",
+            "Sends to the AI provider, with your key: your week's food as averages a day, and each day's calories and " +
+                "protein over the last five weeks; your weight trend; each day's sessions, minutes, steps and sleep over " +
+                "those weeks, and patterns your phone works out from them; your week's averages of sleep, resting heart " +
+                "rate and heart-rate variability with their usual levels; your weekly plan, its goal and the trainer's " +
+                "view of it; what you wrote after this week's sessions and when asking for plans; your note about " +
+                "yourself; your goal, age, sex and height; and the trainer's last three letters. Never a meal or a " +
+                "food. One of today's 20 AI requests.",
         )
+    }
+
+    /** D4, D140 (amended): the coach's letter still says it is the AI's advice, not a measurement. */
+    @Test
+    fun `the coach's letter is attributed as AI advice`() {
+        assertThat(LetterWording.FROM_COACH).isEqualTo("From your AI trainer · advice, not a measurement · the figures were counted on your phone")
+    }
+
+    @Test
+    fun `rests_on is introduced once`() {
+        assertThat(LetterWording.restsOn("5 of 7 days logged")).isEqualTo("Rests on 5 of 7 days logged")
+        assertThat(LetterWording.restsOn("rests on 5 of 7 days logged")).isEqualTo("Rests on 5 of 7 days logged")
+    }
+
+    @Test
+    fun `recognition splits into its paragraphs, blank lines dropped`() {
+        assertThat(LetterWording.paragraphs("Invented one.\n\n  Invented two.\nInvented three.\n"))
+            .containsExactly("Invented one.", "Invented two.", "Invented three.").inOrder()
+    }
+
+    @Test
+    fun `paying_off's first sentence is set apart, and a single sentence is not`() {
+        assertThat(LetterWording.lead("Invented lead. Invented rest, 2.5 more.")).isEqualTo("Invented lead." to " Invented rest, 2.5 more.")
+        assertThat(LetterWording.lead("Invented only sentence.")).isEqualTo("" to "Invented only sentence.")
+        assertThat(LetterWording.lead("No stop at all")).isEqualTo("" to "No stop at all")
     }
 
     private companion object {

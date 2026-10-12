@@ -2,7 +2,19 @@ package com.metaself.app.data.ai
 
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
+import com.metaself.app.domain.letter.DaySession
+import com.metaself.app.domain.letter.FeltEasy
+import com.metaself.app.domain.letter.FoodOnMovingDays
 import com.metaself.app.domain.letter.FoodWeek
+import com.metaself.app.domain.letter.LetterDay
+import com.metaself.app.domain.letter.LetterPatterns
+import com.metaself.app.domain.letter.LongestRun
+import com.metaself.app.domain.letter.PastLetter
+import com.metaself.app.domain.letter.PlanRequestWords
+import com.metaself.app.domain.letter.SessionGroup
+import com.metaself.app.domain.letter.SessionWords
+import com.metaself.app.domain.letter.SleepAndSessions
+import com.metaself.app.domain.letter.WeekdaysAndWeekends
 import com.metaself.app.domain.letter.LetterFigures
 import com.metaself.app.domain.letter.LetterRequest
 import com.metaself.app.domain.letter.MovementFigures
@@ -18,6 +30,9 @@ import com.metaself.app.domain.trainer.BodyFacts
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.FoodContext
 import com.metaself.app.domain.trainer.GoalFacts
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.KindLedger
 import com.metaself.app.domain.trainer.Origin
 import com.metaself.app.domain.trainer.PlanWeek
@@ -40,7 +55,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 
-/** What the letter sends (D101), and how it is asked to write (D102). Every figure and word is invented. */
+/** What the letter sends (D101, D141), and how it is asked to write (D143). Every figure and word is invented. */
 class LetterPromptTest {
 
     private val monday = MovementWeek.mondayOf(TEST_EPOCH_DAY)
@@ -76,8 +91,30 @@ class LetterPromptTest {
         body = BodyFacts(46, Sex.MALE, 180),
         planTitle = "Invented plan",
         planWeek = PlanWeek("Invented focus", listOf(PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Walk"))),
-        lastNextWeek = "Invented line.",
+        days = days,
+        patterns = LetterPatterns(
+            SleepAndSessions(420, 30, SessionGroup(4, 30), SessionGroup(5, 40)),
+            WeekdaysAndWeekends(20, 25, 30, 10),
+            FoodOnMovingDays(2_200, 6, 1_900, 8),
+            FeltEasy(2, 3, 3, 9),
+            LongestRun(4, monday - 10, monday - 7),
+        ),
+        sessionWords = listOf(SessionWords(monday + 1, WorkoutKind.WALK, Felt.EASY, "Invented session words.")),
+        planWords = listOf(PlanRequestWords(monday - 20, adjustment = false, words = "Invented plan words.")),
+        planGoal = PlanGoal.WeeklyMinutes(150, monday + 27),
+        goalView = GoalView(GoalVerdict.WITHIN_REACH, "Invented view."),
+        lastLetters = listOf(PastLetter(monday - 7, "Invented look after.", "Invented line.")),
     )
+
+    /** 35 days: the first logged and slept, with a planned walk; the rest with nothing recorded, minutes included. */
+    private val days = (monday - 28..monday + 6).map { day ->
+        if (day == monday - 28) {
+            LetterDay(day, 30, 0, listOf(DaySession(WorkoutKind.WALK, 30, Felt.EASY)), 8_000, 420, 2_000, 100)
+        } else {
+            // Before the movement record begins: no minutes, not zero.
+            LetterDay(day, null, null, emptyList(), null, null, null, null)
+        }
+    }
 
     private fun body() = LetterPrompt.body("a-model", request(), RequestProfile.DETERMINISTIC)
 
@@ -106,22 +143,46 @@ class LetterPromptTest {
         val user = user(body)
 
         assertThat(body).contains("weekly_letter")
-        assertThat(user.keys).containsExactly(
-            "week", "ledger", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan", "last_next_week",
-        )
+        assertThat(user.keys).containsExactlyElementsIn(TOP)
         assertThat(user.getValue("earlier_weeks").jsonArray).hasSize(4)
     }
 
     /**
-     * D101's "never sent", as the whole shape: food only as a week's averages and a count of days; the
-     * weight only as the trend's change across a week; a session's figures without the owner's words,
-     * felt or plan; no single night's sleep or single day's heart rate, no meal, no food, no amount, no time
-     * of eating, no single weigh-in; the week's ledger (D111): its practice, what was beyond the plan, its
-     * food as averages with the target, and its recovery as averages with their usuals — never a single
-     * night or day. A new key anywhere fails here before it can leave the phone.
+     * D101's "never sent", as amended by D141, as the whole shape: food only as weeks' averages, a count of
+     * days, and each day's calories and protein; the weight only as the trend's change across a week; a
+     * session's figures without the owner's words, felt or plan; no meal, no food, no amount, no time of
+     * eating, no single weigh-in, no raw reading; the week's ledger (D111); the 35 day rows and D142's
+     * patterns; the owner's words only as this week's answers to "How did it go?", the plan-request words and
+     * about_me; the plan's goal and the trainer's view of it; the last letters' look_after and next_week.
+     * A new key anywhere fails here before it can leave the phone.
      */
     @Test
     fun `nothing else is sent`() {
+        val day = listOf(
+            "date", "weekday", "planned_minutes", "own_minutes", "sessions", "sessions[].kind", "sessions[].minutes",
+            "sessions[].felt", "steps", "sleep_minutes", "kcal", "protein_g",
+        )
+        val patterns = listOf(
+            "sleep_and_sessions", "sleep_and_sessions.median_sleep_minutes", "sleep_and_sessions.nights",
+            "sleep_and_sessions.after_shorter_night", "sleep_and_sessions.after_shorter_night.sessions",
+            "sleep_and_sessions.after_shorter_night.average_minutes", "sleep_and_sessions.after_longer_night",
+            "sleep_and_sessions.after_longer_night.sessions", "sleep_and_sessions.after_longer_night.average_minutes",
+            "weekdays_and_weekends", "weekdays_and_weekends.weekday_minutes_a_day", "weekdays_and_weekends.weekdays",
+            "weekdays_and_weekends.weekend_minutes_a_day", "weekdays_and_weekends.weekend_days",
+            "food_on_moving_days", "food_on_moving_days.moving_days_kcal_a_day", "food_on_moving_days.moving_days",
+            "food_on_moving_days.other_days_kcal_a_day", "food_on_moving_days.other_days",
+            "felt_easy", "felt_easy.this_week_easy", "felt_easy.this_week_reviewed", "felt_easy.before_easy",
+            "felt_easy.before_reviewed", "longest_run", "longest_run.days", "longest_run.from", "longest_run.to",
+        )
+        val words = listOf(
+            "after_sessions[].date", "after_sessions[].kind", "after_sessions[].felt", "after_sessions[].words",
+            "plan_requests[].date", "plan_requests[].asked", "plan_requests[].words",
+        )
+        val goal = listOf(
+            "plan_goal.kind", "plan_goal.minutes", "plan_goal.by", "plan_goal.weeks_to_go",
+            "goal_view.verdict", "goal_view.says", "goal_view.instead",
+        )
+        val letters = listOf("last_letters[].from", "last_letters[].look_after", "last_letters[].next_week")
         val week = listOf(
             "from", "food", "food.days_logged", "food.kcal_a_day", "food.protein_g_a_day", "food.carbs_g_a_day",
             "food.fat_g_a_day", "weight_trend_change_kg", "movement", "movement.sessions", "movement.minutes",
@@ -147,7 +208,7 @@ class LetterPromptTest {
             "recovery", "recovery.sleep_minutes_a_night", "recovery.usual_sleep_minutes_a_night",
             "recovery.resting_heart_rate", "recovery.usual_resting_heart_rate", "recovery.hrv_ms", "recovery.usual_hrv_ms",
         )
-        val expected = listOf("week", "ledger", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan", "last_next_week") +
+        val expected = TOP + day.map { "days[].$it" } + patterns.map { "patterns.$it" } + words + goal + letters +
             week.map { "week.$it" } + week.map { "earlier_weeks[].$it" } + session.map { "sessions[].$it" } + ledger.map { "ledger.$it" } +
             listOf("goal.direction", "goal.kg_a_week", "body.age", "body.sex", "body.height_cm") +
             listOf("plan.title", "plan.focus", "plan.sessions", "plan.sessions[].kind", "plan.sessions[].minutes", "plan.sessions[].effort", "plan.sessions[].what")
@@ -167,10 +228,18 @@ class LetterPromptTest {
 
     /** The request's own types have room for nothing else: a new field fails here. */
     @Test
-    fun `the request has room for exactly what D101 lists`() {
+    fun `the request has room for exactly what D101 and D141 list`() {
         assertThat(fieldsOf(LetterRequest::class.java)).containsExactly(
-            "figures", "ledger", "sessions", "aboutMe", "goal", "body", "planTitle", "planWeek", "lastNextWeek",
+            "figures", "ledger", "sessions", "aboutMe", "goal", "body", "planTitle", "planWeek", "days", "patterns",
+            "sessionWords", "planWords", "planGoal", "goalView", "lastLetters",
         )
+        assertThat(fieldsOf(LetterDay::class.java)).containsExactly(
+            "epochDay", "plannedMinutes", "ownMinutes", "sessions", "steps", "sleepMinutes", "kcal", "proteinG",
+        )
+        assertThat(fieldsOf(DaySession::class.java)).containsExactly("kind", "minutes", "felt")
+        assertThat(fieldsOf(SessionWords::class.java)).containsExactly("epochDay", "kind", "felt", "words")
+        assertThat(fieldsOf(PlanRequestWords::class.java)).containsExactly("epochDay", "adjustment", "words")
+        assertThat(fieldsOf(PastLetter::class.java)).containsExactly("weekMonday", "lookAfter", "nextWeek")
         assertThat(fieldsOf(LetterFigures::class.java)).containsExactly("week", "earlier", "targetKcal", "average\$delegate")
         assertThat(fieldsOf(WeekFigures::class.java)).containsExactly("monday", "food", "weightChangeKg", "weighedIn", "movement", "plan")
         assertThat(fieldsOf(FoodWeek::class.java)).containsExactly("daysLogged", "kcal", "proteinG", "carbsG", "fatG")
@@ -188,19 +257,72 @@ class LetterPromptTest {
         assertThat(food.getValue("kcal_a_day").jsonPrimitive.content).isEqualTo("2000")
     }
 
-    /** D102's tone rules, written into the instructions word for word. */
+    /** D143's rules, written into the instructions word for word; D102's softening is gone. */
     @Test
-    fun `the tone rules are in the instructions`() {
+    fun `the instructions put recognition first, the own-choice wording, no hedging and the figures rule`() {
         val system = system(body())
 
         listOf(
-            "Name the effort behind a result, not only the result (\"you made room for it on the days it wasn't convenient\"), in the second person, plainly.",
-            "Compare with his own earlier weeks, never with other people or ideals.",
-            "One thing to look at, framed as information or a next step, never as a failure; a gap in logging is missing information, not a fault. Say when a figure rests on few days and cannot say much.",
-            "Never shame, never exaggerate, no exclamation marks, no emoji. Every figure mentioned must be one given.",
-            "The close is one warm sentence about the week or the person, not a slogan.",
+            "Recognition first, and specific. Name what the effort took, not only what was done",
+            "Sessions beyond the plan are their own choice, and are described so: \"of your own\", \"your own choice\".",
+            "Never \"nobody asked for\", \"unasked\", \"extra\" or anything that makes them sound unwanted.",
+            "Write as the coach, in the first person, to them in the second.",
+            "no flattery, no exclamation marks, no emoji, no slogans.",
+            "One thing to look after, stated plainly and framed as protecting their progress.",
+            "It connects two things or shows a change, and never repeats a total.",
+            "Do not hedge: never write \"not a verdict\", \"a useful point to notice\" or anything like them.",
+            "rests_on says what it rests on, and says so when that is few days.",
+            "Never claim a pattern that is not in patterns or plainly visible in days.",
+            "When your last letter's next_week can be checked in the record, say how it went.",
+            "Figures: only those given, or a difference or ratio of two given ones",
             "Nothing medical is diagnosed.",
         ).forEach { assertThat(system).contains(it) }
+        // D102's rule that read as "never say anything" is not there.
+        assertThat(system).doesNotContain("never as a failure")
+    }
+
+    @Test
+    fun `the request carries the day rows, the patterns, the owner's words, the goal and the last letters`() {
+        val user = user(body())
+
+        val rows = user.getValue("days").jsonArray.map { it.jsonObject }
+        assertThat(rows).hasSize(35)
+        val first = rows.first()
+        assertThat(first.getValue("date").jsonPrimitive.content).isEqualTo(TrainerPrompt.date(monday - 28))
+        assertThat(first.getValue("weekday").jsonPrimitive.content).isEqualTo("monday")
+        assertThat(first.getValue("planned_minutes").jsonPrimitive.content).isEqualTo("30")
+        assertThat(first.getValue("sleep_minutes").jsonPrimitive.content).isEqualTo("420")
+        assertThat(first.getValue("kcal").jsonPrimitive.content).isEqualTo("2000")
+        assertThat(rows[1].getValue("own_minutes")).isEqualTo(JsonNull)
+        assertThat(rows[1].getValue("planned_minutes")).isEqualTo(JsonNull)
+        // A day with nothing logged sends null food, never zero.
+        assertThat(rows[1].getValue("kcal")).isEqualTo(JsonNull)
+        assertThat(rows[1].getValue("protein_g")).isEqualTo(JsonNull)
+
+        val patterns = user.getValue("patterns").jsonObject
+        assertThat(patterns.getValue("longest_run").jsonObject.getValue("days").jsonPrimitive.content).isEqualTo("4")
+        assertThat(user.getValue("after_sessions").jsonArray.single().jsonObject.getValue("words").jsonPrimitive.content)
+            .isEqualTo("Invented session words.")
+        assertThat(user.getValue("plan_requests").jsonArray.single().jsonObject.getValue("asked").jsonPrimitive.content).isEqualTo("plan")
+        assertThat(user.getValue("plan_goal").jsonObject.getValue("weeks_to_go").jsonPrimitive.content).isEqualTo("3")
+        assertThat(user.getValue("goal_view").jsonObject.getValue("verdict").jsonPrimitive.content).isEqualTo("within_reach")
+        assertThat(user.getValue("last_letters").jsonArray.single().jsonObject.getValue("look_after").jsonPrimitive.content)
+            .isEqualTo("Invented look after.")
+    }
+
+    /** D142: a pattern resting on too few days goes as null, and the request says nothing more of it. */
+    @Test
+    fun `a pattern that rests on too few is sent as null`() {
+        val user = user(LetterPrompt.body("a-model", request().copy(patterns = LetterPatterns(null, null, null, null, null)), RequestProfile.DETERMINISTIC))
+
+        user.getValue("patterns").jsonObject.values.forEach { assertThat(it).isEqualTo(JsonNull) }
+    }
+
+    @Test
+    fun `no more than three earlier letters can be put in a request`() {
+        val four = List(4) { PastLetter(monday - 7L * (it + 1), "Invented.", "Invented.") }
+
+        assertThrows<IllegalArgumentException> { request().copy(lastLetters = four) }
     }
 
     /** D112: the letter is told what its ledger holds, and the trainer's five rules, word for word. */
@@ -218,13 +340,15 @@ class LetterPromptTest {
     }
 
     @Test
-    fun `the reply is asked for as six texts`() {
-        assertThat(LetterPrompt.NAMES).containsExactly("headline", "effort", "progress", "look_at", "next_week", "close").inOrder()
+    fun `the reply is asked for as the coach's seven texts`() {
+        assertThat(LetterPrompt.NAMES).containsExactly(
+            "headline", "recognition", "paying_off", "look_after", "rests_on", "next_week", "close",
+        ).inOrder()
         val strictless = LetterPrompt.body("a-model", request(), RequestProfile.DETERMINISTIC.copy(strictFormat = false))
         LetterPrompt.NAMES.forEach { assertThat(system(strictless)).contains(it) }
     }
 
-    /** D116: the letter also gives the week's note, asked last, required beside the six texts. */
+    /** D116: the letter also gives the week's note, asked last, required beside the seven texts. */
     @Test
     fun `the letter asks for week_note too`() {
         val body = Json.parseToJsonElement(body()).jsonObject
@@ -233,7 +357,14 @@ class LetterPromptTest {
         assertThat(system(body())).endsWith(TrainerPrompt.WEEK_NOTE)
         assertThat(schema.getValue("properties").jsonObject.keys).containsExactlyElementsIn(LetterPrompt.NAMES + "week_note").inOrder()
         assertThat(schema.getValue("required").jsonArray.map { it.jsonPrimitive.content }).containsExactlyElementsIn(LetterPrompt.NAMES + "week_note")
-        assertThat(LetterPrompt.NAMES).hasSize(6)
+        assertThat(LetterPrompt.NAMES).hasSize(7)
+    }
+
+    private companion object {
+        val TOP = listOf(
+            "week", "ledger", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan",
+            "days", "patterns", "after_sessions", "plan_requests", "plan_goal", "goal_view", "last_letters",
+        )
     }
 
     private fun fieldsOf(type: Class<*>): List<String> =

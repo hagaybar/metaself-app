@@ -21,6 +21,12 @@ class FakeLetterStore(vararg letters: WeeklyLetter) : LetterStore {
         return id
     }
 
+    override suspend fun replace(letter: WeeklyLetter): Long {
+        val id = nextId++
+        letters.value = letters.value.filterNot { it.weekMonday == letter.weekMonday } + letter.copy(id = id)
+        return id
+    }
+
     override suspend fun markRead(weekMonday: Long, atMillis: Long) {
         letters.value = letters.value.map {
             if (it.weekMonday == weekMonday && it.readAtMillis == null) it.copy(readAtMillis = atMillis) else it

@@ -14,9 +14,12 @@ import com.metaself.app.data.trainer.InMemoryWeekNoteStore
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.DayTotals
+import com.metaself.app.domain.letter.LetterPatterns
 import com.metaself.app.domain.letter.LetterReply
 import com.metaself.app.domain.letter.LetterTexts
+import com.metaself.app.domain.letter.PastLetter
 import com.metaself.app.domain.letter.PlanWeekFigures
+import com.metaself.app.domain.letter.SessionWords
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.HealthDay
 import com.metaself.app.domain.movement.Workout
@@ -27,6 +30,9 @@ import com.metaself.app.domain.target.CurrentTarget
 import com.metaself.app.domain.trainer.AttemptFacts
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.FoodContext
+import com.metaself.app.domain.trainer.GoalVerdict
+import com.metaself.app.domain.trainer.GoalView
+import com.metaself.app.domain.trainer.PlanGoal
 import com.metaself.app.domain.trainer.KindLedger
 import com.metaself.app.domain.trainer.PlanConfirmation
 import com.metaself.app.domain.trainer.PlanWeek
@@ -249,11 +255,14 @@ class WriteWeeklyLetterTest {
     }
 
     @Test
-    fun `the request carries no words on a session, last week's line for next week, and the note trimmed`() = runTest {
-        record.workouts.value = listOf(walk(1, LETTER_MONDAY + 2))
-        trainer.reviews.value = listOf(TrainerReview(workoutId = 1, planId = null, felt = Felt.HARD, words = "Invented words"))
+    fun `the request carries no words on a session, the week's answers apart, last week's letter, and the note trimmed`() = runTest {
+        record.workouts.value = listOf(walk(1, LETTER_MONDAY + 2), walk(2, LETTER_MONDAY - 3))
+        trainer.reviews.value = listOf(
+            TrainerReview(workoutId = 1, planId = null, felt = Felt.HARD, words = " Invented words "),
+            TrainerReview(workoutId = 2, planId = null, felt = Felt.EASY, words = "Invented earlier words"),
+        )
         aboutMe.note.value = "  Invented note.  "
-        letters.add(aWeeklyLetter(LETTER_MONDAY - 7).let { it.copy(texts = it.texts.copy(nextWeek = "Invented line.")) })
+        letters.add(aWeeklyLetter(LETTER_MONDAY - 7, aCoachLetter(lookAfter = "Invented look.", nextWeek = "Invented line.")))
 
         job()(LETTER_MONDAY)
 
@@ -261,10 +270,83 @@ class WriteWeeklyLetterTest {
         assertThat(request.sessions).hasSize(1)
         assertThat(request.sessions.single().words).isNull()
         assertThat(request.sessions.single().felt).isNull()
-        assertThat(request.toString()).doesNotContain("Invented words")
-        assertThat(request.lastNextWeek).isEqualTo("Invented line.")
+        // D141: this week's answers to "How did it go?" go apart from the sessions; an earlier week's do not.
+        assertThat(request.sessionWords).containsExactly(SessionWords(LETTER_MONDAY + 2, WorkoutKind.WALK, Felt.HARD, "Invented words"))
+        assertThat(request.toString()).doesNotContain("Invented earlier words")
+        assertThat(request.lastLetters).containsExactly(PastLetter(LETTER_MONDAY - 7, "Invented look.", "Invented line."))
         assertThat(request.aboutMe).isEqualTo("Invented note.")
         assertThat(request.figures.week.movement.hard).isEqualTo(1)
+    }
+
+    /** D141: the last three letters before this week, newest first — an old six-part letter by its look_at. */
+    @Test
+    fun `the last three letters go, the old shape by its look_at`() = runTest {
+        someFood()
+        val old = LetterTexts.SixParts("Invented.", "Invented.", "Invented.", "Invented old look.", "Invented old line.", "Invented.")
+        letters.add(aWeeklyLetter(LETTER_MONDAY - 35, old))
+        letters.add(aWeeklyLetter(LETTER_MONDAY - 28, old))
+        letters.add(aWeeklyLetter(LETTER_MONDAY - 21, aCoachLetter(nextWeek = "Invented a.")))
+        // A quiet week had no letter; the run skips it.
+        letters.add(aWeeklyLetter(LETTER_MONDAY - 7, aCoachLetter(nextWeek = "Invented b.")))
+
+        job()(LETTER_MONDAY)
+
+        assertThat(writer.asked.single().lastLetters).containsExactly(
+            PastLetter(LETTER_MONDAY - 7, "Invented.", "Invented b."),
+            PastLetter(LETTER_MONDAY - 21, "Invented.", "Invented a."),
+            PastLetter(LETTER_MONDAY - 28, "Invented old look.", "Invented old line."),
+        ).inOrder()
+    }
+
+    @Test
+    fun `the request carries the 35 day rows and their patterns`() = runTest {
+        someFood()
+        record.workouts.value = listOf(walk(1, LETTER_MONDAY))
+        record.days.value = listOf(HealthDay(LETTER_MONDAY, steps = 8_000, sleepMinutes = 420))
+        // The movement record begins a week before the letter's: the days before it have no minutes.
+        record.earliest.value = LETTER_MONDAY - 7
+
+        job()(LETTER_MONDAY)
+
+        val request = writer.asked.single()
+        assertThat(request.days).hasSize(35)
+        assertThat(request.days.first().epochDay).isEqualTo(LETTER_MONDAY - 28)
+        val monday = request.days.single { it.epochDay == LETTER_MONDAY }
+        assertThat(monday.ownMinutes).isEqualTo(40)
+        assertThat(monday.steps).isEqualTo(8_000)
+        assertThat(monday.sleepMinutes).isEqualTo(420)
+        assertThat(monday.kcal).isEqualTo(2_000)
+        assertThat(request.days.single { it.epochDay == LETTER_MONDAY + 1 }.kcal).isNull()
+        assertThat(request.days.single { it.epochDay == LETTER_MONDAY - 8 }.ownMinutes).isNull()
+        assertThat(request.days.single { it.epochDay == LETTER_MONDAY - 7 }.ownMinutes).isEqualTo(0)
+        assertThat(request.patterns).isEqualTo(LetterPatterns.of(request.days, LETTER_MONDAY))
+    }
+
+    /** D141: the running plan's goal, the view stored with its evaluation, and the words of the last five weeks' requests. */
+    @Test
+    fun `the request carries the plan's goal, the trainer's view of it and the plan-request words`() = runTest {
+        someFood()
+        val planned = PlannedSession(WorkoutKind.WALK, 40, PlannedEffort.STEADY, "Invented walk")
+        val plan = WeeksPlan("Invented plan", List(4) { PlanWeek("Invented focus", listOf(planned)) }, "Invented.")
+        val goal = PlanGoal.WeeklyMinutes(150, LETTER_MONDAY + 13)
+        val view = GoalView(GoalVerdict.STRETCH, "Invented view.")
+        val made = (LETTER_MONDAY - 14) * DAY + 43_200_000
+        programmes.rows.value = listOf(
+            // Asked long before the five weeks: its words stay home.
+            Programme(1, (LETTER_MONDAY - 60) * DAY + 43_200_000, ProgrammeAsk(2, 2, "Invented old words"), null, plan.copy(weeks = plan.weeks.take(2)), "a-model", LETTER_MONDAY - 63, ProgrammeStatus.REPLACED),
+            Programme(2, made, ProgrammeAsk(4, 2, " Invented plan words ", goal), null, plan, "a-model", LETTER_MONDAY - 14, ProgrammeStatus.ADJUSTED, goalView = view),
+            Programme(3, made + DAY, ProgrammeAsk(4, 2, "Invented adjust words", goal), null, plan, "a-model", LETTER_MONDAY - 14, ProgrammeStatus.RUNNING, replacesId = 2),
+        )
+
+        job()(LETTER_MONDAY)
+
+        val request = writer.asked.single()
+        assertThat(request.planGoal).isEqualTo(goal)
+        assertThat(request.goalView).isEqualTo(view)
+        assertThat(request.planWords.map { it.words to it.adjustment }).containsExactly(
+            "Invented plan words" to false, "Invented adjust words" to true,
+        ).inOrder()
+        assertThat(request.toString()).doesNotContain("Invented old words")
     }
 
     @Test
@@ -275,7 +357,41 @@ class WriteWeeklyLetterTest {
         job()(LETTER_MONDAY)
 
         assertThat(writer.asked.single().aboutMe).isNull()
-        assertThat(writer.asked.single().lastNextWeek).isNull()
+        assertThat(writer.asked.single().lastLetters).isEmpty()
+    }
+
+    /** D144: written again, the week's letter is replaced — already read, nothing notified — by the Sunday request. */
+    @Test
+    fun `a letter written again replaces the week's letter, from the same request as Sunday's`() = runTest {
+        someFood()
+        job()(LETTER_MONDAY)
+        val sunday = writer.asked.single()
+        val first = letters.letters.value.single()
+        writer = FakeLetterWriter(LetterReply.Written(TEXTS.copy(headline = "Invented again."), "a-model"))
+
+        val outcome = job().writeAgain(LETTER_MONDAY)
+
+        assertThat(writer.asked.single()).isEqualTo(sunday)
+        val stored = letters.letters.value.single()
+        assertThat(stored.texts.headline).isEqualTo("Invented again.")
+        assertThat(stored.id).isNotEqualTo(first.id)
+        assertThat(stored.readAtMillis).isEqualTo(NOW)
+        assertThat((outcome as WriteWeeklyLetter.Outcome.Written).letter.texts.headline).isEqualTo("Invented again.")
+        // Only the Sunday letter told the notifications.
+        assertThat(told).isEqualTo(1)
+    }
+
+    @Test
+    fun `a letter that cannot be written again leaves the week's letter as it was`() = runTest {
+        someFood()
+        job()(LETTER_MONDAY)
+        val first = letters.letters.value.single()
+        writer = FakeLetterWriter(LetterReply.Failed(EstimateResult.Unreachable(), null))
+
+        val outcome = job().writeAgain(LETTER_MONDAY)
+
+        assertThat(outcome).isInstanceOf(WriteWeeklyLetter.Outcome.Retry::class.java)
+        assertThat(letters.letters.value).containsExactly(first)
     }
 
     @Test
@@ -406,6 +522,6 @@ class WriteWeeklyLetterTest {
         const val DAY = 86_400_000L
         const val NOW = 1_000_000L
         const val LAST_COPIED = 500_000L
-        val TEXTS = LetterTexts("Invented headline.", "Invented a.", "Invented b.", "Invented c.", "Invented d.", "Invented e.")
+        val TEXTS = LetterTexts.Coach("Invented headline.", "Invented a.", "Invented b.", "Invented c.", "Invented f.", "Invented d.", "Invented e.")
     }
 }

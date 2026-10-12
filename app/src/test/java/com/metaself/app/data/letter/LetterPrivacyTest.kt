@@ -144,7 +144,7 @@ class LetterPrivacyTest {
         }
     }
 
-    private fun lastWeek(): WeeklyLetter = aWeeklyLetter(LETTER_MONDAY - 7).let { it.copy(texts = it.texts.copy(nextWeek = LAST_LINE)) }
+    private fun lastWeek(): WeeklyLetter = aWeeklyLetter(LETTER_MONDAY - 7, aCoachLetter(nextWeek = LAST_LINE))
 
     private fun reply(content: String): String = """{"choices":[{"message":{"content":${JsonPrimitive(content)}}}]}"""
 
@@ -179,7 +179,7 @@ class LetterPrivacyTest {
         const val NOTE = "Invented note that must not reach the log"
         const val ANSWER = "Invented answer that must not reach the log"
         const val LAST_LINE = "Invented last line that must not reach the log"
-        const val GOOD_LETTER = """{"headline":"Invented","effort":"Invented a.","progress":"Invented b.",
-            "look_at":"Invented c.","next_week":"Invented d.","close":"Invented e."}"""
+        const val GOOD_LETTER = """{"headline":"Invented","recognition":"Invented a.","paying_off":"Invented b.",
+            "look_after":"Invented c.","rests_on":"Invented f.","next_week":"Invented d.","close":"Invented e."}"""
     }
 }

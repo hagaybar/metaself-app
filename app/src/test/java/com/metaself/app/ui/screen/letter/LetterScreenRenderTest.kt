@@ -5,6 +5,7 @@ import com.metaself.app.data.letter.LETTER_MONDAY
 import com.metaself.app.data.letter.aWeeklyLetter
 import com.metaself.app.data.letter.anEmptyWeek
 import com.metaself.app.data.letter.someFigures
+import com.metaself.app.domain.letter.LetterTexts
 import com.metaself.app.domain.letter.WeeklyLetter
 import com.metaself.app.ui.ComposeRender
 import com.metaself.app.ui.letter.LetterWording
@@ -17,7 +18,7 @@ import java.time.ZoneOffset
 /**
  * JUnit 4 by necessity — Robolectric's runner is JUnit 4.
  *
- * What the letter's page draws, and in what order (D4, D103). Not provable here (CLAUDE.md, Testing):
+ * What the letter's page draws, and in what order (D4, D103, D140). Not provable here (CLAUDE.md, Testing):
  * widths, wrapping. The week is the one holding TEST_EPOCH_DAY; every figure and word is invented.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -32,9 +33,40 @@ class LetterScreenRenderTest {
         LetterScreen(LetterViewModel.State.Shown(letter), onBack = {}, zone = ZoneOffset.UTC)
     }
 
+    /** D140: the coach's parts in order under their headings, rests_on under look_after, the figures closed. */
     @Test
-    fun `the advice line comes before anything the model wrote but the headline, and the parts follow in order`() {
-        val texts = draw(aWeeklyLetter().copy(texts = TEXTS))
+    fun `a coach's letter draws its parts in order, with the figures closed`() {
+        val texts = draw(aWeeklyLetter().copy(texts = COACH))
+
+        assertThat(texts).containsAtLeast(
+            "WEEKLY LETTER · 31 AUG – 6 SEP", "Invented headline", LetterWording.FROM_COACH,
+            "WHAT YOU DID THIS WEEK", "Invented first paragraph.", "Invented second paragraph.",
+            "Invented lead. Invented rest.",
+            "ONE THING I WANT TO LOOK AFTER", "Invented look.", "Rests on invented days",
+            "FOR NEXT WEEK", "Invented next.", "Invented close.", LetterWording.FIGURES,
+        ).inOrder()
+        assertThat(texts).doesNotContain("THE WEEK")
+        assertThat(texts).doesNotContain("WHAT YOU PUT IN")
+        assertThat(texts).doesNotContain(LetterWording.FROM_TRAINER)
+    }
+
+    @Test
+    fun `the week's figures open in place, with their notes`() {
+        val sundayTwoPm = ((LETTER_MONDAY + 6) * 24 + 14) * 3_600_000L
+        draw(aWeeklyLetter().copy(texts = COACH, bandDataUntil = sundayTwoPm))
+
+        render.click(LetterWording.FIGURES)
+        val opened = render.textsAgain()
+
+        assertThat(opened).containsAtLeast(LetterWording.FIGURES, "THE WEEK", "THIS WEEK", "4-WEEK AVG").inOrder()
+        assertThat(opened).contains("Band data up to Sun 14:00.")
+        assertThat(opened).contains("Calories and protein are averages over the 5 days you logged.")
+    }
+
+    /** D140: a letter stored before it keeps D102's shape — its headings, its advice line, and the box open. */
+    @Test
+    fun `an old six-part letter is drawn as before`() {
+        val texts = draw(aWeeklyLetter(texts = SIX_PARTS))
 
         assertThat(texts).containsAtLeast(
             "WEEKLY LETTER · 31 AUG – 6 SEP", "Invented headline", LetterWording.FROM_TRAINER,
@@ -43,13 +75,14 @@ class LetterScreenRenderTest {
         ).inOrder()
         assertThat(render.isDrawnBefore(LetterWording.FROM_TRAINER, "WHAT YOU PUT IN")).isTrue()
         assertThat(render.isDrawnBefore("Invented close.", "THE WEEK")).isTrue()
+        assertThat(texts).doesNotContain(LetterWording.FIGURES)
     }
 
     @Test
     fun `the box shows this week against the four weeks, and a dash where a figure is missing`() {
         val week = anEmptyWeek(LETTER_MONDAY).copy(food = anEmptyWeek(LETTER_MONDAY).food.copy(daysLogged = 5, kcal = 2_000))
         val figures = someFigures().copy(week = week)
-        val texts = draw(aWeeklyLetter().copy(figures = figures))
+        val texts = draw(aWeeklyLetter(texts = SIX_PARTS).copy(figures = figures))
 
         assertThat(texts).containsAtLeast("THE WEEK", "THIS WEEK", "4-WEEK AVG").inOrder()
         assertThat(texts).containsAtLeast("Days logged", "5 of 7", "5").inOrder()
@@ -60,12 +93,74 @@ class LetterScreenRenderTest {
     @Test
     fun `the band's line shows only when the band's data may be behind`() {
         val sundayTwoPm = ((LETTER_MONDAY + 6) * 24 + 14) * 3_600_000L
-        val behind = draw(aWeeklyLetter().copy(bandDataUntil = sundayTwoPm))
+        val behind = draw(aWeeklyLetter(texts = SIX_PARTS).copy(bandDataUntil = sundayTwoPm))
         assertThat(behind).contains("Band data up to Sun 14:00.")
         assertThat(behind).contains("Calories and protein are averages over the 5 days you logged.")
 
-        val current = draw(aWeeklyLetter())
+        val current = draw(aWeeklyLetter(texts = SIX_PARTS))
         assertThat(current.none { it.startsWith("Band data up to") }).isTrue()
+    }
+
+    /** D144: "Write this letter again" at the end of the newest letter only, whatever its shape. */
+    @Test
+    fun `only the newest letter offers to be written again, at its end`() {
+        val newest = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter(texts = SIX_PARTS), newest = true), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(newest).contains(LetterWording.WRITE_AGAIN)
+        assertThat(render.isDrawnBefore("Calories and protein are averages", LetterWording.WRITE_AGAIN)).isTrue()
+        assertThat(render.isDrawnBefore("Invented close.", LetterWording.WRITE_AGAIN)).isTrue()
+
+        val coach = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter().copy(texts = COACH), newest = true), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(render.isDrawnBefore(LetterWording.FIGURES, LetterWording.WRITE_AGAIN)).isTrue()
+        assertThat(coach).contains(LetterWording.WRITE_AGAIN)
+
+        assertThat(draw(aWeeklyLetter(texts = SIX_PARTS))).doesNotContain(LetterWording.WRITE_AGAIN)
+    }
+
+    @Test
+    fun `the confirmation says what writing again does, with its two answers`() {
+        var offered = 0
+        var written = 0
+        var kept = 0
+        render.texts {
+            LetterScreen(
+                LetterViewModel.State.Shown(aWeeklyLetter(), newest = true), onBack = {}, zone = ZoneOffset.UTC,
+                onOfferAgain = { offered++ },
+            )
+        }
+        render.click(LetterWording.WRITE_AGAIN)
+        assertThat(offered).isEqualTo(1)
+
+        val confirming = render.texts {
+            LetterScreen(
+                LetterViewModel.State.Shown(aWeeklyLetter(), newest = true, confirming = true), onBack = {}, zone = ZoneOffset.UTC,
+                onWriteAgain = { written++ }, onKeep = { kept++ },
+            )
+        }
+        assertThat(confirming).containsAtLeast(
+            "This asks the trainer again (one request) and replaces this letter.", "Write it again", "Keep this one",
+        ).inOrder()
+        assertThat(confirming).doesNotContain(LetterWording.WRITE_AGAIN)
+        render.click("Write it again")
+        render.click("Keep this one")
+        assertThat(written to kept).isEqualTo(1 to 1)
+    }
+
+    @Test
+    fun `while it is written again the letter stays, and a failure is said`() {
+        val writing = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter(), newest = true, writing = true), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(writing).containsAtLeast("Invented headline.", LetterWording.WRITING).inOrder()
+        assertThat(render.isEnabled(LetterWording.WRITING)).isFalse()
+
+        val failed = render.texts {
+            LetterScreen(LetterViewModel.State.Shown(aWeeklyLetter(), newest = true, said = "Invented failure."), onBack = {}, zone = ZoneOffset.UTC)
+        }
+        assertThat(failed).containsAtLeast("Invented headline.", LetterWording.WRITE_AGAIN, "Invented failure.").inOrder()
     }
 
     @Test
@@ -76,8 +171,12 @@ class LetterScreenRenderTest {
     }
 
     private companion object {
-        val TEXTS = com.metaself.app.domain.letter.LetterTexts(
+        val SIX_PARTS = LetterTexts.SixParts(
             "Invented headline", "Invented effort.", "Invented progress.", "Invented look.", "Invented next.", "Invented close.",
+        )
+        val COACH = LetterTexts.Coach(
+            "Invented headline", "Invented first paragraph.\n\nInvented second paragraph.", "Invented lead. Invented rest.",
+            "Invented look.", "invented days", "Invented next.", "Invented close.",
         )
     }
 }
