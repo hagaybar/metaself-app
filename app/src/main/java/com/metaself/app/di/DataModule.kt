@@ -51,6 +51,11 @@ import com.metaself.app.data.health.RoomWorkoutFileStore
 import com.metaself.app.data.health.WorkoutFileImporter
 import com.metaself.app.data.health.WorkoutFileSource
 import com.metaself.app.data.health.WorkoutFileStore
+import com.metaself.app.data.health.FileWaitingFileStore
+import com.metaself.app.data.health.SessionsArrived
+import com.metaself.app.data.health.WaitingFileMatcher
+import com.metaself.app.data.health.WaitingFileStore
+import com.metaself.app.data.health.WaitingFiles
 import com.metaself.app.data.health.RecountingWalkSwitch
 import com.metaself.app.data.health.WalkChoices
 import com.metaself.app.data.health.WalkSwitch
@@ -403,6 +408,20 @@ object DataModule {
     /** What importing a workout file reads and writes (D82). */
     @Provides
     fun provideWorkoutFileStore(store: RoomWorkoutFileStore): WorkoutFileStore = store
+
+    /** D138: the workout files waiting for their session — one small file on the phone, never in a backup. */
+    @Provides
+    @Singleton
+    fun provideWaitingFileStore(@ApplicationContext context: Context): WaitingFileStore =
+        FileWaitingFileStore(java.io.File(context.filesDir, "waiting-workout-files.json"))
+
+    /** D138: matching the waiting files after each copy from Health Connect. */
+    @Provides
+    fun provideSessionsArrived(matcher: WaitingFileMatcher): SessionsArrived = matcher
+
+    /** D138: the waiting files as Your movement shows them. */
+    @Provides
+    fun provideWaitingFiles(matcher: WaitingFileMatcher): WaitingFiles = matcher
 
     /** Switching an app's walks on or off, and summarising the days that changes (D81). */
     @Provides

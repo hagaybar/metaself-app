@@ -268,6 +268,31 @@ class HealthRecordSyncTest {
             .isEqualTo("window STEPS ${cursor - 7 * DAY}..$cursor")
     }
 
+    /** D138: the waiting workout files are matched each time a copy has run — in the foreground and the background. */
+    @Test
+    fun `each copy that runs is followed by matching the waiting files`() = runTest {
+        var told = 0
+        val sync = HealthRecordSync(source, store, problems, now = { now }, zone = { ZoneOffset.UTC }, foreground = foreground) { told++ }
+        source.granted = setOf(HealthKind.EXERCISE)
+
+        sync.copyNow()
+        sync.copyInBackground()
+
+        assertThat(told).isEqualTo(2)
+    }
+
+    /** D138: a copy that never ran — the app in the background — tells nobody. */
+    @Test
+    fun `a copy that does not run matches nothing`() = runTest {
+        var told = 0
+        val quiet = FakeAppForeground(initial = false)
+        val sync = HealthRecordSync(source, store, problems, now = { now }, zone = { ZoneOffset.UTC }, foreground = quiet) { told++ }
+
+        sync.copyNow()
+
+        assertThat(told).isEqualTo(0)
+    }
+
     /** Rule 8: a second copy asked for while one is running does nothing. */
     @Test
     fun `a copy asked for while one runs does nothing`() = runTest {

@@ -37,6 +37,11 @@ holding today drawn as far as today.
 - **The headline**: the average with its unit — "148 min a week", "18.2 km a week", "8,900 steps a day".
 - **Tapping a bar opens that week** in the Week span.
 
+Amended 2026-10-11: the week holding today is unfinished, so it is left out of the dashed line and the
+headline average (all three chips), as Year leaves out the current month; its bar is still drawn, as far as
+today. With no complete week recorded, the headline is the current week's figure and "so far" ("85 min so
+far", invented). Browsing back, where no week in view holds today, nothing changes.
+
 **Year** — one bar per calendar month: minutes, split as above; the current month labelled "so far".
 
 - **The headline**: "640 min a month" — the average of the complete months that have a record; with
@@ -57,7 +62,9 @@ One sentence, counted on the phone — never the AI's (as D115), so it is curren
   min" — appended to D131's line. Fewer than two such weeks: nothing appended.
 - **12 weeks** (Minutes): "The last 4 weeks averaged 165, up from 120 the 4 before." — "up from",
   "down from", or "about the same as" (within a tenth). It needs a record in all eight weeks; otherwise
-  "Over the N weeks recorded." Km and Steps say the same in their units.
+  "Over the N weeks recorded." Km and Steps say the same in their units. Amended 2026-10-11: the last 4 are
+  the four complete weeks before the week holding today, when it is in view, and the 4 before are the four
+  before those; "the N weeks recorded" counts complete weeks only.
 - **Year**: "Over the N months recorded."
 
 No praise and no reproach (D14).

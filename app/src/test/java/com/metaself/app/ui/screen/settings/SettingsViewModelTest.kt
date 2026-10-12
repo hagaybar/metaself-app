@@ -19,6 +19,7 @@ import com.metaself.app.data.day.InMemoryMealRepository
 import com.metaself.app.data.day.MealDao
 import com.metaself.app.data.drive.DriveAccess
 import com.metaself.app.data.drive.DriveBackup
+import com.metaself.app.data.drive.DriveCopies
 import com.metaself.app.data.drive.DriveHttp
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
@@ -688,7 +689,7 @@ class SettingsViewModelTest {
             offAccount = account,
             profiles = profiles,
             backupFolder = folder,
-            automaticBackup = AutomaticBackup(profiles, backups, folder, drive),
+            automaticBackup = AutomaticBackup(profiles, backups, folder, DriveCopies(drive, archive, problems)),
             today = Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) },
             now = Now { 0L },
             steps = steps,

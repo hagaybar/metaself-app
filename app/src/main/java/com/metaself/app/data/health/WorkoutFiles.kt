@@ -2,6 +2,7 @@ package com.metaself.app.data.health
 
 import com.metaself.app.data.day.DatabaseTransaction
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.time.Now
 import com.metaself.app.domain.movement.FileWorkout
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.TcxRead
@@ -85,12 +86,16 @@ interface WorkoutFileImporter {
     suspend fun choose(file: FileWorkout, id: Long): ImportOutcome
     suspend fun add(file: FileWorkout): ImportOutcome
 
+    /** D138: "None of these — wait for the band". */
+    suspend fun wait(file: FileWorkout): ImportOutcome
+
     companion object {
         /** For a screen built without one: every file is refused as unreadable. */
         val NONE = object : WorkoutFileImporter {
             override suspend fun import(uri: String) = ImportOutcome.Refused(WorkoutFileRefusal.UNREADABLE)
             override suspend fun choose(file: FileWorkout, id: Long) = ImportOutcome.Failed
             override suspend fun add(file: FileWorkout) = ImportOutcome.Failed
+            override suspend fun wait(file: FileWorkout) = ImportOutcome.Failed
         }
     }
 }
@@ -98,6 +103,11 @@ interface WorkoutFileImporter {
 /**
  * Importing a workout file (D82): read it, find the one stored workout it belongs to, and fill in
  * what that workout lacks — or say why not, offer to add it, or list the ones to choose from.
+ *
+ * D138: the copy from Health Connect runs first ([HealthRecordCopier.copyNow], as far as it is allowed; a failure is
+ * logged and the import goes on), so a session the band's app has just handed over is there to match. A file that
+ * matches nothing, with nothing of its kind on its day, is kept waiting ([WaitingFileStore]) for
+ * [WaitingFileMatcher] to fill after a later copy; any fill or add of a file stops it waiting.
  *
  * **Nothing here throws upwards (D8).** A file that cannot be opened is [WorkoutFileRefusal.UNREADABLE]
  * and a failed read or write of the store is [ImportOutcome.Failed]; both are logged (kind
@@ -107,12 +117,21 @@ class ImportWorkoutFile(
     private val files: WorkoutFileSource,
     private val store: WorkoutFileStore,
     private val problems: ProblemLog,
+    private val copier: HealthRecordCopier,
+    private val waiting: WaitingFileStore,
+    private val now: Now,
     private val zone: () -> ZoneId,
 ) : WorkoutFileImporter {
 
     @Inject
-    constructor(files: WorkoutFileSource, store: WorkoutFileStore, problems: ProblemLog) :
-        this(files, store, problems, { ZoneId.systemDefault() })
+    constructor(
+        files: WorkoutFileSource,
+        store: WorkoutFileStore,
+        problems: ProblemLog,
+        copier: HealthRecordCopier,
+        waiting: WaitingFileStore,
+        now: Now,
+    ) : this(files, store, problems, copier, waiting, now, { ZoneId.systemDefault() })
 
     override suspend fun import(uri: String): ImportOutcome {
         val text = try {
@@ -132,10 +151,41 @@ class ImportWorkoutFile(
                     is TcxRead.Read -> read.workout
                 }
             }
+            fetch()
             // One read of the file's days serves both the match and, failing one, D91's same-kind offer.
             val zone = zone()
             val stored = store.on(WorkoutFileMatch.days(file, zone))
-            matchAndFill(file, stored, zone) ?: ImportOutcome.NoMatch(file, WorkoutFileMatch.sameKind(file, stored, zone))
+            matchAndFill(file, stored, zone) ?: WorkoutFileMatch.sameKind(file, stored, zone).let { sameKind ->
+                if (sameKind.isEmpty()) keepWaiting(file) else ImportOutcome.NoMatch(file, sameKind)
+            }
+        }
+    }
+
+    /** D138: "None of these — wait for the band". */
+    override suspend fun wait(file: FileWorkout): ImportOutcome = guarded {
+        waiting.keep(file, now())
+        ImportOutcome.Waiting(file)
+    }
+
+    /** D138: kept waiting; a store that cannot keep it leaves the old offer to add it, and is logged. */
+    private suspend fun keepWaiting(file: FileWorkout): ImportOutcome = try {
+        waiting.keep(file, now())
+        ImportOutcome.Waiting(file)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (failure: Exception) {
+        note("not kept waiting: ${failure::class.java.simpleName} ${failure.message}")
+        ImportOutcome.NoMatch(file)
+    }
+
+    /** D138: fetch first. The copy logs its own failures; anything else it throws is logged here, and matching goes on. */
+    private suspend fun fetch() {
+        try {
+            copier.copyNow()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            note("copy before matching: ${failure::class.java.simpleName} ${failure.message}")
         }
     }
 
@@ -162,7 +212,7 @@ class ImportWorkoutFile(
         val zone = zone()
         matchAndFill(file, store.on(WorkoutFileMatch.days(file, zone)), zone) ?: run {
             val workout = WorkoutFileMatch.asWorkout(file, zone)
-            ImportOutcome.AddedWorkout(workout.copy(id = store.add(workout)))
+            ImportOutcome.AddedWorkout(workout.copy(id = store.add(workout))).also { stopWaiting(file) }
         }
     }
 
@@ -178,10 +228,22 @@ class ImportWorkoutFile(
 
     private suspend fun fillOne(file: FileWorkout, id: Long): ImportOutcome {
         val filling = store.fill(id, file) ?: return ImportOutcome.NoMatch(file)
+        stopWaiting(file)
         return if (filling.added.any) {
             ImportOutcome.Filled(filling.workout, filling.added, file.metres)
         } else {
             ImportOutcome.Unchanged(filling.workout, file.metres)
+        }
+    }
+
+    /** D138: a file filled or added waits no more. A failure is logged; what was written stands. */
+    private suspend fun stopWaiting(file: FileWorkout) {
+        try {
+            waiting.drop(file)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            note("still waiting: ${failure::class.java.simpleName} ${failure.message}")
         }
     }
 

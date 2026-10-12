@@ -69,13 +69,14 @@ object MovementSpanWording {
 
     /**
      * The headline (D136): the average with its unit — "148 min a week", "18.2 km a week", "8,900 steps a day",
-     * "640 min a month" — or, on Year with no complete month, "85 min so far" (all invented). Null for a span wholly
-     * before the record, which says [NOTHING_THIS_FAR] instead; "No km recorded" when the bars hold no figure.
+     * "640 min a month" — over the complete weeks or months — or, with none complete, the current one's "85 min so
+     * far", "4.2 km so far", "9,000 steps a day so far" (all invented). Null for a span wholly before the record, which
+     * says [NOTHING_THIS_FAR] instead; "No km recorded" when the bars hold no figure.
      */
     fun headline(chart: SpanChart, measure: SpanMeasure): String? {
         if (chart.nothingRecorded) return null
         val shown = if (chart.span == MovementSpan.YEAR) SpanMeasure.MINUTES else measure
-        chart.soFar?.let { return "${number(it)} min so far" }
+        chart.soFar(shown)?.let { return figure(it, shown) + unitAfter(shown).ifEmpty { " min" } + " so far" }
         val average = chart.average(shown) ?: return "No ${unitName(shown)} recorded"
         return when (shown) {
             SpanMeasure.MINUTES -> "${number(average.roundToInt())} min a " + if (chart.span == MovementSpan.YEAR) "month" else "week"
@@ -89,8 +90,8 @@ object MovementSpanWording {
 
     /**
      * The line under the 12-week headline (D137): "The last 4 weeks averaged 165, up from 120 the 4 before." — "up
-     * from", "down from", or "about the same as" within a tenth — needing all eight weeks with a figure; otherwise
-     * "Over the N weeks recorded."; null with none. Km and Steps carry their unit on the first figure.
+     * from", "down from", or "about the same as" within a tenth — over complete weeks, needing all eight with a
+     * figure; otherwise "Over the N weeks recorded." over the complete weeks; null with none. Km and Steps carry their unit on the first figure.
      */
     fun twelveWeeksLine(chart: SpanChart, measure: SpanMeasure): String? {
         val trend = chart.trend(measure)

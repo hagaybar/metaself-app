@@ -7,6 +7,8 @@ import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.health.SessionSplits
+import com.metaself.app.data.health.WaitingFileMatcher
+import com.metaself.app.data.health.WaitingFiles
 import com.metaself.app.data.health.WorkoutFileImporter
 import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.profile.ProfileRepository
@@ -15,7 +17,10 @@ import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.KeptPlans
 import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.domain.day.Meal
+import com.metaself.app.domain.movement.FileWorkout
+import com.metaself.app.domain.movement.FilledLater
 import com.metaself.app.domain.movement.ImportOutcome
+import com.metaself.app.domain.movement.WaitingLine
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.SessionSplit
 import com.metaself.app.domain.movement.Workout
@@ -95,6 +100,8 @@ class MovementViewModel(
     private val savedState: SavedStateHandle = SavedStateHandle(),
     /** The kept weekly plans, which "planned" is counted by (D110, D135, D136). */
     private val plans: KeptPlans = KeptPlans.NONE,
+    /** D138: the workout files waiting for their session. */
+    private val waitingFiles: WaitingFiles = WaitingFiles.NONE,
 ) : ViewModel() {
 
     @Inject
@@ -111,7 +118,8 @@ class MovementViewModel(
         splits: SessionSplits,
         savedState: SavedStateHandle,
         plans: KeptPlans,
-    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer, splits, savedState, plans)
+        waitingFiles: WaitingFiles,
+    ) : this(record, meals, today, problems, typed, profiles, now, files, Dispatchers.IO, trainer, splits, savedState, plans, waitingFiles)
 
     private val calendarToday = MutableStateFlow(today().toEpochDay())
 
@@ -144,6 +152,15 @@ class MovementViewModel(
 
     /** The last workout file's import (D82). */
     private val fileImport = MutableStateFlow<FileImportState?>(null)
+
+    /** D138: the files filled in the background since the page was last open — said for this visit. */
+    private val filledLater = MutableStateFlow<List<FilledLater>>(emptyList())
+
+    /** D138: the waiting files; a read that fails shows none (the matcher logs its own failures). */
+    private val waitingLines: Flow<List<WaitingLine>> = waitingFiles.lines.catch { failure ->
+        problems.record(PROBLEM_KIND, "waiting files not read: " + (failure.message ?: failure::class.java.simpleName))
+        emit(emptyList())
+    }
 
     /** Every sheet this screen has opened gets the next one of these (see [WorkoutSheetState.token]). */
     private var nextSheetToken = 0L
@@ -228,14 +245,22 @@ class MovementViewModel(
         }
     }
 
-    private data class Choices(val file: FileImportState?, val span: MovementSpan, val measure: SpanMeasure)
+    private data class Choices(
+        val file: FileImportState?,
+        val span: MovementSpan,
+        val measure: SpanMeasure,
+        val waiting: List<WaitingLine>,
+        val filled: List<FilledLater>,
+    )
 
     val state: StateFlow<MovementUiState> = combine(
         week,
         openDay,
         sheet,
         undo,
-        combine(fileImport, span, measure) { file, shownSpan, counted -> Choices(file, shownSpan, counted) },
+        combine(fileImport, span, measure, waitingLines, filledLater) { file, shownSpan, counted, waiting, filled ->
+            Choices(file, shownSpan, counted, waiting, filled)
+        },
     ) { read, open, sheetNow, undoNow, choices ->
         val file = choices.file
         val built = read?.week
@@ -273,7 +298,7 @@ class MovementViewModel(
                 strip = read.strip,
                 usualWeek = read.usual,
             )
-        }
+        }.copy(waiting = choices.waiting, filledLater = choices.filled)
     }
         .stateIn(
             scope = viewModelScope,
@@ -284,10 +309,32 @@ class MovementViewModel(
     /** A workout file was picked or shared (D82): read it and fill in, or say why not. */
     fun importFile(uri: String) = fileStep { files.import(uri) }
 
-    /** "Add it as a workout", for the file that matched nothing. */
+    /** "Add it as a workout", for the file that matched nothing — waiting or not (D138). */
     fun addFromFile() {
-        val file = (fileImport.value?.outcome as? ImportOutcome.NoMatch)?.file ?: return
+        val file = when (val outcome = fileImport.value?.outcome) {
+            is ImportOutcome.NoMatch -> outcome.file
+            is ImportOutcome.Waiting -> outcome.file
+            else -> null
+        } ?: return
         fileStep { files.add(file) }
+    }
+
+    /** D138: "None of these — wait for the band", under the sessions of the file's kind (D91). */
+    fun waitForBand() {
+        val outcome = fileImport.value?.outcome as? ImportOutcome.NoMatch ?: return
+        if (outcome.sameKind.isEmpty()) return
+        fileStep { files.wait(outcome.file) }
+    }
+
+    /** D138: "Add it as a workout" on a waiting file's line; said as an import is. */
+    fun addWaiting(file: FileWorkout) = fileStep { files.add(file) }
+
+    /** D138: one of the sessions a waiting file matches, chosen on its line. */
+    fun chooseForWaiting(file: FileWorkout, id: Long) = fileStep { files.choose(file, id) }
+
+    /** D138: "Drop it" on a waiting file's line. */
+    fun dropWaiting(file: FileWorkout) {
+        viewModelScope.launch { waitingFiles.drop(file) }
     }
 
     /** One of several matching workouts, or of the same-kind sessions offered after no match (D91), was chosen. */
@@ -306,18 +353,19 @@ class MovementViewModel(
     }
 
     /**
-     * One step at a time; the importer never throws (D8), so the step always lands. Every outcome is
-     * also written to the problem log as kind [IMPORT_KIND] (D82, amended), so an import can be
-     * confirmed after the line on screen has been dismissed. The write is moved off the caller's own
-     * dispatcher (Main) the same way `HealthRecordSync.note` does, since the log writes a file (D8).
+     * One step at a time; the importer never throws (D8), so the step always lands. An outcome that is a problem — a
+     * refused file, a failed write — is also written to the problem log as kind [IMPORT_KIND]; one that worked or
+     * waits is not (D139). The write is moved off the caller's own dispatcher (Main) the same way
+     * `HealthRecordSync.note` does, since the log writes a file (D8).
      */
     private fun fileStep(step: suspend () -> ImportOutcome) {
         if (fileImport.value?.working == true) return
         fileImport.value = FileImportState(outcome = fileImport.value?.outcome, working = true)
         viewModelScope.launch {
             val outcome = step()
-            val logged = WorkoutFileWording.logLine(outcome, today().toEpochDay())
-            withContext(ioDispatcher) { problems.record(IMPORT_KIND, logged) }
+            WorkoutFileWording.logLine(outcome)?.let { logged ->
+                withContext(ioDispatcher) { problems.record(IMPORT_KIND, logged) }
+            }
             fileImport.value = FileImportState(outcome = outcome)
         }
     }
@@ -641,6 +689,8 @@ class MovementViewModel(
     }
 
     init {
+        // D138: once per visit — a page rebuilt by a turn of the phone keeps this view model, and its notes.
+        viewModelScope.launch { filledLater.value = waitingFiles.opened() }
         // D132: "Log a workout" on the Trainer opens this page with the sheet open for today — once per visit.
         // Marked in the entry's saved state, so the page rebuilt (a turn of the phone) does not open it again.
         if (savedState.get<Boolean>(OPEN_LOG) == true && savedState.get<Boolean>(LOG_OPENED) != true) {
@@ -669,8 +719,8 @@ class MovementViewModel(
         const val STOP_TIMEOUT_MS = 5_000L
         const val PROBLEM_KIND = "movement"
 
-        /** A workout file's outcome, success or not (D82, amended). */
-        const val IMPORT_KIND = "import"
+        /** A workout file's outcome that is a problem (D82, D139). */
+        const val IMPORT_KIND = WaitingFileMatcher.IMPORT_KIND
 
         /** D132: the destination's argument — opened from the Trainer's "Log a workout", the sheet opens at once. */
         const val OPEN_LOG = "openLog"

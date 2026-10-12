@@ -61,11 +61,13 @@ class HealthRecordSync(
     private val now: Now,
     private val zone: () -> ZoneId,
     private val foreground: AppForeground = AppForeground.ALWAYS,
+    /** D138: told after each pass that ran, so the workout files waiting for their sessions are matched. */
+    private val arrivals: SessionsArrived = SessionsArrived.NONE,
 ) : HealthRecordCopier, BackgroundHealthCopy {
 
     @Inject
-    constructor(source: HealthSource, store: HealthStore, problems: ProblemLog, now: Now, foreground: AppForeground) :
-        this(source, store, problems, now, { ZoneId.systemDefault() }, foreground)
+    constructor(source: HealthSource, store: HealthStore, problems: ProblemLog, now: Now, foreground: AppForeground, arrivals: SessionsArrived) :
+        this(source, store, problems, now, { ZoneId.systemDefault() }, foreground, arrivals)
 
     private val running = Mutex()
 
@@ -107,6 +109,7 @@ class HealthRecordSync(
         } finally {
             running.unlock()
         }
+        matchWaiting()
     }
 
     /**
@@ -117,12 +120,29 @@ class HealthRecordSync(
      */
     override suspend fun copyInBackground(): Boolean {
         if (!running.tryLock()) return false
-        return try {
+        val done = try {
             val end = pass()
             if (end == PassEnd.REFUSED) oweRecheck()
             end == PassEnd.DONE
         } finally {
             running.unlock()
+        }
+        matchWaiting()
+        return done
+    }
+
+    /**
+     * D138: after every pass that ran, whatever it brought. A pass that brought no session matches nothing new, so
+     * this is the same as matching after those that did, without having to tell them apart; with nothing waiting it
+     * reads nothing. Outside [running], so a file's import, which asks for a copy first, never waits on it.
+     */
+    private suspend fun matchWaiting() {
+        try {
+            arrivals.afterCopy()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            note("waiting files: ${failure::class.java.simpleName} ${failure.message}")
         }
     }
 

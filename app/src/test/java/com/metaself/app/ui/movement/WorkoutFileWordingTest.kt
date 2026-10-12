@@ -5,6 +5,7 @@ import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.AddedFigures
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.FileWorkout
+import com.metaself.app.domain.movement.FilledLater
 import com.metaself.app.domain.movement.ImportOutcome
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
@@ -112,29 +113,22 @@ class WorkoutFileWordingTest {
         assertThat(WorkoutFileWording.choice(walk, zone)).isEqualTo("Walking · 10:00 · 40 min")
     }
 
-    // --- The problem log's line for each outcome (kind "import"): which figures, never their values
-    // beyond what the screen's own line says; the day, never the time of a stored workout. ---
+    // --- The problem log (D139): only what went wrong — a refused file, a failed write — is written. ---
 
     @Test
-    fun `the log says which figures a fill added, to which workout, on which day`() {
-        val filled = walk.copy(distanceM = 3_250, distanceSource = WorkoutFigureSource.FILE, steps = 4_000)
+    fun `an outcome that worked, or waits, is not written to the problem log`() {
+        val filled = walk.copy(distanceM = 3_250, distanceSource = WorkoutFigureSource.FILE)
 
-        assertThat(logLine(ImportOutcome.Filled(filled, AddedFigures(distanceM = 3_250, steps = 4_000), 3_250)))
-            .isEqualTo("added distance and steps to Walking on Thu 3 Sep")
-        assertThat(logLine(ImportOutcome.Filled(filled, AddedFigures(distanceM = 3_250, steps = 4_000, kcal = 250), 3_250)))
-            .isEqualTo("added distance, steps and calories to Walking on Thu 3 Sep")
+        assertThat(logLine(ImportOutcome.Filled(filled, AddedFigures(distanceM = 3_250), 3_250))).isNull()
+        assertThat(logLine(ImportOutcome.Unchanged(walk, null))).isNull()
+        assertThat(logLine(ImportOutcome.NoMatch(file))).isNull()
+        assertThat(logLine(ImportOutcome.Several(file, listOf(walk, walk.copy(id = 2))))).isNull()
+        assertThat(logLine(ImportOutcome.AddedWorkout(walk))).isNull()
+        assertThat(logLine(ImportOutcome.Waiting(file))).isNull()
     }
 
     @Test
-    fun `the log says every other outcome in one plain line`() {
-        assertThat(logLine(ImportOutcome.Unchanged(walk, null)))
-            .isEqualTo("nothing new for Walking on Thu 3 Sep")
-        assertThat(logLine(ImportOutcome.NoMatch(file)))
-            .isEqualTo("no workout matches a file from Thu 3 Sep 10:00")
-        assertThat(logLine(ImportOutcome.Several(file, listOf(walk, walk.copy(id = 2)))))
-            .isEqualTo("2 workouts match a file from Thu 3 Sep 10:00")
-        assertThat(logLine(ImportOutcome.AddedWorkout(walk)))
-            .isEqualTo("added Walking on Thu 3 Sep from a file")
+    fun `a refused file and a failed write are written in one plain line`() {
         assertThat(logLine(ImportOutcome.Refused(WorkoutFileRefusal.NO_START)))
             .isEqualTo("refused: the file does not say when the workout started")
         assertThat(logLine(ImportOutcome.Failed))
@@ -156,18 +150,41 @@ class WorkoutFileWordingTest {
         }
     }
 
-    /** The log outlives the screen, so a date from a past year says so — MovementWeekWording's rule. */
+    /** The log outlives the screen, so a date from a past year says so — MovementWeekWording's rule (D138). */
     @Test
-    fun `an older file's log line says the year, a recent one does not`() {
+    fun `a file that never found its session says when it was from, with the year when it is not this one`() {
         val oldFile = FileWorkout(writtenAt = LocalDateTime.of(2025, 6, 22, 10, 0), instant = null, seconds = 2_400, distanceM = 3_250.0)
-        val oldWalk = walk.copy(epochDay = LocalDate.of(2025, 6, 22).toEpochDay())
 
-        assertThat(logLine(ImportOutcome.NoMatch(oldFile))).isEqualTo("no workout matches a file from Sun 22 Jun 2025 10:00")
-        assertThat(logLine(ImportOutcome.AddedWorkout(oldWalk))).isEqualTo("added Walking on Sun 22 Jun 2025 from a file")
-        assertThat(logLine(ImportOutcome.NoMatch(file))).isEqualTo("no workout matches a file from Thu 3 Sep 10:00")
+        assertThat(WorkoutFileWording.neverFound(oldFile, TEST_EPOCH_DAY)).isEqualTo("a file from Sun 22 Jun 2025 10:00 never found its session")
+        assertThat(WorkoutFileWording.neverFound(file, TEST_EPOCH_DAY)).isEqualTo("a file from Thu 3 Sep 10:00 never found its session")
     }
 
-    private fun logLine(outcome: ImportOutcome) = WorkoutFileWording.logLine(outcome, TEST_EPOCH_DAY)
+    // --- D138: a file waiting for its session. ---
+
+    @Test
+    fun `a waiting file's outcome says the band's session has not reached the phone`() {
+        assertThat(line(ImportOutcome.Waiting(file)))
+            .isEqualTo("The band's session for this file hasn't reached the phone yet. It will be filled in when it does.")
+    }
+
+    @Test
+    fun `a waiting file's line on Your movement says when the file is from`() {
+        assertThat(WorkoutFileWording.waiting(file, TEST_EPOCH_DAY)).isEqualTo("A file from Thu 3 Sep 10:00 is waiting for the band's session")
+        assertThat(WorkoutFileWording.andMore(2)).isEqualTo("and 2 more")
+    }
+
+    @Test
+    fun `a file filled in the background is said by its session's kind and day`() {
+        assertThat(WorkoutFileWording.filledLater(FilledLater(WorkoutKind.WALK, TEST_EPOCH_DAY), TEST_EPOCH_DAY))
+            .isEqualTo("Filled in your walk of Thu 3 Sep from the file that was waiting.")
+        assertThat(WorkoutFileWording.filledLater(FilledLater(WorkoutKind.CYCLE, LocalDate.of(2025, 12, 30).toEpochDay()), TEST_EPOCH_DAY))
+            .isEqualTo("Filled in your ride of Tue 30 Dec 2025 from the file that was waiting.")
+        WorkoutKind.entries.forEach { kind ->
+            assertThat(WorkoutFileWording.filledLater(FilledLater(kind, TEST_EPOCH_DAY), TEST_EPOCH_DAY)).startsWith("Filled in your ")
+        }
+    }
+
+    private fun logLine(outcome: ImportOutcome) = WorkoutFileWording.logLine(outcome)
 
     private fun line(outcome: ImportOutcome) = WorkoutFileWording.line(outcome, zone)
 }

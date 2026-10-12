@@ -184,6 +184,10 @@
     <string name="movement_file_reading">Reading the file…</string>
     <string name="movement_file_add">Add it as a workout</string>
     <string name="movement_file_done">Done</string>
+    <string name="movement_file_add_now">Add it as a workout now</string>
+    <string name="movement_file_ok">OK</string>
+    <string name="movement_file_wait">None of these — wait for the band</string>
+    <string name="movement_waiting_drop">Drop it</string>
     <string name="movement_workout_change">change this workout</string>
     <!-- D92: parts a session that other workouts also recorded. -->
     <string name="movement_split_session">These are two sessions</string>

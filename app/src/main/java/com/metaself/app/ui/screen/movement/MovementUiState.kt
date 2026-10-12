@@ -1,6 +1,8 @@
 package com.metaself.app.ui.screen.movement
 
+import com.metaself.app.domain.movement.FilledLater
 import com.metaself.app.domain.movement.ImportOutcome
+import com.metaself.app.domain.movement.WaitingLine
 import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutDraft
@@ -38,6 +40,8 @@ import com.metaself.app.domain.trainer.WeekStrip
  * @property measure what the 12-week bars count (D136); Minutes first.
  * @property strip the Week chart: the Trainer's strip for the week shown, without its "To do" (D135).
  * @property usualWeek the mean minutes of the recorded weeks among the four before the week shown; null under two (D137).
+ * @property waiting the workout files waiting for their session (D138), oldest first.
+ * @property filledLater the waiting files filled in the background since the page was last open, said once (D138).
  */
 data class MovementUiState(
     val week: MovementWeek? = null,
@@ -57,6 +61,8 @@ data class MovementUiState(
     val measure: SpanMeasure = SpanMeasure.MINUTES,
     val strip: WeekStrip? = null,
     val usualWeek: Double? = null,
+    val waiting: List<WaitingLine> = emptyList(),
+    val filledLater: List<FilledLater> = emptyList(),
 )
 
 /**
