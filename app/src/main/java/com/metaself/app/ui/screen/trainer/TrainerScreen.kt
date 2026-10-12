@@ -24,6 +24,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.metaself.app.R
@@ -53,14 +55,16 @@ import com.metaself.app.ui.theme.MetaSelfTint
 import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.ProgrammeWording
+import com.metaself.app.ui.trainer.TalkWording
 import com.metaself.app.ui.trainer.TrainerWeekWording
 import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
 /**
  * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
- * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116);
- * one main button with Log a workout beside it (D132); the session waiting for words; and five plain rows —
+ * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116) with
+ * Reply › (D145); Log a workout beside Talk to your trainer (D132, D145), the next thing to do under them; the session
+ * waiting for words; and five plain rows —
  * Your plan, Your movement (D132), Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
  * (InlineComposableReturnGuardTest).
  */
@@ -85,6 +89,8 @@ fun TrainerScreen(
     onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
     /** D132 item 2: Your movement, with the log-a-workout sheet open for today. */
     onLogWorkout: () -> Unit = {},
+    /** D145: Your trainer, the conversation — from Talk to your trainer and the coach's note's Reply ›. */
+    onTalk: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
@@ -99,8 +105,8 @@ fun TrainerScreen(
                     val boxes = TrainerWeekWording.boxes(week.ledger)
                     if (boxes.isNotEmpty()) Boxes(boxes)
                 }
-                state.note?.let { NoteView(it, zone) }
-                MainButton(home, onPlan, onPlanAhead, onSeePlan, onLogWorkout)
+                state.note?.let { NoteView(it, zone, onTalk) }
+                MainButton(home, onPlan, onPlanAhead, onSeePlan, onLogWorkout, onTalk)
                 home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
                 // D122: the kept single session is on the plan page now (Your plan → Session), not here.
                 Rows(
@@ -270,23 +276,26 @@ private fun Boxes(boxes: List<TrainerWeekWording.Box>) {
     }
 }
 
-/** D116: the coach's note, when it was written, and whose it is (D4). */
+/** D116: the coach's note, when it was written, and whose it is (D4); D145: Reply › opens the conversation. */
 @Composable
-private fun NoteView(note: WeekNote, zone: ZoneId) {
+private fun NoteView(note: WeekNote, zone: ZoneId, onTalk: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             Text(note.text, style = MaterialTheme.typography.bodyLarge)
             Text(TrainerWeekWording.noteWhen(note, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(TrainerWording.FROM_TRAINER, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = onTalk, modifier = Modifier.align(Alignment.End)) {
+                Text(TalkWording.REPLY, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
 
 /**
- * D114 item 5, D124: the next thing to do, filled — with Log a workout, outlined, beside it on one row (D132
- * item 2). When it is Plan ahead or a plan-page button, the session action stays under the row, outlined — "Plan
- * the open walk" in a plan's last week, else Plan my next session, the one way to a single session's plan with
- * no weekly plan running.
+ * D145: Log a workout, outlined, and Talk to your trainer, filled, on one row (D132 item 2's row). Under it the next
+ * thing to do (D114 item 5, D124), outlined and full width; when it is Plan ahead or a plan-page button, the session
+ * action stays under it, outlined — "Plan the open walk" in a plan's last week, else Plan my next session, the one
+ * way to a single session's plan with no weekly plan running.
  */
 @Composable
 private fun MainButton(
@@ -295,10 +304,11 @@ private fun MainButton(
     onPlanAhead: () -> Unit,
     onSeePlan: () -> Unit,
     onLogWorkout: () -> Unit,
+    onTalk: () -> Unit,
 ) {
     val main = home.main
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
-        // One height for both, so they read as one row whatever the main button holds.
+        // One height for both, so they read as one row whatever they hold.
         Row(
             modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
             horizontalArrangement = Arrangement.spacedBy(Spacing.Related),
@@ -306,32 +316,35 @@ private fun MainButton(
             OutlinedButton(onClick = onLogWorkout, modifier = Modifier.weight(1f).fillMaxHeight()) {
                 Text(stringResource(R.string.movement_log_workout), textAlign = TextAlign.Center)
             }
-            val filled = Modifier.weight(1f).fillMaxHeight()
-            when (main) {
-                is MainAction.PlanOpen -> Button(onClick = onPlan, modifier = filled) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(TrainerWeekWording.planOpen(main.kind), textAlign = TextAlign.Center)
-                        home.next?.let {
-                            Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-                        }
+            Button(onClick = onTalk, modifier = Modifier.weight(1f).fillMaxHeight()) {
+                Text(TalkWording.TALK, textAlign = TextAlign.Center)
+            }
+        }
+        val outlined = Modifier.fillMaxWidth()
+        when (main) {
+            is MainAction.PlanOpen -> OutlinedButton(onClick = onPlan, modifier = outlined) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(TrainerWeekWording.planOpen(main.kind), textAlign = TextAlign.Center)
+                    home.next?.let {
+                        Text(ProgrammeWording.nextInPlan(it), style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
                     }
                 }
-                MainAction.PlanNext -> Button(onClick = onPlan, modifier = filled) {
-                    Text(stringResource(R.string.trainer_plan_next), textAlign = TextAlign.Center)
-                }
-                MainAction.PlanAhead -> Button(onClick = onPlanAhead, modifier = filled) {
-                    Text(stringResource(R.string.trainer_evaluate), textAlign = TextAlign.Center)
-                }
-                // D121: the ask is on the plan page, beside its privacy line; this button takes him there.
-                MainAction.PlanThisWeek -> Button(onClick = onSeePlan, modifier = filled) {
-                    Text(PlanPageWording.PLAN_THIS_WEEK, textAlign = TextAlign.Center)
-                }
-                MainAction.FillNextWeek -> Button(onClick = onSeePlan, modifier = filled) {
-                    Text(PlanPageWording.FILL_NEXT_WEEK, textAlign = TextAlign.Center)
-                }
-                MainAction.NextBlock -> Button(onClick = onSeePlan, modifier = filled) {
-                    Text(PlanPageWording.NEXT_BLOCK, textAlign = TextAlign.Center)
-                }
+            }
+            MainAction.PlanNext -> OutlinedButton(onClick = onPlan, modifier = outlined) {
+                Text(stringResource(R.string.trainer_plan_next), textAlign = TextAlign.Center)
+            }
+            MainAction.PlanAhead -> OutlinedButton(onClick = onPlanAhead, modifier = outlined) {
+                Text(stringResource(R.string.trainer_evaluate), textAlign = TextAlign.Center)
+            }
+            // D121: the ask is on the plan page, beside its privacy line; this button takes him there.
+            MainAction.PlanThisWeek -> OutlinedButton(onClick = onSeePlan, modifier = outlined) {
+                Text(PlanPageWording.PLAN_THIS_WEEK, textAlign = TextAlign.Center)
+            }
+            MainAction.FillNextWeek -> OutlinedButton(onClick = onSeePlan, modifier = outlined) {
+                Text(PlanPageWording.FILL_NEXT_WEEK, textAlign = TextAlign.Center)
+            }
+            MainAction.NextBlock -> OutlinedButton(onClick = onSeePlan, modifier = outlined) {
+                Text(PlanPageWording.NEXT_BLOCK, textAlign = TextAlign.Center)
             }
         }
         if (main !is MainAction.PlanOpen && main != MainAction.PlanNext) {

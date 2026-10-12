@@ -202,6 +202,17 @@ object TrainerWording {
     /** D121, D125: Fill in next week, Plan this week, Plan the next block. */
     fun privacyFill(ceiling: Int): String = privacy("your plan with its goal and outline, and how it has gone", ceiling)
 
+    /**
+     * D147, D148: a reply in the conversation — the message, the conversation's last 14 days word for word (the
+     * feedback and letters in it included), the running plan and the coach's note, and everything else every request
+     * holds.
+     */
+    fun privacyTalk(ceiling: Int): String = privacy(
+        "your message and the last 14 days of this conversation, word for word, the trainer's feedback and letters in it included",
+        ceiling,
+        extra = "your plan, its week and goal when one runs, and the coach's note on this week",
+    ) + " Never meals."
+
     private fun privacy(first: String, ceiling: Int, extra: String? = null): String =
         "Sends to OpenAI, with your key: $first; your note about yourself; " +
             "your sessions of the last six weeks, with your words on them; weekly totals; " +
