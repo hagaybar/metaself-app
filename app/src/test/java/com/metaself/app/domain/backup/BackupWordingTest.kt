@@ -1,5 +1,6 @@
 package com.metaself.app.domain.backup
 
+import com.metaself.app.domain.backup.BackupTrainerMessage
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.backup.RestoreResult
 import com.metaself.app.ui.settings.BackupWording
@@ -183,6 +184,32 @@ class BackupWordingTest {
         assertThat(onlyLetters).contains("1 weekly letter")
         assertThat(onlyLetters).doesNotContain("nothing here to lose")
         assertThat(none).doesNotContain("letter")
+    }
+
+    /** D148: the conversation is named when either side has some, last; a phone with none never names it. Invented counts. */
+    @Test
+    fun `the confirmation names the conversation when either side has some, and only then`() {
+        val text = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 4, weights = 6, hasProfile = true, weeklyLetters = 2, trainerMessages = 6),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true, trainerMessages = 1),
+        )
+        val onlyTalk = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 0, weights = 0, hasProfile = false, trainerMessages = 2),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true),
+        )
+
+        assertThat(text).contains("6 weights, 2 weekly letters and 6 messages with the trainer already on this phone")
+        assertThat(text).contains("5 weights, 0 weekly letters and 1 message with the trainer from the file")
+        assertThat(onlyTalk).doesNotContain("nothing here to lose")
+        assertThat(BackupWording.restored(RestoreResult(meals = 4, weights = 5, hasProfile = true))).doesNotContain("message")
+    }
+
+    @Test
+    fun `a file's messages are counted once per id`() {
+        val row = BackupTrainerMessage(1, 1_000, true, "Invented.")
+        val file = Backup(trainerMessages = listOf(row, row.copy(text = "Again."), row.copy(id = 2)))
+
+        assertThat(RestoreResult.inFile(file).trainerMessages).isEqualTo(2)
     }
 
     /** D104: a file's letters are counted as the restore writes them, one per week. Invented. */

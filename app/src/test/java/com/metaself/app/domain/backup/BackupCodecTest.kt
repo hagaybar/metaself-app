@@ -1,5 +1,6 @@
 package com.metaself.app.domain.backup
 
+import com.metaself.app.domain.backup.BackupTrainerMessage
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.backup.BackupCodec
 import com.metaself.app.data.backup.BackupFoods
@@ -133,8 +134,25 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 10`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(10)
+    fun `the format is version 11`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(11)
+    }
+
+    /** D148: the conversation rides in the file, each message with its id; a version 1–10 file has none. Invented. */
+    @Test
+    fun `the conversation is written and read back, and an older file has none`() {
+        val asked = BackupTrainerMessage(id = 3, atMillis = 1_000, fromOwner = true, text = "Invented question.", model = null, answered = true)
+        val reply = BackupTrainerMessage(id = 4, atMillis = 2_000, fromOwner = false, text = "Invented reply.", model = "m", replyTo = 3)
+        val withTalk = full.copy(trainerMessages = listOf(asked, reply))
+        val text = BackupCodec.encode(withTalk)
+
+        assertThat(text).contains("\"trainer_messages\"")
+        assertThat(text).contains("\"reply_to\": 3")
+        assertThat(text).contains("\"from_owner\": true")
+        assertThat(BackupCodec.decode(text)).isEqualTo(withTalk)
+        // A version 10 file, written out by hand as the older files are, has no conversation.
+        val version10 = """{"version": 10, "exported_at": 1000, "meals": [], "weights": [], "weekly_letters": []}"""
+        assertThat(BackupCodec.decode(version10)!!.trainerMessages).isEmpty()
     }
 
     /** D104: the weekly letters and the letter's setting ride in the file; a version 1–9 file has neither. Invented. */

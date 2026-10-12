@@ -63,6 +63,8 @@ data class Backup(
     @SerialName("plan_confirmations") val planConfirmations: List<BackupPlanConfirmation> = emptyList(),
     /** D104: the weekly letters, each as stored. Empty in a file from before version 10. */
     @SerialName("weekly_letters") val weeklyLetters: List<BackupWeeklyLetter> = emptyList(),
+    /** D148: the conversation with the trainer, every message with its id. Empty in a file from before version 11. */
+    @SerialName("trainer_messages") val trainerMessages: List<BackupTrainerMessage> = emptyList(),
 ) {
     companion object {
         /**
@@ -108,8 +110,12 @@ data class Backup(
          * Version 10 adds the weekly letters (D104), [weeklyLetters], and on [ai] the weekly letter's
          * setting. A version 1–9 file has neither; restoring one leaves no letters — a restore replaces —
          * and the phone's setting as it is.
+         *
+         * Version 11 adds the conversation with the trainer (D148), [trainerMessages], each message with its id, which a
+         * reply's `reply_to` names. The feedback and letters the conversation shows are not in it again: they are
+         * already in the file (D146). A version 1–10 file has none, and restoring one leaves none — a restore replaces.
          */
-        const val CURRENT_VERSION = 10
+        const val CURRENT_VERSION = 11
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -365,6 +371,21 @@ data class BackupWeeklyLetter(
     val model: String,
     @SerialName("band_data_until") val bandDataUntil: Long? = null,
     @SerialName("read_at") val readAtMillis: Long? = null,
+)
+
+/**
+ * One message of the conversation (D148): the owner's ([fromOwner]) or the trainer's reply, with the model that wrote
+ * it (null on his); [answered] whether his got a reply; [replyTo] a reply's message, by its [id].
+ */
+@Serializable
+data class BackupTrainerMessage(
+    val id: Long,
+    @SerialName("at") val atMillis: Long,
+    @SerialName("from_owner") val fromOwner: Boolean,
+    val text: String,
+    val model: String? = null,
+    val answered: Boolean = false,
+    @SerialName("reply_to") val replyTo: Long? = null,
 )
 
 /**
