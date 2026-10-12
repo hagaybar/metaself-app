@@ -23,7 +23,7 @@ in it.</p>
 <p>Everything you log lives <strong>on your phone</strong>: meals and their nutrition figures,
 weights, your profile, your goal, your settings, the health record described below, workouts you
 type in, what you tell the trainer, the note you write about yourself, the trainer's plans and
-feedback, and its weekly letters. It is held in the application's own private
+feedback, its weekly letters, and your conversation with it. It is held in the application's own private
 storage, which no other app can read.</p>
 
 <p>Your OpenAI API key, and your Open Food Facts password if you choose to save one, are stored
@@ -67,7 +67,12 @@ letter, is sent once a week without a tap for as long as its setting is on.</p>
   plan would start, your last evaluation, the plan that went with it and how many of its sessions you did
   each week; when you adjust a plan, the plan, the date it started and how many of its sessions you have
   done; with either, for each planned session, whether it was done, done shorter with your say-so, or not
-  done, and the minutes of the shorter sessions that did not count; and the trainer's last three feedbacks. <strong>Never sent:</strong> a meal, a food's name, an amount or a time of eating, a single night's
+  done, and the minutes of the shorter sessions that did not count; and the trainer's last three feedbacks. When you
+  write to the trainer on <em>Your trainer</em> and press Send (or <em>Try again</em>), the request also holds
+  your message and <strong>the last 14 days of that conversation, word for word</strong> — your messages, its
+  replies, and its feedback and weekly letters of those days, up to the newest 24,000 characters — with your
+  weekly plan, its week and goal when one is running, and the trainer's note on this week. Each message you send is one
+  request; the conversation itself stays on your phone. <strong>Never sent:</strong> a meal, a food's name, an amount or a time of eating, a single night's
   sleep or a single day's heart rate, sleep stages, oxygen, breathing rate, individual
   readings, a single weigh-in, a target weight, your name, or which app or device recorded a
   session. The same list is shown on screen beside the button. Settings → <em>Test the trainer's
@@ -110,7 +115,7 @@ letter, is sent once a week without a tap for as long as its setting is on.</p>
   requests the <code>drive.file</code> scope, which grants access <strong>only to files the
   application itself creates</strong>. It cannot see, list, open or modify anything else in your
   Drive. The daily file is the same export you can save by hand — which includes your health record,
-  workouts, sleep, the trainer's plans and feedback and your note about yourself — and your API key
+  workouts, sleep, the trainer's plans and feedback, your conversation with it and your note about yourself — and your API key
   is deliberately not in it. The detailed health readings, too many for a daily file, go as one
   compressed file per month.</li>
 </ol>
