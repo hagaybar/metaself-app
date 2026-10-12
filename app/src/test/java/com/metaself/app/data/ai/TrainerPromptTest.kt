@@ -901,9 +901,13 @@ class TrainerPromptTest {
         assertThat(plan.getValue("plan").jsonObject.getValue("title").jsonPrimitive.content).isEqualTo(WEEKS.title)
         assertThat(plan.keys).containsExactly("goal", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "filled_weeks")
 
-        val noPlan = talkRequest(plan = null)
+        assertThat(question.getValue("week_note").jsonPrimitive.content).isEqualTo("Invented week note.")
+        assertThat(question.keys).containsExactly("kind", "conversation", "reply_to", "plan", "week_note")
+
+        val noPlan = talkRequest(plan = null, weekNote = null)
         val sent = Json.parseToJsonElement(TrainerPrompt.userMessage(noPlan)).jsonObject.getValue("question").jsonObject
         assertThat(sent.getValue("plan")).isEqualTo(JsonNull)
+        assertThat(sent.getValue("week_note")).isEqualTo(JsonNull)
     }
 
     /** D147: the coach's rules for a reply, and the phrase the letter bans, banned in the same words. */
@@ -940,7 +944,10 @@ class TrainerPromptTest {
         assertThrows<IllegalArgumentException> { TrainerPrompt.planBody("a-model", talkRequest()) }
     }
 
-    private fun talkRequest(plan: TalkPlan? = TalkPlan(ProgrammeAsk(4, 3), TEST_EPOCH_DAY - 10, WEEKS, weekIndex = 1)): TrainerRequest {
+    private fun talkRequest(
+        plan: TalkPlan? = TalkPlan(ProgrammeAsk(4, 3), TEST_EPOCH_DAY - 10, WEEKS, weekIndex = 1),
+        weekNote: String? = "Invented week note.",
+    ): TrainerRequest {
         val asked = ConversationLine(LocalDateTime.of(2026, 9, 3, 8, 30), true, LineKind.MESSAGE, "Invented question.")
         return request(
             TrainerQuestion.Talk(
@@ -952,6 +959,7 @@ class TrainerPromptTest {
                 ),
                 replyTo = asked,
                 plan = plan,
+                weekNote = weekNote,
             ),
         )
     }

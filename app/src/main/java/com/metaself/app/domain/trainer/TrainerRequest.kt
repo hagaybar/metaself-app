@@ -110,12 +110,14 @@ sealed interface TrainerQuestion {
      * D147: a reply in the conversation. [conversation] is the last 14 days of it, word for word and oldest first, cut
      * to the newest 24,000 characters ([Conversation.window]) — the owner's messages, the trainer's replies, and the
      * feedback and letters in their place; [replyTo] is the owner's message being answered (the newest, unless it is
-     * tried again after a later one); [plan] the running weekly plan, its week and its goal, null when none runs.
+     * tried again after a later one); [plan] the running weekly plan, its week and its goal, null when none runs;
+     * [weekNote] the coach's note on this week as the Trainer page shows it (D116), which Reply › answers, or null.
      */
     data class Talk(
         val conversation: List<ConversationLine>,
         val replyTo: ConversationLine,
         val plan: TalkPlan?,
+        val weekNote: String? = null,
     ) : TrainerQuestion {
         init {
             require(replyTo.fromOwner && replyTo.kind == LineKind.MESSAGE) { "a reply answers one of the owner's messages" }

@@ -326,7 +326,8 @@ object TrainerPrompt {
         session's kind and minutes) and your weekly letters ("kind": "letter", with the Monday of the week). Each has
         the local time it was written ("at"). question.reply_to is the message of theirs to answer now; it is usually
         the last one. question.plan is their running weekly plan, with its goal, when it started and the week they are
-        in (this_week_number, from 1), or null when none runs.
+        in (this_week_number, from 1; 0 before the plan starts), or null when none runs. question.week_note is your
+        note on this week as their Trainer page shows it, which they may be answering, or null when there is none.
 
         You are the same coach who writes their feedback after a session, their plans, the note on their week and the
         weekly letter. Answer as that coach, to them, in the second person, in a few sentences unless they ask for more.
@@ -644,6 +645,7 @@ object TrainerPrompt {
                     }
                 } ?: JsonNull,
             )
+            put("week_note", question.weekNote?.let(::JsonPrimitive) ?: JsonNull)
         }
     }
 
