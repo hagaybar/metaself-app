@@ -161,4 +161,31 @@ interface TrainerDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertLetters(letters: List<WeeklyLetterEntity>)
+
+    // The conversation (D145, D148).
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertMessage(message: TrainerMessageEntity): Long
+
+    @Query("SELECT * FROM trainer_messages ORDER BY atMillis, id")
+    fun observeMessages(): Flow<List<TrainerMessageEntity>>
+
+    @Query("SELECT * FROM trainer_messages WHERE id = :id")
+    suspend fun message(id: Long): TrainerMessageEntity?
+
+    /** The owner's message [id] got its reply; how many rows changed (0 or 1). */
+    @Query("UPDATE trainer_messages SET answered = 1 WHERE id = :id AND fromOwner = 1")
+    suspend fun markAnswered(id: Long): Int
+
+    /** D145: the owner's message [id] and the reply it got, in one statement; a reply's id deletes nothing. */
+    @Query("DELETE FROM trainer_messages WHERE (id = :id AND fromOwner = 1) OR replyTo = :id")
+    suspend fun deleteOwnMessage(id: Long): Int
+
+    @Query("SELECT * FROM trainer_messages ORDER BY id")
+    suspend fun allMessages(): List<TrainerMessageEntity>
+
+    @Query("DELETE FROM trainer_messages")
+    suspend fun deleteMessages()
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertMessages(messages: List<TrainerMessageEntity>)
 }

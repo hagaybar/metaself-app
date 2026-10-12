@@ -90,10 +90,13 @@ import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.day.MIGRATION_9_10
 import com.metaself.app.data.day.MIGRATION_10_11
 import com.metaself.app.data.day.MIGRATION_11_12
+import com.metaself.app.data.day.MIGRATION_12_13
 import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.RoomProgrammeStore
 import com.metaself.app.data.trainer.RoomTrainerStore
 import com.metaself.app.data.trainer.TrainerDao
+import com.metaself.app.data.trainer.ConversationStore
+import com.metaself.app.data.trainer.RoomConversationStore
 import com.metaself.app.data.trainer.KeptPlans
 import com.metaself.app.data.trainer.StoredKeptPlans
 import com.metaself.app.data.trainer.TrainerReviews
@@ -189,6 +192,7 @@ object DataModule {
         MIGRATION_9_10,
         MIGRATION_10_11,
         MIGRATION_11_12,
+        MIGRATION_12_13,
     ).build()
 
     @Provides
@@ -300,6 +304,11 @@ object DataModule {
     @Provides
     @Singleton
     fun provideLetterStore(store: RoomLetterStore): LetterStore = store
+
+    /** D145, D148: the conversation with the trainer. */
+    @Provides
+    @Singleton
+    fun provideConversationStore(store: RoomConversationStore): ConversationStore = store
 
     /** The weekly letter's setting re-queues the Sunday run through this (D99). */
     @Provides
