@@ -53,6 +53,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
+import com.metaself.app.domain.trainer.FactGroup
+import com.metaself.app.domain.trainer.FactSource
+import com.metaself.app.domain.trainer.SheetFact
 import org.junit.jupiter.api.assertThrows
 
 /** What the letter sends (D101, D141), and how it is asked to write (D143). Every figure and word is invented. */
@@ -226,12 +229,25 @@ class LetterPromptTest {
         assertThrows<IllegalArgumentException> { request().copy(sessions = listOf(session.copy(felt = Felt.HARD))) }
     }
 
+    /** D151: the letter carries the sheet's current facts as every trainer request does, and says what it is. */
+    @Test
+    fun `the letter sends the sheet, and null when there is none`() {
+        val fact = SheetFact(1, FactGroup.BODY, "An invented fact.", TEST_EPOCH_DAY - 5, FactSource.NOTICED)
+        val withSheet = user(LetterPrompt.body("a-model", request().copy(sheet = listOf(fact))))
+
+        val sent = withSheet.getValue("sheet").jsonArray.single().jsonObject
+        assertThat(sent.getValue("text").jsonPrimitive.content).isEqualTo("An invented fact.")
+        assertThat(sent.getValue("source").jsonPrimitive.content).isEqualTo("you_noticed")
+        assertThat(user(body()).getValue("sheet")).isEqualTo(JsonNull)
+        assertThat(system(body())).contains("sheet is what you know about them from your conversations")
+    }
+
     /** The request's own types have room for nothing else: a new field fails here. */
     @Test
     fun `the request has room for exactly what D101 and D141 list`() {
         assertThat(fieldsOf(LetterRequest::class.java)).containsExactly(
             "figures", "ledger", "sessions", "aboutMe", "goal", "body", "planTitle", "planWeek", "days", "patterns",
-            "sessionWords", "planWords", "planGoal", "goalView", "lastLetters",
+            "sessionWords", "planWords", "planGoal", "goalView", "lastLetters", "sheet",
         )
         assertThat(fieldsOf(LetterDay::class.java)).containsExactly(
             "epochDay", "plannedMinutes", "ownMinutes", "sessions", "steps", "sleepMinutes", "kcal", "proteinG",
@@ -363,7 +379,7 @@ class LetterPromptTest {
     private companion object {
         val TOP = listOf(
             "week", "ledger", "earlier_weeks", "target_kcal", "sessions", "about_me", "goal", "body", "plan",
-            "days", "patterns", "after_sessions", "plan_requests", "plan_goal", "goal_view", "last_letters",
+            "days", "patterns", "after_sessions", "plan_requests", "plan_goal", "goal_view", "last_letters", "sheet",
         )
     }
 

@@ -72,6 +72,10 @@ import com.metaself.app.domain.trainer.WeekNote
 import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
+import com.metaself.app.domain.trainer.FactGroup
+import com.metaself.app.domain.trainer.FactSource
+import com.metaself.app.domain.trainer.SheetFact
+import com.metaself.app.domain.trainer.SheetMadeBy
 import com.metaself.app.domain.weight.WeightReading
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -92,6 +96,7 @@ class AskTheTrainerTest {
     private val programmes = FakeProgrammeStore()
     private val food = FakeFoodTotals()
     private val weekNotes = InMemoryWeekNoteStore()
+    private val sheets = InMemorySheetStore()
 
     /** Today, as the phone reads it; [TEST_EPOCH_DAY] unless a test moves it. */
     private var day = TEST_EPOCH_DAY
@@ -1153,8 +1158,73 @@ class AskTheTrainerTest {
 
     private fun ask() = AskTheTrainer(
         record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe, programmes,
-        Today { LocalDate.ofEpochDay(day) }, Now { NOW }, CurrentYear { TEST_YEAR }, food, weekNotes,
+        Today { LocalDate.ofEpochDay(day) }, Now { NOW }, CurrentYear { TEST_YEAR }, food, weekNotes, sheets,
     )
+
+    /** D151: the newest sheet's current facts go with every ask — the form's plan, feedback, an evaluation, goals. */
+    @Test
+    fun `every ask carries the newest sheet, its current facts only`() = runTest {
+        keepSheets()
+        trainer.plans += TrainerReply.Failed(EstimateResult.NoKey)
+        trainer.feedback += TrainerReply.Failed(EstimateResult.NoKey)
+        trainer.evaluations += TrainerReply.Failed(EstimateResult.NoKey)
+        trainer.evaluations += TrainerReply.Failed(EstimateResult.NoKey)
+        trainer.suggestions += TrainerReply.Failed(EstimateResult.NoKey)
+
+        ask().suggest(ANSWERS)
+        ask().save(1, Felt.RIGHT, "Invented.", null, withFeedback = true)
+        ask().evaluate(ProgrammeAsk(2, 2))
+        ask().planAhead(PlanAheadAsk(GOAL_15K, 3))
+        ask().suggestGoals(3, "")
+
+        assertThat(trainer.asked).hasSize(5)
+        trainer.asked.forEach { assertThat(it.sheet).containsExactly(SHEET_NOW) }
+    }
+
+    /** D151: and the running plan's asks — filling in a week, adjusting it, and a steady plan's next block. */
+    @Test
+    fun `the plan's asks carry the newest sheet too`() = runTest {
+        keepSheets()
+        keptOutlined(filled = 0)
+        trainer.fills += TrainerReply.Failed(EstimateResult.NoKey)
+        trainer.adjustments += TrainerReply.Failed(EstimateResult.NoKey)
+
+        ask().fillWeek()
+        ask().adjust("Invented words.")
+
+        assertThat(trainer.asked.map { it.question::class }).containsExactly(TrainerQuestion.FillWeek::class, TrainerQuestion.Adjust::class)
+        trainer.asked.forEach { assertThat(it.sheet).containsExactly(SHEET_NOW) }
+    }
+
+    @Test
+    fun `a steady plan's next block carries the newest sheet`() = runTest {
+        keepSheets()
+        val steady = offered().copy(
+            ask = ProgrammeAsk(4, 3, goal = PlanGoal.Steady),
+            plan = WeeksPlan("Invented", List(4) { PlanWeek("w", listOf(WALK_30)) }, "Invented reason.", STEADY_OUTLINE),
+        )
+        programmes.keep(programmes.add(steady), MONDAY - 21, TEST_EPOCH_DAY - 21)
+        trainer.blocks += TrainerReply.Failed(EstimateResult.NoKey)
+
+        ask().nextBlock()
+
+        assertThat(trainer.asked.single().sheet).containsExactly(SHEET_NOW)
+    }
+
+    @Test
+    fun `with no sheet, or none of its facts current, the request's sheet is null`() = runTest {
+        assertThat(ask().request(TrainerQuestion.Plan(ANSWERS)).sheet).isNull()
+
+        sheets.add(NOW, listOf(SHEET_NOW.copy(droppedEpochDay = TEST_EPOCH_DAY)), SheetMadeBy.OWNER, null)
+
+        assertThat(ask().request(TrainerQuestion.Plan(ANSWERS)).sheet).isNull()
+    }
+
+    /** An older version, then the newest: the newest's current fact, and one it dropped. */
+    private suspend fun keepSheets() {
+        sheets.add(NOW - DAY, listOf(SHEET_NOW.copy(text = "An older invented fact.")), SheetMadeBy.REWRITE, "a-model")
+        sheets.add(NOW, listOf(SHEET_NOW, SHEET_NOW.copy(id = 2, text = "Dropped.", droppedEpochDay = TEST_EPOCH_DAY)), SheetMadeBy.REWRITE, "a-model")
+    }
 
     /** A synced forty-minute walk starting at 08:00 on [day]. Invented. */
     private fun walk(id: Long, day: Long) = Workout(
@@ -1179,6 +1249,7 @@ class AskTheTrainerTest {
         /** D108: a new reply is a headline and a note; the four parts are empty. */
         val FEEDBACK = Feedback("Invented headline.", "", "", "", "", PlanFollowed.YES, note = "Invented note.")
         val MONDAY = TEST_EPOCH_DAY - 3
+        val SHEET_NOW = SheetFact(1, FactGroup.BODY, "An invented fact.", TEST_EPOCH_DAY - 5, FactSource.SAID)
         val WALK_30 = PlannedSession(WorkoutKind.WALK, 30, PlannedEffort.EASY, "Easy walk")
         val WALK_20 = PlannedSession(WorkoutKind.WALK, 20, PlannedEffort.EASY, "Short walk")
         val WEEKS = WeeksPlan("Invented", List(2) { PlanWeek("w", listOf(WALK_30, WALK_30)) }, "Invented reason.")

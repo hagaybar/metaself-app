@@ -60,7 +60,7 @@ import javax.inject.Inject
 /**
  * The trainer's uses (D86, D87, D93, D97): every request is built here, fresh, from the stored record (a
  * year of it, for the monthly lines, D89), the owner's note (D90), each day's food totals and the kept
- * weekly plans (D110), and only when a screen asks — never in the background (D84). Writes throw — a weekly plan's store refuses a row in the wrong
+ * weekly plans (D110), the newest sheet of what the trainer knows (D151), and only when a screen asks — never in the background (D84). Writes throw — a weekly plan's store refuses a row in the wrong
  * state by throwing too, and nothing here swallows it; the screens catch them (`guarded`) and say so.
  */
 class AskTheTrainer @Inject constructor(
@@ -78,6 +78,8 @@ class AskTheTrainer @Inject constructor(
     private val food: FoodTotals = FoodTotals { _, _ -> emptyMap() },
     /** Where each answer's week_note is kept (D116). Defaulted for tests that do not look at it. */
     private val weekNotes: WeekNoteStore = WeekNoteStore.NONE,
+    /** D151: the sheet every request carries, its newest version. Defaulted for tests that do not look at it. */
+    private val sheets: SheetStore = SheetStore.NONE,
 ) {
 
     sealed interface Suggested {
@@ -663,6 +665,7 @@ class AskTheTrainer @Inject constructor(
             earlierFeedback = store.latestFeedback(TrainerRequest.FEEDBACK_COUNT, exceptWorkoutId),
             earliestDay = record.observeEarliestDay().first(),
             aboutMe = aboutMe.note.first(),
+            sheet = sheets.newest(),
         )
     }
 

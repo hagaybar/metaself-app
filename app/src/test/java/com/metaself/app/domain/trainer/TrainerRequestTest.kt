@@ -249,13 +249,17 @@ class TrainerRequestTest {
      * night's sleep or a single day's heart rate, a raw reading, a weigh-in, a target weight, a name, a
      * title or an origin; a week's food and recovery go only as averages. D89 adds the monthly lines and D90 the owner's note. D93 and
      * D97 add two questions; D96 a planned session on the other two. A new field fails here before it
-     * can leave the phone.
+     * can leave the phone. D151 adds the sheet.
      */
     @Test
     fun `the request has room for exactly what D84 lists`() {
         assertThat(fieldsOf(TrainerRequest::class.java)).containsExactly(
             "question", "today", "aboutMe", "sessions", "weeks", "months", "weight", "goal", "body", "thisWeek",
-            "earlierFeedback",
+            "earlierFeedback", "sheet",
+        )
+        // D149, D151: the sheet, each fact as the page shows it; the request sends only the current ones.
+        assertThat(fieldsOf(SheetFact::class.java)).containsExactly(
+            "id", "group", "text", "sinceEpochDay", "source", "edited", "droppedEpochDay", "removedByOwner",
         )
         assertThat(fieldsOf(SessionFacts::class.java)).containsExactly(
             "epochDay", "kind", "minutes", "distanceM", "distanceFrom", "energyKcal", "energyFrom",

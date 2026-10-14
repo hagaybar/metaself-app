@@ -169,6 +169,8 @@ data class Rhythm(val sessionsSoFar: Int, val daysLeft: Int)
  * @property weeks six week ledgers (D110), this week first and so far, then the five before it.
  * @property aboutMe the owner's standing note (D90), trimmed, sent unchanged; null when there is none.
  * @property months a line for each of up to twelve months before the 42 days (D89), oldest first.
+ * @property sheet what the trainer knows about the owner (D149, D151): the newest version's current facts, null when
+ *   there is no version or it holds none. Every request carries it.
  */
 data class TrainerRequest(
     val question: TrainerQuestion,
@@ -182,6 +184,7 @@ data class TrainerRequest(
     val body: BodyFacts?,
     val thisWeek: Rhythm,
     val earlierFeedback: List<Feedback>,
+    val sheet: List<SheetFact>? = null,
 ) {
     companion object {
         const val SESSION_DAYS = 42
@@ -214,6 +217,7 @@ data class TrainerRequest(
          * @param earlierFeedback newest first; the first [FEEDBACK_COUNT] are sent.
          * @param earliestDay the first day the record holds anything; months before it have no line (D89).
          * @param aboutMe the owner's note (D90), as stored.
+         * @param sheet the newest version of the sheet (D151), or null; only its current facts are sent.
          */
         fun of(
             question: TrainerQuestion,
@@ -231,6 +235,7 @@ data class TrainerRequest(
             earlierFeedback: List<Feedback>,
             earliestDay: Long? = null,
             aboutMe: String? = null,
+            sheet: SheetVersion? = null,
         ): TrainerRequest {
             val first = firstDay(today)
             // D92: a combined session's review may sit on another of its witnesses.
@@ -264,6 +269,7 @@ data class TrainerRequest(
                     (thisMonday + 6 - today).toInt(),
                 ),
                 earlierFeedback = earlierFeedback.take(FEEDBACK_COUNT),
+                sheet = sheet?.current?.takeIf { it.isNotEmpty() },
             )
         }
 
