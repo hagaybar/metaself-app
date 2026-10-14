@@ -13,6 +13,7 @@ import com.metaself.app.data.day.MIGRATION_9_10
 import com.metaself.app.data.day.MIGRATION_10_11
 import com.metaself.app.data.day.MIGRATION_11_12
 import com.metaself.app.data.day.MIGRATION_12_13
+import com.metaself.app.data.day.MIGRATION_13_14
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -801,6 +802,36 @@ class MigrationTest {
             "INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo) VALUES (2, 2000, 0, 'Invented.', 'm', 0, 1)",
         )
         migrated.query("SELECT COUNT(*) FROM trainer_messages").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(2)
+        }
+        migrated.close()
+    }
+
+    /** D150, D151: one new table, empty; every message kept; a version of the sheet can be stored. Invented. */
+    @Test
+    fun `a version 13 database migrates to version 14 with no sheet`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 13).use { db ->
+            db.execSQL(
+                "INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo) VALUES (1, 1000, 1, 'Invented.', NULL, 0, NULL)",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 14, true, MIGRATION_13_14)
+
+        listOf("trainer_sheets" to 0, "trainer_messages" to 1).forEach { (table, rows) ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(rows)
+            }
+        }
+        migrated.execSQL(
+            "INSERT INTO trainer_sheets (id, atMillis, facts, madeBy, model, restoredFrom) VALUES (1, 1000, '[]', 'REWRITE', 'm', NULL)",
+        )
+        migrated.execSQL("INSERT INTO trainer_sheets (id, atMillis, facts, madeBy, model, restoredFrom) VALUES (2, 2000, '[]', 'OWNER', NULL, 1)")
+        migrated.query("SELECT COUNT(*) FROM trainer_sheets").use { cursor ->
             assertThat(cursor.moveToFirst()).isTrue()
             assertThat(cursor.getInt(0)).isEqualTo(2)
         }

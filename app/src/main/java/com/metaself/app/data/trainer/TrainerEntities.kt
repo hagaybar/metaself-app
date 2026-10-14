@@ -112,3 +112,20 @@ data class TrainerMessageEntity(
     val answered: Boolean,
     val replyTo: Long?,
 )
+
+/**
+ * One version of the sheet of what the trainer knows about the owner (D150, D151): every weekly rewrite and every
+ * change he makes is a row, so a bad rewrite can be undone. [facts] is `SheetResponse.encode`'s JSON — the current
+ * facts and those dropped within 28 days; [madeBy] is a `SheetMadeBy` name; [model] the rewrite's, null on his;
+ * [restoredFrom], on a version made by Go back, the version whose facts it brings back. **No foreign key**: a restore
+ * replaces the table whole.
+ */
+@Entity(tableName = "trainer_sheets")
+data class TrainerSheetEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val atMillis: Long,
+    val facts: String,
+    val madeBy: String,
+    val model: String?,
+    val restoredFrom: Long?,
+)

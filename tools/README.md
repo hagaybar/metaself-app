@@ -26,6 +26,9 @@ Scripts carried in version control so they are not only on one machine.
 - `check-migration-12-13.py` — the same for version 13 (D148): the conversation's table created verbatim
   from `13.json`, every other table declared identically and every row kept, and the DAO's delete taking
   the owner's message and the reply it got, nothing else.
+- `check-migration-13-14.py` — the same for version 14 (D150, D151): the sheet's versions' table created
+  verbatim from `14.json`, every other table declared identically and every row kept, and the DAO's read
+  returning the versions oldest first.
 - `check-impossible-figures.py` — runs the on-open repair of issue #7 (clearing a food's number
   group that holds a figure the food form would refuse) against `sqlite3` from the latest exported
   schema, and reads the result back the way the app reads a food. CI's `RoomFoodRepositoryTest` is
