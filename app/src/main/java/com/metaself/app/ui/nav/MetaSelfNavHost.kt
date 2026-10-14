@@ -86,6 +86,8 @@ import com.metaself.app.ui.screen.trainer.PlanSessionScreen
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.screen.trainer.ReviewSessionScreen
 import com.metaself.app.ui.screen.trainer.ReviewSessionViewModel
+import com.metaself.app.ui.screen.trainer.TalkScreen
+import com.metaself.app.ui.screen.trainer.TalkViewModel
 import com.metaself.app.ui.screen.trainer.TrainerScreen
 import com.metaself.app.ui.screen.trainer.TrainerViewModel
 
@@ -137,6 +139,9 @@ sealed class Destination(val route: String) {
 
     /** D114: the reviewed sessions, a page of their own. */
     data object EarlierSessions : Destination("trainer/earlier")
+
+    /** Your trainer (D145): the conversation. */
+    data object Talk : Destination("trainer/talk")
 
     /** About me (D90): the owner's note for the trainer. */
     data object AboutMe : Destination("trainer/about")
@@ -505,6 +510,25 @@ fun MetaSelfNavHost(
                 // D132: Log a workout opens it with the sheet open for today; saving returns there.
                 onLogWorkout = { navController.navigate(Destination.Movement.toLog()) },
                 onAnswer = trainerViewModel::answer,
+                onTalk = { navController.navigate(Destination.Talk.route) },
+            )
+        }
+
+        composable(Destination.Talk.route) {
+            val talkViewModel: TalkViewModel = hiltViewModel()
+            val talkState by talkViewModel.state.collectAsStateWithLifecycle()
+            TalkScreen(
+                state = talkState,
+                onBack = { navController.popBackStack() },
+                onEdit = talkViewModel::edit,
+                onSend = talkViewModel::send,
+                onTryAgain = talkViewModel::tryAgain,
+                onSelect = talkViewModel::select,
+                onAskDelete = talkViewModel::askDelete,
+                onConfirmDelete = talkViewModel::confirmDelete,
+                onCancelDelete = talkViewModel::cancelDelete,
+                // D146: a letter's card opens its page.
+                onLetter = { navController.navigate(Destination.Letter.of(it)) },
             )
         }
 

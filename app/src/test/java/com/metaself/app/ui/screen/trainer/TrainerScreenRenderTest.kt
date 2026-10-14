@@ -74,7 +74,8 @@ class TrainerScreenRenderTest {
 
         val order = listOf(
             "THIS WEEK · MON 31 AUG – SUN 6 SEP", "60 minutes moving this week.", "Planned, done", "Walking, 20 min — count it for this?",
-            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Log a workout", "Plan the open walk", "WAITING FOR YOUR WORDS",
+            "STEPS", "SLEEP", "FOOD", "Invented week note.", "Reply ›", "Log a workout", "Talk to your trainer", "Plan the open walk",
+            "WAITING FOR YOUR WORDS",
             "Your plan · week 1 of 2", "Your movement", "Weekly letters", "Earlier sessions", "About me",
         )
         order.zipWithNext().forEach { (first, second) ->
@@ -127,25 +128,33 @@ class TrainerScreenRenderTest {
         assertThat(planned).isEqualTo(4)
     }
 
-    /** D132 item 2: Log a workout, outlined, beside the main button — on one row — in each of the main button's cases. */
+    /**
+     * D132 item 2, D145: Log a workout and Talk to your trainer on one row, in each of the main button's cases; the main
+     * button under them.
+     */
     @Test
     // Tall, because a node scrolled out of the window reports no bounds; only relative geometry is asserted.
     @Config(qualifiers = "+h8000dp")
-    fun `Log a workout shares the main button's row, and asks for the sheet`() {
+    fun `Log a workout shares its row with Talk to your trainer, and the main button is under them`() {
         var logged = 0
+        var talked = 0
         listOf(
             page(running = RUNNING) to "Plan the open walk",
             page(workouts = listOf(walk(1, MONDAY), walk(2, MONDAY + 1)), running = RUNNING) to "Plan my next session",
             page() to "Plan ahead",
         ).forEach { (state, main) ->
-            draw(state, onLogWorkout = { logged++ })
+            draw(state, onLogWorkout = { logged++ }, onTalk = { talked++ })
 
             assertThat(render.roleOf("Log a workout")).isEqualTo(Role.Button)
-            assertThat(render.topDp("Log a workout")).isEqualTo(render.topDp(main))
-            assertThat(render.isDrawnBefore("Log a workout", main)).isTrue()
+            assertThat(render.roleOf("Talk to your trainer")).isEqualTo(Role.Button)
+            assertThat(render.topDp("Log a workout")).isEqualTo(render.topDp("Talk to your trainer"))
+            assertThat(render.isDrawnBefore("Log a workout", "Talk to your trainer")).isTrue()
+            assertThat(render.topDp(main)).isGreaterThan(render.topDp("Log a workout"))
             render.click("Log a workout")
+            render.click("Talk to your trainer")
         }
         assertThat(logged).isEqualTo(3)
+        assertThat(talked).isEqualTo(3)
         // With Plan ahead, the session's action stays under the row.
         assertThat(render.topDp("Plan ahead")).isGreaterThan(0)
         assertThat(render.topDp("Plan my next session")).isGreaterThan(render.topDp("Plan ahead"))
@@ -263,6 +272,18 @@ class TrainerScreenRenderTest {
         assertThat(none).doesNotContain(TrainerWording.FROM_TRAINER)
     }
 
+    /** D145: the coach's note's Reply › opens the conversation; with no note there is no Reply. */
+    @Test
+    fun `the coach's note's Reply opens the conversation`() {
+        var talked = 0
+        draw(page(note = NOTE), onTalk = { talked++ })
+
+        assertThat(render.roleOf("Reply ›")).isEqualTo(Role.Button)
+        render.click("Reply ›")
+        assertThat(talked).isEqualTo(1)
+        assertThat(draw(page())).doesNotContain("Reply ›")
+    }
+
     /** D132 item 3: after Your plan, a row with its own line, opening Your movement on this week. */
     @Test
     fun `the Your movement row, with its line, opens Your movement`() {
@@ -328,6 +349,7 @@ class TrainerScreenRenderTest {
         onMovement: () -> Unit = {},
         onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
         onLogWorkout: () -> Unit = {},
+        onTalk: () -> Unit = {},
     ): List<String> = render.texts {
         TrainerScreen(
             state = state,
@@ -342,6 +364,7 @@ class TrainerScreenRenderTest {
             onMovement = onMovement,
             onAnswer = onAnswer,
             onLogWorkout = onLogWorkout,
+            onTalk = onTalk,
         )
     }
 

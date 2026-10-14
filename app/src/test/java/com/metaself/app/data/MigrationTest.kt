@@ -12,6 +12,7 @@ import com.metaself.app.data.day.MIGRATION_8_9
 import com.metaself.app.data.day.MIGRATION_9_10
 import com.metaself.app.data.day.MIGRATION_10_11
 import com.metaself.app.data.day.MIGRATION_11_12
+import com.metaself.app.data.day.MIGRATION_12_13
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -766,6 +767,42 @@ class MigrationTest {
         migrated.query("SELECT COUNT(*) FROM weekly_letters").use { cursor ->
             assertThat(cursor.moveToFirst()).isTrue()
             assertThat(cursor.getInt(0)).isEqualTo(1)
+        }
+        migrated.close()
+    }
+
+    /** D148: one new table, empty; every letter and workout kept; a message and its reply can be stored. Invented. */
+    @Test
+    fun `a version 12 database migrates to version 13 with an empty conversation`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 12).use { db ->
+            db.execSQL(
+                "INSERT INTO workouts (id, epochDay, startedAtMillis, durationMinutes, kind, energySource, source, hidden) " +
+                    "VALUES (1, 20699, 1000, 40, 'WALK', 'NONE', 'SYNCED', 0)",
+            )
+            db.execSQL(
+                "INSERT INTO weekly_letters (weekMonday, createdAtMillis, figures, letter, model) VALUES (20696, 1, '{}', '{}', 'm')",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 13, true, MIGRATION_12_13)
+
+        listOf("trainer_messages" to 0, "workouts" to 1, "weekly_letters" to 1).forEach { (table, rows) ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(rows)
+            }
+        }
+        migrated.execSQL(
+            "INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo) VALUES (1, 1000, 1, 'Invented.', NULL, 1, NULL)",
+        )
+        migrated.execSQL(
+            "INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo) VALUES (2, 2000, 0, 'Invented.', 'm', 0, 1)",
+        )
+        migrated.query("SELECT COUNT(*) FROM trainer_messages").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(2)
         }
         migrated.close()
     }

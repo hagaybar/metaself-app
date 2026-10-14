@@ -72,6 +72,20 @@ class TrainerResponseTest {
         assertUnreadable(TrainerResponse.parsePlan(reply(goodPlan.replace("\"Invented reason.\"", "\"\"")), "a-model"))
     }
 
+    /** D147: a reply in the conversation is its words, trimmed; blank, missing or not a string is unreadable. */
+    @Test
+    fun `a talk reply is its words, and nothing else reads`() {
+        val reply = TrainerResponse.parseTalk(reply("""{"reply":"  Invented reply.  "}"""), "a-model") as TrainerReply.Answered
+
+        assertThat(reply.value).isEqualTo("Invented reply.")
+        assertThat(reply.model).isEqualTo("a-model")
+        assertThat(reply.weekNote).isNull()
+        assertUnreadable(TrainerResponse.parseTalk(reply("""{"reply":"  "}"""), "a-model"))
+        assertUnreadable(TrainerResponse.parseTalk(reply("""{"answer":"Invented."}"""), "a-model"))
+        assertUnreadable(TrainerResponse.parseTalk(reply("""{"reply":3}"""), "a-model"))
+        assertUnreadable(TrainerResponse.parseTalk("not json", "a-model"))
+    }
+
     @Test
     fun `a feedback reply becomes a headline and a note`() {
         val reply = TrainerResponse.parseFeedback(reply(goodFeedback), "a-model") as TrainerReply.Answered

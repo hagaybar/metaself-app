@@ -28,6 +28,7 @@ import com.metaself.app.data.trainer.TrainerDao
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.trainer.WeeklyLetterEntity
+import com.metaself.app.data.trainer.TrainerMessageEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
 import com.metaself.app.data.weight.WeightDao
 import com.metaself.app.data.weight.WeightEntity
@@ -47,6 +48,7 @@ import com.metaself.app.domain.backup.BackupSleepStage
 import com.metaself.app.domain.backup.BackupTrainerPlan
 import com.metaself.app.domain.backup.BackupTrainerProgramme
 import com.metaself.app.domain.backup.BackupWeeklyLetter
+import com.metaself.app.domain.backup.BackupTrainerMessage
 import com.metaself.app.domain.backup.BackupWeight
 import com.metaself.app.domain.backup.BackupWorkout
 import com.metaself.app.domain.day.Confidence
@@ -101,6 +103,8 @@ data class RestoreResult(
     val trainerProgrammes: Int = 0,
     /** D104. */
     val weeklyLetters: Int = 0,
+    /** D148: the conversation's messages, his and the trainer's. */
+    val trainerMessages: Int = 0,
 ) {
     companion object {
         /** What [backup] holds, counted as a restore would report it: the file saved, or the file offered. */
@@ -120,6 +124,8 @@ data class RestoreResult(
             trainerProgrammes = backup.trainerProgrammes.distinctBy { it.id }.size,
             // One per week, as the restore writes them.
             weeklyLetters = backup.weeklyLetters.distinctBy { it.weekMonday }.size,
+            // One per id, as the restore writes them.
+            trainerMessages = backup.trainerMessages.distinctBy { it.id }.size,
         )
     }
 }
@@ -231,6 +237,7 @@ class BackupRepository @Inject constructor(
             trainerProgrammes = trainer.allProgrammes().map { it.toBackup() },
             planConfirmations = BackupConfirmations.toFile(everyWorkout.map { it.id }, trainer.allConfirmations()),
             weeklyLetters = trainer.allLetters().map { it.toBackup() },
+            trainerMessages = trainer.allMessages().map { it.toBackup() },
         )
     }
 
@@ -296,6 +303,7 @@ class BackupRepository @Inject constructor(
                 trainer.deleteProgrammes()
                 trainer.deleteConfirmations()
                 trainer.deleteLetters()
+                trainer.deleteMessages()
                 splits.deleteAll()
                 // The copying starts again from scratch: a record read again replaces its rows, so
                 // nothing is doubled, and nothing recorded after this file was made is missed.
@@ -321,6 +329,7 @@ class BackupRepository @Inject constructor(
                 trainer.insertProgrammes(prepared.programmes)
                 trainer.insertConfirmations(prepared.confirmations)
                 trainer.insertLetters(prepared.letters)
+                trainer.insertMessages(prepared.messages)
                 // Last, and inside: a throw here is still a throw out of the transaction.
                 restoreSettings(prepared)
             }
@@ -358,6 +367,7 @@ class BackupRepository @Inject constructor(
             trainerReviews = prepared.reviews.size,
             trainerProgrammes = prepared.programmes.size,
             weeklyLetters = prepared.letters.size,
+            trainerMessages = prepared.messages.size,
         )
     }
 
@@ -491,6 +501,8 @@ class BackupRepository @Inject constructor(
             confirmations = BackupConfirmations.rows(backup.planConfirmations, keptAt.map { it + 1 }),
             // D104: one per week (the table's unique index), numbered afresh.
             letters = backup.weeklyLetters.distinctBy { it.weekMonday }.map { it.toEntity() },
+            // D148: with their ids, which a reply's replyTo names; one per id.
+            messages = backup.trainerMessages.distinctBy { it.id }.map { it.toEntity() },
         )
     }
 
@@ -658,6 +670,7 @@ class BackupRepository @Inject constructor(
         val confirmations: List<PlanConfirmationEntity>,
         /** D104: one per week, id 0. */
         val letters: List<WeeklyLetterEntity>,
+        val messages: List<TrainerMessageEntity>,
     )
 
     /** How much a restore would destroy, so the question asked is a real one. */
@@ -679,6 +692,7 @@ class BackupRepository @Inject constructor(
             trainerReviews = trainer.allReviews().size,
             trainerProgrammes = trainer.allProgrammes().size,
             weeklyLetters = trainer.allLetters().size,
+            trainerMessages = trainer.allMessages().size,
         )
     }
 
@@ -828,6 +842,10 @@ private fun BackupTrainerProgramme.toEntity() = TrainerProgrammeEntity(
 private fun WeeklyLetterEntity.toBackup() = BackupWeeklyLetter(
     weekMonday, createdAtMillis, figures, letter, model, bandDataUntil, readAtMillis,
 )
+
+private fun TrainerMessageEntity.toBackup() = BackupTrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo)
+
+private fun BackupTrainerMessage.toEntity() = TrainerMessageEntity(id, atMillis, fromOwner, text, model, answered, replyTo)
 
 /** Id 0: the table numbers the letters afresh. */
 private fun BackupWeeklyLetter.toEntity() = WeeklyLetterEntity(

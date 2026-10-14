@@ -30,6 +30,7 @@ import com.metaself.app.data.product.ProductDao
 import com.metaself.app.data.product.ProductEntity
 import com.metaself.app.data.trainer.PlanConfirmationEntity
 import com.metaself.app.data.trainer.TrainerDao
+import com.metaself.app.data.trainer.TrainerMessageEntity
 import com.metaself.app.data.trainer.TrainerPlanEntity
 import com.metaself.app.data.trainer.TrainerProgrammeEntity
 import com.metaself.app.data.trainer.TrainerReviewEntity
@@ -72,8 +73,9 @@ import com.metaself.app.domain.portion.Portions
         TrainerProgrammeEntity::class,
         PlanConfirmationEntity::class,
         WeeklyLetterEntity::class,
+        TrainerMessageEntity::class,
     ],
-    version = 12,
+    version = 13,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {

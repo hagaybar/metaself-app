@@ -41,6 +41,9 @@ import okhttp3.mockwebserver.SocketPolicy
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import com.metaself.app.domain.trainer.ConversationLine
+import com.metaself.app.domain.trainer.LineKind
+import java.time.LocalDateTime
 
 /**
  * The trainer, against a server running in this process (D84).
@@ -74,6 +77,27 @@ class OpenAiTrainerTest {
         assertThat(reply.model).isEqualTo(AiSettings().model)
         assertThat(server.requestCount).isEqualTo(1)
         assertThat(settings.calls).isEqualTo(1)
+    }
+
+    /** D147: a reply in the conversation is one call, read as its words, with the model's name. */
+    @Test
+    fun `a reply in the conversation is one call, its words and the model`() = runTest {
+        val settings = FakeSettings()
+        server.enqueue(MockResponse().setBody(reply("{\"reply\": \" Invented reply. \"}")))
+
+        val reply = trainer(settings = settings).talk(TALK_REQUEST) as TrainerReply.Answered
+
+        assertThat(reply.value).isEqualTo("Invented reply.")
+        assertThat(reply.model).isEqualTo(AiSettings().model)
+        assertThat(server.requestCount).isEqualTo(1)
+        assertThat(settings.calls).isEqualTo(1)
+        assertThat(server.takeRequest().body.readUtf8()).contains("conversation_reply")
+    }
+
+    @Test
+    fun `a reply asked with another question is refused before anything is sent`() = runTest {
+        assertThat(runCatching { trainer().talk(PLAN_REQUEST) }.exceptionOrNull()).isInstanceOf(IllegalArgumentException::class.java)
+        assertThat(server.requestCount).isEqualTo(0)
     }
 
     @Test
@@ -285,6 +309,10 @@ class OpenAiTrainerTest {
         val PLAN_REQUEST = request(
             TrainerQuestion.Plan(PlanAnswers(PlanActivity.OUTDOOR_WALK, TimeAvailable.MIN_45, Feeling.NORMAL, Wish.NOT_SURE)),
         )
+
+        val TALK_REQUEST = ConversationLine(LocalDateTime.of(2026, 9, 3, 8, 30), true, LineKind.MESSAGE, WORDS).let { asked ->
+            request(TrainerQuestion.Talk(listOf(asked), asked, null))
+        }
 
         val REVIEW_REQUEST = request(
             TrainerQuestion.Review(

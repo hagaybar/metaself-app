@@ -36,14 +36,19 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
+import com.metaself.app.domain.trainer.ConversationLine
+import com.metaself.app.domain.trainer.LineKind
 import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 
 /**
  * What leaves the phone when the owner asks the trainer (D84) — the third thing this app sends, and
  * like [EstimatePrompt] and [ReviewPrompt] a pure function with its own "nothing else is sent" test.
  *
- * Everything comes from one [TrainerRequest], built fresh from the stored record; no earlier
- * conversation is replayed. The replies are pinned by strict schemas and checked again on the phone
+ * Everything comes from one [TrainerRequest], built fresh from the stored record. The only conversation sent is
+ * a reply's (D147): the last 14 days of it, word for word, in its question — never on another path. The replies are pinned by strict schemas and checked again on the phone
  * ([TrainerResponse]).
  */
 object TrainerPrompt {
@@ -305,6 +310,39 @@ object TrainerPrompt {
         why, one paragraph. Its weeks are filled in with sessions later, as they come.
     """.trimIndent() + "\n\n" + HOW_IT_WENT
 
+    /**
+     * The words on sessions beyond the plan, and the phrase never used for them. Shared, word for word, by the letter
+     * (D140) and a reply in the conversation (D147).
+     */
+    internal const val OWN_CHOICE =
+        "Sessions beyond the plan are their own choice, and are described so: \"of your own\", \"your own choice\". " +
+            "Never \"nobody asked for\", \"unasked\", \"extra\" or anything that makes them sound unwanted."
+
+    /** D147: a reply in the conversation — the same coach, a few sentences, the record's numbers, no change made. */
+    internal val TALK = """
+        They are talking with you in a conversation on their phone. question.conversation is the last 14 days of it,
+        word for word, oldest first, cut to its newest part when it is long: their messages ("from": "them"), your
+        replies ("from": "you"), and, in their place, your feedback after a session ("kind": "session_feedback", with the
+        session's kind and minutes) and your weekly letters ("kind": "letter", with the Monday of the week). Each has
+        the local time it was written ("at"). question.reply_to is the message of theirs to answer now; it is usually
+        the last one. question.plan is their running weekly plan, with its goal, when it started and the week they are
+        in (this_week_number, from 1; 0 before the plan starts), or null when none runs. question.week_note is your
+        note on this week as their Trainer page shows it, which they may be answering, or null when there is none.
+
+        You are the same coach who writes their feedback after a session, their plans, the note on their week and the
+        weekly letter. Answer as that coach, to them, in the second person, in a few sentences unless they ask for more.
+        Use the record's numbers and never invent one: every figure you state comes from what you are given; you may
+        compare two of them, but never estimate one.
+        You may disagree with them. When you do, say so plainly and say why, from the record.
+        You cannot change their plan, their goal or anything else stored on their phone from this conversation. When
+        something should change, tell them what to change and where (for example, Change the rest of my plan on the
+        plan page), and never say or imply that you have changed it.
+        If reply_to mentions pain, dizziness or chest discomfort, tell them to stop and see a doctor before saying
+        anything else.
+    """.trimIndent() + "\n" + OWN_CHOICE + "\n" + """
+        Plain text only: no headings, no emoji, and no list unless they ask for one. Reply with reply: your answer.
+    """.trimIndent()
+
     /** D129: the stand on the goal, on the evaluate path (Plan ahead) only. */
     internal val GOAL_VIEW = """
         Take a stand on the goal before you plan for it. Judge question.goal against what the record shows — the
@@ -411,8 +449,11 @@ object TrainerPrompt {
      * strict format is also sent the schema paragraph after it; that is reply shape, which the workbench
      * never sends.
      */
-    fun instructions(path: TrainerPath): String =
-        COMMON + "\n\n" + SIX_WEEKS + "\n\n" + LEDGER + "\n\n" + WEEK_RULES + "\n\n" + when (path) {
+    fun instructions(path: TrainerPath): String {
+        val shared = COMMON + "\n\n" + SIX_WEEKS + "\n\n" + LEDGER + "\n\n" + WEEK_RULES + "\n\n"
+        // D147: a reply sets its own voice and asks for no week_note — a reply does not replace the coach's note.
+        if (path == TrainerPath.TALK) return shared + VOICE_NOTE + "\n\n" + TALK
+        return shared + when (path) {
             TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
             TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
             TrainerPath.EVALUATE -> VOICE + "\n\n" + EVALUATE + "\n\n" + GOAL_VIEW + PLANNING
@@ -420,7 +461,15 @@ object TrainerPrompt {
             TrainerPath.FILL_WEEK -> VOICE + "\n\n" + FILL_WEEK + PLANNING
             TrainerPath.NEXT_BLOCK -> VOICE + "\n\n" + NEXT_BLOCK + PLANNING
             TrainerPath.SUGGEST_GOALS -> VOICE + "\n\n" + SUGGEST_GOALS + PLANNING
+            TrainerPath.TALK -> error("answered above")
         } + "\n\n" + WEEK_NOTE
+    }
+
+    /** D147: a reply in the conversation — the shared part, the reply's task, and a reply of words only. */
+    fun talkBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
+        require(request.question is TrainerQuestion.Talk) { "a reply is asked with a talk question" }
+        return ChatRequest.body(model, profile, messages(request), "conversation_reply", TALK_SCHEMA)
+    }
 
     /** D125, D126: what the plan paths and suggesting goals add after their own task — the goal and outline, then the conventions. */
     private val PLANNING: String get() = "\n\n" + GOALS + "\n\n" + CONVENTIONS
@@ -575,7 +624,60 @@ object TrainerPrompt {
             )
             put("last_evaluation", lastEvaluationJson(question.last))
         }
+        is TrainerQuestion.Talk -> buildJsonObject {
+            put("kind", "talk")
+            putJsonArray("conversation") { question.conversation.forEach { add(lineJson(it)) } }
+            putJsonObject("reply_to") {
+                put("at", at(question.replyTo.at))
+                put("text", question.replyTo.text)
+            }
+            put(
+                "plan",
+                question.plan?.let { plan ->
+                    buildJsonObject {
+                        put("goal", sentGoal(plan.ask.goal, today))
+                        put("weeks", plan.ask.weeks)
+                        put("sessions_a_week", plan.ask.perWeek)
+                        put("starts", date(plan.startEpochDay))
+                        put("plan", weeksPlanJson(plan.plan))
+                        put("this_week_number", plan.weekIndex + 1)
+                        putJsonArray("filled_weeks") { plan.plan.filledWeeks.forEach { add(it) } }
+                    }
+                } ?: JsonNull,
+            )
+            put("week_note", question.weekNote?.let(::JsonPrimitive) ?: JsonNull)
+        }
     }
+
+    /** D147: one item of the conversation, as sent — its local time, who wrote it, what it is, and its words. */
+    private fun lineJson(line: ConversationLine): JsonObject = buildJsonObject {
+        put("at", at(line.at))
+        put("from", if (line.fromOwner) "them" else "you")
+        put(
+            "kind",
+            when (line.kind) {
+                LineKind.MESSAGE -> "message"
+                LineKind.SESSION_FEEDBACK -> "session_feedback"
+                LineKind.LETTER -> "letter"
+            },
+        )
+        put(
+            "session",
+            if (line.kind != LineKind.SESSION_FEEDBACK || line.sessionKind == null) {
+                JsonNull
+            } else {
+                buildJsonObject {
+                    put("kind", kind(line.sessionKind))
+                    put("minutes", line.sessionMinutes?.let(::JsonPrimitive) ?: JsonNull)
+                }
+            },
+        )
+        put("week", line.letterWeek?.let { JsonPrimitive(date(it)) } ?: JsonNull)
+        put("text", line.text)
+    }
+
+    /** A local time to the minute, as "2026-10-12T08:30". */
+    private fun at(time: LocalDateTime): String = time.truncatedTo(ChronoUnit.MINUTES).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME).take(16)
 
     /** D93, D98: the last kept evaluation with its plan and how it went — on the evaluate and suggest-goals paths. */
     private fun lastEvaluationJson(last: LastEvaluation?): JsonElement = last?.let {
@@ -1026,6 +1128,9 @@ object TrainerPrompt {
 
     /** D121: a steady plan's next block. */
     private val NEXT_BLOCK_SCHEMA: JsonObject = strictObject("block" to BLOCK_SCHEMA, "why" to string(), "week_note" to string())
+
+    /** D147: a reply in the conversation — its words, and nothing else. */
+    private val TALK_SCHEMA: JsonObject = strictObject("reply" to string())
 
     /** D97's reply: the plan of weeks, and the week's note (D116). The plan inside an evaluation keeps [WEEKS_PLAN_SCHEMA]. */
     private val ADJUST_SCHEMA: JsonObject = strictObject(

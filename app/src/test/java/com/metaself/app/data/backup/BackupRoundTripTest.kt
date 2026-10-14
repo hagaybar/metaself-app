@@ -1,5 +1,6 @@
 package com.metaself.app.data.backup
 
+import com.metaself.app.data.trainer.TrainerMessageEntity
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -853,6 +854,23 @@ class BackupRoundTripTest {
         repository().restore(BackupCodec.decode("""{"version": 9, "exported_at": 1000}""")!!)
         assertThat(db.trainerDao().allLetters()).isEmpty()
         assertThat(letterSettings.settings.value.hour).isEqualTo(21)
+    }
+
+    /** D148: the conversation goes out with the file and comes back as it was, ids and all; a version 10 file leaves none. */
+    @Test
+    fun `the conversation comes back as it was, and an older file leaves none`() = runTest {
+        val asked = TrainerMessageEntity(5, 1_000, true, "Invented question.", null, true, null)
+        val reply = TrainerMessageEntity(6, 2_000, false, "Invented reply.", "m", false, 5)
+        db.trainerDao().insertMessages(listOf(asked, reply))
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        db.trainerDao().deleteMessages()
+        repository().restore(file)
+
+        assertThat(db.trainerDao().allMessages()).containsExactly(asked, reply).inOrder()
+
+        repository().restore(BackupCodec.decode("""{"version": 10, "exported_at": 1000}""")!!)
+        assertThat(db.trainerDao().allMessages()).isEmpty()
     }
 
     /** D90: the note goes out with the file and comes back with it. Invented words. */

@@ -95,3 +95,20 @@ data class WeeklyLetterEntity(
     val bandDataUntil: Long?,
     val readAtMillis: Long?,
 )
+
+/**
+ * One message of the conversation (D145, D148): the owner's ([fromOwner]) or the trainer's reply, with the model
+ * that wrote it ([model], null on his). [answered] says whether his got a reply; a reply's [replyTo] names the message
+ * it answers, so deleting his message removes exactly the reply it got. The feedback and the letters shown in the
+ * thread are not copied here (D146). **No foreign key**: a restore replaces the table whole.
+ */
+@Entity(tableName = "trainer_messages")
+data class TrainerMessageEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val atMillis: Long,
+    val fromOwner: Boolean,
+    val text: String,
+    val model: String?,
+    val answered: Boolean,
+    val replyTo: Long?,
+)

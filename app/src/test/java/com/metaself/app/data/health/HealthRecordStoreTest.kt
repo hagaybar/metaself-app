@@ -7,6 +7,8 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.assumeSqliteRuntime
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomDatabaseTransaction
+import com.metaself.app.data.trainer.RoomConversationStore
+import com.metaself.app.domain.trainer.TrainerMessage
 import com.metaself.app.data.letter.LETTER_MONDAY
 import com.metaself.app.data.letter.RoomLetterStore
 import com.metaself.app.data.letter.aWeeklyLetter
@@ -965,6 +967,29 @@ class HealthRecordStoreTest {
 
         assertThat(letters.of(LETTER_MONDAY)).isEqualTo(again.copy(id = id))
         assertThat(letters.observeAll().first().map { it.weekMonday }).containsExactly(LETTER_MONDAY, LETTER_MONDAY - 7).inOrder()
+    }
+
+    /** D145, D148 over a real table: a reply marks its message answered; deleting his message takes its reply only. Invented words. */
+    @Test
+    fun `the conversation stores replies against their message, and deletes a message with its reply`() = runTest {
+        val messages = RoomConversationStore(db.trainerDao(), RoomDatabaseTransaction(db))
+        val first = messages.addOwn("Invented question.", atMillis = 1_000)
+        val second = messages.addOwn("Invented second question.", atMillis = 3_000)
+        val reply = messages.addReply(first, "Invented answer.", "a-model", atMillis = 2_000)
+        val secondReply = messages.addReply(second, "Invented second answer.", "a-model", atMillis = 4_000)
+
+        assertThat(messages.message(first)!!.answered).isTrue()
+        assertThat(messages.message(reply)).isEqualTo(TrainerMessage(reply, 2_000, false, "Invented answer.", "a-model", false, first))
+        assertThat(messages.observe().first().map { it.id }).containsExactly(first, reply, second, secondReply).inOrder()
+        // A reply's own id deletes nothing; a reply to a reply is refused.
+        messages.deleteOwn(reply)
+        assertThat(messages.observe().first()).hasSize(4)
+        assertThat(runCatching { messages.addReply(reply, "Invented.", "a-model", 5_000) }.isFailure).isTrue()
+        assertThat(messages.observe().first()).hasSize(4)
+
+        messages.deleteOwn(first)
+
+        assertThat(messages.observe().first().map { it.id }).containsExactly(second, secondReply).inOrder()
     }
 
     private fun aFeedback(headline: String) =

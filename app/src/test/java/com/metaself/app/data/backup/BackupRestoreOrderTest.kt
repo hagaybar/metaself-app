@@ -1,5 +1,7 @@
 package com.metaself.app.data.backup
 
+import com.metaself.app.data.trainer.TrainerMessageEntity
+import com.metaself.app.domain.backup.BackupTrainerMessage
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
@@ -98,6 +100,7 @@ class BackupRestoreOrderTest {
                 "trainer.deleteProgrammes",
                 "trainer.deleteConfirmations",
                 "trainer.deleteLetters",
+                "trainer.deleteMessages",
                 "splits.deleteAll",
                 "bookkeeping.clearSync",
                 "findOrCreate Yoghurt",
@@ -117,6 +120,7 @@ class BackupRestoreOrderTest {
                 "trainer.insertProgrammes",
                 "trainer.insertConfirmations",
                 "trainer.insertLetters",
+                "trainer.insertMessages",
                 "profile.save",
                 "saveRevision",
                 "saveArrival",
@@ -398,6 +402,33 @@ class BackupRestoreOrderTest {
             WeeklyLetterEntity(0, 20_689, 1_000, "{}", "{}", "m", 2_000, 3_000),
         ).inOrder()
         assertThat(result.weeklyLetters).isEqualTo(2)
+    }
+
+    /** D148: the conversation is replaced inside the transaction, each message with its id, one per id. Invented. */
+    @Test
+    fun `the conversation is emptied and restored with its ids, and counted`() = runTest {
+        val asked = BackupTrainerMessage(3, 1_000, true, "Invented question.", answered = true)
+        val reply = BackupTrainerMessage(4, 2_000, false, "Invented reply.", model = "m", replyTo = 3)
+        val file = aFile().copy(trainerMessages = listOf(asked, reply, asked.copy(text = "Invented duplicate.")))
+
+        val result = restorer().restore(file)
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = written.getValue("trainer.insertMessages").first() as List<TrainerMessageEntity>
+        assertThat(rows).containsExactly(
+            TrainerMessageEntity(3, 1_000, true, "Invented question.", null, true, null),
+            TrainerMessageEntity(4, 2_000, false, "Invented reply.", "m", false, 3),
+        ).inOrder()
+        assertThat(result.trainerMessages).isEqualTo(2)
+        assertThat(log).containsAtLeast("trainer.deleteMessages", "trainer.insertMessages").inOrder()
+    }
+
+    @Test
+    fun `an older file leaves no conversation`() = runTest {
+        val result = restorer().restore(aFile().copy(version = 10))
+
+        assertThat(written.getValue("trainer.insertMessages").first() as List<*>).isEmpty()
+        assertThat(result.trainerMessages).isEqualTo(0)
     }
 
     /** D104: a file from before the letter's setting leaves the phone's switch and hour alone. */
