@@ -29,6 +29,10 @@ Scripts carried in version control so they are not only on one machine.
 - `check-migration-13-14.py` — the same for version 14 (D150, D151): the sheet's versions' table created
   verbatim from `14.json`, every other table declared identically and every row kept, and the DAO's read
   returning the versions oldest first.
+- `check-migration-14-15.py` — the same for version 15 (0.86.1): the two `health_readings` indexes created
+  verbatim from `15.json`, every table otherwise declared identically and every row kept, and the query
+  plans of `HealthReadingDao.daysOf(recordId)`, `deleteByRecordId` and `onDay` going from a scan of the
+  whole table to a search of the new index.
 - `check-impossible-figures.py` — runs the on-open repair of issue #7 (clearing a food's number
   group that holds a figure the food form would refuse) against `sqlite3` from the latest exported
   schema, and reads the result back the way the app reads a food. CI's `RoomFoodRepositoryTest` is

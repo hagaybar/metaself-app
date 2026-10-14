@@ -953,6 +953,51 @@ class HealthRecordSyncTest {
         kinds.forEach { store.bookmarks[it] = done("t-$it", it) }
     }
 
+    /**
+     * 0.86.1: a pass slower than [HealthRecordSync.SLOW_PASS_MILLIS] says how long it took, once. The clock moves
+     * an invented 6 s per catch-up week read; eight empty weeks make 48 s.
+     */
+    @Test
+    fun `a slow copy says how long it took, once`() = runTest {
+        var clock = now
+        val sync = HealthRecordSync(source, store, problems, now = { clock }, zone = { ZoneOffset.UTC }, foreground = foreground)
+        source.granted = setOf(HealthKind.STEPS)
+        source.windowRecords = { _, _ -> clock += 6_000; emptyList() }
+
+        sync.copyNow()
+
+        val slow = problems.logged.filter { it.detail.startsWith("copy took") }
+        assertThat(slow.map { it.detail }).containsExactly("copy took 48 s; logging food may have waited for it")
+        assertThat(slow.single().kind).isEqualTo("health")
+    }
+
+    /** The background copy (D99) is measured the same way. Invented: 11 s for the first week read. */
+    @Test
+    fun `a slow background copy says so too`() = runTest {
+        var clock = now
+        val sync = HealthRecordSync(source, store, problems, now = { clock }, zone = { ZoneOffset.UTC }, foreground = foreground)
+        source.granted = setOf(HealthKind.STEPS)
+        source.windowRecords = { _, _ -> if (clock == now) clock += 11_000; emptyList() }
+
+        sync.copyInBackground()
+
+        assertThat(problems.logged.map { it.detail }.filter { it.startsWith("copy took") })
+            .containsExactly("copy took 11 s; logging food may have waited for it")
+    }
+
+    /** At the threshold exactly, and below it, nothing is logged. Invented: 10 s, the threshold itself. */
+    @Test
+    fun `a copy at the threshold logs nothing`() = runTest {
+        var clock = now
+        val sync = HealthRecordSync(source, store, problems, now = { clock }, zone = { ZoneOffset.UTC }, foreground = foreground)
+        source.granted = setOf(HealthKind.STEPS)
+        source.windowRecords = { _, _ -> clock += HealthRecordSync.SLOW_PASS_MILLIS / 8; emptyList() }
+
+        sync.copyNow()
+
+        assertThat(problems.logged.map { it.detail }.filter { it.startsWith("copy took") }).isEmpty()
+    }
+
     // --- Fakes -----------------------------------------------------------------------------------
 
     private fun done(token: String, kind: HealthKind = HealthKind.STEPS) = HealthSyncEntity(
