@@ -1,6 +1,7 @@
 package com.metaself.app.data.backup
 
 import com.metaself.app.data.trainer.TrainerMessageEntity
+import com.metaself.app.data.trainer.TrainerSheetEntity
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
@@ -871,6 +872,23 @@ class BackupRoundTripTest {
 
         repository().restore(BackupCodec.decode("""{"version": 10, "exported_at": 1000}""")!!)
         assertThat(db.trainerDao().allMessages()).isEmpty()
+    }
+
+    /** D150: every version of the sheet goes out with the file and comes back as it was; a version 11 file leaves none. */
+    @Test
+    fun `the sheet's versions come back as they were, and an older file leaves none`() = runTest {
+        val rewrite = TrainerSheetEntity(5, 1_000, "[]", "REWRITE", "m", null)
+        val back = TrainerSheetEntity(6, 2_000, "[]", "OWNER", null, 5)
+        db.trainerDao().insertSheets(listOf(rewrite, back))
+
+        val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!
+        db.trainerDao().deleteSheets()
+        repository().restore(file)
+
+        assertThat(db.trainerDao().allSheets()).containsExactly(rewrite, back).inOrder()
+
+        repository().restore(BackupCodec.decode("""{"version": 11, "exported_at": 1000}""")!!)
+        assertThat(db.trainerDao().allSheets()).isEmpty()
     }
 
     /** D90: the note goes out with the file and comes back with it. Invented words. */

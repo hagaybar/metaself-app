@@ -1,6 +1,8 @@
 package com.metaself.app.data.backup
 
 import com.metaself.app.data.trainer.TrainerMessageEntity
+import com.metaself.app.data.trainer.TrainerSheetEntity
+import com.metaself.app.domain.backup.BackupTrainerSheet
 import com.metaself.app.domain.backup.BackupTrainerMessage
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.AiSettings
@@ -101,6 +103,7 @@ class BackupRestoreOrderTest {
                 "trainer.deleteConfirmations",
                 "trainer.deleteLetters",
                 "trainer.deleteMessages",
+                "trainer.deleteSheets",
                 "splits.deleteAll",
                 "bookkeeping.clearSync",
                 "findOrCreate Yoghurt",
@@ -121,6 +124,7 @@ class BackupRestoreOrderTest {
                 "trainer.insertConfirmations",
                 "trainer.insertLetters",
                 "trainer.insertMessages",
+                "trainer.insertSheets",
                 "profile.save",
                 "saveRevision",
                 "saveArrival",
@@ -421,6 +425,28 @@ class BackupRestoreOrderTest {
         ).inOrder()
         assertThat(result.trainerMessages).isEqualTo(2)
         assertThat(log).containsAtLeast("trainer.deleteMessages", "trainer.insertMessages").inOrder()
+    }
+
+    /** D150: the sheet's versions are replaced inside the transaction, each with its id, one per id. Invented. */
+    @Test
+    fun `the sheet's versions are emptied and restored with their ids, and counted`() = runTest {
+        val rewrite = BackupTrainerSheet(3, 1_000, "[]", "REWRITE", "m")
+        val back = BackupTrainerSheet(4, 2_000, "[]", "OWNER", restoredFrom = 3)
+        val file = aFile().copy(trainerSheets = listOf(rewrite, back, rewrite.copy(atMillis = 9)))
+
+        val result = restorer().restore(file)
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = written.getValue("trainer.insertSheets").first() as List<TrainerSheetEntity>
+        assertThat(rows).containsExactly(
+            TrainerSheetEntity(3, 1_000, "[]", "REWRITE", "m", null),
+            TrainerSheetEntity(4, 2_000, "[]", "OWNER", null, 3),
+        ).inOrder()
+        assertThat(result.trainerSheets).isEqualTo(2)
+        assertThat(log).containsAtLeast("trainer.deleteSheets", "trainer.insertSheets").inOrder()
+
+        val older = restorer().restore(aFile().copy(version = 11))
+        assertThat(older.trainerSheets).isEqualTo(0)
     }
 
     @Test

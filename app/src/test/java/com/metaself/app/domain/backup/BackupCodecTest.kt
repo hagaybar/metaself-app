@@ -134,8 +134,24 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 11`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(11)
+    fun `the format is version 12`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(12)
+    }
+
+    /** D150: every version of the sheet rides in the file, each with its id; a version 1–11 file has none. Invented. */
+    @Test
+    fun `the sheet's versions are written and read back, and an older file has none`() {
+        val rewrite = BackupTrainerSheet(id = 3, atMillis = 1_000, facts = "[]", madeBy = "REWRITE", model = "m")
+        val back = BackupTrainerSheet(id = 4, atMillis = 2_000, facts = "[]", madeBy = "OWNER", restoredFrom = 3)
+        val withSheets = full.copy(trainerSheets = listOf(rewrite, back))
+        val text = BackupCodec.encode(withSheets)
+
+        assertThat(text).contains("\"trainer_sheets\"")
+        assertThat(text).contains("\"restored_from\": 3")
+        assertThat(text).contains("\"made_by\": \"OWNER\"")
+        assertThat(BackupCodec.decode(text)).isEqualTo(withSheets)
+        val version11 = """{"version": 11, "exported_at": 1000, "meals": [], "weights": [], "trainer_messages": []}"""
+        assertThat(BackupCodec.decode(version11)!!.trainerSheets).isEmpty()
     }
 
     /** D148: the conversation rides in the file, each message with its id; a version 1–10 file has none. Invented. */
