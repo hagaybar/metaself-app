@@ -1,6 +1,7 @@
 package com.metaself.app.data.health
 
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.diagnostics.measure.MeasureRecorder
 import com.metaself.app.data.lifecycle.AppForeground
 import com.metaself.app.data.time.Now
 import com.metaself.app.domain.health.HealthKind
@@ -62,12 +63,21 @@ class HealthRecordSync(
     private val zone: () -> ZoneId,
     private val foreground: AppForeground = AppForeground.ALWAYS,
     /** D138: told after each pass that ran, so the workout files waiting for their sessions are matched. */
+    /** D152 (temporary): each pass's phases, timed and counted. Off unless switched on. */
+    private val measure: MeasureRecorder = MeasureRecorder.OFF,
     private val arrivals: SessionsArrived = SessionsArrived.NONE,
 ) : HealthRecordCopier, BackgroundHealthCopy {
 
     @Inject
-    constructor(source: HealthSource, store: HealthStore, problems: ProblemLog, now: Now, foreground: AppForeground, arrivals: SessionsArrived) :
-        this(source, store, problems, now, { ZoneId.systemDefault() }, foreground, arrivals)
+    constructor(
+        source: HealthSource,
+        store: HealthStore,
+        problems: ProblemLog,
+        now: Now,
+        foreground: AppForeground,
+        arrivals: SessionsArrived,
+        measure: MeasureRecorder,
+    ) : this(source, store, problems, now, { ZoneId.systemDefault() }, foreground, measure, arrivals)
 
     private val running = Mutex()
 
@@ -157,6 +167,7 @@ class HealthRecordSync(
      */
     private suspend fun pass(): PassEnd {
         val startedAt = now()
+        val startedNanos = measure.clock.nanos()
         val end = try {
             copy()
             PassEnd.DONE
@@ -169,7 +180,38 @@ class HealthRecordSync(
             PassEnd.FAILED
         }
         noteIfSlow(startedAt)
+        val took = measure.clock.nanos() - startedNanos
+        measure.record("copy_pass") {
+            put("end", end.name)
+            putMillis("ms", took)
+        }
         return end
+    }
+
+    /** D152: one phase of one kind — what Health Connect gave, what was stored, and where the time went. */
+    private fun phase(
+        kind: HealthKind,
+        phase: String,
+        read: List<ReadRecord>,
+        deleted: Int,
+        days: Int,
+        readNanos: Long,
+        storeNanos: Long,
+    ) = measure.record("copy_phase") {
+        put("kind", kind.name)
+        put("phase", phase)
+        put("records_read", read.size)
+        put("rows_stored", read.sumOf { rowsOf(it) })
+        put("ids_deleted", deleted)
+        put("days_touched", days)
+        putMillis("health_connect_ms", readNanos)
+        putMillis("store_ms", storeNanos)
+    }
+
+    private fun rowsOf(record: ReadRecord): Int = when (record) {
+        is ReadRecord.Reading -> record.samples.size
+        is ReadRecord.Night -> 1 + record.stages.size
+        is ReadRecord.Session -> 1
     }
 
     /**
@@ -484,16 +526,24 @@ class HealthRecordSync(
     ): HealthSyncEntity {
         var mark = start
         while (budget.take()) {
+            val asked = measure.clock.nanos()
             val page = source.changes(kind, mark.changesToken!!)
             if (page.expired) {
                 val token = source.changesToken(kind)
                 val from = nowMillis - WINDOW_DAYS * DAY
-                touched += store.replaceWindow(kind, from, nowMillis, source.readWindow(kind, from, nowMillis))
+                val reading = measure.clock.nanos()
+                val window = source.readWindow(kind, from, nowMillis)
+                val storing = measure.clock.nanos()
+                val replaced = store.replaceWindow(kind, from, nowMillis, window)
+                phase(kind, "window", window, 0, replaced.size, storing - reading, measure.clock.nanos() - storing)
+                touched += replaced
                 mark = mark.copy(changesToken = token, tokenAtMillis = nowMillis)
                 store.saveBookmark(mark)
                 return mark
             }
+            val storing = measure.clock.nanos()
             val days = store.apply(page.upserts, page.deletedIds)
+            phase(kind, "changes", page.upserts, page.deletedIds.size, days.size, storing - asked, measure.clock.nanos() - storing)
             touched += days
             if (kind in GAP_KINDS) arrived.getOrPut(kind) { mutableSetOf() } += days
             mark = mark.copy(changesToken = page.nextToken, tokenAtMillis = nowMillis)
@@ -519,6 +569,7 @@ class HealthRecordSync(
         val kind = turn.kind
         val to = turn.mark.catchUpCursorMillis ?: nowMillis
         val from = to - SLICE_DAYS * DAY
+        val reading = measure.clock.nanos()
         val records = try {
             source.readWindow(kind, from, to)
         } catch (cancelled: CancellationException) {
@@ -537,7 +588,10 @@ class HealthRecordSync(
             turn.finished = true
             return
         }
-        touched += store.apply(records, emptyList())
+        val storing = measure.clock.nanos()
+        val days = store.apply(records, emptyList())
+        phase(kind, "catch-up week", records, 0, days.size, storing - reading, measure.clock.nanos() - storing)
+        touched += days
         turn.emptyInARow = if (records.isEmpty()) turn.emptyInARow + 1 else 0
         val emptyRun = turn.emptyInARow >= EMPTY_SLICES_TO_STOP
         val done = emptyRun || from <= nowMillis - FURTHEST_DAYS * DAY
@@ -564,6 +618,7 @@ class HealthRecordSync(
         if (touched.isEmpty()) return
         val days = touched.sorted()
         for (run in runsOf(days)) {
+            val asking = measure.clock.nanos()
             val totals = try {
                 source.dayTotals(run.first(), run.last())
             } catch (cancelled: CancellationException) {
@@ -573,7 +628,14 @@ class HealthRecordSync(
                 note("totals: ${failure::class.java.simpleName} ${failure.message}")
                 TotalsResult.ALL_FAILED
             }
+            val summarising = measure.clock.nanos()
             store.summarise(run.toSet(), totals, nowMillis)
+            val done = measure.clock.nanos()
+            measure.record("copy_summarise") {
+                put("days", run.size)
+                putMillis("health_connect_ms", summarising - asking)
+                putMillis("store_ms", done - summarising)
+            }
             touched -= run.toSet()
         }
     }

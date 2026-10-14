@@ -3,6 +3,11 @@ package com.metaself.app.data.health
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.diagnostics.Problem
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.diagnostics.measure.FakeMeasureClock
+import com.metaself.app.data.diagnostics.measure.MeasureRecorder
+import com.metaself.app.data.diagnostics.measure.MeasureWindow
+import com.metaself.app.data.diagnostics.measure.RecordingSink
+import com.metaself.app.data.diagnostics.measure.aWriterWithoutTimer
 import com.metaself.app.data.lifecycle.FakeAppForeground
 import com.metaself.app.domain.health.HealthKind
 import kotlinx.coroutines.CancellationException
@@ -1003,6 +1008,31 @@ class HealthRecordSyncTest {
     private fun done(token: String, kind: HealthKind = HealthKind.STEPS) = HealthSyncEntity(
         kind = kind.name, changesToken = token, tokenAtMillis = 0, catchUpCursorMillis = 0, catchUpDone = true,
     )
+
+    /** D152: switched on, each phase of a pass is one line of counts and times — never a record's id or value. */
+    @Test
+    fun `measured, a pass writes its phases as counts and times`() = runTest {
+        val clock = FakeMeasureClock()
+        val sink = RecordingSink()
+        val measure = MeasureRecorder(sink, clock, aWriterWithoutTimer())
+        measure.switchOn(clock.wall + MeasureWindow.LENGTH_MILLIS)
+        val measured = HealthRecordSync(
+            source, store, problems, now = { now }, zone = { ZoneOffset.UTC }, foreground = foreground, measure = measure,
+        )
+        source.granted = setOf(HealthKind.STEPS)
+        source.windowRecords = { from, _ -> if (from == 93 * DAY) listOf(steps("record-id-one", from)) else emptyList() }
+
+        measured.copyNow()
+        measure.flush()
+
+        val week = sink.lines.first { it.contains("\"type\":\"copy_phase\"") }
+        assertThat(week).contains("\"kind\":\"STEPS\"")
+        assertThat(week).contains("\"phase\":\"catch-up week\"")
+        assertThat(week).contains("\"records_read\":1,\"rows_stored\":1,\"ids_deleted\":0")
+        assertThat(sink.lines.any { it.contains("\"type\":\"copy_pass\"") && it.contains("\"end\":\"DONE\"") }).isTrue()
+        assertThat(sink.lines.joinToString()).doesNotContain("record-id-one")
+        assertThat(sink.lines.joinToString()).doesNotContain("100.0")
+    }
 
     private fun steps(id: String, at: Long) = ReadRecord.Reading(
         HealthKind.STEPS, "com.example.band", id, listOf(Sample(at, at + 60_000, 100.0)),

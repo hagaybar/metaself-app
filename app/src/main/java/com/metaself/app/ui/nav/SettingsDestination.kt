@@ -30,6 +30,8 @@ import com.metaself.app.ui.screen.settings.EatingSettingsPage
 import com.metaself.app.ui.screen.settings.FoodDatabaseSettingsPage
 import com.metaself.app.ui.screen.settings.MovementSettingsPage
 import com.metaself.app.ui.screen.settings.ProblemsSettingsPage
+import com.metaself.app.ui.screen.settings.MeasureViewModel
+import com.metaself.app.data.diagnostics.measure.DiagnosticsHeader
 import com.metaself.app.ui.screen.settings.SettingsPage
 import com.metaself.app.ui.screen.settings.SettingsScreen
 import com.metaself.app.ui.screen.settings.SettingsViewModel
@@ -251,6 +253,13 @@ internal fun SettingsDestination(
 
         SettingsPage.PROBLEMS -> {
             val clipboard = LocalClipboardManager.current
+            // D152 (temporary): its own view model on this entry, as the trainer workbench has.
+            val measureViewModel: MeasureViewModel = hiltViewModel(here)
+            val measureState by measureViewModel.state.collectAsStateWithLifecycle()
+            // Android's own document picker, as a backup is saved: no storage permission, his choice of place.
+            val chooseWhereToSaveDiagnostics = rememberLauncherForActivityResult(
+                ActivityResultContracts.CreateDocument("application/x-ndjson"),
+            ) { uri -> uri?.let(measureViewModel::download) }
             ProblemsSettingsPage(
                 state = settingsState,
                 onCopyProblems = {
@@ -258,6 +267,11 @@ internal fun SettingsDestination(
                 },
                 onClearProblems = settingsViewModel::clearProblems,
                 onBack = onBack,
+                measure = measureState,
+                onMeasure = measureViewModel::setOn,
+                onDownloadDiagnostics = {
+                    chooseWhereToSaveDiagnostics.launch(DiagnosticsHeader.fileName(LocalDate.now().toString()))
+                },
             )
         }
 

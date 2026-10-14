@@ -3,13 +3,16 @@
   Android 12 and above. Two separate questions, answered the same way: what may go to the owner's
   Google account, and what may be handed to a new phone during a device-to-device transfer.
 
-  Everything except the API key, for the reason in backup_rules.xml.
+  Everything except the API key, for the reason in backup_rules.xml, and the app's own measurements
+  (D152, temporary), which leave the phone only when downloaded by hand.
 -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="sharedpref" path="metaself_api_key.xml" />
+        <exclude domain="file" path="measure/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="metaself_api_key.xml" />
+        <exclude domain="file" path="measure/" />
     </device-transfer>
 </data-extraction-rules>

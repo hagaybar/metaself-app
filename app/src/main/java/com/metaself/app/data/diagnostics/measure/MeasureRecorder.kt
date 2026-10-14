@@ -64,6 +64,20 @@ class MeasureRecorder(
 
     // --- App open: process start to the day drawn, once per process -----------------------------
 
+    @Volatile private var activityCreatedElapsed = -1L
+
+    /** The activity was first created at [elapsedMillis] since boot; later re-creations are not the open. */
+    fun activityCreated(elapsedMillis: Long) {
+        if (activityCreatedElapsed < 0) activityCreatedElapsed = elapsedMillis
+    }
+
+    /** The day drew its first data at [elapsedMillis] since boot; the process started at [processStartElapsedMillis]. */
+    fun dayDrawn(elapsedMillis: Long, processStartElapsedMillis: Long) {
+        if (appOpenSeen) return
+        val activity = activityCreatedElapsed
+        appOpened(elapsedMillis - processStartElapsedMillis, if (activity >= 0) elapsedMillis - activity else null)
+    }
+
     @Volatile private var restored = false
     @Volatile private var appOpenSeen = false
     @Volatile private var pendingAppOpen: LongArray? = null
