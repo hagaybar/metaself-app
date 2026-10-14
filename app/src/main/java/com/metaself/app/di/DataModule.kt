@@ -94,6 +94,10 @@ import com.metaself.app.data.day.MIGRATION_12_13
 import com.metaself.app.data.day.MIGRATION_13_14
 import com.metaself.app.data.day.MIGRATION_14_15
 import com.metaself.app.data.day.MIGRATION_15_16
+import com.metaself.app.data.diagnostics.measure.MeasureFile
+import com.metaself.app.data.diagnostics.measure.MeasureRecorder
+import com.metaself.app.data.diagnostics.measure.MeasuringOpenHelperFactory
+import androidx.sqlite.db.framework.FrameworkSQLiteOpenHelperFactory
 import com.metaself.app.data.trainer.ProgrammeStore
 import com.metaself.app.data.trainer.RoomProgrammeStore
 import com.metaself.app.data.trainer.RoomTrainerStore
@@ -177,14 +181,25 @@ object DataModule {
      * No fallbackToDestructiveMigration. It is the line that turns a missing migration into
      * silently deleted food; a missing migration should stop the app and be fixed.
      */
+    /** D152 (temporary): off until the owner switches it on; its file is in the app's own files only. */
+    @Provides
+    @Singleton
+    fun provideMeasureRecorder(
+        @ApplicationContext context: Context,
+    ): MeasureRecorder = MeasureRecorder(MeasureFile(java.io.File(context.filesDir, MeasureFile.DIRECTORY)))
+
     @Provides
     @Singleton
     fun provideDatabase(
         @ApplicationContext context: Context,
+        measure: MeasureRecorder,
     ): MetaSelfDatabase = Room.databaseBuilder(
         context,
         MetaSelfDatabase::class.java,
         DATABASE_NAME,
+    ).openHelperFactory(
+        // D152: Room's own factory, every statement and transaction timed while measuring is on.
+        MeasuringOpenHelperFactory(FrameworkSQLiteOpenHelperFactory(), measure),
     ).addMigrations(
         MetaSelfDatabase.MIGRATION_1_2,
         MetaSelfDatabase.MIGRATION_2_3,
