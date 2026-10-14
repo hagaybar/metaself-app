@@ -87,6 +87,8 @@ import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
 import com.metaself.app.ui.screen.trainer.ReviewSessionScreen
 import com.metaself.app.ui.screen.trainer.ReviewSessionViewModel
 import com.metaself.app.ui.screen.trainer.TalkScreen
+import com.metaself.app.ui.screen.trainer.SheetScreen
+import com.metaself.app.ui.screen.trainer.SheetViewModel
 import com.metaself.app.ui.screen.trainer.TalkViewModel
 import com.metaself.app.ui.screen.trainer.TrainerScreen
 import com.metaself.app.ui.screen.trainer.TrainerViewModel
@@ -145,6 +147,9 @@ sealed class Destination(val route: String) {
 
     /** About me (D90): the owner's note for the trainer. */
     data object AboutMe : Destination("trainer/about")
+
+    /** What I know about you (D149): the trainer's sheet. */
+    data object Sheet : Destination("trainer/sheet")
 
     /** Weekly letters (D103): every letter, and Write it now. */
     data object Letters : Destination("trainer/letters")
@@ -511,6 +516,28 @@ fun MetaSelfNavHost(
                 onLogWorkout = { navController.navigate(Destination.Movement.toLog()) },
                 onAnswer = trainerViewModel::answer,
                 onTalk = { navController.navigate(Destination.Talk.route) },
+                onSheet = { navController.navigate(Destination.Sheet.route) },
+            )
+        }
+
+        composable(Destination.Sheet.route) {
+            val sheetViewModel: SheetViewModel = hiltViewModel()
+            val sheetState by sheetViewModel.state.collectAsStateWithLifecycle()
+            SheetScreen(
+                state = sheetState,
+                onBack = { navController.popBackStack() },
+                onEdit = sheetViewModel::startEdit,
+                onEditText = sheetViewModel::editText,
+                onSaveEdit = sheetViewModel::saveEdit,
+                onCancelEdit = sheetViewModel::cancelEdit,
+                onRemove = sheetViewModel::askRemove,
+                onConfirmRemove = sheetViewModel::confirmRemove,
+                onCancelRemove = sheetViewModel::cancelRemove,
+                onGoBack = sheetViewModel::askGoBack,
+                onConfirmGoBack = sheetViewModel::confirmGoBack,
+                onCancelGoBack = sheetViewModel::cancelGoBack,
+                // Full conversation › opens Your trainer (D145).
+                onConversation = { navController.navigate(Destination.Talk.route) },
             )
         }
 
