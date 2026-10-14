@@ -14,6 +14,7 @@ import com.metaself.app.data.day.MIGRATION_10_11
 import com.metaself.app.data.day.MIGRATION_11_12
 import com.metaself.app.data.day.MIGRATION_12_13
 import com.metaself.app.data.day.MIGRATION_13_14
+import com.metaself.app.data.day.MIGRATION_14_15
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -835,6 +836,32 @@ class MigrationTest {
             assertThat(cursor.moveToFirst()).isTrue()
             assertThat(cursor.getInt(0)).isEqualTo(2)
         }
+        migrated.close()
+    }
+
+    /** 0.86.1: two indexes on the readings, and every reading kept. Invented. */
+    @Test
+    fun `a version 14 database migrates to version 15 with the readings indexed by record and by day`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 14).use { db ->
+            db.execSQL(
+                "INSERT INTO health_readings (id, kind, startMillis, endMillis, value, unit, origin, recordId, sampleIndex, epochDay) " +
+                    "VALUES (1, 'HEART_RATE', 1000, NULL, 60.0, 'bpm', 'com.example.band', 'r-1', 0, 20699)",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 15, true, MIGRATION_14_15)
+
+        migrated.query("SELECT COUNT(*) FROM health_readings").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(1)
+        }
+        val indexes = mutableListOf<String>()
+        migrated.query("PRAGMA index_list(`health_readings`)").use { cursor ->
+            while (cursor.moveToNext()) indexes += cursor.getString(cursor.getColumnIndexOrThrow("name"))
+        }
+        assertThat(indexes).containsAtLeast("index_health_readings_recordId", "index_health_readings_epochDay")
         migrated.close()
     }
 

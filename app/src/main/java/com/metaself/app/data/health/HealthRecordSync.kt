@@ -149,17 +149,43 @@ class HealthRecordSync(
     /** How a pass ended. */
     private enum class PassEnd { DONE, REFUSED, FAILED }
 
-    /** One pass; [PassEnd.REFUSED] when Health Connect refused it for being in the background. Never throws else. */
-    private suspend fun pass(): PassEnd = try {
-        copy()
-        PassEnd.DONE
-    } catch (refused: BackgroundReadRefused) {
-        PassEnd.REFUSED
-    } catch (cancelled: CancellationException) {
-        throw cancelled
-    } catch (failure: Throwable) {
-        note("copying stopped: ${failure::class.java.simpleName} ${failure.message}")
-        PassEnd.FAILED
+    /**
+     * One pass; [PassEnd.REFUSED] when Health Connect refused it for being in the background. Never throws else.
+     *
+     * A pass that ends — done, refused or failed — after more than [SLOW_PASS_MILLIS] leaves one line saying how
+     * long it took ([noteIfSlow]); a cancelled one leaves none.
+     */
+    private suspend fun pass(): PassEnd {
+        val startedAt = now()
+        val end = try {
+            copy()
+            PassEnd.DONE
+        } catch (refused: BackgroundReadRefused) {
+            PassEnd.REFUSED
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Throwable) {
+            note("copying stopped: ${failure::class.java.simpleName} ${failure.message}")
+            PassEnd.FAILED
+        }
+        noteIfSlow(startedAt)
+        return end
+    }
+
+    /**
+     * 0.86.1: the copy's writes hold the database, and logging food — and the food list's `@Transaction` reads —
+     * wait for them. A pass slower than [SLOW_PASS_MILLIS] says so once, in whole seconds, so the problem log shows
+     * whether the copy is still in the way. Never throws (D8).
+     */
+    private suspend fun noteIfSlow(startedAt: Long) {
+        try {
+            val took = now() - startedAt
+            if (took > SLOW_PASS_MILLIS) note("copy took ${took / 1_000} s; logging food may have waited for it")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            // The measurement is not worth a failure of its own.
+        }
     }
 
     /**
@@ -617,6 +643,12 @@ class HealthRecordSync(
          * from today (today included) have their totals asked again ([recheckRecent]).
          */
         const val RECHECK_DAYS = 3L
+
+        /**
+         * A choice, not a measurement: a pass taking longer than this is logged ([noteIfSlow]). A wait this long for
+         * the food list is one the owner notices; how long an ordinary pass takes is what the line is there to show.
+         */
+        const val SLOW_PASS_MILLIS = 10_000L
 
         /** A choice: a totals call covers at most this many consecutive days. */
         const val TOTALS_DAYS = 30L
