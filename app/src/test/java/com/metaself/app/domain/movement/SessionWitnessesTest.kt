@@ -430,4 +430,64 @@ class SessionWitnessesTest {
         assertThat(SessionWitnesses.toHide(aSyncedWorkout(id = 1))).containsExactly(1L)
         assertThat(SessionWitnesses.toHide(typed(id = 3))).isEmpty()
     }
+
+    // --- Where own distance decides anything (D153) --------------------------------------------------
+
+    @Test
+    fun `own distance is asked only of synced workouts with a distance that overlap another`() {
+        val asked = SessionWitnesses.ownDistanceDecides(
+            listOf(
+                aSyncedWorkout(id = 1, from = 0, minutes = 60, distanceM = 5_000),
+                aSyncedWorkout(id = 2, from = 10, minutes = 40, distanceM = 4_800),
+                // Overlapping, but no distance of its own to be chosen.
+                aSyncedWorkout(id = 3, from = 20, minutes = 30),
+                // A distance, but alone in its time.
+                aSyncedWorkout(id = 4, from = 300, minutes = 30, distanceM = 2_000),
+                // Overlapping and with a distance, but typed: never chosen by own distance.
+                typed(id = 5, from = 0, minutes = 60).copy(distanceM = 5_100),
+            ),
+        )
+
+        assertThat(asked).containsExactly(1L, 2L)
+    }
+
+    @Test
+    fun `a hidden or uncounted workout makes no other one worth asking about`() {
+        val asked = SessionWitnesses.ownDistanceDecides(
+            listOf(
+                aSyncedWorkout(id = 1, from = 0, minutes = 60, distanceM = 5_000),
+                aSyncedWorkout(id = 2, from = 0, minutes = 60, distanceM = 5_000, hidden = true),
+                aSyncedWorkout(id = 3, from = 0, minutes = 60, distanceM = 5_000, counted = false),
+            ),
+        )
+
+        assertThat(asked).isEmpty()
+    }
+
+    @Test
+    fun `one workout, or none, asks nothing`() {
+        assertThat(SessionWitnesses.ownDistanceDecides(emptyList())).isEmpty()
+        assertThat(SessionWitnesses.ownDistanceDecides(listOf(aSyncedWorkout(id = 1, distanceM = 5_000)))).isEmpty()
+    }
+
+    @Test
+    fun `asking only those gives the sessions asking every workout gives`() {
+        // Invented: two apps' copies of one walk, each with a distance, only the second app recording
+        // distance readings during it; and a lone run whose app recorded some too.
+        val stored = listOf(
+            aSyncedWorkout(id = 1, from = 0, minutes = 60, distanceM = 5_000),
+            aSyncedWorkout(id = 2, from = 5, minutes = 50, distanceM = 4_000),
+            aSyncedWorkout(id = 3, from = 300, minutes = 30, distanceM = 6_000, kind = WorkoutKind.RUN),
+        )
+        val ownEverywhere = setOf(2L, 3L)
+        fun sessions(own: Set<Long>) = combine(*stored.map { it.copy(ownDistance = it.id in own) }.toTypedArray())
+
+        val asked = SessionWitnesses.ownDistanceDecides(stored)
+
+        assertThat(sessions(ownEverywhere intersect asked)).isEqualTo(sessions(ownEverywhere).map { session ->
+            // The lone run's own flag is the one difference, and nothing reads it.
+            if (session.id == 3L) session.copy(ownDistance = false) else session
+        })
+        assertThat(sessions(ownEverywhere intersect asked).first().distanceM).isEqualTo(4_000)
+    }
 }

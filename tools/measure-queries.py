@@ -115,8 +115,11 @@ OVERRIDES = {
     "HealthDayDao.observeBetween": {"from": LAST_DAY - 83, "to": LAST_DAY},
     "WorkoutDao.observeBetween": {"from": LAST_DAY - 83, "to": LAST_DAY},
     "SleepDao.sessionsBetween": {"from": LAST_DAY - 6, "to": LAST_DAY},
-    # Your movement -> Year, the widest range it is asked over (a trainer request asks ~13 months)
-    "WorkoutDao.idsWithOwnDistance": {"from": LAST_DAY - 369, "to": LAST_DAY},
+    # Its one caller since D153's fix: the band report in Settings, over 30 days, once a visit. (Before
+    # it, Your movement -> Year asked ~370 days and every trainer request ~13 months, on every write.)
+    "WorkoutDao.idsWithOwnDistance": {"from": LAST_DAY - 29, "to": LAST_DAY},
+    # What replaced it on every screen: only the workouts overlapping another (invented: three)
+    "WorkoutDao.idsWithOwnDistanceAmong": {"ids": [1, 2, 3]},
     "WorkoutDao.syncedIdsBetween": {"from": LAST_DAY - 9, "to": LAST_DAY},
     "WorkoutDao.dropSyncedNotIn": {"from": LAST_DAY - 9, "to": LAST_DAY, "keep": ["w5", "w6"]},
     # millisecond windows: the copy's re-read of the last ten days
