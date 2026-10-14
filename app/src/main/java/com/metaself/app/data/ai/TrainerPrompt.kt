@@ -650,7 +650,7 @@ object TrainerPrompt {
     }
 
     /** D147: one item of the conversation, as sent — its local time, who wrote it, what it is, and its words. */
-    private fun lineJson(line: ConversationLine): JsonObject = buildJsonObject {
+    internal fun lineJson(line: ConversationLine): JsonObject = buildJsonObject {
         put("at", at(line.at))
         put("from", if (line.fromOwner) "them" else "you")
         put(
@@ -677,7 +677,7 @@ object TrainerPrompt {
     }
 
     /** A local time to the minute, as "2026-10-12T08:30". */
-    private fun at(time: LocalDateTime): String = time.truncatedTo(ChronoUnit.MINUTES).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME).take(16)
+    internal fun at(time: LocalDateTime): String = time.truncatedTo(ChronoUnit.MINUTES).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME).take(16)
 
     /** D93, D98: the last kept evaluation with its plan and how it went — on the evaluate and suggest-goals paths. */
     private fun lastEvaluationJson(last: LastEvaluation?): JsonElement = last?.let {
