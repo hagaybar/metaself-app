@@ -57,6 +57,7 @@ fun SheetScreen(
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = SheetWording.TITLE, modifier = modifier, onBack = onBack) {
         Text(SheetWording.HEADER, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(SheetWording.PRIVACY, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val newest = state.newest
         when {
             state.unreadable -> Text(SheetWording.UNREADABLE, color = MaterialTheme.colorScheme.error)

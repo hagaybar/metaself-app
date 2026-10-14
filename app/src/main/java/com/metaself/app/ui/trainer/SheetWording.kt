@@ -25,6 +25,11 @@ object SheetWording {
     const val HEADER = "I rewrite this every Sunday from the week's conversation. I read it every time I write to you — " +
         "notes, plans, letters and replies. Change or remove anything that's wrong."
 
+    /** What the weekly rewrite sends (D150), said on the page. */
+    const val PRIVACY = "Each Sunday, after the weekly letter, the rewrite sends to OpenAI, with your key: this page as it " +
+        "stands, your note about yourself, and our conversation since the last rewrite, word for word, my feedback and " +
+        "letters in it included. Nothing else from your record. One AI request; none in a week you wrote nothing."
+
     /** Before the first rewrite: what will appear, and when. */
     const val EMPTY = "Nothing here yet. Every Sunday, after your weekly letter, I read what we said that week and write " +
         "down what I learn about you: aches and injuries, how you like to train, your goals in your own words, and what in " +

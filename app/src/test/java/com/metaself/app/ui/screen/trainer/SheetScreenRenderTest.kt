@@ -36,7 +36,7 @@ class SheetScreenRenderTest {
         val texts = draw(SheetViewModel.State(loaded = true, today = TEST_EPOCH_DAY))
 
         assertThat(texts).contains(SheetWording.TITLE)
-        assertThat(texts).containsAtLeast(SheetWording.HEADER, SheetWording.EMPTY, SheetWording.FULL_CONVERSATION).inOrder()
+        assertThat(texts).containsAtLeast(SheetWording.HEADER, SheetWording.PRIVACY, SheetWording.EMPTY, SheetWording.FULL_CONVERSATION).inOrder()
         assertThat(texts).doesNotContain(SheetWording.GO_BACK)
     }
 

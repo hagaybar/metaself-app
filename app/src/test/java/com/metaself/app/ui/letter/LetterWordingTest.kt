@@ -140,7 +140,7 @@ class LetterWordingTest {
                 "those weeks, and patterns your phone works out from them; your week's averages of sleep, resting heart " +
                 "rate and heart-rate variability with their usual levels; your weekly plan, its goal and the trainer's " +
                 "view of it; what you wrote after this week's sessions and when asking for plans; your note about " +
-                "yourself; your goal, age, sex and height; and the trainer's last three letters. Never a meal or a " +
+                "yourself; what the trainer knows about you; your goal, age, sex and height; and the trainer's last three letters. Never a meal or a " +
                 "food. One of today's 20 AI requests.",
         )
     }
