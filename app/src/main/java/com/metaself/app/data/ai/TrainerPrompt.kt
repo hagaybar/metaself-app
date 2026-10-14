@@ -48,7 +48,8 @@ import java.time.temporal.ChronoUnit
  * like [EstimatePrompt] and [ReviewPrompt] a pure function with its own "nothing else is sent" test.
  *
  * Everything comes from one [TrainerRequest], built fresh from the stored record. The only conversation sent is
- * a reply's (D147): the last 14 days of it, word for word, in its question — never on another path. The replies are pinned by strict schemas and checked again on the phone
+ * a reply's (D147): the last 14 days of it, word for word, in its question — never on another path. Every request
+ * carries the sheet of what the trainer knows about the owner (D151), its current facts only. The replies are pinned by strict schemas and checked again on the phone
  * ([TrainerResponse]).
  */
 object TrainerPrompt {
@@ -71,6 +72,12 @@ object TrainerPrompt {
         about_me is their own standing description of themselves, written once and kept: injuries,
         preferences, equipment, what the training is for. Weigh it with the record. Where it conflicts
         with the numbers, the numbers are what happened.
+
+        sheet is what you know about them from your conversations with them, which you rewrite each week: each
+        fact with its group (body, training, goals, life), since when it has been true, and its source
+        ("they_said": they told you; "you_noticed": you inferred it). It is null when there is none yet. Weigh
+        it with about_me and the record; where it conflicts with the numbers, the numbers are what happened.
+        Use it as a coach who remembers; never quote it back to them as a list.
 
         Their two aims are their weight goal and a steady rhythm of sessions. Keep your advice consistent
         with your earlier feedback unless the record gives a reason to change it.
@@ -501,6 +508,8 @@ object TrainerPrompt {
         put("question", question(request.question, request.today))
         put("today", date(request.today))
         put("about_me", request.aboutMe?.let(::JsonPrimitive) ?: JsonNull)
+        // D151: every request carries the sheet.
+        put("sheet", SheetPrompt.sheetJson(request.sheet))
         putJsonArray("sessions") { request.sessions.forEach { add(sessionJson(it)) } }
         putJsonArray("weeks") { request.weeks.forEach { add(ledgerJson(it)) } }
         putJsonArray("months") { request.months.forEach { add(month(it)) } }
@@ -650,7 +659,7 @@ object TrainerPrompt {
     }
 
     /** D147: one item of the conversation, as sent — its local time, who wrote it, what it is, and its words. */
-    private fun lineJson(line: ConversationLine): JsonObject = buildJsonObject {
+    internal fun lineJson(line: ConversationLine): JsonObject = buildJsonObject {
         put("at", at(line.at))
         put("from", if (line.fromOwner) "them" else "you")
         put(
@@ -677,7 +686,7 @@ object TrainerPrompt {
     }
 
     /** A local time to the minute, as "2026-10-12T08:30". */
-    private fun at(time: LocalDateTime): String = time.truncatedTo(ChronoUnit.MINUTES).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME).take(16)
+    internal fun at(time: LocalDateTime): String = time.truncatedTo(ChronoUnit.MINUTES).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME).take(16)
 
     /** D93, D98: the last kept evaluation with its plan and how it went — on the evaluate and suggest-goals paths. */
     private fun lastEvaluationJson(last: LastEvaluation?): JsonElement = last?.let {

@@ -212,6 +212,32 @@ class BackupWordingTest {
         assertThat(RestoreResult.inFile(file).trainerMessages).isEqualTo(2)
     }
 
+    /** D150: the sheet's versions are named when either side has some, last; a phone with none never names them. Invented counts. */
+    @Test
+    fun `the confirmation names the sheet's versions when either side has some, and only then`() {
+        val text = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 4, weights = 6, hasProfile = true, trainerMessages = 6, trainerSheets = 3),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true, trainerSheets = 1),
+        )
+        val onlySheets = BackupWording.confirmReplacing(
+            here = RestoreResult(meals = 0, weights = 0, hasProfile = false, trainerSheets = 2),
+            incoming = RestoreResult(meals = 4, weights = 5, hasProfile = true),
+        )
+
+        assertThat(text).contains("6 messages with the trainer and 3 versions of what the trainer knows already on this phone")
+        assertThat(text).contains("0 messages with the trainer and 1 version of what the trainer knows from the file")
+        assertThat(onlySheets).doesNotContain("nothing here to lose")
+        assertThat(BackupWording.restored(RestoreResult(meals = 4, weights = 5, hasProfile = true))).doesNotContain("version")
+    }
+
+    @Test
+    fun `a file's sheet versions are counted once per id`() {
+        val row = BackupTrainerSheet(1, 1_000, "[]", "REWRITE", "m")
+        val file = Backup(trainerSheets = listOf(row, row.copy(atMillis = 2), row.copy(id = 2)))
+
+        assertThat(RestoreResult.inFile(file).trainerSheets).isEqualTo(2)
+    }
+
     /** D104: a file's letters are counted as the restore writes them, one per week. Invented. */
     @Test
     fun `a file's weekly letters are counted once per week`() {

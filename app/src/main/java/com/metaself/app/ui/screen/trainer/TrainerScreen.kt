@@ -55,6 +55,7 @@ import com.metaself.app.ui.theme.MetaSelfTint
 import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.trainer.PlanPageWording
 import com.metaself.app.ui.trainer.ProgrammeWording
+import com.metaself.app.ui.trainer.SheetWording
 import com.metaself.app.ui.trainer.TalkWording
 import com.metaself.app.ui.trainer.TrainerWeekWording
 import com.metaself.app.ui.trainer.TrainerWording
@@ -64,8 +65,8 @@ import java.time.ZoneId
  * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
  * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116) with
  * Reply › (D145); Log a workout beside Talk to your trainer (D132, D145), the next thing to do under them; the session
- * waiting for words; and five plain rows —
- * Your plan, Your movement (D132), Weekly letters, Earlier sessions, About me. Branches only — no early return out of an inline composable
+ * waiting for words; and six plain rows —
+ * Your plan, Your movement (D132), Weekly letters, Earlier sessions, About me, What I know about you (D149). Branches only — no early return out of an inline composable
  * (InlineComposableReturnGuardTest).
  */
 @Composable
@@ -91,6 +92,8 @@ fun TrainerScreen(
     onLogWorkout: () -> Unit = {},
     /** D145: Your trainer, the conversation — from Talk to your trainer and the coach's note's Reply ›. */
     onTalk: () -> Unit = {},
+    /** D149: What I know about you, the trainer's sheet. */
+    onSheet: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
     MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
@@ -117,6 +120,8 @@ fun TrainerScreen(
                         PageRow(LetterWording.LIST_TITLE, onLetters),
                         PageRow(TrainerWeekWording.EARLIER, onEarlier),
                         PageRow(TrainerWeekWording.ABOUT_ME, onAboutMe),
+                        // D149: the trainer's sheet, beside his own note (D90), which stays as it is.
+                        PageRow(SheetWording.TITLE, onSheet, SheetWording.ROW_LINE),
                     ),
                 )
             }

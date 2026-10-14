@@ -19,12 +19,18 @@ import androidx.room.PrimaryKey
  * @property endMillis null for an instant (a heart-rate sample, a weight); the span's end otherwise.
  * @property unit "count", "m", "kcal", "bpm", "ms", "%", "breaths/min", "kg".
  * @property epochDay the local day of [startMillis], stored so that a day is one indexed range.
+ *
+ * Version 15 adds two indexes: `recordId` alone, for a record Health Connect reports deleted (its id
+ * comes without its origin), and `epochDay` alone, for a day's summary of every kind. Before them both
+ * scanned the whole table, inside the copy's write transactions, holding up every other write (0.86.1).
  */
 @Entity(
     tableName = "health_readings",
     indices = [
         Index(value = ["kind", "epochDay", "startMillis"]),
         Index(value = ["origin", "recordId", "sampleIndex"], unique = true),
+        Index(value = ["recordId"]),
+        Index(value = ["epochDay"]),
     ],
 )
 data class HealthReadingEntity(

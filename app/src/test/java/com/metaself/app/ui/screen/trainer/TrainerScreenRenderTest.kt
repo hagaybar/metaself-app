@@ -76,7 +76,7 @@ class TrainerScreenRenderTest {
             "THIS WEEK · MON 31 AUG – SUN 6 SEP", "60 minutes moving this week.", "Planned, done", "Walking, 20 min — count it for this?",
             "STEPS", "SLEEP", "FOOD", "Invented week note.", "Reply ›", "Log a workout", "Talk to your trainer", "Plan the open walk",
             "WAITING FOR YOUR WORDS",
-            "Your plan · week 1 of 2", "Your movement", "Weekly letters", "Earlier sessions", "About me",
+            "Your plan · week 1 of 2", "Your movement", "Weekly letters", "Earlier sessions", "About me", "What I know about you",
         )
         order.zipWithNext().forEach { (first, second) ->
             assertThat(render.isDrawnBefore(first, second)).isTrue()
@@ -299,17 +299,19 @@ class TrainerScreenRenderTest {
     @Test
     fun `each row opens what it names`() {
         val opened = mutableListOf<String>()
-        draw(
+        val texts = draw(
             page(running = RUNNING),
             onSeePlan = { opened += "plan" }, onLetters = { opened += "letters" }, onEarlier = { opened += "earlier" },
-            onAboutMe = { opened += "about" },
+            onAboutMe = { opened += "about" }, onSheet = { opened += "sheet" },
         )
+        // D149: the sheet's row says what it is under its name.
+        assertThat(texts).containsAtLeast("About me", "What I know about you", "Kept from our talks · updated Sundays").inOrder()
 
-        listOf("Your plan · week 1 of 2", "Weekly letters", "Earlier sessions", "About me").forEach {
+        listOf("Your plan · week 1 of 2", "Weekly letters", "Earlier sessions", "About me", "What I know about you").forEach {
             assertThat(render.roleOf(it)).isEqualTo(Role.Button)
             render.click(it)
         }
-        assertThat(opened).containsExactly("plan", "letters", "earlier", "about").inOrder()
+        assertThat(opened).containsExactly("plan", "letters", "earlier", "about", "sheet").inOrder()
 
         // D124: with no plan the row is still there — the plan screen holds Plan ahead and the Next session.
         assertThat(draw(page())).contains("Your plan")
@@ -350,6 +352,7 @@ class TrainerScreenRenderTest {
         onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
         onLogWorkout: () -> Unit = {},
         onTalk: () -> Unit = {},
+        onSheet: () -> Unit = {},
     ): List<String> = render.texts {
         TrainerScreen(
             state = state,
@@ -365,6 +368,7 @@ class TrainerScreenRenderTest {
             onAnswer = onAnswer,
             onLogWorkout = onLogWorkout,
             onTalk = onTalk,
+            onSheet = onSheet,
         )
     }
 

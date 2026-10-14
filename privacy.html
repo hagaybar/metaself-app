@@ -11,7 +11,7 @@
 <header><a class="back" href="./">← MetaSelf</a></header>
 
 <h1>Privacy</h1>
-<p class="updated">Last updated 10 October 2026</p>
+<p class="updated">Last updated 14 October 2026</p>
 
 <p>MetaSelf is a personal Android application written for a single user. It is not published on any
 app store, has no accounts, no analytics, no advertising and no operator. <strong>There is no server
@@ -23,7 +23,8 @@ in it.</p>
 <p>Everything you log lives <strong>on your phone</strong>: meals and their nutrition figures,
 weights, your profile, your goal, your settings, the health record described below, workouts you
 type in, what you tell the trainer, the note you write about yourself, the trainer's plans and
-feedback, its weekly letters, and your conversation with it. It is held in the application's own private
+feedback, its weekly letters, your conversation with it, and what it keeps from that conversation about you
+(every version of it). It is held in the application's own private
 storage, which no other app can read.</p>
 
 <p>Your OpenAI API key, and your Open Food Facts password if you choose to save one, are stored
@@ -34,7 +35,7 @@ or export.</p>
 <h2>What leaves your phone, and when</h2>
 
 <p>Seven things. Six are sent only when you do something that requires it; the seventh, the weekly
-letter, is sent once a week without a tap for as long as its setting is on.</p>
+letter and the rewrite that follows it, is sent once a week without a tap for as long as its setting is on.</p>
 
 <ol>
   <li><strong>A meal description, and your answers about it, to OpenAI.</strong> When you ask for an
@@ -55,7 +56,8 @@ letter, is sent once a week without a tap for as long as its setting is on.</p>
   the button to plan a session, to get feedback on one, to be evaluated and given a plan for the weeks
   ahead, or to adjust that plan, the request is sent using <em>your own</em> API key and holds: your
   answers or your words about the session or the plan; the note you wrote about
-  yourself; your sessions of the last six weeks (kind, date, minutes, distance, steps, calories,
+  yourself; <strong>what the trainer knows about you</strong> — the facts it keeps from your conversations
+  (described under the weekly letter), as they stand now; your sessions of the last six weeks (kind, date, minutes, distance, steps, calories,
   heart rate and heart-rate zones, how each felt and what you wrote about it); for each of six weeks, what you did in and beyond your weekly plan (each planned session's outcome; other
   sessions by kind with their minutes, distance and minutes in brisk heart-rate zones; steps and distance a
   day), your food as the days you logged and the average calories and protein a day, with your calorie
@@ -92,14 +94,22 @@ letter, is sent once a week without a tap for as long as its setting is on.</p>
   them), how many of them felt easy, right or hard, and your steps and active calories a day; what you did in and beyond the weekly plan, and
   your average sleep a night, resting heart rate and heart-rate variability, each beside its usual over the
   four weeks before; the weekly plan's week, when one is running; the note
-  you wrote about yourself; your goal's direction and rate; your age, sex and height; today's calorie
+  you wrote about yourself; what the trainer knows about you; your goal's direction and rate; your age, sex and height; today's calorie
   target; last week's letter's "for next week" line; and the same figures for each of the four weeks
   before. If you allow Health Connect's background access, the application first copies your band's
   data, as it does when you open it. <strong>Never sent:</strong> a meal or anything about one, a
   single night's sleep or a single day's heart rate, sleep stages, oxygen, breathing rate,
   individual readings, a single weigh-in, your name, or which app or device recorded a session. The
   letter is kept on your phone. <em>Write it now</em>, on the Weekly letters screen, sends the same
-  request when you press it.</li>
+  request when you press it.
+  <br><br>After the Sunday letter, <strong>a second request rewrites what the trainer knows about you</strong>
+  (<em>What I know about you</em>, on the Trainer page), also without your pressing anything. It uses
+  <em>your own</em> API key and holds: that list of facts as it stands, with the ones you changed or removed
+  marked so; the note you wrote about yourself; and <strong>your conversation with the trainer since the last
+  rewrite, word for word</strong> — your messages, its replies, and its feedback and weekly letters of that time,
+  up to the newest 48,000 characters. Nothing else from your record goes with it. A week in which you wrote
+  nothing to the trainer sends no rewrite. Every version of the list is kept on your phone, so a rewrite can be
+  undone.</li>
 
   <li><strong>A barcode number, to Open Food Facts.</strong> Only the number. The camera is used
   for nothing but reading barcodes; the picture is read on the phone and never stored or sent. A
@@ -115,7 +125,8 @@ letter, is sent once a week without a tap for as long as its setting is on.</p>
   requests the <code>drive.file</code> scope, which grants access <strong>only to files the
   application itself creates</strong>. It cannot see, list, open or modify anything else in your
   Drive. The daily file is the same export you can save by hand — which includes your health record,
-  workouts, sleep, the trainer's plans and feedback, your conversation with it and your note about yourself — and your API key
+  workouts, sleep, the trainer's plans and feedback, your conversation with it, what it knows about you and your note
+  about yourself — and your API key
   is deliberately not in it. The detailed health readings, too many for a daily file, go as one
   compressed file per month.</li>
 </ol>

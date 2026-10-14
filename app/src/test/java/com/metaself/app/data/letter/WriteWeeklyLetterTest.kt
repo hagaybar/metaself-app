@@ -48,6 +48,11 @@ import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.WeekNote
 import com.metaself.app.domain.trainer.WeekNoteSource
 import com.metaself.app.domain.trainer.WeeksPlan
+import com.metaself.app.data.trainer.InMemorySheetStore
+import com.metaself.app.domain.trainer.FactGroup
+import com.metaself.app.domain.trainer.FactSource
+import com.metaself.app.domain.trainer.SheetFact
+import com.metaself.app.domain.trainer.SheetMadeBy
 import com.metaself.app.domain.weight.WeightReading
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Test
@@ -67,6 +72,7 @@ class WriteWeeklyLetterTest {
     private val aboutMe = InMemoryAboutMeStore()
     private val letters = FakeLetterStore()
     private val weekNotes = InMemoryWeekNoteStore()
+    private val sheets = InMemorySheetStore()
     private val events = mutableListOf<String>()
     private var told = 0
     private var granted = false
@@ -96,6 +102,7 @@ class WriteWeeklyLetterTest {
         year = { 2026 },
         notifier = { told++ },
         weekNotes = weekNotes,
+        sheets = sheets,
     )
 
     private fun walk(id: Long, day: Long, minutes: Int = 40) = Workout(
@@ -124,6 +131,21 @@ class WriteWeeklyLetterTest {
         food.days = emptyMap()
         assertThat(job()(LETTER_MONDAY)).isEqualTo(WriteWeeklyLetter.Outcome.Quiet)
         assertThat(told).isEqualTo(1)
+    }
+
+    /** D151: the letter carries the newest sheet's current facts, as every trainer request does; none when there are none. */
+    @Test
+    fun `the letter carries the newest sheet`() = runTest {
+        someFood()
+        val fact = SheetFact(1, FactGroup.GOALS, "An invented fact.", LETTER_MONDAY, FactSource.SAID)
+        val recording = FakeLetterWriter(LetterReply.Written(TEXTS, "a-model"))
+        writer = recording
+        job()(LETTER_MONDAY)
+        sheets.add(NOW, listOf(fact, fact.copy(id = 2, text = "Dropped.", droppedEpochDay = LETTER_MONDAY)), SheetMadeBy.REWRITE, "a-model")
+        letters.letters.value = emptyList()
+        job()(LETTER_MONDAY)
+
+        assertThat(recording.asked.map { it.sheet }).containsExactly(null, listOf(fact)).inOrder()
     }
 
     /** D116: the letter's week_note is kept with the letter's week and the moment it came; a letter without one keeps none. */

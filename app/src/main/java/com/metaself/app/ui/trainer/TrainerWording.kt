@@ -214,7 +214,7 @@ object TrainerWording {
     ) + " Never meals."
 
     private fun privacy(first: String, ceiling: Int, extra: String? = null): String =
-        "Sends to OpenAI, with your key: $first; your note about yourself; " +
+        "Sends to OpenAI, with your key: $first; your note about yourself; what the trainer knows about you; " +
             "your sessions of the last six weeks, with your words on them; weekly totals; " +
             "weekly averages of your sleep, resting heart rate, heart-rate variability and food, with your calorie target; " +
             "a line for each month of the year before; your weight trend and goal rate; your age, sex and height; " +

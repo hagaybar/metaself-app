@@ -13,6 +13,8 @@ import com.metaself.app.data.day.MIGRATION_9_10
 import com.metaself.app.data.day.MIGRATION_10_11
 import com.metaself.app.data.day.MIGRATION_11_12
 import com.metaself.app.data.day.MIGRATION_12_13
+import com.metaself.app.data.day.MIGRATION_13_14
+import com.metaself.app.data.day.MIGRATION_14_15
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -804,6 +806,62 @@ class MigrationTest {
             assertThat(cursor.moveToFirst()).isTrue()
             assertThat(cursor.getInt(0)).isEqualTo(2)
         }
+        migrated.close()
+    }
+
+    /** D150, D151: one new table, empty; every message kept; a version of the sheet can be stored. Invented. */
+    @Test
+    fun `a version 13 database migrates to version 14 with no sheet`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 13).use { db ->
+            db.execSQL(
+                "INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo) VALUES (1, 1000, 1, 'Invented.', NULL, 0, NULL)",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 14, true, MIGRATION_13_14)
+
+        listOf("trainer_sheets" to 0, "trainer_messages" to 1).forEach { (table, rows) ->
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(rows)
+            }
+        }
+        migrated.execSQL(
+            "INSERT INTO trainer_sheets (id, atMillis, facts, madeBy, model, restoredFrom) VALUES (1, 1000, '[]', 'REWRITE', 'm', NULL)",
+        )
+        migrated.execSQL("INSERT INTO trainer_sheets (id, atMillis, facts, madeBy, model, restoredFrom) VALUES (2, 2000, '[]', 'OWNER', NULL, 1)")
+        migrated.query("SELECT COUNT(*) FROM trainer_sheets").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(2)
+        }
+        migrated.close()
+    }
+
+    /** 0.86.1: two indexes on the readings, and every reading kept. Invented. */
+    @Test
+    fun `a version 14 database migrates to version 15 with the readings indexed by record and by day`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 14).use { db ->
+            db.execSQL(
+                "INSERT INTO health_readings (id, kind, startMillis, endMillis, value, unit, origin, recordId, sampleIndex, epochDay) " +
+                    "VALUES (1, 'HEART_RATE', 1000, NULL, 60.0, 'bpm', 'com.example.band', 'r-1', 0, 20699)",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 15, true, MIGRATION_14_15)
+
+        migrated.query("SELECT COUNT(*) FROM health_readings").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getInt(0)).isEqualTo(1)
+        }
+        val indexes = mutableListOf<String>()
+        migrated.query("PRAGMA index_list(`health_readings`)").use { cursor ->
+            while (cursor.moveToNext()) indexes += cursor.getString(cursor.getColumnIndexOrThrow("name"))
+        }
+        assertThat(indexes).containsAtLeast("index_health_readings_recordId", "index_health_readings_epochDay")
         migrated.close()
     }
 

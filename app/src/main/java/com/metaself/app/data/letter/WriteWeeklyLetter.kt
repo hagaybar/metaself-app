@@ -9,6 +9,8 @@ import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.data.trainer.ProgrammeStore
+import com.metaself.app.data.trainer.SheetStore
+import com.metaself.app.data.trainer.newest
 import com.metaself.app.data.trainer.TrainerReviews
 import com.metaself.app.data.trainer.WeekNoteStore
 import com.metaself.app.data.weight.WeightRepository
@@ -91,6 +93,8 @@ class WriteWeeklyLetter @Inject constructor(
     private val notifier: LetterNotifier = LetterNotifier.NONE,
     /** Where the letter's week_note is kept (D116), about the letter's week. */
     private val weekNotes: WeekNoteStore = WeekNoteStore.NONE,
+    /** D151: the letter carries the newest sheet, as every trainer request does. */
+    private val sheets: SheetStore = SheetStore.NONE,
 ) : WeeklyLetterJob {
     sealed interface Outcome {
         data object Quiet : Outcome
@@ -180,6 +184,7 @@ class WriteWeeklyLetter @Inject constructor(
                 .sortedByDescending { it.weekMonday }
                 .take(LetterRequest.LAST_LETTERS)
                 .map { PastLetter(it.weekMonday, it.texts.lookAfter, it.texts.nextWeek) },
+            sheet = sheets.newest()?.current?.takeIf { it.isNotEmpty() },
         )
         return when (val reply = writer.write(request)) {
             is LetterReply.Failed -> failed(reply)

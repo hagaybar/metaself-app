@@ -55,6 +55,9 @@ object LetterPrompt {
         the last five weeks. plan_goal is the goal of the plan that ran this week, when one did, and
         goal_view your stand on it when the plan was made. last_letters are your last three letters, newest
         first, each with its week, its look_after and its next_week.
+        sheet is what you know about them from your conversations, which you rewrite each week: each fact with its
+        group, since when it has been true, and its source ("they_said" or "you_noticed"); null when there is none.
+        Weigh it as you weigh about_me; never list it back to them.
         A null is a figure not recorded, never zero.
     """.trimIndent() + "\n\n" + "ledger is this week's ledger." + "\n\n" + TrainerPrompt.LEDGER + "\n\n" +
         TrainerPrompt.WEEK_RULES + "\n\n" + """
@@ -92,6 +95,8 @@ object LetterPrompt {
         put("target_kcal", request.figures.targetKcal?.let(::JsonPrimitive) ?: JsonNull)
         putJsonArray("sessions") { request.sessions.forEach { add(TrainerPrompt.sessionJson(it)) } }
         put("about_me", request.aboutMe?.let(::JsonPrimitive) ?: JsonNull)
+        // D151: the letter carries the sheet, as every trainer request does.
+        put("sheet", SheetPrompt.sheetJson(request.sheet))
         put(
             "goal",
             request.goal?.let { buildJsonObject { put("direction", it.direction.name.lowercase()); put("kg_a_week", it.kgPerWeek) } } ?: JsonNull,

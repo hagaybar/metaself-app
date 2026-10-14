@@ -65,6 +65,8 @@ data class Backup(
     @SerialName("weekly_letters") val weeklyLetters: List<BackupWeeklyLetter> = emptyList(),
     /** D148: the conversation with the trainer, every message with its id. Empty in a file from before version 11. */
     @SerialName("trainer_messages") val trainerMessages: List<BackupTrainerMessage> = emptyList(),
+    /** D150: every version of the sheet of what the trainer knows, each with its id. Empty in a file from before version 12. */
+    @SerialName("trainer_sheets") val trainerSheets: List<BackupTrainerSheet> = emptyList(),
 ) {
     companion object {
         /**
@@ -114,8 +116,12 @@ data class Backup(
          * Version 11 adds the conversation with the trainer (D148), [trainerMessages], each message with its id, which a
          * reply's `reply_to` names. The feedback and letters the conversation shows are not in it again: they are
          * already in the file (D146). A version 1–10 file has none, and restoring one leaves none — a restore replaces.
+         *
+         * Version 12 adds the sheet of what the trainer knows about the owner (D150), [trainerSheets]: every version,
+         * each with its id (which a version's `restored_from` names), its facts as the app stores them, who made it and
+         * the model. A version 1–11 file has none, and restoring one leaves none — a restore replaces.
          */
-        const val CURRENT_VERSION = 11
+        const val CURRENT_VERSION = 12
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -386,6 +392,21 @@ data class BackupTrainerMessage(
     val model: String? = null,
     val answered: Boolean = false,
     @SerialName("reply_to") val replyTo: Long? = null,
+)
+
+/**
+ * One version of the sheet (D150): [facts] as the app stores them (`SheetResponse.encode`'s JSON, kept as text so a
+ * restore puts back exactly what was there), [madeBy] REWRITE or OWNER, the rewrite's [model] (null on the owner's),
+ * and, on a version made by Go back, the version it brought back ([restoredFrom], by [id]).
+ */
+@Serializable
+data class BackupTrainerSheet(
+    val id: Long,
+    @SerialName("at") val atMillis: Long,
+    val facts: String,
+    @SerialName("made_by") val madeBy: String,
+    val model: String? = null,
+    @SerialName("restored_from") val restoredFrom: Long? = null,
 )
 
 /**

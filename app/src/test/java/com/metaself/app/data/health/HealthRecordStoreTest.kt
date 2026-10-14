@@ -8,6 +8,12 @@ import com.metaself.app.data.assumeSqliteRuntime
 import com.metaself.app.data.day.MetaSelfDatabase
 import com.metaself.app.data.day.RoomDatabaseTransaction
 import com.metaself.app.data.trainer.RoomConversationStore
+import com.metaself.app.data.trainer.RoomSheetStore
+import com.metaself.app.domain.trainer.FactGroup
+import com.metaself.app.domain.trainer.FactSource
+import com.metaself.app.domain.trainer.SheetFact
+import com.metaself.app.domain.trainer.SheetMadeBy
+import com.metaself.app.domain.trainer.SheetVersion
 import com.metaself.app.domain.trainer.TrainerMessage
 import com.metaself.app.data.letter.LETTER_MONDAY
 import com.metaself.app.data.letter.RoomLetterStore
@@ -990,6 +996,22 @@ class HealthRecordStoreTest {
         messages.deleteOwn(first)
 
         assertThat(messages.observe().first().map { it.id }).containsExactly(second, secondReply).inOrder()
+    }
+
+    /** D150, D151 over a real table: every version kept, oldest first, read back as written; an unreadable row is left out. Invented. */
+    @Test
+    fun `the sheet keeps every version and reads each back`() = runTest {
+        val sheets = RoomSheetStore(db.trainerDao())
+        val fact = SheetFact(1, FactGroup.BODY, "An invented fact.", 20_690, FactSource.SAID, edited = true)
+        val dropped = fact.copy(id = 2, text = "Dropped.", droppedEpochDay = 20_699, removedByOwner = true)
+        val first = sheets.add(1_000, listOf(fact), SheetMadeBy.REWRITE, "a-model")
+        val second = sheets.add(2_000, listOf(fact, dropped), SheetMadeBy.OWNER, null, restoredFrom = first)
+        db.trainerDao().insertSheet(com.metaself.app.data.trainer.TrainerSheetEntity(0, 3_000, "not json", "REWRITE", "a-model", null))
+
+        assertThat(sheets.observe().first()).containsExactly(
+            SheetVersion(first, 1_000, listOf(fact), SheetMadeBy.REWRITE, "a-model"),
+            SheetVersion(second, 2_000, listOf(fact, dropped), SheetMadeBy.OWNER, null, first),
+        ).inOrder()
     }
 
     private fun aFeedback(headline: String) =

@@ -188,4 +188,20 @@ interface TrainerDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertMessages(messages: List<TrainerMessageEntity>)
+
+    // D150, D151: the sheet's versions.
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertSheet(sheet: TrainerSheetEntity): Long
+
+    @Query("SELECT * FROM trainer_sheets ORDER BY id")
+    fun observeSheets(): Flow<List<TrainerSheetEntity>>
+
+    @Query("SELECT * FROM trainer_sheets ORDER BY id")
+    suspend fun allSheets(): List<TrainerSheetEntity>
+
+    @Query("DELETE FROM trainer_sheets")
+    suspend fun deleteSheets()
+
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertSheets(sheets: List<TrainerSheetEntity>)
 }

@@ -61,6 +61,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import com.metaself.app.domain.trainer.ConversationLine
 import com.metaself.app.domain.trainer.LineKind
+import com.metaself.app.domain.trainer.FactGroup
+import com.metaself.app.domain.trainer.FactSource
+import com.metaself.app.domain.trainer.SheetFact
 import com.metaself.app.domain.trainer.TalkPlan
 import java.time.LocalDateTime
 import org.junit.jupiter.api.assertThrows
@@ -80,7 +83,7 @@ class TrainerPromptTest {
 
         assertThat(body.toString()).contains("session_plan")
         assertThat(user.keys).containsExactly(
-            "question", "today", "about_me", "sessions", "weeks", "months", "weight", "goal", "body", "this_week",
+            "question", "today", "about_me", "sheet", "sessions", "weeks", "months", "weight", "goal", "body", "this_week",
             "earlier_feedback",
         )
         assertThat(user.getValue("question").jsonObject.getValue("kind").jsonPrimitive.content).isEqualTo("plan")
@@ -359,7 +362,7 @@ class TrainerPromptTest {
 
         assertThat(body.toString()).contains("evaluation_and_plan")
         assertThat(user.keys).containsExactly(
-            "question", "today", "about_me", "sessions", "weeks", "months", "weight", "goal", "body", "this_week",
+            "question", "today", "about_me", "sheet", "sessions", "weeks", "months", "weight", "goal", "body", "this_week",
             "earlier_feedback",
         )
         assertThat(question.keys).containsExactly("kind", "goal", "weeks", "sessions_a_week", "words", "starts", "last_evaluation")
@@ -616,6 +619,47 @@ class TrainerPromptTest {
         }
         assertThat(systemContent(TrainerPrompt.planBody("a-model", planRequest()))).doesNotContain("how_it_went")
         assertThat(systemContent(TrainerPrompt.feedbackBody("a-model", reviewRequest()))).doesNotContain("how_it_went")
+    }
+
+    /** D151: every path's body — and the workbench's — sends the sheet's current facts, and null when there are none. */
+    @Test
+    fun `every path sends the sheet`() {
+        val goals = request(TrainerQuestion.SuggestGoals(3, "", TEST_EPOCH_DAY + 4, LAST, RunningGoal(GOAL_15K, OUTLINE_15)))
+        val bodies: List<(TrainerRequest) -> String> = listOf(
+            { TrainerPrompt.planBody("a-model", it) },
+            { TrainerPrompt.feedbackBody("a-model", it) },
+            { TrainerPrompt.evaluateBody("a-model", it) },
+            { TrainerPrompt.adjustBody("a-model", it) },
+            { TrainerPrompt.fillBody("a-model", it) },
+            { TrainerPrompt.nextBlockBody("a-model", it) },
+            { TrainerPrompt.suggestGoalsBody("a-model", it) },
+            { TrainerPrompt.talkBody("a-model", it) },
+            { TrainerPrompt.workbenchBody("a-model", LOADED, it) },
+        )
+        val requests = listOf(
+            planRequest(), reviewRequest(), evaluateRequest(), adjustRequest(), fillRequest(), nextBlockRequest(), goals,
+            talkRequest(), planRequest(),
+        )
+        bodies.zip(requests).forEach { (body, request) ->
+            val sent = Json.parseToJsonElement(userContent(Json.parseToJsonElement(body(request.copy(sheet = SHEET))).jsonObject)).jsonObject
+            val sheet = sent.getValue("sheet").jsonArray.single().jsonObject
+            assertThat(sheet.keys).containsExactly("group", "text", "since", "source").inOrder()
+            assertThat(sheet.getValue("text").jsonPrimitive.content).isEqualTo("An invented fact.")
+            assertThat(sheet.getValue("group").jsonPrimitive.content).isEqualTo("goals")
+            assertThat(sheet.getValue("source").jsonPrimitive.content).isEqualTo("they_said")
+            assertThat(sheet.getValue("since").jsonPrimitive.content).isEqualTo("2026-08-29")
+            val without = Json.parseToJsonElement(userContent(Json.parseToJsonElement(body(request)).jsonObject)).jsonObject
+            assertThat(without.getValue("sheet")).isEqualTo(JsonNull)
+        }
+    }
+
+    @Test
+    fun `the shared instructions say what the sheet is, and that the numbers win`() {
+        TrainerPath.entries.forEach { path ->
+            val text = TrainerPrompt.instructions(path)
+            assertThat(text).contains("sheet is what you know about them from your conversations with them")
+            assertThat(text).contains("where it conflicts with the numbers, the numbers are what happened")
+        }
     }
 
     /** D106: "save the app's instructions" is the system message each real body sends, not a copy of it. */
@@ -1081,6 +1125,7 @@ class TrainerPromptTest {
     }
 
     private companion object {
+        val SHEET = listOf(SheetFact(1, FactGroup.GOALS, "An invented fact.", TEST_EPOCH_DAY - 5, FactSource.SAID, edited = true))
         /** D147: what each line of the conversation is sent with, and nothing else. */
         val LINE_KEYS = setOf("at", "from", "kind", "session", "week", "text")
 

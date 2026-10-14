@@ -19,8 +19,8 @@ object BackupWording {
      *
      * "Are you sure?" is not information. A restore replaces, and the owner is entitled to know
      * what he is replacing before he agrees to it. The health record, the trainer's plans and the
-     * session reviews (D88), the weekly plans (D98), the weekly letters (D104) and the conversation with the trainer
-     * (D148) are each named when either side holds any, so a phone with none reads exactly as it did before they
+     * session reviews (D88), the weekly plans (D98), the weekly letters (D104), the conversation with the trainer
+     * (D148) and the versions of what the trainer knows (D150) are each named when either side holds any, so a phone with none reads exactly as it did before they
      * existed.
      */
     fun confirmReplacing(here: RestoreResult, incoming: RestoreResult): String = buildString {
@@ -29,12 +29,15 @@ object BackupWording {
         val withWeeks = hasWeeks(here) || hasWeeks(incoming)
         val withLetters = hasLetters(here) || hasLetters(incoming)
         val withTalk = hasTalk(here) || hasTalk(incoming)
+        val withSheets = hasSheets(here) || hasSheets(incoming)
         append("This will delete ")
-        append(record(here, withHealth, withTrainer, withWeeks, withLetters, withTalk))
+        append(record(here, withHealth, withTrainer, withWeeks, withLetters, withTalk, withSheets))
         append(" already on this phone, and put back ")
-        append(record(incoming, withHealth, withTrainer, withWeeks, withLetters, withTalk))
+        append(record(incoming, withHealth, withTrainer, withWeeks, withLetters, withTalk, withSheets))
         append(" from the file.")
-        if (here.meals == 0 && here.weights == 0 && !hasHealth(here) && !hasTrainer(here) && !hasWeeks(here) && !hasLetters(here) && !hasTalk(here)) {
+        if (here.meals == 0 && here.weights == 0 && !hasHealth(here) && !hasTrainer(here) && !hasWeeks(here) && !hasLetters(here) && !hasTalk(here) &&
+            !hasSheets(here)
+        ) {
             append(" There is nothing here to lose.")
         }
     }
@@ -62,12 +65,14 @@ object BackupWording {
 
     private fun hasTalk(result: RestoreResult): Boolean = result.trainerMessages > 0
 
+    private fun hasSheets(result: RestoreResult): Boolean = result.trainerSheets > 0
+
     /**
      * "400 meals and 50 weights", or with the health record, "…, 12 workouts and 30 days of health
      * data", with the trainer's record, "…, 3 trainer plans and 2 session reviews", and with the weekly
      * plans, "…, 2 session reviews and 1 weekly plan", and with the weekly letters, "…, 1 weekly plan
-     * and 2 weekly letters", and with the conversation, "…, 2 weekly letters and 6 messages with the trainer" (every
-     * count invented).
+     * and 2 weekly letters", with the conversation, "…, 2 weekly letters and 6 messages with the trainer", and with the
+     * sheet, "…, 6 messages with the trainer and 3 versions of what the trainer knows" (every count invented).
      */
     private fun record(
         result: RestoreResult,
@@ -76,13 +81,15 @@ object BackupWording {
         withWeeks: Boolean = hasWeeks(result),
         withLetters: Boolean = hasLetters(result),
         withTalk: Boolean = hasTalk(result),
+        withSheets: Boolean = hasSheets(result),
     ): String {
         val parts = listOf(meals(result.meals), weights(result.weights)) +
             (if (withHealth) listOf(workouts(result.workouts), healthDays(result.healthDays)) else emptyList()) +
             (if (withTrainer) listOf(trainerPlans(result.trainerPlans), sessionReviews(result.trainerReviews)) else emptyList()) +
             (if (withWeeks) listOf(weeklyPlans(result.trainerProgrammes)) else emptyList()) +
             (if (withLetters) listOf(weeklyLetters(result.weeklyLetters)) else emptyList()) +
-            if (withTalk) listOf(messages(result.trainerMessages)) else emptyList()
+            (if (withTalk) listOf(messages(result.trainerMessages)) else emptyList()) +
+            if (withSheets) listOf(sheets(result.trainerSheets)) else emptyList()
         return parts.dropLast(1).joinToString(", ") + " and " + parts.last()
     }
 
@@ -95,6 +102,9 @@ object BackupWording {
     private fun weeklyLetters(count: Int): String = if (count == 1) "1 weekly letter" else "$count weekly letters"
 
     private fun messages(count: Int): String = if (count == 1) "1 message with the trainer" else "$count messages with the trainer"
+
+    private fun sheets(count: Int): String =
+        if (count == 1) "1 version of what the trainer knows" else "$count versions of what the trainer knows"
 
     private fun workouts(count: Int): String = if (count == 1) "1 workout" else "$count workouts"
 

@@ -11,6 +11,7 @@ import com.metaself.app.data.ai.DataStoreRequestProfileStore
 import com.metaself.app.data.ai.EncryptedApiKeyStore
 import com.metaself.app.data.ai.OpenAiFoodReviewer
 import com.metaself.app.data.ai.OpenAiLetterWriter
+import com.metaself.app.data.ai.OpenAiSheetWriter
 import com.metaself.app.data.ai.OpenAiMealConversation
 import com.metaself.app.data.ai.OpenAiMealEstimator
 import com.metaself.app.data.ai.OpenAiTrainer
@@ -31,6 +32,7 @@ import com.metaself.app.domain.ai.FoodReviewer
 import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.letter.LetterWriter
+import com.metaself.app.domain.trainer.SheetWriter
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.WorkbenchSender
 import dagger.Module
@@ -175,4 +177,15 @@ object AiModule {
         profiles: RequestProfileStore,
         problems: ProblemLog,
     ): LetterWriter = OpenAiLetterWriter(keys, settings, client, profiles, problems)
+
+    /** The sheet's weekly rewrite (D150): the same key, ceiling, client, profiles and log as the trainer. */
+    @Provides
+    @Singleton
+    fun provideSheetWriter(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        profiles: RequestProfileStore,
+        problems: ProblemLog,
+    ): SheetWriter = OpenAiSheetWriter(keys, settings, client, profiles, problems)
 }

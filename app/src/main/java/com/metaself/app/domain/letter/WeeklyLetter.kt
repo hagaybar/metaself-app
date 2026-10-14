@@ -1,6 +1,7 @@
 package com.metaself.app.domain.letter
 
 import com.metaself.app.domain.movement.WorkoutKind
+import com.metaself.app.domain.trainer.SheetFact
 import com.metaself.app.domain.trainer.BodyFacts
 import com.metaself.app.domain.trainer.Felt
 import com.metaself.app.domain.trainer.GoalFacts
@@ -83,6 +84,7 @@ data class PastLetter(val weekMonday: Long, val lookAfter: String, val nextWeek:
  * @property planGoal the goal of the plan that ran this week (D119, D127), when one ran with a goal.
  * @property goalView the trainer's stand on that goal (D129), stored with the plan's evaluation.
  * @property lastLetters the last three letters before this one, newest first.
+ * @property sheet what the trainer knows about the owner (D151): the newest sheet's current facts, null when none.
  */
 data class LetterRequest(
     val figures: LetterFigures,
@@ -100,6 +102,7 @@ data class LetterRequest(
     val planGoal: PlanGoal?,
     val goalView: GoalView?,
     val lastLetters: List<PastLetter>,
+    val sheet: List<SheetFact>? = null,
 ) {
     init {
         require(sessions.all { it.words == null && it.felt == null && it.plan == null }) {

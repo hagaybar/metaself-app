@@ -26,6 +26,7 @@ interface HealthReadingDao {
     @Query("DELETE FROM health_readings WHERE origin = :origin AND recordId = :recordId")
     suspend fun deleteRecord(origin: String, recordId: String)
 
+    /** Every kind's rows on one day, through the `epochDay` index (version 15); a full scan before it. */
     @Query("SELECT * FROM health_readings WHERE epochDay = :epochDay ORDER BY kind, startMillis, sampleIndex")
     suspend fun onDay(epochDay: Long): List<HealthReadingEntity>
 
@@ -47,13 +48,14 @@ interface HealthReadingDao {
     suspend fun daysOf(origin: String, recordId: String): List<Long>
 
     /**
-     * A deleted record's days. Health Connect's deletion gives the id alone, and no index starts with
-     * `recordId` (adding one is a schema change), so this scans the table. Accepted: deletions are rare.
+     * A deleted record's days. Health Connect's deletion gives the id alone, so this goes through the
+     * `recordId` index (version 15). Without it, every deleted id scanned the whole table inside the
+     * copy's write transaction, and deletions are not rare: a page of changes can carry many.
      */
     @Query("SELECT DISTINCT epochDay FROM health_readings WHERE recordId = :recordId")
     suspend fun daysOf(recordId: String): List<Long>
 
-    /** Unindexed, as [daysOf] by id alone is; deletions are rare. */
+    /** Through the `recordId` index (version 15), as [daysOf] by id alone is. */
     @Query("DELETE FROM health_readings WHERE recordId = :recordId")
     suspend fun deleteByRecordId(recordId: String)
 

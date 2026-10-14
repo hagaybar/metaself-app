@@ -28,6 +28,10 @@ import com.metaself.app.domain.trainer.PlannedEffort
 import com.metaself.app.domain.trainer.PlannedSession
 import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
+import com.metaself.app.domain.trainer.FactGroup
+import com.metaself.app.domain.trainer.FactSource
+import com.metaself.app.domain.trainer.SheetFact
+import com.metaself.app.domain.trainer.SheetMadeBy
 import com.metaself.app.domain.trainer.ThreadItem
 import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
@@ -53,6 +57,7 @@ class TalkToTheTrainerTest {
     private val messages = InMemoryConversationStore()
     private val letters = FakeLetterStore()
     private val weekNotes = InMemoryWeekNoteStore()
+    private val sheets = InMemorySheetStore()
     private var now = NOW
 
     @Test
@@ -75,6 +80,18 @@ class TalkToTheTrainerTest {
     }
 
     /** D145: a message is never lost because a request failed; Try again sends it again. */
+    /** D151: a reply reads the sheet, as every request does. */
+    @Test
+    fun `a reply carries the newest sheet`() = runTest {
+        val fact = SheetFact(1, FactGroup.LIFE, "An invented fact.", TEST_EPOCH_DAY - 4, FactSource.NOTICED)
+        sheets.add(NOW - HOUR, listOf(fact), SheetMadeBy.REWRITE, "a-model")
+        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+
+        talk().answer(talk().say("Invented question."))
+
+        assertThat(trainer.asked.single().sheet).containsExactly(fact)
+    }
+
     @Test
     fun `a failed request keeps the message not answered, and trying again answers it`() = runTest {
         trainer.talks += TrainerReply.Failed(EstimateResult.Unreachable())
@@ -192,7 +209,7 @@ class TalkToTheTrainerTest {
 
     private fun ask() = AskTheTrainer(
         record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer, InMemoryAboutMeStore(), programmes,
-        Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { now }, CurrentYear { TEST_YEAR },
+        Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { now }, CurrentYear { TEST_YEAR }, sheets = sheets,
     )
 
     private fun run(id: Long) = Workout(

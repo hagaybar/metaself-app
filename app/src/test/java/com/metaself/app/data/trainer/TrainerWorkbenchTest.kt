@@ -42,6 +42,10 @@ import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.WeeksPlan
 import com.metaself.app.domain.trainer.Wish
+import com.metaself.app.domain.trainer.FactGroup
+import com.metaself.app.domain.trainer.FactSource
+import com.metaself.app.domain.trainer.SheetFact
+import com.metaself.app.domain.trainer.SheetMadeBy
 import com.metaself.app.domain.weight.WeightReading
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.BeforeEach
@@ -62,9 +66,10 @@ class TrainerWorkbenchTest {
     private val sender = RecordingWorkbenchSender()
     private val weights = InMemoryWeightRepository(listOf(WeightReading(TEST_EPOCH_DAY - 10, 74.0)))
     private val aboutMe = InMemoryAboutMeStore("Invented note.")
+    private val sheets = InMemorySheetStore()
     private val ask = AskTheTrainer(
         record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe, programmes,
-        Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW }, CurrentYear { TEST_YEAR },
+        Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW }, CurrentYear { TEST_YEAR }, sheets = sheets,
     )
     private val workbench = TrainerWorkbench(ask, store, record, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, sender)
 
@@ -90,6 +95,18 @@ class TrainerWorkbenchTest {
         // The asked session's own earlier feedback is excluded, as the real ask excludes it too (exceptWorkoutId).
         assertThat(bench.earlierFeedback).contains(OTHER_FEEDBACK)
         assertThat(bench.earlierFeedback).doesNotContain(OWN_FEEDBACK)
+    }
+
+    /** D151: the workbench's requests carry the sheet, since they are the real ones. */
+    @Test
+    fun `the workbench's request carries the newest sheet`() = runTest {
+        val fact = SheetFact(1, FactGroup.TRAINING, "An invented fact.", TEST_EPOCH_DAY - 4, FactSource.SAID)
+        sheets.add(NOW, listOf(fact), SheetMadeBy.OWNER, null)
+
+        val bench = workbench.request(TrainerWorkbench.Inputs.Plan(ANSWERS))!!
+
+        assertThat(bench.sheet).containsExactly(fact)
+        assertThat(TrainerPrompt.userMessage(bench)).contains("An invented fact.")
     }
 
     @Test
