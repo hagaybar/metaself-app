@@ -20,6 +20,7 @@ data class ChangeLogEntry(
 object ChangeLog {
 
     val entries: List<ChangeLogEntry> = listOf(
+        entry("0.87.0", 10, 14, "Movement and the trainer no longer look through every workout's distance readings, a deleted band record no longer searches all your nights and workouts, and Recent problems can measure the app for 3 days and save what it measured."),
         entry("0.86.1", 10, 14, "Your food list and logging no longer wait behind the band's records being copied."),
         entry("0.86.0", 10, 14, "Your trainer remembers: What I know about you, on the Trainer page, holds what it learns from your conversations, rewritten each Sunday; change or remove anything that's wrong."),
         entry("0.85.0", 10, 12, "Talk to your trainer: write to it from the Trainer page, and its feedback and letters appear in the conversation."),

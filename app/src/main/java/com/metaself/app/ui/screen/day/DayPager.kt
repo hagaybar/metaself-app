@@ -1,5 +1,7 @@
 package com.metaself.app.ui.screen.day
 
+import android.os.Process
+import android.os.SystemClock
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.Modifier
@@ -159,6 +162,15 @@ private fun DayPagerOn(
     onOpenTrainer: () -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // D152 (temporary): the first frame drawn with the day's data — the end of the app's open.
+    val drawnReady = state is DayUiState.Ready
+    LaunchedEffect(drawnReady) {
+        if (drawnReady) {
+            withFrameNanos { }
+            viewModel.dayDrawn(SystemClock.elapsedRealtime(), Process.getStartElapsedRealtime())
+        }
+    }
 
     val range = remember(todayEpochDay) { DayRange(today = todayEpochDay) }
     val pagerState = rememberPagerState(initialPage = range.todayPage) { range.pageCount }

@@ -126,7 +126,7 @@ class MovementRecordTest {
         val dao = only<WorkoutDao> { method ->
             when (method) {
                 "observeBetween" -> rows
-                "idsWithOwnDistance" -> listOf(2L)
+                "idsWithOwnDistanceAmong" -> listOf(2L)
                 else -> null
             }
         }
@@ -153,7 +153,7 @@ class MovementRecordTest {
         val dao = only<WorkoutDao> { method ->
             when (method) {
                 "observeBetween" -> rows
-                "idsWithOwnDistance" -> emptyList<Long>()
+                "idsWithOwnDistanceAmong" -> emptyList<Long>()
                 "byId" -> second
                 else -> null
             }

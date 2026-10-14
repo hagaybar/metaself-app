@@ -1,5 +1,7 @@
 package com.metaself.app.ui.screen.trainer
 
+import com.metaself.app.data.diagnostics.measure.FirstData
+import com.metaself.app.data.diagnostics.measure.MeasureRecorder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.diagnostics.ProblemLog
@@ -61,7 +63,11 @@ class TrainerViewModel @Inject constructor(
     private val problems: ProblemLog,
     private val ask: AskTheTrainer,
     weekNotes: WeekNoteStore,
+    /** D152 (temporary): time to the page's first data. Off unless switched on. */
+    measure: MeasureRecorder = MeasureRecorder.OFF,
 ) : ViewModel() {
+
+    private val firstData = FirstData(measure, "trainer")
 
     /**
      * [aboutMe] is the owner's note (D90), "" when none. [answering]: the sessions whose answer to "count it
@@ -173,6 +179,7 @@ class TrainerViewModel @Inject constructor(
                 refused = now.refused.takeIf { card == now.refusedOn },
             )
         }
+        .let { states -> firstData.of(states) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), State(today = calendarToday.value))
 
     /** The screen came to the front: on a new day, the last three days are read again from it. */

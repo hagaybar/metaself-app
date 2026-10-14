@@ -6,6 +6,11 @@ import com.metaself.app.data.day.InMemoryMealRepository
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.backup.DailyBackup
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.diagnostics.measure.FakeMeasureClock
+import com.metaself.app.data.diagnostics.measure.MeasureRecorder
+import com.metaself.app.data.diagnostics.measure.MeasureWindow
+import com.metaself.app.data.diagnostics.measure.RecordingSink
+import com.metaself.app.data.diagnostics.measure.aWriterWithoutTimer
 import com.metaself.app.data.movement.StepAccess
 import com.metaself.app.data.movement.StepSource
 import com.metaself.app.data.health.FakeTypedWorkouts
@@ -150,6 +155,31 @@ class DayViewModelTest {
         advanceUntilIdle()
 
         assertThat(meals.logged.map { it.loggedAtMillis }).containsExactly(moment, moment, moment, moment)
+    }
+
+    /** D152: measured, every way of logging writes how long from the tap to the row; the day's first data once. */
+    @Test
+    fun `measured, each Log says how long from the tap to the row written, and never what was logged`() = runTest {
+        val clock = FakeMeasureClock()
+        val sink = RecordingSink()
+        val measure = MeasureRecorder(sink, clock, aWriterWithoutTimer())
+        measure.switchOn(clock.wall + MeasureWindow.LENGTH_MILLIS)
+        val viewModel = viewModel(measure = measure)
+
+        viewModel.state.first { it is DayUiState.Ready }
+        viewModel.log(anItem(name = "Typed"))
+        viewModel.logMeal(listOf(ToLog(anItem(name = "Described"))))
+        viewModel.logScanned(anItem(name = "Scanned"), aPacket())
+        viewModel.logSavedMeal(LoggedMeal(items = listOf(anItem(name = "Saved")), savedMealId = 1, adjusted = false))
+        advanceUntilIdle()
+        measure.flush()
+
+        val logs = sink.lines.filter { it.contains("\"type\":\"log\"") }
+        assertThat(logs.map { Regex("\"how\":\"([^\"]+)\"").find(it)!!.groupValues[1] })
+            .containsExactly("one item", "meal", "scan", "saved meal")
+        assertThat(logs.all { it.contains("\"tap_to_written_ms\":") }).isTrue()
+        assertThat(sink.lines.count { it.contains("\"screen\":\"day\"") }).isEqualTo(1)
+        listOf("Typed", "Described", "Scanned", "Saved").forEach { assertThat(sink.lines.joinToString()).doesNotContain(it) }
     }
 
     /** D58 §12.8: from My meals nothing says which day, so logging goes on today. */
@@ -376,6 +406,7 @@ class DayViewModelTest {
             override suspend fun history(from: LocalDate, to: LocalDate) = emptyList<DayMovement>()
         },
         typedWorkouts: TypedWorkouts = TypedWorkouts.NONE,
+        measure: MeasureRecorder = MeasureRecorder.OFF,
     ) = DayViewModel(
         profiles = profiles,
         meals = mealRepository,
@@ -403,6 +434,7 @@ class DayViewModelTest {
         loggedFoods = LoggedFoods(foods),
         problems = problems,
         typedWorkouts = typedWorkouts,
+        measure = measure,
     )
 
     @Test

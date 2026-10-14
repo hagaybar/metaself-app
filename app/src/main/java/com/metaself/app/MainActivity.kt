@@ -3,6 +3,7 @@ package com.metaself.app
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -12,6 +13,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.core.content.IntentCompat
 import androidx.lifecycle.lifecycleScope
+import com.metaself.app.data.diagnostics.measure.MeasureRecorder
+import com.metaself.app.data.diagnostics.measure.MeasureSwitch
 import com.metaself.app.data.health.SharedWorkoutFiles
 import com.metaself.app.data.health.inlineWorkoutText
 import com.metaself.app.data.letter.LetterNotifications
@@ -40,8 +43,17 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var openedLetters: OpenedLetters
 
+    /** D152 (temporary): measuring follows its stored switch from the first moment of each open. */
+    @Inject
+    lateinit var measureSwitch: MeasureSwitch
+
+    @Inject
+    lateinit var measure: MeasureRecorder
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        measure.activityCreated(SystemClock.elapsedRealtime())
+        lifecycleScope.launch { measureSwitch.restore() }
         // Not again on a re-creation: the file was offered the first time, and may be imported already.
         if (savedInstanceState == null) {
             takeSharedFile(intent)

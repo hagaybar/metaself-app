@@ -1,5 +1,7 @@
 package com.metaself.app.ui.screen.repeat
 
+import com.metaself.app.data.diagnostics.measure.FirstData
+import com.metaself.app.data.diagnostics.measure.MeasureRecorder
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.food.FoodRepository
@@ -37,7 +39,12 @@ import javax.inject.Inject
 class RepeatViewModel @Inject constructor(
     foods: FoodRepository,
     savedMeals: SavedMealRepository,
+    /** D152 (temporary): time to the lists' first data. Off unless switched on. */
+    measure: MeasureRecorder = MeasureRecorder.OFF,
 ) : ViewModel() {
+
+    private val firstFoods = FirstData(measure, "add something: foods")
+    private val firstMeals = FirstData(measure, "add something: meals")
 
     private val _adjusting = MutableStateFlow<Adjusting?>(null)
     private val _choosing = MutableStateFlow<Choosing?>(null)
@@ -60,13 +67,13 @@ class RepeatViewModel @Inject constructor(
      * until meals built by hand exist to replace it.
      */
     val state: StateFlow<RepeatUiState> = combine(
-        foods.observeOffered().onEach { offered ->
+        firstFoods.of(foods.observeOffered()).onEach { offered ->
             _choosing.update { open -> open?.let { refreshed(it, offered) } }
             _adjusting.update { open ->
                 open?.adding?.let { open.copy(adding = refreshed(it, offered)) } ?: open
             }
         },
-        savedMeals.observeOffered(),
+        firstMeals.of(savedMeals.observeOffered()),
         _adjusting,
         _choosing,
         _looking,

@@ -94,6 +94,30 @@ object SessionWitnesses {
         return (sessions + aside).sortedWith(compareBy<Workout>({ it.startedAtMillis }, { it.id }))
     }
 
+    /**
+     * D153: the workouts whose [Workout.ownDistance] can change a session — synced ones with a distance
+     * that overlap another workout [combine] would join them with. It is read nowhere else, so asking the
+     * database for any other workout's is work for nothing; a superset of the ones it decides (a split
+     * pair is included), never fewer.
+     */
+    fun ownDistanceDecides(workouts: List<Workout>): Set<Long> {
+        val candidates = workouts.filter { !it.hidden && it.counted }
+            .sortedWith(compareBy<Workout>({ it.startedAtMillis }, { it.id }))
+        val decided = mutableSetOf<Long>()
+        candidates.forEachIndexed { i, a ->
+            var j = i + 1
+            while (j < candidates.size && candidates[j].startedAtMillis <= endOf(a)) {
+                val b = candidates[j]
+                if (overlaps(a, b)) {
+                    if (a.source == WorkoutSource.SYNCED && a.distanceM != null) decided += a.id
+                    if (b.source == WorkoutSource.SYNCED && b.distanceM != null) decided += b.id
+                }
+                j++
+            }
+        }
+        return decided
+    }
+
     /** At least half of the shorter one shared; a zero-minute one only inside the other. */
     fun overlaps(a: Workout, b: Workout): Boolean {
         val shorter = min(lengthOf(a), lengthOf(b))
