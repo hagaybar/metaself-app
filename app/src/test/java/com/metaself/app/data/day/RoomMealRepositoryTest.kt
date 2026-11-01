@@ -49,6 +49,18 @@ class RoomMealRepositoryTest {
     }
 
     @Test
+    fun `the rows since a day leave out earlier days and say which meal each came from`() = runTest {
+        repository.log(aMeal(epochDay = DAY - 1, items = listOf(anItem(name = "Hummus"))))
+        repository.log(aMeal(epochDay = DAY, items = listOf(anItem(name = "Hummus", portionAmount = 2.0, portionUnit = "spoon"))))
+
+        val row = repository.observeRowsSince(DAY).first().single()
+
+        assertThat(row.amount).isEqualTo(2.0)
+        assertThat(row.unit).isEqualTo("spoon")
+        assertThat(row.savedMealId).isNull()
+    }
+
+    @Test
     fun `a logged meal appears on its day`() = runTest {
         repository.log(aMeal(epochDay = DAY, items = listOf(anItem(name = "Hummus"))))
 

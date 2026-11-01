@@ -5,6 +5,8 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import com.metaself.app.domain.food.LastAmount
+import com.metaself.app.domain.food.LoggedRow
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -15,6 +17,29 @@ import kotlinx.coroutines.flow.Flow
  */
 @Dao
 interface MealDao {
+
+    /** Every row on a day from [fromEpochDay] on, for working out the tiles on Add something (D154). */
+    @Query(
+        "SELECT m.id AS mealId, m.savedMealId AS savedMealId, i.foodId AS foodId, " +
+            "i.portionAmount AS amount, i.portionUnit AS unit, m.loggedAtMillis AS loggedAtMillis " +
+            "FROM meals m INNER JOIN food_items i ON i.mealId = m.id " +
+            "WHERE m.epochDay >= :fromEpochDay",
+    )
+    fun observeRowsSince(fromEpochDay: Long): Flow<List<LoggedRow>>
+
+    /**
+     * The last time each food was logged on its own, for what its amount question opens holding
+     * (D155). SQLite takes the bare columns from the row `MAX` picked.
+     */
+    @Query(
+        "SELECT i.foodId AS foodId, i.portionAmount AS amount, i.portionUnit AS unit, " +
+            "MAX(m.loggedAtMillis) AS loggedAtMillis " +
+            "FROM food_items i INNER JOIN meals m ON m.id = i.mealId " +
+            "WHERE i.foodId IS NOT NULL AND m.savedMealId IS NULL " +
+            "AND (SELECT COUNT(*) FROM food_items o WHERE o.mealId = m.id) = 1 " +
+            "GROUP BY i.foodId",
+    )
+    fun observeLastAmounts(): Flow<List<LastAmount>>
 
     @Transaction
     @Query("SELECT * FROM meals WHERE epochDay = :epochDay ORDER BY loggedAtMillis ASC, id ASC")

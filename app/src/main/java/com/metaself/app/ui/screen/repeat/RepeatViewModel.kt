@@ -2,14 +2,20 @@ package com.metaself.app.ui.screen.repeat
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.metaself.app.data.day.LoggingHistory
 import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.SavedMealRepository
+import com.metaself.app.data.time.Today
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.FoodSearch
 import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.LastAmount
 import com.metaself.app.domain.food.MealComponent
+import com.metaself.app.domain.food.QuickAdd
+import com.metaself.app.domain.food.QuickTile
+import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.portion.Portions
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +43,8 @@ import javax.inject.Inject
 class RepeatViewModel @Inject constructor(
     foods: FoodRepository,
     savedMeals: SavedMealRepository,
+    history: LoggingHistory,
+    today: Today,
 ) : ViewModel() {
 
     private val _adjusting = MutableStateFlow<Adjusting?>(null)
@@ -45,40 +53,51 @@ class RepeatViewModel @Inject constructor(
     /**
      * Which list is in front and what is typed into the search, as one value.
      *
-     * One rather than two because `combine` takes five flows and there are six things to combine —
+     * One rather than two because `combine` takes five flows and there are more to combine —
      * and because these two genuinely move together: every change to either closes whatever is open,
      * for the same reason.
      */
     private val _looking = MutableStateFlow(Looking())
 
+    private var spent = false
+
     /**
      * The foods list is now the owner's foods, not a list derived from whatever happened to be
      * logged.
      *
-     * A food logged again and again is one entry instead of thirty, and picking it asks how much
-     * rather than offering a past amount. The meals list is still derived and stays so
-     * until meals built by hand exist to replace it.
+     * A food logged again and again is one entry instead of thirty. Picking it asks how much, opening
+     * at the amount it usually or last had (D155); its tile, if it has earned one, logs that without
+     * asking (D154).
      */
     val state: StateFlow<RepeatUiState> = combine(
-        foods.observeOffered().onEach { offered ->
-            _choosing.update { open -> open?.let { refreshed(it, offered) } }
-            _adjusting.update { open ->
-                open?.adding?.let { open.copy(adding = refreshed(it, offered)) } ?: open
-            }
+        combine(
+            foods.observeOffered().onEach { offered ->
+                _choosing.update { open -> open?.let { refreshed(it, offered) } }
+                _adjusting.update { open ->
+                    open?.adding?.let { open.copy(adding = refreshed(it, offered)) } ?: open
+                }
+            },
+            savedMeals.observeOffered(),
+            history.observeRowsSince(today().toEpochDay() - QuickAdd.WINDOW_DAYS),
+            history.observeLastAmounts(),
+        ) { ownFoods, ownMeals, rows, lastAmounts ->
+            Known(ownFoods, ownMeals, QuickAdd.tiles(ownFoods, ownMeals, rows), lastAmounts.associateBy { it.foodId })
         },
-        savedMeals.observeOffered(),
         _adjusting,
         _choosing,
         _looking,
-    ) { ownFoods, ownMeals, adjusting, choosing, looking ->
+    ) { known, adjusting, choosing, looking ->
+        val ownFoods = known.foods
         val foods = FoodSearch.matching(ownFoods, looking.query)
         RepeatUiState(
             tab = looking.tab,
             query = looking.query,
             foods = foods,
-            meals = ownMeals.filter { it.name.contains(looking.query.trim(), ignoreCase = true) },
+            meals = known.meals.filter { it.name.contains(looking.query.trim(), ignoreCase = true) },
             adjusting = adjusting?.let { offering(it, ownFoods) },
             choosing = choosing?.let { current(it, foods) },
+            quick = known.tiles,
+            lastAmounts = known.lastAmounts,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -147,13 +166,32 @@ class RepeatViewModel @Inject constructor(
     /**
      * Pick a food, and start deciding how much of it.
      *
-     * Opened on whichever way of counting the food actually knows, preferring weighing when it knows
-     * both — grams are the more exact of the two and the one a kitchen scale answers.
+     * Opened holding the amount he usually or last had, in that unit (D155). With nothing to go on,
+     * it opens empty on whichever way of counting the food actually knows, preferring weighing when
+     * it knows both — grams are the more exact of the two and the one a kitchen scale answers.
      */
     fun beginChoosing(index: Int) {
-        val food = state.value.foods.getOrNull(index) ?: return
-        val countedAs = if (food.facts.canBeWeighed) CountedAs.GRAMS else CountedAs.UNITS
-        _choosing.value = Choosing(index = index, food = food, countedAs = countedAs)
+        val shown = state.value
+        val food = shown.foods.getOrNull(index) ?: return
+        val offered = QuickAdd.amountToOffer(food, shown.quick, shown.lastAmounts[food.id])
+        _choosing.value = Choosing(
+            index = index,
+            food = food,
+            countedAs = offered?.countedAs ?: if (food.facts.canBeWeighed) CountedAs.GRAMS else CountedAs.UNITS,
+            amount = offered?.let { Portions.inBox(it.amount) }.orEmpty(),
+        )
+    }
+
+    /**
+     * A tile pressed, or null if one already was on this screen (D154).
+     *
+     * One press, one row: the press closes the screen, and a second one landing before it has gone
+     * must neither write again nor go back past the day.
+     */
+    fun spend(tile: QuickTile): QuickTile? {
+        if (spent) return null
+        spent = true
+        return tile
     }
 
     fun countAs(countedAs: CountedAs) {
@@ -181,19 +219,7 @@ class RepeatViewModel @Inject constructor(
         val choosing = _choosing.value ?: return null
         val numbers = choosing.preview ?: return null
         _choosing.value = null
-        return FoodItem(
-            name = choosing.food.name,
-            portion = Portions.words(numbers.amount, numbers.unit),
-            portionAmount = numbers.amount,
-            portionUnit = numbers.unit,
-            kcal = numbers.kcal,
-            proteinG = numbers.proteinG,
-            carbsG = numbers.carbsG,
-            fatG = numbers.fatG,
-            source = numbers.source,
-            confidence = numbers.confidence,
-            foodId = choosing.food.id,
-        )
+        return QuickAdd.rowOf(choosing.food, numbers)
     }
 
     // --- A meal, for one day only ----------------------------------------------------------------
@@ -380,6 +406,14 @@ class RepeatViewModel @Inject constructor(
             adjusted = current.adjusted,
         )
     }
+
+    /** What the record and his lists say, as one value, for the reason [Looking] is one. */
+    private class Known(
+        val foods: List<Food>,
+        val meals: List<SavedMeal>,
+        val tiles: List<QuickTile>,
+        val lastAmounts: Map<Long, LastAmount>,
+    )
 
     /** Which list is in front, and what is typed into the search. */
     private data class Looking(

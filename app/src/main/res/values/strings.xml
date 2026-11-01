@@ -57,6 +57,7 @@
     <string name="today_undo">Undo</string>
     <string name="today_deleted">Deleted</string>
     <string name="today_logged_dismiss">Got it</string>
+    <string name="today_logged_undo">Undo</string>
     <string name="today_more">More</string>
     <string name="today_got_it">Got it</string>
     <!-- D133: Settings' first row, and the title of the page it opens. -->
@@ -363,7 +364,11 @@
     <string name="repeat_none">Nothing to repeat yet. Anything you log will appear here.</string>
     <string name="repeat_tab_none">Nothing on this list yet.</string>
     <string name="repeat_describe_instead">Describe “%1$s” instead</string>
-    <string name="repeat_note">Tap a meal to open it: Log it puts it on the day you are on, as it is or changed for today. Tap a food and it asks how much first. Nothing is sent anywhere.</string>
+    <string name="repeat_note">Tap a meal to open it: Log it puts it on the day you are on, as it is or changed for today. Tap a food and it asks how much first, starting from your usual amount. Nothing is sent anywhere.</string>
+    <string name="repeat_quick_title">Quick add: one tap logs it</string>
+    <string name="repeat_quick_title_on">Quick add to %1$s: one tap logs it</string>
+    <string name="repeat_quick_food">%1$s · %2$d kcal</string>
+    <string name="repeat_quick_meal">Meal · %1$d kcal</string>
     <string name="repeat_tab_foods">My foods</string>
     <string name="repeat_tab_meals">My meals</string>
     <string name="repeat_search">Search what you have eaten</string>

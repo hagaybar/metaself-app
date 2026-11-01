@@ -2,6 +2,8 @@ package com.metaself.app.data.day
 
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
+import com.metaself.app.domain.food.LastAmount
+import com.metaself.app.domain.food.LoggedRow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
@@ -14,7 +16,7 @@ import javax.inject.Inject
  */
 class RoomMealRepository @Inject constructor(
     private val dao: MealDao,
-) : MealRepository {
+) : MealRepository, LoggingHistory {
 
     /**
      * The day's meals, each row labelled with what its food is called NOW.
@@ -33,6 +35,11 @@ class RoomMealRepository @Inject constructor(
 
     private fun savedMealNames(): Flow<Map<Long, String>> =
         dao.observeSavedMealNames().map { rows -> rows.associate { it.id to it.name } }
+
+    override fun observeRowsSince(fromEpochDay: Long): Flow<List<LoggedRow>> =
+        dao.observeRowsSince(fromEpochDay)
+
+    override fun observeLastAmounts(): Flow<List<LastAmount>> = dao.observeLastAmounts()
 
     override fun observeLoggedDays(): Flow<Set<Long>> =
         dao.observeLoggedDays().map { it.toSet() }

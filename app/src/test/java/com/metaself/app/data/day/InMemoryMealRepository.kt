@@ -4,6 +4,8 @@ import com.metaself.app.data.food.FoodRepository
 import com.metaself.app.data.food.LoggedRowsOfFoods
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
+import com.metaself.app.domain.food.LastAmount
+import com.metaself.app.domain.food.LoggedRow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
@@ -57,7 +59,7 @@ class InMemoryMealRepository(
      */
     private val foods: FoodRepository? = null,
     private val mealTitles: Flow<Map<Long, String>>? = null,
-) : MealRepository, LoggedRowsOfFoods {
+) : MealRepository, LoggedRowsOfFoods, LoggingHistory {
 
     /*
      * The two id counters, standing in for `sqlite_sequence`. Declared BEFORE `state`: property
@@ -149,6 +151,26 @@ class InMemoryMealRepository(
         meals.filter { it.savedMealId != null }
             .groupBy { it.savedMealId!! }
             .mapValues { (_, logged) -> logged.maxOf { it.loggedAtMillis } }
+    }
+
+    /** `MealDao.observeRowsSince`. */
+    override fun observeRowsSince(fromEpochDay: Long): Flow<List<LoggedRow>> = state.map { meals ->
+        meals.filter { it.epochDay >= fromEpochDay }.flatMap { meal ->
+            meal.items.map { item ->
+                LoggedRow(meal.id, meal.savedMealId, item.foodId, item.portionAmount, item.portionUnit, meal.loggedAtMillis)
+            }
+        }
+    }
+
+    /** `MealDao.observeLastAmounts`. */
+    override fun observeLastAmounts(): Flow<List<LastAmount>> = state.map { meals ->
+        meals.filter { it.savedMealId == null && it.items.size == 1 && it.items.single().foodId != null }
+            .sortedBy { it.loggedAtMillis }
+            .associateBy { it.items.single().foodId!! }
+            .map { (foodId, meal) ->
+                val item = meal.items.single()
+                LastAmount(foodId, item.portionAmount, item.portionUnit, meal.loggedAtMillis)
+            }
     }
 
     override fun observeLoggedDays(): Flow<Set<Long>> =

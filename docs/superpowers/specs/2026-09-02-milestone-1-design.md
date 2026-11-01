@@ -288,7 +288,8 @@ correction note is in that file).
 - **A food knows what it is, not how much of it he puts in.** A chosen food arrives in the builder
   waiting for an amount with **nothing filled in**, and becomes part of the meal only when he says
   so. This is D4 applied to a form default: a number typed into a box he then saves is
-  indistinguishable afterwards from a number he entered himself.
+  indistinguishable afterwards from a number he entered himself. **Still so in the builder. On Add
+  something the amount now opens filled in, from his own earlier entry (D155, 2026-11-01).**
 - **A day whose rows became a meal shows them under that meal's name with NOT ONE STORED NUMBER
   CHANGED.** The gathering writes the new meal's identity onto rows that already exist; it does not
   recompute, re-cost or re-source anything.
@@ -660,6 +661,9 @@ growing to match — unless the words were right and the app wrong.**
 - **Add something** says what each list does: *Tap a meal and it goes on the day you are on, as you
   built it. Tap a food and it asks how much first. Nothing is sent anywhere.* Logging a food is not
   made one tap: an amount is the one thing the app will not fill in for him (D4).
+  **AMENDED 2026-11-01 (from 0.88.0), by the owner:** the amount question now opens at the food's usual
+  or last amount (D155), and tiles above the lists log on one press (D154). See
+  `2026-11-01-quick-add-design.md`.
   **AMENDED 2026-09-24, public issue #21 (from 0.48.0):** a meal's tap now opens it, so the meal half
   reads *Tap a meal to open it: Log it puts it on the day you are on, as it is or changed for
   today.* — the words changed to what the app now does (see step 9).
