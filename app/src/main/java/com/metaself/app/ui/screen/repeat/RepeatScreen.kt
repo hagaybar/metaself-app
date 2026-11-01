@@ -33,6 +33,7 @@ import com.metaself.app.domain.food.FoodFacts
 import com.metaself.app.domain.food.PerHundredMillilitres
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.MealComponent
+import com.metaself.app.domain.food.QuickTile
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.domain.amount.BelievableAmount
 import com.metaself.app.ui.MetaSelfScreen
@@ -48,6 +49,7 @@ import com.metaself.app.ui.portion.portionWords
 import com.metaself.app.ui.portion.unitWord
 import com.metaself.app.ui.theme.MetaSelfInk
 import com.metaself.app.ui.theme.Spacing
+import java.time.LocalDate
 import java.util.Locale
 
 /**
@@ -69,9 +71,9 @@ import java.util.Locale
  * a number you cannot trust. A part the app cannot cost — shown with a "?" — is skipped when the
  * meal is logged, not guessed at.
  *
- * A food is not one tap: tapping it asks how much first, with the amount left empty, because the
- * amount is the one thing the app will not fill in for him (D4). The note above both tabs says which
- * is which (D37) — it once said "One tap logs it" of both.
+ * A food's row is not one tap: tapping it asks how much first, opening at the amount it usually or
+ * last had (D155). The note above both tabs says which is which (D37) — it once said "One tap logs
+ * it" of both. What does log on one press is a tile above the lists, which is not a row (D154).
  *
  * The meal opens in place, not on a screen of its own, so that what he is changing stays next to
  * the other meals he might have picked instead.
@@ -112,6 +114,10 @@ fun RepeatScreen(
     onPutItIn: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** A tile pressed: it logs (D154). */
+    onQuickTile: (QuickTile) -> Unit = {},
+    /** The day a tile would log on, when that is not today. */
+    otherDay: LocalDate? = null,
 ) {
     MetaSelfScreen(
         title = stringResource(R.string.repeat_title),
@@ -173,6 +179,8 @@ fun RepeatScreen(
             }
             return@MetaSelfScreen
         }
+
+        QuickAddTiles(tiles = state.tilesShown, otherDay = otherDay, onTile = onQuickTile)
 
         Text(
             text = stringResource(R.string.repeat_note),
@@ -657,9 +665,8 @@ private fun Small(label: String, said: String? = null, onClick: () -> Unit) {
 /**
  * One of the owner's foods: what it is called, and everything it knows about itself.
  *
- * The whole row opens it, because picking a food and saying how much is now one action rather than
- * two — there is no "log it exactly as it was last time" any more, and there should not be: a
- * food is one entry now, not one per time it was logged, and it has no last time of its own.
+ * The whole row opens it, because picking a food and saying how much is one action rather than two.
+ * Logging it as last time without being asked is a tile's job, not a row's (D154).
  *
  * What it knows is shown as separate lines rather than one sentence. A food may genuinely have two
  * things to say — what 100 g are worth and what one of it is worth — and joining a Hebrew name to a

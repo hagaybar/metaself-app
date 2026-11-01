@@ -215,6 +215,7 @@ private fun DayPagerOn(
         // read taken once per app open, so a walk taken WHILE the app is open never showed up
         // until it was closed and reopened.
         val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+        val canUndoQuickLog by viewModel.canUndoQuickLog.collectAsStateWithLifecycle()
         // Counted by the view model rather than flagged here. A boolean set beside each call could
         // not count: two deletes and one undo left it disagreeing with what was actually still
         // recoverable, in one direction or the other depending on the order.
@@ -263,6 +264,7 @@ private fun DayPagerOn(
                         onDismissTargetChange = viewModel::dismissTargetChange,
                         onDismissFoodRetaught = viewModel::dismissFoodRetaught,
                         onDismissJustLogged = viewModel::dismissJustLogged,
+                        onUndoQuickLog = if (canUndoQuickLog) viewModel::undoQuickLog else null,
                         onDismissEncouragement = viewModel::dismissEncouragement,
                         onDismissRefusal = viewModel::dismissRefusal,
                         weeklyLetter = weeklyLetter,

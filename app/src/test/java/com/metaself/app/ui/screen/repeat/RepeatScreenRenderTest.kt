@@ -15,9 +15,11 @@ import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerUnit
 import com.metaself.app.domain.food.Provenance
+import com.metaself.app.domain.food.QuickTile
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.ui.ComposeRender
 import org.junit.After
+import java.time.LocalDate
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,6 +38,9 @@ class RepeatScreenRenderTest {
 
     /** The tab asked for, or null if none was. */
     private var shownTab: RepeatTab? = null
+
+    /** The tile pressed, or null if none was. */
+    private var pressedTile: QuickTile? = null
 
     /** Whether the adjuster's "Put something in" was pressed. */
     private var beganAdding = false
@@ -65,6 +70,58 @@ class RepeatScreenRenderTest {
      * This branch returns early, before the search box is drawn. Without a way out, a fresh install
      * would open its front door onto a screen offering no way to log anything at all.
      */
+    private fun aTile() = QuickTile(
+        name = "Oat bar",
+        items = listOf(anItem(name = "Oat bar", portion = "1 bar", kcal = 200)),
+        foodId = 1,
+    )
+
+    private fun aMealTile() = QuickTile(
+        name = "Lentil soup",
+        items = listOf(anItem(name = "Lentils", kcal = 200), anItem(name = "Oil", kcal = 100)),
+        savedMealId = 2,
+    )
+
+    @Test
+    fun `a tile says what it will write, and a press hands it over`() {
+        val texts = draw(RepeatUiState(foods = someFoods(), quick = listOf(aTile(), aMealTile())))
+
+        assertThat(texts).containsAtLeast("Quick add: one tap logs it", "Oat bar", "1 bar · 200 kcal", "Lentil soup", "Meal · 300 kcal")
+
+        render.click("Oat bar")
+
+        assertThat(pressedTile?.foodId).isEqualTo(1)
+    }
+
+    @Test
+    fun `the tiles come above the lists`() {
+        draw(RepeatUiState(foods = someFoods(), quick = listOf(aTile())))
+
+        assertThat(render.isDrawnBefore("Quick add", someFoods().first().name)).isTrue()
+    }
+
+    @Test
+    fun `with no tiles there is no section`() {
+        assertThat(draw(RepeatUiState(foods = someFoods())).none { it.startsWith("Quick add") }).isTrue()
+    }
+
+    @Test
+    fun `typing hides the tiles`() {
+        val texts = draw(RepeatUiState(foods = someFoods(), query = "o", quick = listOf(aTile())))
+
+        assertThat(texts.none { it.startsWith("Quick add") }).isTrue()
+    }
+
+    @Test
+    fun `on another day the heading names it`() {
+        val texts = draw(
+            RepeatUiState(foods = someFoods(), quick = listOf(aTile())),
+            otherDay = LocalDate.of(2026, 9, 2),
+        )
+
+        assertThat(texts).contains("Quick add to Wed 2 Sep: one tap logs it")
+    }
+
     @Test
     fun `with nothing ever logged it still offers to describe a meal`() {
         val texts = draw(RepeatUiState())
@@ -216,8 +273,8 @@ class RepeatScreenRenderTest {
 
     /**
      * The note sits above both lists, and it used to say "One tap logs it" of both. A food's tap
-     * asks how much first, because the amount is the one thing the app will not fill in for him
-     * (D4); since public issue #21 a meal's tap opens it, and Log it is what puts it on the day. The
+     * asks how much first; since public issue #21 a meal's tap opens it, and Log it is what puts it
+     * on the day. The
      * note says each (D37), and no longer that a tap alone puts a meal on the day.
      */
     @Test
@@ -1103,9 +1160,12 @@ class RepeatScreenRenderTest {
         state: RepeatUiState,
         onSetComponentAmount: (Long, String) -> Unit = { _, _ -> },
         onStepComponent: (Long, Int) -> Unit = { _, _ -> },
+        otherDay: LocalDate? = null,
     ): List<String> = render.texts {
         RepeatScreen(
             state = state,
+            onQuickTile = { pressedTile = it },
+            otherDay = otherDay,
             onDescribe = { words -> describedWith = words },
             onManageFoods = {},
             onGivePortion = { foodId -> portionFor = foodId },
@@ -1139,6 +1199,7 @@ class RepeatScreenRenderTest {
     private companion object {
         const val REPEAT_NOTE =
             "Tap a meal to open it: Log it puts it on the day you are on, as it is or changed " +
-                "for today. Tap a food and it asks how much first. Nothing is sent anywhere."
+                "for today. Tap a food and it asks how much first, starting from your usual amount. " +
+                "Nothing is sent anywhere."
     }
 }

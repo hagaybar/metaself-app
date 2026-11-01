@@ -158,6 +158,7 @@ fun DayScreenContent(
     onDismissEncouragement: () -> Unit,
     onDismissRefusal: () -> Unit,
     modifier: Modifier = Modifier,
+    onUndoQuickLog: (() -> Unit)? = null,
     // Defaulted for the reason every callback added after this screen was written is: every caller
     // written before D45 (issue #13) draws the day it always drew, and the day pager is the one
     // that wires it.
@@ -294,6 +295,9 @@ fun DayScreenContent(
                 text = logged,
                 dismissLabel = stringResource(R.string.today_logged_dismiss),
                 onDismiss = onDismissJustLogged,
+                // Only after a tile, the one way in that writes on a single press (D156).
+                actionLabel = onUndoQuickLog?.let { stringResource(R.string.today_logged_undo) },
+                onAction = onUndoQuickLog,
             )
         }
 

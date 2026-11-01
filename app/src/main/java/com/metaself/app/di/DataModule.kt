@@ -81,6 +81,7 @@ import com.metaself.app.data.health.WorkoutSessions
 import com.metaself.app.data.health.WorkoutDao
 import com.metaself.app.data.movement.HealthConnectSteps
 import com.metaself.app.data.movement.StepSource
+import com.metaself.app.data.day.LoggingHistory
 import com.metaself.app.data.day.MealRepository
 import com.metaself.app.data.day.MIGRATION_4_5
 import com.metaself.app.data.day.MIGRATION_5_6
@@ -498,6 +499,10 @@ object DataModule {
     @Provides
     @Singleton
     fun provideMealRepository(dao: MealDao): MealRepository = RoomMealRepository(dao)
+
+    @Provides
+    @Singleton
+    fun provideLoggingHistory(dao: MealDao): LoggingHistory = RoomMealRepository(dao)
 
     /** The only place in the running app that reads the calendar. */
     @Provides
