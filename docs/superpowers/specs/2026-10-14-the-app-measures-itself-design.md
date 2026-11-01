@@ -11,6 +11,9 @@ measure here against a made-up store of a year's size (D153).
 
 ## D152 — Measuring on the phone (temporary)
 
+**Removed in 0.87.1, unused.** The slowness that prompted it did not persist, so nothing was measured and
+the code went without having served. D153 below stays.
+
 **Off by default.** Settings → Recent problems gets a switch, **Measure the app for 3 days**, which turns
 itself off 72 hours after it was turned on. Turned off, the measuring costs one check of a flag per event.
 
