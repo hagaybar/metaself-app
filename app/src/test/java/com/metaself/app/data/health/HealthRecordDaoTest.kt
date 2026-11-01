@@ -448,6 +448,28 @@ class HealthRecordDaoTest {
         assertThat(found).containsNoneOf(otherApp, outside, longAgo)
     }
 
+    /** D153: the same answer, asked of named workouts only — the rest are not looked at. Invented. */
+    @Test
+    fun `own distance asked of named workouts answers for those alone`() = runTest {
+        val dao = db.workoutDao()
+        fun at(day: Long, offset: Long) = day * DAY_MILLIS + offset
+        fun workout(id: String, day: Long) = synced(id, day = day).copy(startedAtMillis = at(day, 1_000))
+        val asked = dao.insert(workout("s1", TEST_EPOCH_DAY))
+        val notAsked = dao.insert(workout("s2", TEST_EPOCH_DAY - 1))
+        val askedWithout = dao.insert(workout("s3", TEST_EPOCH_DAY - 2))
+        db.healthReadingDao().insertAll(
+            listOf(
+                distance("d1", TEST_EPOCH_DAY, from = at(TEST_EPOCH_DAY, 60_000), to = at(TEST_EPOCH_DAY, 120_000)),
+                distance("d2", TEST_EPOCH_DAY - 1, from = at(TEST_EPOCH_DAY - 1, 60_000), to = at(TEST_EPOCH_DAY - 1, 120_000)),
+            ),
+        )
+
+        val found = dao.idsWithOwnDistanceAmong(listOf(asked, askedWithout))
+
+        assertThat(found).containsExactly(asked)
+        assertThat(dao.idsWithOwnDistance(TEST_EPOCH_DAY - 29, TEST_EPOCH_DAY)).containsExactly(asked, notAsked)
+    }
+
     private fun distance(record: String, day: Long, from: Long, to: Long, origin: String = ORIGIN) = HealthReadingEntity(
         kind = "DISTANCE",
         startMillis = from,

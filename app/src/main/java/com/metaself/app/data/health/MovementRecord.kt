@@ -74,14 +74,18 @@ class RoomMovementRecord @Inject constructor(
         days.observeBetween(from, to).map { rows -> rows.map { it.toHealthDay() } }
 
     /**
-     * Which workouts' own app recorded distance during them (D81) is asked only when there are two or
-     * more to combine: it decides between witnesses and nothing else.
+     * Which workouts' own app recorded distance during them (D81) decides between witnesses and nothing
+     * else, so it is asked only of the workouts it can decide ([SessionWitnesses.ownDistanceDecides],
+     * D153) — none at all when nothing overlaps. Asked of every workout in the range, a year's view
+     * probed three days of distance readings per workout, again on every write to `workouts`.
      */
     override fun observeWorkouts(from: Long, to: Long): Flow<List<Workout>> =
         combine(workouts.observeBetween(from, to), walks.uncounted, splits.observeAll()) { rows, uncounted, split ->
-            val own = if (rows.size < 2) emptySet() else workouts.idsWithOwnDistance(from, to).toSet()
+            val read = rows.map { it.toWorkout(uncounted) }
+            val asked = SessionWitnesses.ownDistanceDecides(read)
+            val own = if (asked.isEmpty()) emptySet() else workouts.idsWithOwnDistanceAmong(asked.toList()).toSet()
             SessionWitnesses.combine(
-                rows.map { it.toWorkout(uncounted).copy(ownDistance = it.id in own) },
+                read.map { it.copy(ownDistance = it.id in own) },
                 split.mapNotNull { it.toSplit() },
             )
         }

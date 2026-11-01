@@ -892,8 +892,8 @@ fun MetaSelfNavHost(
                 },
                 onBuildMeal = { navController.navigate(Destination.BuildMeal.of(0)) },
                 onEditMeal = { mealId -> navController.navigate(Destination.BuildMeal.of(mealId)) },
-                // Picking a food no longer logs it: it asks how much, because the food is one entry
-                // now rather than one per morning and has no amount of its own to repeat.
+                // Picking a food does not log it: it asks how much, opening at the usual amount
+                // (D155). A tile is what logs on one press (D154).
                 onPickFood = repeatViewModel::beginChoosing,
                 onCountAs = repeatViewModel::countAs,
                 onSetAmount = repeatViewModel::setAmount,
@@ -927,6 +927,14 @@ fun MetaSelfNavHost(
                 onDropPicked = repeatViewModel::dropPicked,
                 onPutItIn = repeatViewModel::putItIn,
                 onBack = { navController.popBackStack() },
+                // Spent once: a second press must neither write again nor go back past the day.
+                onQuickTile = { tile ->
+                    repeatViewModel.spend(tile)?.let {
+                        dayViewModel.logQuick(it)
+                        navController.popBackStack()
+                    }
+                },
+                otherDay = dayViewModel.otherDayBeingLoggedOn(),
             )
         }
 

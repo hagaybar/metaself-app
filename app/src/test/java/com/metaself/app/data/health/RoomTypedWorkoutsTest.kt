@@ -320,6 +320,7 @@ class RoomTypedWorkoutsTest {
         override suspend fun deleteSyncedRow(id: Long): Unit = error("not used")
         override suspend fun syncedWalkDays(origin: String): List<Long> = error("not used")
         override suspend fun idsWithOwnDistance(from: Long, to: Long): List<Long> = emptyList()
+        override suspend fun idsWithOwnDistanceAmong(ids: List<Long>): List<Long> = emptyList()
         override suspend fun missingTotalsOn(days: List<Long>): List<WorkoutEntity> = error("not used")
     }
 

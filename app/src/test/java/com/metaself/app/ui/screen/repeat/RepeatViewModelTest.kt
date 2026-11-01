@@ -1,7 +1,10 @@
 package com.metaself.app.ui.screen.repeat
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.day.InMemoryMealRepository
+import com.metaself.app.data.day.LoggingHistory
 import com.metaself.app.data.day.MealRepository
+import com.metaself.app.data.time.Today
 import com.metaself.app.data.food.FakeFoodRepository
 import com.metaself.app.data.food.FakeSavedMealRepository
 import com.metaself.app.data.food.aFood
@@ -17,6 +20,7 @@ import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import com.metaself.app.domain.portion.Portions
@@ -32,6 +36,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
+import java.time.LocalDate
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -1046,14 +1051,106 @@ class RepeatViewModelTest {
     private fun TestScope.watched(
         foods: FakeFoodRepository,
         savedMeals: FakeSavedMealRepository = FakeSavedMealRepository(),
+        history: LoggingHistory = InMemoryMealRepository(),
     ): RepeatViewModel {
         val viewModel = RepeatViewModel(
             foods = foods,
             savedMeals = savedMeals,
+            history = history,
+            today = Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) },
         )
         backgroundScope.launch { viewModel.state.collect { } }
         advanceUntilIdle()
         return viewModel
+    }
+
+    // --- Quick add (D154, D155) -------------------------------------------------------------------
+
+    /** Food 1 (grams) three times at 100 g, inside the window. */
+    private fun cucumberThreeTimes(day: Long = TEST_EPOCH_DAY) = InMemoryMealRepository(
+        List(3) { index ->
+            aMeal(
+                id = 100L + index,
+                epochDay = day,
+                items = listOf(anItem(name = "Cucumber", portionAmount = 100.0, portionUnit = "g").copy(foodId = 1)),
+            )
+        },
+    )
+
+    @Test
+    fun `tiles come from the record, and go while anything is typed`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), history = cucumberThreeTimes())
+
+        assertThat(viewModel.state.value.tilesShown.map { it.name }).containsExactly("Cucumber")
+
+        viewModel.search("c")
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.tilesShown).isEmpty()
+    }
+
+    @Test
+    fun `what was logged before the window earns no tile`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), history = cucumberThreeTimes(day = TEST_EPOCH_DAY - 31))
+
+        assertThat(viewModel.state.value.quick).isEmpty()
+    }
+
+    @Test
+    fun `a tile is spent once, so a second press neither writes nor goes back`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), history = cucumberThreeTimes())
+        val tile = viewModel.state.value.quick.single()
+
+        assertThat(viewModel.spend(tile)).isEqualTo(tile)
+        assertThat(viewModel.spend(tile)).isNull()
+    }
+
+    @Test
+    fun `a food with a history opens at its amount, ready to log`() = runTest(dispatcher) {
+        val viewModel = watched(pantry(), history = cucumberThreeTimes())
+        val index = viewModel.state.value.foods.indexOfFirst { it.id == 1L }
+
+        viewModel.beginChoosing(index)
+        advanceUntilIdle()
+
+        val open = viewModel.state.value.choosing!!
+        assertThat(open.amount).isEqualTo("100")
+        assertThat(open.countedAs).isEqualTo(CountedAs.GRAMS)
+        assertThat(open.canLog).isTrue()
+    }
+
+    @Test
+    fun `a food logged once in a unit opens in that unit even though it could be weighed`() = runTest(dispatcher) {
+        val foods = FakeFoodRepository(
+            listOf(aFood("Bread", FoodFacts(per100g = aPer100g(250.0), perUnit = aPerUnit("slice", 75.0)))),
+        )
+        val history = InMemoryMealRepository(
+            listOf(
+                aMeal(
+                    id = 100,
+                    epochDay = TEST_EPOCH_DAY - 60,
+                    items = listOf(anItem(name = "Bread", portionAmount = 2.0, portionUnit = "slice").copy(foodId = 1)),
+                ),
+            ),
+        )
+        val viewModel = watched(foods, history = history)
+
+        viewModel.beginChoosing(0)
+        advanceUntilIdle()
+
+        val open = viewModel.state.value.choosing!!
+        assertThat(open.amount).isEqualTo("2")
+        assertThat(open.countedAs).isEqualTo(CountedAs.UNITS)
+    }
+
+    @Test
+    fun `a food never logged on its own opens empty`() = runTest(dispatcher) {
+        val viewModel = watched(pantry())
+
+        viewModel.beginChoosing(0)
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.choosing!!.amount).isEmpty()
     }
 
     /** A salad he built: two foods, counted the way each of them knows. */

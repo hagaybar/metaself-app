@@ -15,6 +15,7 @@ import com.metaself.app.data.day.MIGRATION_11_12
 import com.metaself.app.data.day.MIGRATION_12_13
 import com.metaself.app.data.day.MIGRATION_13_14
 import com.metaself.app.data.day.MIGRATION_14_15
+import com.metaself.app.data.day.MIGRATION_15_16
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -862,6 +863,40 @@ class MigrationTest {
             while (cursor.moveToNext()) indexes += cursor.getString(cursor.getColumnIndexOrThrow("name"))
         }
         assertThat(indexes).containsAtLeast("index_health_readings_recordId", "index_health_readings_epochDay")
+        migrated.close()
+    }
+
+    /** D153: four indexes on the nights and the workouts, and every row kept. Invented. */
+    @Test
+    fun `a version 15 database migrates to version 16 with nights and workouts indexed by record and by start`() {
+        assumeSqliteRuntime()
+
+        helper.createDatabase(TEST_DB, 15).use { db ->
+            db.execSQL(
+                "INSERT INTO sleep_sessions (id, epochDay, startMillis, endMillis, origin, recordId, title) " +
+                    "VALUES (1, 20699, 1000, 2000, 'com.example.band', 'n-1', NULL)",
+            )
+            db.execSQL(
+                "INSERT INTO workouts (id, epochDay, startedAtMillis, durationMinutes, kind, energySource, source, " +
+                    "origin, originId, hidden) VALUES (1, 20699, 1000, 30, 'RUN', 'NONE', 'SYNCED', 'com.example.band', 'w-1', 0)",
+            )
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 16, true, MIGRATION_15_16)
+
+        for (table in listOf("sleep_sessions", "workouts")) {
+            migrated.query("SELECT COUNT(*) FROM $table").use { cursor ->
+                assertThat(cursor.moveToFirst()).isTrue()
+                assertThat(cursor.getInt(0)).isEqualTo(1)
+            }
+        }
+        fun indexes(table: String) = mutableListOf<String>().also { names ->
+            migrated.query("PRAGMA index_list(`$table`)").use { cursor ->
+                while (cursor.moveToNext()) names += cursor.getString(cursor.getColumnIndexOrThrow("name"))
+            }
+        }
+        assertThat(indexes("sleep_sessions")).containsAtLeast("index_sleep_sessions_recordId", "index_sleep_sessions_startMillis")
+        assertThat(indexes("workouts")).containsAtLeast("index_workouts_originId", "index_workouts_startedAtMillis")
         migrated.close()
     }
 

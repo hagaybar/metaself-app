@@ -33,6 +33,12 @@ Scripts carried in version control so they are not only on one machine.
   verbatim from `15.json`, every table otherwise declared identically and every row kept, and the query
   plans of `HealthReadingDao.daysOf(recordId)`, `deleteByRecordId` and `onDay` going from a scan of the
   whole table to a search of the new index.
+- `check-migration-15-16.py` — the same for version 16 (D153): the four `workouts` and `sleep_sessions`
+  indexes created verbatim from `16.json`, every table otherwise declared identically and every row kept,
+  and seven query plans going from a scan of the table to a search of a new index.
+- `measure-queries.py` — D153: every DAO query against an invented store the size of a year of a band's
+  record (sizes stated in the script), with its plan and time; exits 1 on an unaccepted scan of a table that
+  grows with the record or a query over 50 ms. Run with `python3 -I`.
 - `check-impossible-figures.py` — runs the on-open repair of issue #7 (clearing a food's number
   group that holds a figure the food form would refuse) against `sqlite3` from the latest exported
   schema, and reads the result back the way the app reads a food. CI's `RoomFoodRepositoryTest` is

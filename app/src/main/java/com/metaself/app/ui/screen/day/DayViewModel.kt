@@ -14,6 +14,7 @@ import com.metaself.app.data.food.MealResult
 import com.metaself.app.data.food.SavedMealRepository
 import com.metaself.app.data.food.ToLog
 import com.metaself.app.domain.food.MealFromDay
+import com.metaself.app.domain.food.QuickTile
 import com.metaself.app.ui.screen.repeat.LoggedMeal
 import com.metaself.app.data.profile.ProfileRepository
 import com.metaself.app.data.weight.WeightRepository
@@ -833,6 +834,13 @@ class DayViewModel @Inject constructor(
      */
     private val _justLogged = MutableStateFlow<String?>(null)
 
+    /** The rows the tile behind the line on the day wrote, or null when the line is about nothing a tile did. */
+    private val _quickLog = MutableStateFlow<CompletableDeferred<List<Long>>?>(null)
+
+    /** Whether the line on the day can be taken back (D156). */
+    val canUndoQuickLog: StateFlow<Boolean> =
+        _quickLog.map { it != null }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     /** Which meals he built are open on the day in front of him. */
     private val _openMeals = MutableStateFlow<Set<Long>>(emptySet())
 
@@ -1132,6 +1140,7 @@ class DayViewModel @Inject constructor(
     /** The owner has seen what was logged; it does not come back. */
     fun dismissJustLogged() {
         _justLogged.value = null
+        _quickLog.value = null
     }
 
     /** The owner has read the notice; it does not come back. */
@@ -1185,6 +1194,7 @@ class DayViewModel @Inject constructor(
     fun showDay(epochDay: Long) {
         selectedDay.value = epochDay
         _justLogged.value = null
+        _quickLog.value = null
         // Choosing belongs to the day it started on: the ids are rows on one date, and carrying them
         // across a swipe would offer to make a meal out of rows that are no longer on screen.
         _chosen.value = emptySet()
@@ -1197,6 +1207,7 @@ class DayViewModel @Inject constructor(
     fun log(item: FoodItem) {
         // Said before the write starts, as every other way of logging says it, so a write that
         // fails at once still finds the line there to take the place of.
+        _quickLog.value = null
         _justLogged.value = "Logged ${item.name} — ${item.kcal} kcal"
         logOn(selectedDay.value, item)
     }
@@ -1299,6 +1310,7 @@ class DayViewModel @Inject constructor(
 
     /** Saving is never silent, whichever way a described meal was accepted. */
     private fun sayWhatWasLogged(items: List<FoodItem>) {
+        _quickLog.value = null
         _justLogged.value = if (items.size == 1) {
             "Logged ${items.single().name} — ${items.single().kcal} kcal"
         } else {
@@ -1317,6 +1329,7 @@ class DayViewModel @Inject constructor(
      * product, so they cannot disagree.
      */
     fun logScanned(item: FoodItem, product: Product) {
+        _quickLog.value = null
         _justLogged.value = "Logged ${item.name} — ${item.kcal} kcal"
         logging {
             val attached = loggedFoods.attach(
@@ -1349,6 +1362,7 @@ class DayViewModel @Inject constructor(
      */
     fun logSavedMeal(meal: LoggedMeal) {
         if (meal.items.isEmpty()) return
+        _quickLog.value = null
         _justLogged.value = if (meal.items.size == 1) {
             "Logged ${meal.items.single().name} — ${meal.items.single().kcal} kcal"
         } else {
@@ -1370,6 +1384,71 @@ class DayViewModel @Inject constructor(
             )
         }
     }
+
+    /**
+     * Write down what a tile says, on the day being looked at (D154).
+     *
+     * The line is said before the write starts, and the promise of the ids goes up with it so that
+     * an Undo pressed before the write has finished waits for it (D156). Completed in `finally` too,
+     * so one left waiting on a write that failed finishes with nothing to take back.
+     */
+    fun logQuick(tile: QuickTile) {
+        val day = selectedDay.value
+        val written = CompletableDeferred<List<Long>>()
+        _quickLog.value = written
+        val row = tile.items.singleOrNull()?.takeIf { tile.savedMealId == null }
+        _justLogged.value = if (row != null) {
+            "Logged ${tile.name}, ${row.portion} — ${tile.kcal} kcal"
+        } else {
+            "Logged ${tile.name} — ${tile.kcal} kcal"
+        }
+        act(
+            ActionRefused.MAYBE_PARTIAL,
+            onRefused = {
+                _justLogged.value = null
+                if (_quickLog.value === written) _quickLog.value = null
+            },
+        ) {
+            try {
+                // Every row carries its food already, so this attach teaches nothing, and that
+                // still replaces whatever the last action said (D45).
+                val attached = loggedFoods.attach(tile.items)
+                _foodRetaught.value = RetaughtWording.notice(attached.retaught, RetaughtBecause.JUST_LOGGED)
+                written.complete(
+                    meals.log(
+                        Meal(
+                            epochDay = day,
+                            loggedAtMillis = now(),
+                            items = attached.items,
+                            savedMealId = tile.savedMealId,
+                            savedMealAdjusted = false,
+                        ),
+                    ),
+                )
+            } finally {
+                written.complete(emptyList())
+            }
+        }
+    }
+
+    /**
+     * Take back exactly the rows the last tile wrote, and with its last row the meal (D156).
+     *
+     * By their ids, so a row logged in the same second is not touched, and with no receipt: what
+     * this reverses is one press a moment ago, not something deleted that may be wanted back.
+     */
+    fun undoQuickLog() {
+        val written = _quickLog.value ?: return
+        _quickLog.value = null
+        _justLogged.value = null
+        failing(ActionRefused.NOTHING_CHANGED) {
+            written.await().forEach { meals.deleteItem(it) }
+        }
+    }
+
+    /** The day a tile would log on, when that is not today (D154). */
+    fun otherDayBeingLoggedOn(): LocalDate? =
+        selectedDay.value.takeIf { it != today().toEpochDay() }?.let(LocalDate::ofEpochDay)
 
     /**
      * Open a meal he built, or close it again.

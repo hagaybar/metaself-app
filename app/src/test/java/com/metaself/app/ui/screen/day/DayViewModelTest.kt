@@ -27,6 +27,7 @@ import com.metaself.app.data.day.MealRepository
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
 import com.metaself.app.domain.food.FoodFacts
+import com.metaself.app.domain.food.QuickTile
 import com.metaself.app.domain.food.Nutrients
 import com.metaself.app.domain.food.PerHundredGrams
 import com.metaself.app.domain.food.Provenance
@@ -4156,6 +4157,121 @@ class DayViewModelTest {
      * that lives inside it stays invisible: what is on screen while the rows are on their way can
      * only be asserted if the rows can be made to wait.
      */
+    private fun aTile(savedMealId: Long? = null) = QuickTile(
+        name = "Oat bar",
+        items = listOf(anItem(name = "Oat bar", portion = "1 bar", kcal = 200)),
+        savedMealId = savedMealId,
+        foodId = if (savedMealId == null) 1L else null,
+    )
+
+    @Test
+    fun `a tile logs on the day looked at and says what it wrote, with Undo`() = runTest(dispatcher) {
+        val meals = FakeMealRepository()
+        val model = watched(viewModel(mealRepository = meals))
+        model.showDay(TEST_EPOCH_DAY - 1)
+        advanceUntilIdle()
+
+        model.logQuick(aTile())
+        advanceUntilIdle()
+
+        assertThat(meals.logged.single().epochDay).isEqualTo(TEST_EPOCH_DAY - 1)
+        assertThat(ready(model).justLogged).isEqualTo("Logged Oat bar, 1 bar — 200 kcal")
+        assertThat(model.canUndoQuickLog.value).isTrue()
+    }
+
+    @Test
+    fun `a meal's tile carries the meal, never marked as adjusted`() = runTest(dispatcher) {
+        val meals = FakeMealRepository()
+        val model = watched(viewModel(mealRepository = meals))
+
+        model.logQuick(aTile(savedMealId = 7))
+        advanceUntilIdle()
+
+        assertThat(meals.logged.single().savedMealId).isEqualTo(7)
+        assertThat(meals.logged.single().savedMealAdjusted).isFalse()
+    }
+
+    @Test
+    fun `Undo takes back exactly what the tile wrote`() = runTest(dispatcher) {
+        val meals = FakeMealRepository(listOf(aMeal(id = 9, items = listOf(anItem(id = 7, name = "Hummus")))))
+        val model = watched(viewModel(mealRepository = meals))
+
+        model.logQuick(aTile())
+        advanceUntilIdle()
+        model.undoQuickLog()
+        advanceUntilIdle()
+
+        // The row the tile wrote, by its own id, and not the one already on the day.
+        assertThat(meals.deleted).hasSize(1)
+        assertThat(meals.deleted).doesNotContain(7L)
+        assertThat(ready(model).justLogged).isNull()
+        assertThat(model.canUndoQuickLog.value).isFalse()
+    }
+
+    @Test
+    fun `an Undo pressed before the write has landed waits for it`() = runTest(dispatcher) {
+        val meals = WriteHeldOpen(FakeMealRepository())
+        val model = watched(viewModel(mealRepository = meals))
+
+        model.logQuick(aTile())
+        advanceUntilIdle()
+        model.undoQuickLog()
+        advanceUntilIdle()
+        assertThat(meals.store.deleted).isEmpty()
+
+        meals.letItLand()
+        advanceUntilIdle()
+
+        val written = meals.store.logged.single()
+        assertThat(written.items).hasSize(1)
+        assertThat(meals.store.deleted).hasSize(1)
+    }
+
+    @Test
+    fun `a failed write offers no Undo`() = runTest(dispatcher) {
+        val model = watched(viewModel(mealRepository = Failing(FakeMealRepository()).apply { writes = true }))
+
+        model.logQuick(aTile())
+        advanceUntilIdle()
+
+        assertThat(ready(model).justLogged).isNull()
+        assertThat(model.canUndoQuickLog.value).isFalse()
+    }
+
+    @Test
+    fun `Undo goes with the line, and is not left beside another logging's line`() = runTest(dispatcher) {
+        val model = watched(viewModel())
+
+        model.logQuick(aTile())
+        advanceUntilIdle()
+        model.dismissJustLogged()
+        advanceUntilIdle()
+        assertThat(model.canUndoQuickLog.value).isFalse()
+
+        model.logQuick(aTile())
+        advanceUntilIdle()
+        model.showDay(TEST_EPOCH_DAY - 1)
+        advanceUntilIdle()
+        assertThat(model.canUndoQuickLog.value).isFalse()
+
+        model.logQuick(aTile())
+        advanceUntilIdle()
+        model.log(anItem(name = "Hummus"))
+        advanceUntilIdle()
+        assertThat(model.canUndoQuickLog.value).isFalse()
+    }
+
+    @Test
+    fun `the other day is named only when it is not today`() = runTest(dispatcher) {
+        val model = watched(viewModel())
+
+        assertThat(model.otherDayBeingLoggedOn()).isNull()
+
+        model.showDay(TEST_EPOCH_DAY - 1)
+
+        assertThat(model.otherDayBeingLoggedOn()).isEqualTo(LocalDate.ofEpochDay(TEST_EPOCH_DAY - 1))
+    }
+
     private class WriteHeldOpen(val store: FakeMealRepository) : MealRepository by store {
         private val landed = CompletableDeferred<Unit>()
 

@@ -5,10 +5,12 @@ import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.food.CannotCount
 import com.metaself.app.domain.food.CountedAs
 import com.metaself.app.domain.food.Food
+import com.metaself.app.domain.food.LastAmount
 import com.metaself.app.domain.food.LoggedFrom
 import com.metaself.app.domain.food.Logging
 import com.metaself.app.domain.food.MealComponent
 import com.metaself.app.domain.food.PerHundredMillilitres
+import com.metaself.app.domain.food.QuickTile
 import com.metaself.app.domain.food.SavedMeals
 import com.metaself.app.domain.food.SavedMeal
 import com.metaself.app.domain.portion.Portions
@@ -178,7 +180,14 @@ data class RepeatUiState(
     val meals: List<SavedMeal> = emptyList(),
     val adjusting: Adjusting? = null,
     val choosing: Choosing? = null,
+    /** Every tile earned (D154); [tilesShown] says whether they are drawn just now. */
+    val quick: List<QuickTile> = emptyList(),
+    /** Each food's last amount logged on its own, by food id, for its amount question (D155). */
+    val lastAmounts: Map<Long, LastAmount> = emptyMap(),
 ) {
+    /** The tiles to draw: none while anything is typed, because typing means looking for something else. */
+    val tilesShown: List<QuickTile> get() = if (query.isBlank()) quick else emptyList()
+
     /** True when he has searched and nothing came back, which needs saying rather than showing. */
     val searchedAndFoundNothing: Boolean
         get() = query.isNotBlank() &&

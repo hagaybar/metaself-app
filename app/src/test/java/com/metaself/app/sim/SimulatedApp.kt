@@ -414,7 +414,7 @@ private fun AddSomethingHere(
     stack: MutableList<Where>,
     goBack: () -> Unit,
 ) {
-    val repeatViewModel = entry.viewModel { RepeatViewModel(world.foods, world.savedMeals) }
+    val repeatViewModel = entry.viewModel { RepeatViewModel(world.foods, world.savedMeals, world.dayMeals, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }) }
     val state by repeatViewModel.state.collectAsStateWithLifecycle()
 
     RepeatScreen(
@@ -442,6 +442,12 @@ private fun AddSomethingHere(
         onLogAdjusted = {
             repeatViewModel.adjusted()?.let(dayViewModel::logSavedMeal)
             goBack()
+        },
+        onQuickTile = { tile ->
+            repeatViewModel.spend(tile)?.let {
+                dayViewModel.logQuick(it)
+                goBack()
+            }
         },
         onBeginAddingToMeal = repeatViewModel::beginAddingToMeal,
         onSearchToAdd = repeatViewModel::searchToAdd,

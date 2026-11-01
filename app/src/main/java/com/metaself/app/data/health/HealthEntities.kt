@@ -64,6 +64,9 @@ data class HealthReadingEntity(
     indices = [
         Index("epochDay"),
         Index(value = ["origin", "originId"], unique = true),
+        // Version 16 (D153): a deleted record's id alone, and the window re-read's start times.
+        Index("originId"),
+        Index("startedAtMillis"),
     ],
 )
 data class WorkoutEntity(
@@ -109,6 +112,9 @@ data class WorkoutEntity(
     indices = [
         Index("epochDay"),
         Index(value = ["origin", "recordId"], unique = true),
+        // Version 16 (D153): a deleted record's id alone, and the window re-read's start times.
+        Index("recordId"),
+        Index("startMillis"),
     ],
 )
 data class SleepSessionEntity(

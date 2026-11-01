@@ -58,6 +58,20 @@ interface WorkoutDao {
     suspend fun idsWithOwnDistance(from: Long, to: Long): List<Long>
 
     /**
+     * [idsWithOwnDistance] for the workouts [ids] alone (D153): the ones whose own distance can decide a
+     * session ([com.metaself.app.domain.movement.SessionWitnesses.ownDistanceDecides]). Over a year the
+     * range form probed three days of distance readings for every synced workout in it.
+     */
+    @Query(
+        "SELECT w.id FROM workouts w WHERE w.source = 'SYNCED' AND w.id IN (:ids) " +
+            "AND EXISTS (SELECT 1 FROM health_readings r WHERE r.kind = 'DISTANCE' AND r.origin = w.origin " +
+            "AND r.epochDay BETWEEN w.epochDay - 1 AND w.epochDay + 1 " +
+            "AND r.startMillis < w.startedAtMillis + w.durationMinutes * 60000 " +
+            "AND COALESCE(r.endMillis, r.startMillis) > w.startedAtMillis)",
+    )
+    suspend fun idsWithOwnDistanceAmong(ids: List<Long>): List<Long>
+
+    /**
      * Visible synced workouts on [days] with no distance, or with no calories from their app (energy
      * source NONE): the figures the copying may ask Health Connect for again.
      */
