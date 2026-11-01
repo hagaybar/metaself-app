@@ -4,8 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.day.DeletedEntry
 import com.metaself.app.data.diagnostics.ProblemLog
-import com.metaself.app.data.diagnostics.measure.FirstData
-import com.metaself.app.data.diagnostics.measure.MeasureRecorder
 import com.metaself.app.data.health.HealthRecordCopier
 import com.metaself.app.data.health.TypedWorkouts
 import com.metaself.app.data.day.MealRepository
@@ -137,11 +135,7 @@ class DayViewModel @Inject constructor(
     private val healthRecord: HealthRecordCopier = HealthRecordCopier.NONE,
     /** The owner's typed workouts, the day's third movement reading (D60, D77). Defaulted like [healthRecord]. */
     private val typedWorkouts: TypedWorkouts = TypedWorkouts.NONE,
-    /** D152 (temporary): the day's first data, every Log tap to its row written, the app's open. Off unless switched on. */
-    private val measure: MeasureRecorder = MeasureRecorder.OFF,
 ) : ViewModel() {
-
-    private val firstDay = FirstData(measure, "day")
 
     /**
      * What today's walking is worth, refreshed when the app opens.
@@ -1129,29 +1123,11 @@ class DayViewModel @Inject constructor(
                 }
             }
         }
-        .let { states -> firstDay.of(states) { it !is DayUiState.Loading } }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
             initialValue = DayUiState.Loading,
         )
-
-    /**
-     * D152: the day drew its first frame of data, at [elapsedMillis] since boot, the process having
-     * started at [processStartElapsedMillis]. Recorded once per process, and only while measuring.
-     */
-    fun dayDrawn(elapsedMillis: Long, processStartElapsedMillis: Long) {
-        measure.dayDrawn(elapsedMillis, processStartElapsedMillis)
-    }
-
-    /** D152: one Log, from the tap ([tappedNanos]) to its row written; [how] it was logged. */
-    private fun logged(how: String, tappedNanos: Long) {
-        val took = measure.clock.nanos() - tappedNanos
-        measure.record("log") {
-            put("how", how)
-            putMillis("tap_to_written_ms", took)
-        }
-    }
 
     /** The owner has seen what was logged; it does not come back. */
     fun dismissJustLogged() {
@@ -1222,7 +1198,7 @@ class DayViewModel @Inject constructor(
         // Said before the write starts, as every other way of logging says it, so a write that
         // fails at once still finds the line there to take the place of.
         _justLogged.value = "Logged ${item.name} — ${item.kcal} kcal"
-        logOn(selectedDay.value, item, how = "one item")
+        logOn(selectedDay.value, item)
     }
 
     /**
@@ -1240,11 +1216,7 @@ class DayViewModel @Inject constructor(
         if (items.isEmpty()) return
         if (onToday) showDay(todayEpochDayNow())
         sayWhatWasLogged(items.map { it.item })
-        val tapped = measure.clock.nanos()
-        logging {
-            writeMeal(items)
-            logged("meal", tapped)
-        }
+        logging { writeMeal(items) }
     }
 
     /**
@@ -1290,10 +1262,8 @@ class DayViewModel @Inject constructor(
         _chosen.value = emptySet()
         _refusal.value = null
         sayWhatWasLogged(items.map { it.item })
-        val tapped = measure.clock.nanos()
         logging {
             val ids = writeMeal(items)
-            logged("meal", tapped)
             // Assigned, not added to: a row ticked on the day before he came here is not part of
             // what he just described.
             _chosen.value = ids.toSet()
@@ -1348,7 +1318,6 @@ class DayViewModel @Inject constructor(
      */
     fun logScanned(item: FoodItem, product: Product) {
         _justLogged.value = "Logged ${item.name} — ${item.kcal} kcal"
-        val tapped = measure.clock.nanos()
         logging {
             val attached = loggedFoods.attach(
                 item,
@@ -1365,7 +1334,6 @@ class DayViewModel @Inject constructor(
                     items = listOf(attached.item),
                 ),
             )
-            logged("scan", tapped)
         }
     }
 
@@ -1386,7 +1354,6 @@ class DayViewModel @Inject constructor(
         } else {
             "Logged ${meal.items.size} items — ${meal.items.sumOf { it.kcal }} kcal"
         }
-        val tapped = measure.clock.nanos()
         logging {
             // Every item of a saved meal carries its food already, so this attach teaches nothing
             // and has nothing to report — which still replaces whatever the last action said.
@@ -1401,7 +1368,6 @@ class DayViewModel @Inject constructor(
                     savedMealAdjusted = meal.adjusted,
                 ),
             )
-            logged("saved meal", tapped)
         }
     }
 
@@ -1741,8 +1707,7 @@ class DayViewModel @Inject constructor(
         ) { deleted.await()?.let { meals.restore(it) } }
     }
 
-    private fun logOn(epochDay: Long, item: FoodItem, how: String) {
-        val tapped = measure.clock.nanos()
+    private fun logOn(epochDay: Long, item: FoodItem) {
         logging {
             val attached = loggedFoods.attach(item)
             // The issue's own door: typing a name he has used before still teaches that food, and
@@ -1755,7 +1720,6 @@ class DayViewModel @Inject constructor(
                     items = listOf(attached.item),
                 ),
             )
-            logged(how, tapped)
         }
     }
 
