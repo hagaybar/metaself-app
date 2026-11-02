@@ -39,7 +39,7 @@ class TalkScreenRenderTest {
         val texts = draw(TalkViewModel.State(loaded = true))
 
         assertThat(texts).containsAtLeast("Your trainer", "Back", TalkWording.AI, TalkWording.EMPTY)
-        assertThat(texts.any { it.startsWith("Sends to OpenAI, with your key: your message; this conversation and your others of the last 14 days") }).isTrue()
+        assertThat(texts).contains(TalkWording.SENT_TO_OPENAI)
     }
 
     /** D163: under a coach's reply, small, what the phone says it read; nothing under a reply from before the file. */

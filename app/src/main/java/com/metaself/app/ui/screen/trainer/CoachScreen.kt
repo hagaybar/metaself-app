@@ -3,24 +3,36 @@ package com.metaself.app.ui.screen.trainer
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -43,8 +55,9 @@ import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
 /**
- * The coach screen (D157), top to bottom: the coach's note on this week with Reply ›; the box; up to three suggestions
- * (D158); the three latest conversations with All conversations › (D160); Everything else ›; what leaves the phone.
+ * The coach screen (D157, D166): the chat is the focus. The box is at the bottom, where it is in a conversation, with the
+ * line on what leaves the phone under it. Above it, the coach's note when there is one and, while the box is empty, up
+ * to three quick links. All conversations and Everything else are in the menu.
  * Branches only — no early return out of an inline composable (InlineComposableReturnGuardTest).
  */
 @Composable
@@ -59,32 +72,85 @@ fun CoachScreen(
     onPlan: () -> Unit,
     onPlanAhead: () -> Unit,
     onSeePlan: () -> Unit,
+    onLetter: (Long) -> Unit,
     onReplyToNote: (WeekNote) -> Unit,
-    onConversation: (String) -> Unit,
     onAllConversations: () -> Unit,
     onEverythingElse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val zone = ZoneId.systemDefault()
-    MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
-        trainer.note?.let { note -> NoteView(note, zone) { onReplyToNote(note) } }
-        Box(coach, onEdit, onSend)
-        coach.refused?.let { Text(stringResource(it.sentence), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-        trainer.home?.let { home ->
-            Suggestions(CoachSuggestions.of(home), onAskAboutTheWeek, onReview, onPlan, onPlanAhead, onSeePlan, onEverythingElse)
+    MetaSelfScreen(
+        title = stringResource(R.string.trainer_title),
+        modifier = modifier,
+        onBack = onBack,
+        scrolls = false,
+        actions = { Menu(coach.conversations.isNotEmpty(), onAllConversations, onEverythingElse) },
+    ) {
+        Column(Modifier.fillMaxSize().imePadding(), verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(Spacing.Related, Alignment.Bottom),
+            ) {
+                trainer.note?.let { note -> NoteView(note, zone) { onReplyToNote(note) } }
+                if (coach.unreadable) Text(TalkWording.UNREADABLE, color = MaterialTheme.colorScheme.error)
+                val home = trainer.home
+                if (home != null && coach.draft.isBlank()) {
+                    QuickLinks(CoachSuggestions.of(home, coach.conversations), onAskAboutTheWeek, onReview, onPlan, onPlanAhead, onSeePlan, onLetter, onEverythingElse)
+                }
+            }
+            coach.refused?.let { Text(stringResource(it.sentence), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            Box(coach, onEdit, onSend)
+            SentToOpenAi(coach.ceiling)
         }
-        if (coach.unreadable) Text(TalkWording.UNREADABLE, color = MaterialTheme.colorScheme.error)
-        Column(Modifier.fillMaxWidth()) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            coach.conversations.take(LATEST).forEach { ConversationRow(it, trainer.today, zone, onConversation) }
-            if (coach.conversations.isNotEmpty()) PlainRow(TalkWording.ALL_CONVERSATIONS, null, onAllConversations)
-            PlainRow(TalkWording.EVERYTHING_ELSE, TalkWording.EVERYTHING_ELSE_LINE, onEverythingElse)
-        }
-        Text(TrainerWording.privacyTalk(coach.ceiling), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
-/** D160: every conversation, in the coach screen's rows. */
+/** D166: the title bar's menu. With no conversations there is no way to an empty list. */
+@Composable
+private fun Menu(hasConversations: Boolean, onAllConversations: () -> Unit, onEverythingElse: () -> Unit) {
+    var showing by remember { mutableStateOf(false) }
+    IconButton(onClick = { showing = true }) {
+        Icon(Icons.Filled.MoreVert, contentDescription = stringResource(R.string.today_more))
+    }
+    DropdownMenu(expanded = showing, onDismissRequest = { showing = false }) {
+        if (hasConversations) {
+            DropdownMenuItem(text = { Text(TalkWording.ALL_CONVERSATIONS) }, onClick = {
+                showing = false
+                onAllConversations()
+            })
+        }
+        DropdownMenuItem(text = { Text(TalkWording.EVERYTHING_ELSE) }, onClick = {
+            showing = false
+            onEverythingElse()
+        })
+    }
+}
+
+/** D166: one line, and the whole of what leaves the phone (D84) a tap away. Also at the head of a conversation. */
+@Composable
+internal fun SentToOpenAi(ceiling: Int) {
+    var showing by remember { mutableStateOf(false) }
+    Text(
+        TalkWording.SENT_TO_OPENAI,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClick = { showing = true })
+            .wrapContentHeight(Alignment.CenterVertically),
+    )
+    if (showing) {
+        AlertDialog(
+            onDismissRequest = { showing = false },
+            title = { Text(TalkWording.WHATS_SENT) },
+            text = { Text(TrainerWording.privacyTalk(ceiling), modifier = Modifier.verticalScroll(rememberScrollState())) },
+            confirmButton = { TextButton(onClick = { showing = false }) { Text(TalkWording.CLOSE) } },
+        )
+    }
+}
+
+/** D160: every conversation, with its newest words. */
 @Composable
 fun ConversationsScreen(
     coach: CoachViewModel.State,
@@ -124,31 +190,32 @@ private fun Box(coach: CoachViewModel.State, onEdit: (String) -> Unit, onSend: (
     }
 }
 
-/** D158: each with the label and destination it has on the old page. */
-@OptIn(ExperimentalLayoutApi::class)
+/** D158, D166: each with the label and destination it has on the old page, as plain rows just above the box. */
 @Composable
-private fun Suggestions(
-    suggestions: List<CoachSuggestion>,
+private fun QuickLinks(
+    links: List<CoachSuggestion>,
     onAskAboutTheWeek: () -> Unit,
     onReview: (Long) -> Unit,
     onPlan: () -> Unit,
     onPlanAhead: () -> Unit,
     onSeePlan: () -> Unit,
+    onLetter: (Long) -> Unit,
     onEverythingElse: () -> Unit,
 ) {
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(Spacing.Related), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
-        suggestions.forEach { suggestion ->
-            when (suggestion) {
-                is CoachSuggestion.Review -> Suggestion(TrainerWording.rowAction(null)) { onReview(suggestion.session.id) }
-                CoachSuggestion.CountSession -> Suggestion(TalkWording.COUNT_SESSION, onEverythingElse)
-                CoachSuggestion.AskAboutTheWeek -> Suggestion(TalkWording.ASK_ABOUT_THE_WEEK, onAskAboutTheWeek)
-                is CoachSuggestion.Next -> when (val action = suggestion.action) {
-                    is MainAction.PlanOpen -> Suggestion(TrainerWeekWording.planOpen(action.kind), onPlan)
-                    MainAction.PlanNext -> Suggestion(stringResource(R.string.trainer_plan_next), onPlan)
-                    MainAction.PlanAhead -> Suggestion(stringResource(R.string.trainer_evaluate), onPlanAhead)
-                    MainAction.PlanThisWeek -> Suggestion(PlanPageWording.PLAN_THIS_WEEK, onSeePlan)
-                    MainAction.FillNextWeek -> Suggestion(PlanPageWording.FILL_NEXT_WEEK, onSeePlan)
-                    MainAction.NextBlock -> Suggestion(PlanPageWording.NEXT_BLOCK, onSeePlan)
+    Column(Modifier.fillMaxWidth()) {
+        links.forEach { link ->
+            when (link) {
+                is CoachSuggestion.Review -> QuickLink(TrainerWording.rowAction(null)) { onReview(link.session.id) }
+                CoachSuggestion.CountSession -> QuickLink(TalkWording.COUNT_SESSION, onEverythingElse)
+                is CoachSuggestion.Letter -> QuickLink(TalkWording.SEE_LETTER) { onLetter(link.weekMonday) }
+                CoachSuggestion.AskAboutTheWeek -> QuickLink(TalkWording.ASK_ABOUT_THE_WEEK, onAskAboutTheWeek)
+                is CoachSuggestion.Next -> when (val action = link.action) {
+                    is MainAction.PlanOpen -> QuickLink(TrainerWeekWording.planOpen(action.kind), onPlan)
+                    MainAction.PlanNext -> QuickLink(stringResource(R.string.trainer_plan_next), onPlan)
+                    MainAction.PlanAhead -> QuickLink(stringResource(R.string.trainer_evaluate), onPlanAhead)
+                    MainAction.PlanThisWeek -> QuickLink(PlanPageWording.PLAN_THIS_WEEK, onSeePlan)
+                    MainAction.FillNextWeek -> QuickLink(PlanPageWording.FILL_NEXT_WEEK, onSeePlan)
+                    MainAction.NextBlock -> QuickLink(PlanPageWording.NEXT_BLOCK, onSeePlan)
                 }
             }
         }
@@ -156,8 +223,17 @@ private fun Suggestions(
 }
 
 @Composable
-private fun Suggestion(label: String, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp)) { Text(label) }
+private fun QuickLink(label: String, onClick: () -> Unit) {
+    Text(
+        label,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .wrapContentHeight(Alignment.CenterVertically),
+    )
 }
 
 /** D160: its name, the start of its newest words, when it last moved, and whether a message is not answered. */
@@ -180,26 +256,3 @@ private fun ConversationRow(summary: ConversationSummary, today: Long, zone: Zon
     }
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
-
-/** A plain row, in the old page's form. */
-@Composable
-private fun PlainRow(label: String, line: String?, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp)
-            .clickable(role = Role.Button, onClick = onClick)
-            .padding(vertical = Spacing.Related),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.bodyLarge)
-            line?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-        }
-        Text("›", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-}
-
-/** D157: the conversations the coach screen shows. */
-private const val LATEST = 3

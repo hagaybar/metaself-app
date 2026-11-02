@@ -43,7 +43,6 @@ import com.metaself.app.domain.trainer.TrainerMessage
 import com.metaself.app.ui.MetaSelfScreen
 import com.metaself.app.ui.theme.Spacing
 import com.metaself.app.ui.trainer.TalkWording
-import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
 /**
@@ -169,7 +168,7 @@ private fun rows(state: TalkViewModel.State, zone: ZoneId): List<ThreadRow> = bu
 private fun Head(state: TalkViewModel.State, onAskDeleteAll: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
         Text(TalkWording.AI, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(TrainerWording.privacyTalk(state.ceiling), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SentToOpenAi(state.ceiling)
         when {
             state.unreadable -> Text(TalkWording.UNREADABLE, color = MaterialTheme.colorScheme.error)
             state.loaded && state.thread.isEmpty() -> Text(TalkWording.EMPTY, style = MaterialTheme.typography.bodyMedium)

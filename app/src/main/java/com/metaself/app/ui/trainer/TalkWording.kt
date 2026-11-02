@@ -33,12 +33,15 @@ object TalkWording {
     const val CONFIRM_DELETE_CONVERSATION = "Delete this conversation? Your messages and the trainer's replies go. " +
         "Feedback and letters stay, and so does anything already in What I know about you."
     const val BOX_PLACEHOLDER = "Ask your coach anything…"
-    const val ASK_ABOUT_THE_WEEK = "How is my week going?"
+    const val ASK_ABOUT_THE_WEEK = "How am I doing this week?"
+    const val SEE_LETTER = "See your weekly letter"
+    const val SENT_TO_OPENAI = "Sent to OpenAI with your key · What's sent ›"
+    const val WHATS_SENT = "What's sent"
+    const val CLOSE = "Close"
     const val COUNT_SESSION = "A shorter session may count for your plan"
     const val ALL_CONVERSATIONS = "All conversations"
     const val NO_CONVERSATIONS = "Nothing here yet."
     const val EVERYTHING_ELSE = "Everything else"
-    const val EVERYTHING_ELSE_LINE = "Your week, plan, movement, letters and what the trainer knows"
 
     private const val READ = "Read: "
     private const val READ_NOTHING = "the front page only"
