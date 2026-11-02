@@ -6,6 +6,7 @@ import com.metaself.app.domain.food.LastAmount
 import com.metaself.app.domain.food.LoggedRow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 
@@ -29,6 +30,13 @@ class RoomMealRepository @Inject constructor(
         combine(dao.observeDay(epochDay), currentNames(), savedMealNames()) { rows, names, titles ->
             rows.mapNotNull { it.toDomain(names, titles) }
         }
+
+    /** D161: the span in one query, labelled as [observeDay] labels a day. */
+    override suspend fun mealsBetween(from: Long, to: Long): List<Meal> {
+        val names = currentNames().first()
+        val titles = savedMealNames().first()
+        return dao.mealsBetween(from, to).mapNotNull { it.toDomain(names, titles) }
+    }
 
     private fun currentNames(): Flow<Map<Long, String>> =
         dao.observeCurrentNames().map { rows -> rows.associate { it.foodId to it.displayName } }

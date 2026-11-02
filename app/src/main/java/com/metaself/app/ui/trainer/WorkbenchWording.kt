@@ -1,5 +1,6 @@
 package com.metaself.app.ui.trainer
 
+import com.metaself.app.domain.trainer.CoachLooks
 import com.metaself.app.domain.trainer.TrainerPath
 
 /** Every sentence on "Test the trainer's instructions" (D106). */
@@ -14,6 +15,11 @@ object WorkbenchWording {
     const val SENDING = "Sending…"
     const val PRIVACY = "On Send, what the chosen test sends goes to OpenAI with your key, under the instructions " +
         "named above. It counts as one of today's AI requests. Nothing is kept."
+    const val TALK_LABEL = "A sentence to your coach"
+    const val TALK_PRIVACY = "On Send, the coach reads your file as it would in a real conversation, and what it reads goes to " +
+        "OpenAI with your key: individual meals and food names included. Up to ${CoachLooks.MAX} of today's AI requests. Nothing is kept: " +
+        "not this sentence, not the reply, and nothing is added to what the trainer knows."
+    const val WOULD_REMEMBER = "In a real conversation, this would go on What I know about you: "
     const val COPY_REPLY = "Copy reply"
     const val COPY_SENT = "Copy what was sent"
     const val NO_PLAN = "No plan is running."
@@ -36,10 +42,10 @@ object WorkbenchWording {
         TrainerPath.FILL_WEEK -> "Fill in next week"
         TrainerPath.NEXT_BLOCK -> "Plan the next block"
         TrainerPath.SUGGEST_GOALS -> "Suggest goals"
-        TrainerPath.TALK -> "Talk to your trainer"
+        TrainerPath.TALK -> "A conversation"
     }
 
-    /** A path the workbench does not try (D121's two asks, D126, D147). */
+    /** A path the workbench does not try (D121's two asks, D126). */
     const val NOT_HERE = "This one is not tried here."
 
     /** The line that always says which instructions Send will use. */

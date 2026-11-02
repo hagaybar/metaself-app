@@ -1,9 +1,12 @@
 package com.metaself.app.data.trainer
 
+import com.metaself.app.data.ai.CoachPrompt
 import com.metaself.app.data.ai.TrainerPrompt
 import com.metaself.app.data.health.MovementRecord
 import com.metaself.app.data.time.Today
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.trainer.CoachAnswer
+import com.metaself.app.domain.trainer.CoachRequest
 import com.metaself.app.domain.trainer.PlanAnswers
 import com.metaself.app.domain.trainer.PlanAheadAsk
 import com.metaself.app.domain.trainer.TrainerPath
@@ -15,7 +18,7 @@ import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /**
- * D106: the trainer's four paths, tried under other instructions on the real record. The request is the
+ * D106, D163: the trainer's four paths and a conversation, tried under other instructions on the real record. The request is the
  * real ask's — built by [AskTheTrainer]'s own question builders and request — and this class **only
  * reads**: no review is saved first, no answer is stored, kept, ticked or offered. Only when the page asks.
  */
@@ -25,6 +28,7 @@ class TrainerWorkbench @Inject constructor(
     private val record: MovementRecord,
     private val today: Today,
     private val sender: WorkbenchSender,
+    private val talk: TalkToTheTrainer,
 ) {
 
     /** What each path's real screen asks. */
@@ -81,6 +85,16 @@ class TrainerWorkbench @Inject constructor(
 
     /** Sends an already built [request] with [system] as the whole system message. Reads no store. */
     suspend fun send(request: TrainerRequest, system: String): WorkbenchReply = sender.send(system, request)
+
+    /**
+     * D163: [words] as a message in a conversation, under [instructions] (null: the app's own): the real loop, opening
+     * the real file, up to three requests. Nothing is stored.
+     */
+    suspend fun tryConversation(words: String, instructions: String?): CoachAnswer = talk.tryOut(words, instructions)
+
+    /** D163: what a [tryConversation] last sent: its instructions and its user message, for Copy what was sent. */
+    fun sentOf(request: CoachRequest, instructions: String?): String =
+        (instructions ?: TrainerPrompt.instructions(TrainerPath.TALK)) + "\n\n" + CoachPrompt.userMessage(request)
 
     /** Why [request] built nothing for [inputs]. */
     fun nothingSent(inputs: Inputs): Run = if (inputs is Inputs.Adjust) Run.NotRunning else Run.SessionGone

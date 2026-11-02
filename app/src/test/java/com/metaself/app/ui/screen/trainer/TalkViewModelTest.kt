@@ -6,13 +6,18 @@ import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.health.FakeMovementRecord
 import com.metaself.app.data.letter.FakeLetterStore
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Now
-import com.metaself.app.data.trainer.FakeTrainer
+import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.FakeCoachModel
+import com.metaself.app.data.trainer.askTheCoach
+import com.metaself.app.data.trainer.InMemorySheetStore
 import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.data.trainer.InMemoryConversationStore
 import com.metaself.app.data.trainer.InMemoryWeekNoteStore
 import com.metaself.app.data.trainer.TalkToTheTrainer
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.trainer.ThreadItem
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.ui.ActionRefused
@@ -33,6 +38,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 
 /** Your trainer (D145, D146): send, a failure that loses nothing, Try again, delete. Every word is invented. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -41,7 +47,7 @@ class TalkViewModelTest {
     private val dispatcher = StandardTestDispatcher()
     private val outliving = CoroutineScope(SupervisorJob() + dispatcher)
     private val store = FakeTrainerStore()
-    private val trainer = FakeTrainer()
+    private val coach = FakeCoachModel()
     private val messages = InMemoryConversationStore()
     private val problems = RecordingProblemLog()
     private var now = TrainerScreens.NOW
@@ -57,7 +63,7 @@ class TalkViewModelTest {
 
     @Test
     fun `send stores the words, empties the field, and shows the reply`() = runTest {
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         val viewModel = watched()
         advanceUntilIdle()
 
@@ -71,13 +77,13 @@ class TalkViewModelTest {
         assertThat(state.writing).isNull()
         assertThat(state.failure).isNull()
         assertThat(state.thread.map { (it as ThreadItem.Said).message.text }).containsExactly("Invented question.", "Invented reply.").inOrder()
-        assertThat(trainer.asked).hasSize(1)
+        assertThat(coach.asked).hasSize(1)
     }
 
     /** D145: the message stays, not answered; Try again sends it and the reply arrives. */
     @Test
     fun `a failed reply keeps the message, and Try again answers it`() = runTest {
-        trainer.talks += TrainerReply.Failed(EstimateResult.NoKey)
+        coach.looks += TrainerReply.Failed(EstimateResult.NoKey)
         val viewModel = watched()
         advanceUntilIdle()
         viewModel.edit("Invented question.")
@@ -89,7 +95,7 @@ class TalkViewModelTest {
         assertThat(kept.answered).isFalse()
         assertThat(viewModel.state.value.draft).isEmpty()
 
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         viewModel.tryAgain(kept.id)
         advanceUntilIdle()
 
@@ -111,7 +117,7 @@ class TalkViewModelTest {
         assertThat(viewModel.state.value.draft).isEqualTo("Invented question.")
         assertThat(viewModel.state.value.refused).isEqualTo(ActionRefused.NOTHING_CHANGED)
         assertThat(viewModel.state.value.busy).isFalse()
-        assertThat(trainer.asked).isEmpty()
+        assertThat(coach.asked).isEmpty()
     }
 
     @Test
@@ -130,7 +136,7 @@ class TalkViewModelTest {
     /** D145: Delete asks first; confirmed, his message and its reply go. */
     @Test
     fun `delete asks first, then removes the message and its reply`() = runTest {
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         val viewModel = watched()
         advanceUntilIdle()
         viewModel.edit("Invented question.")
@@ -158,7 +164,7 @@ class TalkViewModelTest {
     /** D159: a message the coach screen stored is asked about on opening, and answered in its conversation. */
     @Test
     fun `a conversation opened to ask answers that message`() = runTest {
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         val asked = messages.addOwn("Invented question.", now, CONVERSATION)
 
         val viewModel = watched(ask = asked)
@@ -173,7 +179,7 @@ class TalkViewModelTest {
     @Test
     fun `only its own conversation, and Send stays in it`() = runTest {
         messages.addOwn("Invented, another subject.", now, "talk:9")
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         val viewModel = watched()
         advanceUntilIdle()
         assertThat(viewModel.state.value.thread).isEmpty()
@@ -209,7 +215,8 @@ class TalkViewModelTest {
 
     private fun TestScope.watched(ask: Long = TalkViewModel.NO_ASK): TalkViewModel {
         val talk = TalkToTheTrainer(
-            TrainerScreens.ask(FakeMovementRecord(), store, trainer), trainer, messages, store, FakeLetterStore(), InMemoryWeekNoteStore(), Now { now },
+            askTheCoach(coach, Now { now }, store = store), messages, store, FakeLetterStore(), InMemoryWeekNoteStore(), InMemorySheetStore(), ProblemLog.NONE,
+            Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { now },
         )
         val make = { TalkViewModel(SavedStateHandle(mapOf(TalkViewModel.CONVERSATION to CONVERSATION, TalkViewModel.ASK to ask)), talk, FakeAiSettings(), problems, outliving) }
         val viewModel = ViewModelProvider(ViewModelStore(), TrainerScreens.factory(make))[TalkViewModel::class.java]

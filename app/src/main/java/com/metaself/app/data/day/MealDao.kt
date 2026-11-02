@@ -45,6 +45,11 @@ interface MealDao {
     @Query("SELECT * FROM meals WHERE epochDay = :epochDay ORDER BY loggedAtMillis ASC, id ASC")
     fun observeDay(epochDay: Long): Flow<List<MealWithItems>>
 
+    /** D161: every logging of a span, once, for the coach's meals drawer and measured habits. */
+    @Transaction
+    @Query("SELECT * FROM meals WHERE epochDay BETWEEN :fromEpochDay AND :toEpochDay ORDER BY epochDay ASC, loggedAtMillis ASC, id ASC")
+    suspend fun mealsBetween(fromEpochDay: Long, toEpochDay: Long): List<MealWithItems>
+
     /**
      * Every meal, newest first, for offering back to be repeated.
      *

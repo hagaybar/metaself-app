@@ -281,6 +281,7 @@ internal fun SettingsDestination(
                 onPlan = workbench::changePlan,
                 onEvaluate = workbench::changeEvaluate,
                 onAdjustWords = workbench::changeAdjustWords,
+                onTalkWords = workbench::changeTalkWords,
                 onLoad = { chooseInstructions.launch(arrayOf("text/plain", "*/*")) },
                 onUseAppOwn = workbench::useAppOwn,
                 onSaveAppOwn = { chooseWhereToSave.launch(WorkbenchWording.fileName(state.path)) },

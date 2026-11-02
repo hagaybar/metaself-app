@@ -101,7 +101,8 @@ data class WeeklyLetterEntity(
  * One message of the conversation (D145, D148): the owner's ([fromOwner]) or the trainer's reply, with the model
  * that wrote it ([model], null on his). [answered] says whether his got a reply; a reply's [replyTo] names the message
  * it answers, so deleting his message removes exactly the reply it got. [conversation] is the one it belongs to (D159);
- * there is no table of conversations. The feedback and the letters shown in the thread are not copied here (D146).
+ * there is no table of conversations. [opened] is, on a reply that read the file, what it read (D163): "" when it opened
+ * nothing, null on anything older. The feedback and the letters shown in the thread are not copied here (D146).
  * **No foreign key**: a restore replaces the table whole.
  */
 @Entity(tableName = "trainer_messages")
@@ -114,6 +115,7 @@ data class TrainerMessageEntity(
     val answered: Boolean,
     val replyTo: Long?,
     @ColumnInfo(defaultValue = "") val conversation: String,
+    val opened: String? = null,
 )
 
 /**

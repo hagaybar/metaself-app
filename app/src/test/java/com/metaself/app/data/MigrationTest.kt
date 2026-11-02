@@ -17,6 +17,7 @@ import com.metaself.app.data.day.MIGRATION_13_14
 import com.metaself.app.data.day.MIGRATION_14_15
 import com.metaself.app.data.day.MIGRATION_15_16
 import com.metaself.app.data.day.MIGRATION_16_17
+import com.metaself.app.data.day.MIGRATION_17_18
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -919,6 +920,24 @@ class MigrationTest {
         assertThat(found).hasSize(2)
         assertThat(found[0]).startsWith("day:")
         assertThat(found[1]).isEqualTo(found[0])
+        migrated.close()
+    }
+
+    /** D163: older messages keep their words and have no Read line. */
+    @Test
+    fun `version 18 adds what a reply read, empty on every older message`() {
+        assumeSqliteRuntime()
+        helper.createDatabase(TEST_DB, 17).use { db ->
+            db.execSQL("INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo, conversation) VALUES (1, 1000, 0, 'Invented.', 'm', 0, NULL, 'talk:1')")
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 18, true, MIGRATION_17_18)
+
+        migrated.query("SELECT text, opened FROM trainer_messages").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getString(0)).isEqualTo("Invented.")
+            assertThat(cursor.isNull(1)).isTrue()
+        }
         migrated.close()
     }
 

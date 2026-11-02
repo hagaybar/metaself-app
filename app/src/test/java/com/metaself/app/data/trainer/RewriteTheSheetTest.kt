@@ -6,6 +6,7 @@ import com.metaself.app.data.letter.FakeLetterStore
 import com.metaself.app.data.profile.FakeProfileRepository
 import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.ai.EstimateResult
@@ -131,7 +132,7 @@ class RewriteTheSheetTest {
 
     private fun rewrite() = RewriteTheSheet(writer, sheets, talk(), aboutMe, Now { now })
 
-    private fun talk() = TalkToTheTrainer(ask(), trainer, messages, store, FakeLetterStore(), InMemoryWeekNoteStore(), Now { now })
+    private fun talk() = TalkToTheTrainer(askTheCoach(FakeCoachModel(), Now { now }), messages, store, FakeLetterStore(), InMemoryWeekNoteStore(), sheets, ProblemLog.NONE, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { now })
 
     private fun ask() = AskTheTrainer(
         FakeMovementRecord(), store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer, aboutMe, FakeProgrammeStore(),

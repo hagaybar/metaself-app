@@ -63,6 +63,7 @@ object SheetWording {
         FactGroup.BODY -> "BODY"
         FactGroup.TRAINING -> "HOW YOU LIKE TO TRAIN"
         FactGroup.GOALS -> "GOALS IN YOUR WORDS"
+        FactGroup.EATING -> "EATING"
         FactGroup.LIFE -> "LIFE"
     }
 

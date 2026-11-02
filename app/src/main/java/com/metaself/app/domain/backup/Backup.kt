@@ -123,8 +123,11 @@ data class Backup(
          *
          * Version 13 adds each message's conversation (D159), [BackupTrainerMessage.conversation]. A version 11 or 12 file
          * has none, and each of its messages goes in its local day's conversation, as the database's upgrade put them.
+         *
+         * Version 14 adds what a reply read (D163), [BackupTrainerMessage.opened], optional: a file without it restores
+         * with no Read line under its replies, as they were written.
          */
-        const val CURRENT_VERSION = 13
+        const val CURRENT_VERSION = 14
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -385,7 +388,8 @@ data class BackupWeeklyLetter(
 /**
  * One message of the conversation (D148): the owner's ([fromOwner]) or the trainer's reply, with the model that wrote
  * it (null on his); [answered] whether his got a reply; [replyTo] a reply's message, by its [id]; [conversation] the
- * conversation it is in (D159), null in a file from before version 13.
+ * conversation it is in (D159), null in a file from before version 13; [opened] what a reply read (D163), null on
+ * anything older and in a file from before version 14.
  */
 @Serializable
 data class BackupTrainerMessage(
@@ -397,6 +401,7 @@ data class BackupTrainerMessage(
     val answered: Boolean = false,
     @SerialName("reply_to") val replyTo: Long? = null,
     val conversation: String? = null,
+    val opened: String? = null,
 )
 
 /**

@@ -1,14 +1,12 @@
 package com.metaself.app.data.trainer
 
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.FakeMovementRecord
 import com.metaself.app.data.letter.FakeLetterStore
 import com.metaself.app.data.letter.aWeeklyLetter
-import com.metaself.app.data.profile.FakeProfileRepository
-import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
-import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.movement.EnergySource
@@ -16,9 +14,10 @@ import com.metaself.app.domain.movement.MovementWeek
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.movement.WorkoutSource
-import com.metaself.app.domain.profile.TEST_YEAR
-import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.CoachAnswer
 import com.metaself.app.domain.trainer.Conversation
+import com.metaself.app.domain.trainer.DrawerAsk
+import com.metaself.app.domain.trainer.RememberedFact
 import com.metaself.app.domain.trainer.Evaluation
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.LineKind
@@ -33,7 +32,6 @@ import com.metaself.app.domain.trainer.FactSource
 import com.metaself.app.domain.trainer.SheetFact
 import com.metaself.app.domain.trainer.SheetMadeBy
 import com.metaself.app.domain.trainer.ThreadItem
-import com.metaself.app.domain.trainer.TrainerQuestion
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.TrainerReview
 import com.metaself.app.domain.trainer.WeekNote
@@ -52,7 +50,7 @@ class TalkToTheTrainerTest {
 
     private val record = FakeMovementRecord()
     private val store = FakeTrainerStore()
-    private val trainer = FakeTrainer()
+    private val coach = FakeCoachModel()
     private val programmes = FakeProgrammeStore()
     private val messages = InMemoryConversationStore()
     private val letters = FakeLetterStore()
@@ -62,7 +60,7 @@ class TalkToTheTrainerTest {
 
     @Test
     fun `a message is stored, asked about once, and its reply stored against it`() = runTest {
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
 
         val id = talk().say("  Invented question.  ", "talk:1")
         val outcome = talk().answer(id)
@@ -74,42 +72,42 @@ class TalkToTheTrainerTest {
         assertThat(stored[1].fromOwner).isFalse()
         assertThat(stored[1].model).isEqualTo("a-model")
         assertThat(stored[1].replyTo).isEqualTo(id)
-        val question = trainer.asked.single().question as TrainerQuestion.Talk
-        assertThat(question.replyTo.text).isEqualTo("Invented question.")
-        assertThat(question.conversation.map { it.text }).containsExactly("Invented question.")
+        val request = coach.asked.single()
+        assertThat(request.replyTo.text).isEqualTo("Invented question.")
+        assertThat(request.conversation.map { it.text }).containsExactly("Invented question.")
     }
 
     /** D145: a message is never lost because a request failed; Try again sends it again. */
-    /** D151: a reply reads the sheet, as every request does. */
+    /** D161: a reply's front page holds the whole sheet. */
     @Test
     fun `a reply carries the newest sheet`() = runTest {
         val fact = SheetFact(1, FactGroup.LIFE, "An invented fact.", TEST_EPOCH_DAY - 4, FactSource.NOTICED)
         sheets.add(NOW - HOUR, listOf(fact), SheetMadeBy.REWRITE, "a-model")
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
 
         talk().answer(talk().say("Invented question.", "talk:1"))
 
-        assertThat(trainer.asked.single().sheet).containsExactly(fact)
+        assertThat(coach.asked.single().frontPage.sheet).containsExactly(fact)
     }
 
     @Test
     fun `a failed request keeps the message not answered, and trying again answers it`() = runTest {
-        trainer.talks += TrainerReply.Failed(EstimateResult.Unreachable())
+        coach.looks += TrainerReply.Failed(EstimateResult.Unreachable())
         val id = talk().say("Invented question.", "talk:1")
 
         assertThat(talk().answer(id)).isEqualTo(TalkToTheTrainer.Talked.Failed(EstimateResult.Unreachable()))
         assertThat(messages.observe().first().single().answered).isFalse()
 
         now += 60_000
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         assertThat(talk().answer(id)).isEqualTo(TalkToTheTrainer.Talked.Replied)
 
-        assertThat(trainer.asked).hasSize(2)
-        assertThat((trainer.asked.last().question as TrainerQuestion.Talk).replyTo.text).isEqualTo("Invented question.")
+        assertThat(coach.asked).hasSize(2)
+        assertThat(coach.asked.last().replyTo.text).isEqualTo("Invented question.")
         assertThat(messages.observe().first().map { it.answered }).containsExactly(true, false).inOrder()
         // Answered once: asking again asks nothing.
         assertThat(talk().answer(id)).isEqualTo(TalkToTheTrainer.Talked.NothingToAnswer)
-        assertThat(trainer.asked).hasSize(2)
+        assertThat(coach.asked).hasSize(2)
     }
 
     @Test
@@ -122,8 +120,8 @@ class TalkToTheTrainerTest {
     /** D145: deleting his message removes the reply it got, and nothing else. */
     @Test
     fun `deleting a message removes the reply it got`() = runTest {
-        trainer.talks += TrainerReply.Answered("Invented first reply.", "a-model")
-        trainer.talks += TrainerReply.Answered("Invented second reply.", "a-model")
+        coach.says("Invented first reply.")
+        coach.says("Invented second reply.")
         val first = talk().say("Invented first.", "talk:1")
         talk().answer(first)
         now += 60_000
@@ -155,9 +153,9 @@ class TalkToTheTrainerTest {
         assertThat(feedback.minutes).isEqualTo(60)
         assertThat(messages.observe().first().map { it.id }).containsExactly(id)
 
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         talk().answer(id)
-        val sent = (trainer.asked.single().question as TrainerQuestion.Talk).conversation
+        val sent = coach.asked.single().conversation
         assertThat(sent.map { it.kind }).containsExactly(LineKind.LETTER, LineKind.SESSION_FEEDBACK, LineKind.MESSAGE).inOrder()
         assertThat(sent[1].text).isEqualTo("Invented headline.\n\nInvented note.")
     }
@@ -169,11 +167,11 @@ class TalkToTheTrainerTest {
         messages.addOwn("b".repeat(1_000), NOW - 3 * DAY, "talk:0")
         repeat(12) { messages.addOwn("c".repeat(2_000), NOW - 2 * DAY + it, "talk:0") }
         val id = talk().say("Invented question.", "talk:1")
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
 
         talk().answer(id)
 
-        val sent = (trainer.asked.single().question as TrainerQuestion.Talk).conversation
+        val sent = coach.asked.single().conversation
         // 12 × 2,000 + 18 = 24,018 is over the cap: the oldest 2,000-character one goes, and the 1,000 before it.
         assertThat(sent).hasSize(12)
         assertThat(sent.first().text).isEqualTo("c".repeat(2_000))
@@ -182,33 +180,35 @@ class TalkToTheTrainerTest {
     }
 
     @Test
-    fun `the running plan, its week and the week's note go with the question`() = runTest {
+    fun `the running plan, its week and the week's note are on the front page`() = runTest {
         val id = programmes.add(Programme(0, (MONDAY - 15) * DAY + 12 * HOUR, ProgrammeAsk(2, 2), EVALUATION, WEEKS, "a-model"))
         programmes.keep(id, MONDAY - 7, TEST_EPOCH_DAY - 7)
         weekNotes.note.value = WeekNote("Invented week note.", NOW - HOUR, MONDAY, WeekNoteSource.TRAINER)
-        val message = talk().say("Invented question.", "talk:1")
+        coach.says("Invented reply.")
 
-        val question = talk().question(messages.message(message)!!)
+        talk().answer(talk().say("Invented question.", "talk:1"))
 
-        assertThat(question.plan!!.weekIndex).isEqualTo(1)
-        assertThat(question.plan!!.startEpochDay).isEqualTo(MONDAY - 7)
-        assertThat(question.weekNote).isEqualTo("Invented week note.")
-
-        weekNotes.note.value = WeekNote("Invented old note.", NOW - 8 * DAY, MONDAY - 7, WeekNoteSource.TRAINER)
-        assertThat(talk().question(messages.message(message)!!).weekNote).isNull()
+        val page = coach.asked.single().frontPage
+        assertThat(page.plan!!.weekIndex).isEqualTo(1)
+        assertThat(page.plan!!.startEpochDay).isEqualTo(MONDAY - 7)
+        assertThat(page.weekNote).isEqualTo("Invented week note.")
     }
 
     @Test
-    fun `with no plan running, none goes`() = runTest {
-        val message = talk().say("Invented question.", "talk:1")
+    fun `an old note and no plan are not on the front page`() = runTest {
+        weekNotes.note.value = WeekNote("Invented old note.", NOW - 8 * DAY, MONDAY - 7, WeekNoteSource.TRAINER)
+        coach.says("Invented reply.")
 
-        assertThat(talk().question(messages.message(message)!!).plan).isNull()
+        talk().answer(talk().say("Invented question.", "talk:1"))
+
+        assertThat(coach.asked.single().frontPage.plan).isNull()
+        assertThat(coach.asked.single().frontPage.weekNote).isNull()
     }
 
     /** D159: the box begins a new conversation each time; a reply stays in its message's. */
     @Test
     fun `the box begins a new conversation, and a reply stays in it`() = runTest {
-        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        coach.says("Invented reply.")
         val (first, asked) = talk().begin("Invented question.")
         talk().answer(asked)
         now += 1_000
@@ -226,9 +226,10 @@ class TalkToTheTrainerTest {
         messages.addOwn("Invented, another subject.", NOW - DAY, "talk:9")
         val id = talk().say("Invented question.", "talk:1")
 
-        val question = talk().question(messages.message(id)!!)
+        coach.says("Invented reply.")
+        talk().answer(id)
 
-        assertThat(question.conversation.map { it.text to it.thisConversation })
+        assertThat(coach.asked.single().conversation.map { it.text to it.thisConversation })
             .containsExactly("Invented, another subject." to false, "Invented question." to true).inOrder()
     }
 
@@ -239,9 +240,10 @@ class TalkToTheTrainerTest {
         messages.addOwn("Invented, long ago, elsewhere.", NOW - 40 * DAY, "talk:9")
         val id = talk().say("Invented question.", "talk:1")
 
-        val question = talk().question(messages.message(id)!!)
+        coach.says("Invented reply.")
+        talk().answer(id)
 
-        assertThat(question.conversation.map { it.text }).containsExactly("Invented, long ago, here.", "Invented question.").inOrder()
+        assertThat(coach.asked.single().conversation.map { it.text }).containsExactly("Invented, long ago, here.", "Invented question.").inOrder()
     }
 
     /** D159: a note's conversation shows the note before anything is stored, and stores it with the first message. */
@@ -261,12 +263,88 @@ class TalkToTheTrainerTest {
             .containsExactly("Invented note." to false, "Invented answer." to true, "Invented more." to true).inOrder()
     }
 
-    private fun talk() = TalkToTheTrainer(ask(), trainer, messages, store, letters, weekNotes, Now { now })
+    /** D163: what was read is stored with the reply, made by the phone; a reply that opened nothing says so by "". */
+    @Test
+    fun `a reply stores what it really read`() = runTest {
+        coach.opens(DrawerAsk("days", "${LocalDate.ofEpochDay(TEST_EPOCH_DAY - 6)}", "${LocalDate.ofEpochDay(TEST_EPOCH_DAY)}", ""))
+        coach.says("Invented reply.")
+        record.earliest.value = TEST_EPOCH_DAY - 100
+        val id = talk().say("Invented question.", "talk:1")
 
-    private fun ask() = AskTheTrainer(
-        record, store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), trainer, InMemoryAboutMeStore(), programmes,
-        Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { now }, CurrentYear { TEST_YEAR }, sheets = sheets,
-    )
+        talk().answer(id)
+
+        assertThat(messages.messages.value.last().opened).isEqualTo("sleep and recovery, 7 days")
+
+        now += 1_000
+        coach.says("Invented second reply.")
+        talk().answer(talk().say("Invented second.", "talk:1"))
+
+        assertThat(messages.messages.value.last().opened).isEqualTo("")
+    }
+
+    /** D161: said facts go on the sheet at once, marked as said, as a version of their own; a bad group is dropped. */
+    @Test
+    fun `what the owner said goes on the sheet as a new version, and a bad fact is dropped`() = runTest {
+        coach.says(
+            "Invented reply.",
+            remember = listOf(RememberedFact("eating", "You avoid invented berries."), RememberedFact("astrology", "Invented.")),
+        )
+
+        talk().answer(talk().say("Invented question.", "talk:1"))
+
+        val version = sheets.observe().first().single()
+        assertThat(version.madeBy).isEqualTo(SheetMadeBy.CONVERSATION)
+        assertThat(version.model).isNull()
+        val fact = version.current.single()
+        assertThat(fact.text).isEqualTo("You avoid invented berries.")
+        assertThat(fact.group).isEqualTo(FactGroup.EATING)
+        assertThat(fact.source).isEqualTo(FactSource.SAID)
+        assertThat(fact.sinceEpochDay).isEqualTo(TEST_EPOCH_DAY)
+    }
+
+    /** D161: with nothing to add, no version is made. */
+    @Test
+    fun `a repeat of a fact already there makes no version`() = runTest {
+        sheets.add(NOW - HOUR, listOf(SheetFact(1, FactGroup.LIFE, "An invented fact.", TEST_EPOCH_DAY - 4, FactSource.NOTICED)), SheetMadeBy.REWRITE, "a-model")
+        coach.says("Invented reply.", remember = listOf(RememberedFact("life", "an invented FACT.")))
+
+        talk().answer(talk().say("Invented question.", "talk:1"))
+
+        assertThat(sheets.observe().first()).hasSize(1)
+    }
+
+    /** D161: the reply is stored whatever happens to the fact. */
+    @Test
+    fun `a sheet that cannot be written leaves the reply stored`() = runTest {
+        val refusing = object : SheetStore by sheets {
+            override suspend fun add(atMillis: Long, facts: List<SheetFact>, madeBy: SheetMadeBy, model: String?, restoredFrom: Long?): Long = error("invented write failure")
+        }
+        coach.says("Invented reply.", remember = listOf(RememberedFact("life", "An invented fact.")))
+        val talk = TalkToTheTrainer(coachOver(), messages, store, letters, weekNotes, refusing, ProblemLog.NONE, TODAY, Now { now })
+
+        assertThat(talk.answer(talk.say("Invented question.", "talk:1"))).isEqualTo(TalkToTheTrainer.Talked.Replied)
+        assertThat(messages.messages.value.last().text).isEqualTo("Invented reply.")
+    }
+
+    /** D163: a sentence tried on the workbench is asked about as a message is, and nothing is stored. */
+    @Test
+    fun `trying out a sentence stores nothing`() = runTest {
+        messages.addOwn("Invented, another subject.", NOW - DAY, "talk:9")
+        coach.says("Invented reply.", remember = listOf(RememberedFact("life", "An invented fact.")))
+
+        val answer = talk().tryOut(" Invented sentence. ", "Invented instructions.") as CoachAnswer.Answered
+
+        assertThat(answer.text).isEqualTo("Invented reply.")
+        assertThat(coach.instructions.single()).isEqualTo("Invented instructions.")
+        assertThat(coach.asked.single().replyTo.text).isEqualTo("Invented sentence.")
+        assertThat(coach.asked.single().conversation.map { it.text }).containsExactly("Invented, another subject.", "Invented sentence.").inOrder()
+        assertThat(messages.messages.value.map { it.text }).containsExactly("Invented, another subject.")
+        assertThat(sheets.observe().first()).isEmpty()
+    }
+
+    private fun talk() = TalkToTheTrainer(coachOver(), messages, store, letters, weekNotes, sheets, ProblemLog.NONE, TODAY, Now { now })
+
+    private fun coachOver() = askTheCoach(coach, Now { now }, record = record, store = store, programmes = programmes, sheets = sheets, weekNotes = weekNotes)
 
     private fun run(id: Long) = Workout(
         id = id, epochDay = TEST_EPOCH_DAY, startedAtMillis = TEST_EPOCH_DAY * DAY + 7 * HOUR, durationMinutes = 60,
@@ -275,6 +353,7 @@ class TalkToTheTrainerTest {
     )
 
     private companion object {
+        val TODAY = Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }
         const val DAY = 86_400_000L
         const val HOUR = 3_600_000L
         const val NOW = TEST_EPOCH_DAY * DAY + 15 * HOUR

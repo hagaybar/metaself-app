@@ -37,6 +37,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import com.metaself.app.domain.trainer.ConversationLine
+import com.metaself.app.domain.trainer.TalkPlan
 import com.metaself.app.domain.trainer.LineKind
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -47,8 +48,8 @@ import java.time.temporal.ChronoUnit
  * What leaves the phone when the owner asks the trainer (D84) — the third thing this app sends, and
  * like [EstimatePrompt] and [ReviewPrompt] a pure function with its own "nothing else is sent" test.
  *
- * Everything comes from one [TrainerRequest], built fresh from the stored record. The only conversation sent is
- * a reply's (D147): the last 14 days of it, word for word, in its question — never on another path. Every request
+ * Everything comes from one [TrainerRequest], built fresh from the stored record. No conversation is sent on any of
+ * these paths: a reply in the conversation is [CoachPrompt]'s (D161). Every request
  * carries the sheet of what the trainer knows about the owner (D151), its current facts only. The replies are pinned by strict schemas and checked again on the phone
  * ([TrainerResponse]).
  */
@@ -74,7 +75,7 @@ object TrainerPrompt {
         with the numbers, the numbers are what happened.
 
         sheet is what you know about them from your conversations with them, which you rewrite each week: each
-        fact with its group (body, training, goals, life), since when it has been true, and its source
+        fact with its group (body, training, goals, eating, life), since when it has been true, and its source
         ("they_said": they told you; "you_noticed": you inferred it). It is null when there is none yet. Weigh
         it with about_me and the record; where it conflicts with the numbers, the numbers are what happened.
         Use it as a coach who remembers; never quote it back to them as a list.
@@ -319,39 +320,11 @@ object TrainerPrompt {
 
     /**
      * The words on sessions beyond the plan, and the phrase never used for them. Shared, word for word, by the letter
-     * (D140) and a reply in the conversation (D147).
+     * (D140) and a reply in the conversation (D161).
      */
     internal const val OWN_CHOICE =
         "Sessions beyond the plan are their own choice, and are described so: \"of your own\", \"your own choice\". " +
             "Never \"nobody asked for\", \"unasked\", \"extra\" or anything that makes them sound unwanted."
-
-    /** D147: a reply in the conversation — the same coach, a few sentences, the record's numbers, no change made. */
-    internal val TALK = """
-        They are talking with you on their phone, in separate conversations, one for each subject. The items with
-        this_conversation true are the conversation they are writing in now, whatever its age. The other items are their
-        other conversations of the last 14 days, which you remember and may draw on: do not answer them, and do not take
-        them for the subject here. question.conversation is all of these,
-        word for word, oldest first, cut to its newest part when it is long: their messages ("from": "them"), your
-        replies ("from": "you"), and, in their place, your feedback after a session ("kind": "session_feedback", with the
-        session's kind and minutes) and your weekly letters ("kind": "letter", with the Monday of the week). Each has
-        the local time it was written ("at"). question.reply_to is the message of theirs to answer now; it is usually
-        the last one. question.plan is their running weekly plan, with its goal, when it started and the week they are
-        in (this_week_number, from 1; 0 before the plan starts), or null when none runs. question.week_note is your
-        note on this week as their Trainer page shows it, which they may be answering, or null when there is none.
-
-        You are the same coach who writes their feedback after a session, their plans, the note on their week and the
-        weekly letter. Answer as that coach, to them, in the second person, in a few sentences unless they ask for more.
-        Use the record's numbers and never invent one: every figure you state comes from what you are given; you may
-        compare two of them, but never estimate one.
-        You may disagree with them. When you do, say so plainly and say why, from the record.
-        You cannot change their plan, their goal or anything else stored on their phone from this conversation. When
-        something should change, tell them what to change and where (for example, Change the rest of my plan on the
-        plan page), and never say or imply that you have changed it.
-        If reply_to mentions pain, dizziness or chest discomfort, tell them to stop and see a doctor before saying
-        anything else.
-    """.trimIndent() + "\n" + OWN_CHOICE + "\n" + """
-        Plain text only: no headings, no emoji, and no list unless they ask for one. Reply with reply: your answer.
-    """.trimIndent()
 
     /** D129: the stand on the goal, on the evaluate path (Plan ahead) only. */
     internal val GOAL_VIEW = """
@@ -461,8 +434,8 @@ object TrainerPrompt {
      */
     fun instructions(path: TrainerPath): String {
         val shared = COMMON + "\n\n" + SIX_WEEKS + "\n\n" + LEDGER + "\n\n" + WEEK_RULES + "\n\n"
-        // D147: a reply sets its own voice and asks for no week_note — a reply does not replace the coach's note.
-        if (path == TrainerPath.TALK) return shared + VOICE_NOTE + "\n\n" + TALK
+        // D161: a reply is its own request, with its own instructions, and asks for no week_note.
+        if (path == TrainerPath.TALK) return CoachPrompt.INSTRUCTIONS
         return shared + when (path) {
             TrainerPath.FEEDBACK -> VOICE_NOTE + "\n\n" + FEEDBACK
             TrainerPath.PLAN -> VOICE + "\n\n" + PLAN
@@ -473,12 +446,6 @@ object TrainerPrompt {
             TrainerPath.SUGGEST_GOALS -> VOICE + "\n\n" + SUGGEST_GOALS + PLANNING
             TrainerPath.TALK -> error("answered above")
         } + "\n\n" + WEEK_NOTE
-    }
-
-    /** D147: a reply in the conversation — the shared part, the reply's task, and a reply of words only. */
-    fun talkBody(model: String, request: TrainerRequest, profile: RequestProfile = RequestProfile.guess(model)): String {
-        require(request.question is TrainerQuestion.Talk) { "a reply is asked with a talk question" }
-        return ChatRequest.body(model, profile, messages(request), "conversation_reply", TALK_SCHEMA)
     }
 
     /** D125, D126: what the plan paths and suggesting goals add after their own task — the goal and outline, then the conventions. */
@@ -636,32 +603,17 @@ object TrainerPrompt {
             )
             put("last_evaluation", lastEvaluationJson(question.last))
         }
-        is TrainerQuestion.Talk -> buildJsonObject {
-            put("kind", "talk")
-            // D159: only a reply says which conversation an item is in; the sheet's rewrite reads them all alike.
-            putJsonArray("conversation") {
-                question.conversation.forEach { add(JsonObject(lineJson(it) + ("this_conversation" to JsonPrimitive(it.thisConversation)))) }
-            }
-            putJsonObject("reply_to") {
-                put("at", at(question.replyTo.at))
-                put("text", question.replyTo.text)
-            }
-            put(
-                "plan",
-                question.plan?.let { plan ->
-                    buildJsonObject {
-                        put("goal", sentGoal(plan.ask.goal, today))
-                        put("weeks", plan.ask.weeks)
-                        put("sessions_a_week", plan.ask.perWeek)
-                        put("starts", date(plan.startEpochDay))
-                        put("plan", weeksPlanJson(plan.plan))
-                        put("this_week_number", plan.weekIndex + 1)
-                        putJsonArray("filled_weeks") { plan.plan.filledWeeks.forEach { add(it) } }
-                    }
-                } ?: JsonNull,
-            )
-            put("week_note", question.weekNote?.let(::JsonPrimitive) ?: JsonNull)
-        }
+    }
+
+    /** D147, D161: the running weekly plan as a coach request's front page sends it. */
+    internal fun talkPlanJson(plan: TalkPlan, today: Long): JsonObject = buildJsonObject {
+        put("goal", sentGoal(plan.ask.goal, today))
+        put("weeks", plan.ask.weeks)
+        put("sessions_a_week", plan.ask.perWeek)
+        put("starts", date(plan.startEpochDay))
+        put("plan", weeksPlanJson(plan.plan))
+        put("this_week_number", plan.weekIndex + 1)
+        putJsonArray("filled_weeks") { plan.plan.filledWeeks.forEach { add(it) } }
     }
 
     /** D147: one item of the conversation, as sent — its local time, who wrote it, what it is, and its words. */
@@ -715,7 +667,7 @@ object TrainerPrompt {
     }
 
     /** D105: one week as the phone counted it — each planned session's outcome, and the attempts. Minutes only. */
-    private fun weekOutcome(week: WeekOutcome): JsonObject = buildJsonObject {
+    internal fun weekOutcome(week: WeekOutcome): JsonObject = buildJsonObject {
         put("week", week.week)
         putJsonArray("sessions") {
             week.sessions.forEach { session -> add(sessionOutcomeJson(session)) }
@@ -1036,11 +988,11 @@ object TrainerPrompt {
 
     private fun round2(value: Double): Double = Math.round(value * 100) / 100.0
 
-    private fun string() = buildJsonObject { put("type", "string") }
+    internal fun string() = buildJsonObject { put("type", "string") }
 
     private fun integer() = buildJsonObject { put("type", "integer") }
 
-    private fun strictObject(vararg properties: Pair<String, JsonObject>) = buildJsonObject {
+    internal fun strictObject(vararg properties: Pair<String, JsonObject>) = buildJsonObject {
         put("type", "object")
         put("additionalProperties", false)
         putJsonObject("properties") { properties.forEach { (name, schema) -> put(name, schema) } }
@@ -1067,12 +1019,12 @@ object TrainerPrompt {
         "week_note" to string(),
     )
 
-    private fun enumOf(vararg values: String) = buildJsonObject {
+    internal fun enumOf(vararg values: String) = buildJsonObject {
         put("type", "string")
         putJsonArray("enum") { values.forEach { add(it) } }
     }
 
-    private fun arraySchema(items: JsonObject) = buildJsonObject {
+    internal fun arraySchema(items: JsonObject) = buildJsonObject {
         put("type", "array")
         put("items", items)
     }
@@ -1143,9 +1095,6 @@ object TrainerPrompt {
 
     /** D121: a steady plan's next block. */
     private val NEXT_BLOCK_SCHEMA: JsonObject = strictObject("block" to BLOCK_SCHEMA, "why" to string(), "week_note" to string())
-
-    /** D147: a reply in the conversation — its words, and nothing else. */
-    private val TALK_SCHEMA: JsonObject = strictObject("reply" to string())
 
     /** D97's reply: the plan of weeks, and the week's note (D116). The plan inside an evaluation keeps [WEEKS_PLAN_SCHEMA]. */
     private val ADJUST_SCHEMA: JsonObject = strictObject(

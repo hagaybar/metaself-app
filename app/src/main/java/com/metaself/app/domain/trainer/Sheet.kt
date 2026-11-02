@@ -2,8 +2,8 @@ package com.metaself.app.domain.trainer
 
 import java.time.LocalDateTime
 
-/** D149: the sheet's four groups, in the order the page shows them. Stored by name, never by ordinal. */
-enum class FactGroup { BODY, TRAINING, GOALS, LIFE }
+/** D149, D161: the sheet's groups, in the order the page shows them. Stored by name, never by ordinal. */
+enum class FactGroup { BODY, TRAINING, GOALS, EATING, LIFE }
 
 /** D149, D4: where a fact came from — the owner said it ("you said"), or the trainer inferred it ("I noticed"). */
 enum class FactSource { SAID, NOTICED }
@@ -27,8 +27,11 @@ data class SheetFact(
     val current: Boolean get() = droppedEpochDay == null
 }
 
-/** D151: who made a version — the weekly rewrite, or the owner (an edit, a removal, going back). */
-enum class SheetMadeBy { REWRITE, OWNER }
+/**
+ * D151: who made a version — the weekly rewrite, the owner (an edit, a removal, going back), or, D161, a coach's reply
+ * adding what he said in a conversation.
+ */
+enum class SheetMadeBy { REWRITE, OWNER, CONVERSATION }
 
 /**
  * One version of the sheet (D150): every rewrite and every change the owner makes is a row, so a bad rewrite can be
@@ -137,6 +140,34 @@ object Sheets {
         val kept = candidates.filter { it.id in keptIds }
         val newlyDropped = previous.filter { it.current && it.id !in keptIds }.map { it.copy(droppedEpochDay = today, removedByOwner = false) }
         return kept + newlyDropped + carried(previous, today)
+    }
+
+    /**
+     * D161: [said], facts the owner said in a conversation, added to [previous] as "you said" from [today]. Nothing
+     * already there is touched, so his edits stand. A blank fact, one over [MAX_FACT], a repeat of a current fact or of
+     * one he removed (ignoring case), and one that would cross [MAX_FACTS] or [MAX_CHARS] is left out; later ones are
+     * still tried. When none is added the answer is [previous] itself, so no version is made.
+     */
+    fun remembered(previous: List<SheetFact>, said: List<Pair<FactGroup, String>>, today: Long): List<SheetFact> {
+        val current = previous.filter { it.current }
+        val taken = (current + previous.filter { it.removedByOwner }).map { it.text.lowercase() }.toMutableSet()
+        var nextId = (previous.maxOfOrNull { it.id } ?: 0L) + 1
+        var count = current.size
+        var chars = chars(current)
+        val added = said.mapNotNull { (group, text) ->
+            val words = text.trim()
+            when {
+                words.isEmpty() || words.length > MAX_FACT || words.lowercase() in taken -> null
+                count >= MAX_FACTS || chars + words.length > MAX_CHARS -> null
+                else -> {
+                    taken += words.lowercase()
+                    count++
+                    chars += words.length
+                    SheetFact(nextId++, group, words, today, FactSource.SAID)
+                }
+            }
+        }
+        return if (added.isEmpty()) previous else current + added + carried(previous, today)
     }
 
     /** The owner's [text] for the current fact [id]: his words, "you said", edited. Throws when refused. */

@@ -10,7 +10,8 @@ import java.time.ZoneId
 /**
  * One message of the conversation (D145, D148): the owner's ([fromOwner]) or the trainer's reply. [model] is null on
  * his; [answered] says whether his got a reply; [replyTo] is, on a reply, the id of the message it answers;
- * [conversation] is the conversation it belongs to (D159, [Conversation.talk] and its neighbours).
+ * [conversation] is the conversation it belongs to (D159, [Conversation.talk] and its neighbours); [opened] is, on a
+ * reply that read the file, what it read ([ReadLine], D163), "" when it opened nothing, null on anything older.
  */
 data class TrainerMessage(
     val id: Long,
@@ -21,6 +22,7 @@ data class TrainerMessage(
     val answered: Boolean,
     val replyTo: Long? = null,
     val conversation: String = "",
+    val opened: String? = null,
 )
 
 /** What the thread shows (D146): the messages, and the feedback and letters in their place — never copied. */

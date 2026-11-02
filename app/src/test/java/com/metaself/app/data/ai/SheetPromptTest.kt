@@ -30,7 +30,7 @@ class SheetPromptTest {
         assertThat(body).contains("trainer_sheet")
         val schema = SheetPrompt.SCHEMA.toString()
         assertThat(schema).contains("\"required\":[\"id\",\"group\",\"text\",\"since\",\"source\"]")
-        assertThat(schema).contains("[\"body\",\"training\",\"goals\",\"life\"]")
+        assertThat(schema).contains("[\"body\",\"training\",\"goals\",\"eating\",\"life\"]")
         assertThat(schema).contains("[\"they_said\",\"you_noticed\"]")
         assertThat(schema).doesNotContain("week_note")
     }

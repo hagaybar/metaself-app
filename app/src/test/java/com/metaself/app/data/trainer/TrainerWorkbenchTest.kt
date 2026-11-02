@@ -4,6 +4,8 @@ import com.google.common.truth.Truth.assertThat
 import com.metaself.app.data.ai.TrainerPrompt
 import com.metaself.app.data.health.FakeMovementRecord
 import com.metaself.app.data.profile.FakeProfileRepository
+import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.letter.FakeLetterStore
 import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
@@ -71,7 +73,13 @@ class TrainerWorkbenchTest {
         record, store, weights, FakeProfileRepository(aProfile()), trainer, aboutMe, programmes,
         Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW }, CurrentYear { TEST_YEAR }, sheets = sheets,
     )
-    private val workbench = TrainerWorkbench(ask, store, record, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, sender)
+    private val coach = FakeCoachModel()
+    private val conversations = InMemoryConversationStore()
+    private val talk = TalkToTheTrainer(
+        askTheCoach(coach, Now { NOW }, record = record, store = store, programmes = programmes, weights = weights, sheets = sheets, aboutMe = aboutMe),
+        conversations, store, FakeLetterStore(), InMemoryWeekNoteStore(), sheets, ProblemLog.NONE, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { NOW },
+    )
+    private val workbench = TrainerWorkbench(ask, store, record, Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, sender, talk)
 
     @BeforeEach
     fun setUp() {
