@@ -77,7 +77,7 @@ import com.metaself.app.domain.portion.Portions
         TrainerMessageEntity::class,
         TrainerSheetEntity::class,
     ],
-    version = 17,
+    version = 18,
     exportSchema = true,
 )
 abstract class MetaSelfDatabase : RoomDatabase() {

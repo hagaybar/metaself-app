@@ -29,12 +29,12 @@ class InMemoryConversationStore : ConversationStore {
         return id
     }
 
-    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long): Long {
+    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String?): Long {
         check(!failWrites) { "invented write failure" }
         val answered = checkNotNull(messages.value.firstOrNull { it.id == to && it.fromOwner }) { "the message answered is not the owner's, or is gone" }
         val id = next++
         messages.value = messages.value.map { if (it.id == to) it.copy(answered = true) else it } +
-            TrainerMessage(id, atMillis, false, text, model, answered = false, replyTo = to, conversation = answered.conversation)
+            TrainerMessage(id, atMillis, false, text, model, answered = false, replyTo = to, conversation = answered.conversation, opened = opened)
         return id
     }
 

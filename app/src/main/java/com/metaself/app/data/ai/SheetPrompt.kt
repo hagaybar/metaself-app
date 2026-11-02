@@ -44,13 +44,15 @@ object SheetPrompt {
         second person.
         - A fact they edited (edited_by_them) is their own words: keep it as it is, unless the conversation since
           says otherwise. Do not bring back a fact they removed, unless the conversation since says it is true again.
-        - Groups: "body" for aches, injuries and illness; "training" for how they like to train (times, kinds of
-          session, equipment, what they enjoy or avoid); "goals" for goals in their own words; "life" for what
-          affects their training: travel, a busy month, work, family.
+        - Groups: "body" for aches, injuries, illness, conditions and medication; "training" for how they like to train (times, kinds of
+          session, equipment, what they enjoy or avoid); "goals" for goals in their own words; "eating" for how they
+          eat in their own words: allergies, foods they avoid, the hours they keep; "life" for what affects their
+          training: travel, a busy month, work, family.
         - source "they_said" only for what they actually said in their own messages; "you_noticed" for anything
           you inferred, from what they said or from your feedback and letters. Never mark an inference as said.
         - Never invent a figure: a number appears in a fact only when it was said in the conversation.
-        - Nothing that is already in about_me, and nothing about a single meal or food.
+        - Nothing that is already in about_me, and nothing about one meal they ate. How they eat in general belongs under
+          "eating".
         - since is the day the fact became true, as YYYY-MM-DD, never after today; for a fact you keep unchanged,
           keep its since.
         - Give a kept or changed fact its id; a new fact has id null.
@@ -123,6 +125,7 @@ object SheetPrompt {
         FactGroup.BODY -> "body"
         FactGroup.TRAINING -> "training"
         FactGroup.GOALS -> "goals"
+        FactGroup.EATING -> "eating"
         FactGroup.LIFE -> "life"
     }
 

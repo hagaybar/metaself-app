@@ -860,7 +860,7 @@ private fun WeeklyLetterEntity.toBackup() = BackupWeeklyLetter(
     weekMonday, createdAtMillis, figures, letter, model, bandDataUntil, readAtMillis,
 )
 
-private fun TrainerMessageEntity.toBackup() = BackupTrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo, conversation)
+private fun TrainerMessageEntity.toBackup() = BackupTrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo, conversation, opened)
 
 /** D159: a message from a file before version 13 goes in its local day's conversation, as the upgrade put them. */
 private fun List<BackupTrainerMessage>.withConversations(): List<BackupTrainerMessage> {
@@ -868,7 +868,7 @@ private fun List<BackupTrainerMessage>.withConversations(): List<BackupTrainerMe
     return map { it.copy(conversation = it.conversation ?: byDay.getValue(it.id)) }
 }
 
-private fun BackupTrainerMessage.toEntity() = TrainerMessageEntity(id, atMillis, fromOwner, text, model, answered, replyTo, conversation.orEmpty())
+private fun BackupTrainerMessage.toEntity() = TrainerMessageEntity(id, atMillis, fromOwner, text, model, answered, replyTo, conversation.orEmpty(), opened)
 
 private fun TrainerSheetEntity.toBackup() = BackupTrainerSheet(id, atMillis, facts, madeBy, model, restoredFrom)
 

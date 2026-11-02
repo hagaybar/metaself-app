@@ -134,8 +134,21 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 13`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(13)
+    fun `the format is version 14`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(14)
+    }
+
+    /** D163: what a reply read travels with it, and a file without it reads as a reply with no Read line. */
+    @Test
+    fun `what a reply read is optional in a file`() {
+        val message = BackupTrainerMessage(1, 1_000, false, "Invented reply.", "a-model", false, null, "talk:1", "meals, 3 days")
+        val json = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
+
+        val written = json.encodeToString(BackupTrainerMessage.serializer(), message)
+
+        assertThat(json.decodeFromString(BackupTrainerMessage.serializer(), written).opened).isEqualTo("meals, 3 days")
+        val older = """{"id":1,"at":1000,"from_owner":false,"text":"Invented reply.","conversation":"talk:1"}"""
+        assertThat(json.decodeFromString(BackupTrainerMessage.serializer(), older).opened).isNull()
     }
 
     /** D150: every version of the sheet rides in the file, each with its id; a version 1–11 file has none. Invented. */

@@ -1,7 +1,8 @@
 # One coach, one box — D157 to D165
 
 > Written 2026-11-02 and agreed the same day in conversation with the owner. A revision of the Trainer: amends
-> D85, D114, D145, D146 and D147, and D84 where said. **Every example here is invented.**
+> D85, D114, D145, D146 and D147, and D84 where said. **Every example here is invented.** Release 2's amendments are
+> under "Release 2 as built".
 
 ## Why
 
@@ -83,9 +84,11 @@ Four layers: the **record** (the truth, which memory never changes); **measured 
 
 The coach reads like a coach opening a client's file before a meeting:
 
-- A short **front page** is always sent: goal, this week's plan, facts on the sheet about the body (aches, injuries,
-  illness), the calorie floor, and the list of drawers. It is always sent because a coach cannot ask for what he
-  does not know exists, and a missed injury is the costliest miss.
+- A short **front page** is always sent: today, goal and rate, the running plan and this week, the coach's note, About
+  me, **the whole current sheet** (it is capped, D149, and safety matters more than the few characters saved), age, sex
+  and height, the calorie floor and today's target, how far back each part of the record goes, and the list of drawers.
+  It is always sent because a coach cannot ask for what he does not know exists, and a missed injury is the costliest
+  miss.
 - The record is fixed, read-only **drawers** read by date range: sleep, recovery, individual meals, habits, workouts,
   weight, plan, past conversations (searchable, so memory no longer ends at 14 days). In a conversation the coach
   may open any of them, individual meals included. This amends D84 for the conversation.
@@ -132,6 +135,60 @@ else.
 
 A reply may show the app's own charts, drawn from the record, not from the AI's figures. A tapped suggestion can show
 its chart at once; a typed question waits for the AI, because the phone cannot understand words without it.
+
+## Release 2 as built
+
+Amendments to D161–D163, decided while building. Every figure below is a chosen size.
+
+**Scope.** Only a conversation opens the file; letters, plans and feedback keep their fixed requests for now. A
+conversation's request is its own type (`CoachRequest`), so `TrainerRequest` still has no field for a meal. The old
+reply path that sent the whole fixed request with a conversation in it is gone, not left beside the new one.
+
+**The loop.** The reply's shape is the app's strict structured form, not a model's tool-calling: `open`, `reply`,
+`remember`. On the last of three looks the request says so, an `open` is ignored, and no words is a failure (the message
+stays Not answered). A look with neither words nor a drawer is a failure at once. A look with words *and* a drawer opens:
+it had not finished reading. Asking again for a drawer already open fetches nothing. Each look counts towards the daily
+ceiling like any other call, so a ceiling reached part-way through is a failure and the message waits for Try again.
+
+**Limits.** At most 4 drawers a look, 92 days an ask (the newest days kept, and it says so), and 60,000 characters of
+drawers for one reply, past which the model is told to answer from what it has. Each drawer has its own character cap
+and keeps its newest part. A bad drawer, bad dates or a failed read is said to the model in words; it never fails the
+reply and never reaches the Read line.
+
+**Drawer answers.** `days`, `food_days` and `meals` give each day a state, `not_logged`, `logged_as_zero` or `logged`;
+days before the record began are one line, `before_record`. `sessions` and `weight` list what exists and count the days
+without. Food is read against today's target, because the record holds no target by day. A `meals` row sends no
+saved-meal name and no note: those are words the owner chose for other reasons. A repeated row that carries a confidence
+repeats an estimate, and is sent as one.
+
+**D162.** Spans are whole days ending yesterday: today half-logged would read as under-eating. Below 7 logged days a span
+states only its coverage; a split (weekend, training days) needs 3 days and food around a session 3 sessions. Averages rest
+on days with calories; a day logged as zero is in coverage only. **An eating day runs from the start of morning to the
+end of the following night** (D51's parts), so eating past midnight ends the evening it continues rather than opening a
+new day. A day holding a logging with no honest time (D33) is out of timing whole, since what it hides could be the
+first or last thing eaten; its calories still count. A fast is measured only between two neighbouring such days. Weekend
+means Saturday and Sunday, one named constant. Late-day share is the evening and night parts. Loggings within 30 minutes are one
+occasion; around a session means within 3 hours.
+
+**Remembering.** `remember` is added at once, as a version made by `CONVERSATION`, source SAID, after the reply is stored;
+a failure to write it is logged by kind and the reply stands. That a fact was truly said and not inferred is an
+instruction to the model: the phone cannot check it. The sheet gains an **eating** group. A fact is left out when it is a
+repeat, is over a cap, or is one the owner removed. As with his own changes, a version made after a rewrite ends Go back
+for that rewrite (D150). The weekly rewrite may still reword a said fact; only his edits are protected (D150).
+
+**The Read line.** Stored on the reply without its "Read:", each drawer once with the days it really covered in all. A
+reply that opened nothing shows *Read: the front page only*, so the line is never read as an omission. Replies from before
+this release show none. Room 18 adds `trainer_messages.opened`; backup format 14 carries it, optional.
+
+**D84 amended, for the conversation only.** Individual meals and food names may leave the phone there, on the owner's
+message. The screen's line and the privacy page say so. Every other path's wording stands, Never meals included.
+
+**The floor.** Being told the floor and never advising below it is an instruction and can fail; so can the warning-signs
+rule and the safety questions. "Asked once" rests on the model reading the conversation; nothing counts it on the phone.
+
+**The workbench.** Its conversation path runs the real loop on the real record, shows the reply, what it read and what
+it would have remembered, and stores nothing. Unlike the other paths it keeps the reply's shape, because the loop needs
+it; a loaded file replaces only the instructions.
 
 ## Not in release 1
 

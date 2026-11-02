@@ -40,6 +40,12 @@ object TalkWording {
     const val EVERYTHING_ELSE = "Everything else"
     const val EVERYTHING_ELSE_LINE = "Your week, plan, movement, letters and what the trainer knows"
 
+    private const val READ = "Read: "
+    private const val READ_NOTHING = "the front page only"
+
+    /** D163: the line under a reply, from what the phone stored of what it read; null on a reply from before the file. */
+    fun read(opened: String?): String? = opened?.let { READ + it.ifEmpty { READ_NOTHING } }
+
     private val DAY = DateTimeFormatter.ofPattern("EEE d MMM", Locale.US)
     private val DAY_MONTH = DateTimeFormatter.ofPattern("d MMM", Locale.US)
     private val TIME = DateTimeFormatter.ofPattern("HH:mm", Locale.US)

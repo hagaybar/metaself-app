@@ -9,14 +9,17 @@ import com.metaself.app.data.trainer.InstructionFiles
 import com.metaself.app.data.trainer.TrainerWorkbench
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.movement.Workout
+import com.metaself.app.domain.trainer.CoachAnswer
 import com.metaself.app.domain.trainer.Feeling
 import com.metaself.app.domain.trainer.PlanActivity
+import com.metaself.app.domain.trainer.ReadLine
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPath
 import com.metaself.app.domain.trainer.Wish
 import com.metaself.app.domain.trainer.WorkbenchReply
 import com.metaself.app.ui.screen.trainer.EvaluatePlanViewModel
 import com.metaself.app.ui.screen.trainer.PlanSessionViewModel
+import com.metaself.app.ui.trainer.TalkWording
 import com.metaself.app.ui.trainer.WorkbenchWording
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -53,6 +56,8 @@ class TrainerWorkbenchViewModel @Inject constructor(
      *   app's own. Set together with [fileName], in one update, so the "will send" line is always what Send sends.
      * @property sent the last request body, verbatim, for Copy what was sent.
      * @property notice a sentence for a run that sent nothing (no plan, session gone, record unreadable).
+     * @property read the conversation path's Read line, as a real reply would show it (D163).
+     * @property wouldRemember what a real conversation would have put on the sheet; not put there.
      */
     data class State(
         val loaded: Boolean = false,
@@ -64,6 +69,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
         val plan: PlanSessionViewModel.Form = PlanSessionViewModel.Form(),
         val evaluate: EvaluatePlanViewModel.Form = EvaluatePlanViewModel.PRESET,
         val adjustWords: String = "",
+        val talkWords: String = "",
         val planRuns: Boolean = false,
         val fileName: String? = null,
         val instructions: String? = null,
@@ -73,17 +79,23 @@ class TrainerWorkbenchViewModel @Inject constructor(
         val sent: String? = null,
         val failure: EstimateResult? = null,
         val notice: String? = null,
+        val read: String? = null,
+        val wouldRemember: List<String> = emptyList(),
     ) {
+        /** Whether Send has what the chosen path needs. */
+        private val ready: Boolean get() = if (path == TrainerPath.TALK) talkWords.isNotBlank() else inputs != null
+
         val inputs: TrainerWorkbench.Inputs?
             get() = when (path) {
                 TrainerPath.FEEDBACK -> workoutId?.let { TrainerWorkbench.Inputs.Feedback(it) }
                 TrainerPath.PLAN -> plan.answers()?.let { TrainerWorkbench.Inputs.Plan(it) }
                 TrainerPath.EVALUATE -> evaluate.steady()?.let { TrainerWorkbench.Inputs.Evaluate(it) }
                 TrainerPath.ADJUST -> if (planRuns) TrainerWorkbench.Inputs.Adjust(adjustWords) else null
+                // The conversation is sent by its own route (sendConversation): it is a loop, not one request.
                 TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS, TrainerPath.TALK -> null
             }
 
-        val canSend: Boolean get() = loaded && !sending && inputs != null
+        val canSend: Boolean get() = loaded && !sending && ready
     }
 
     private val _state = MutableStateFlow(restored())
@@ -118,7 +130,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
         sendJob?.cancel()
         sendJob = null
         savedState[PATH] = path.name
-        _state.update { it.copy(path = path, sending = false, reply = null, sent = null, failure = null, notice = null) }
+        _state.update { it.copy(path = path, sending = false, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList()) }
     }
 
     fun pickSession(workoutId: Long) {
@@ -147,6 +159,11 @@ class TrainerWorkbenchViewModel @Inject constructor(
         _state.update { it.copy(adjustWords = words) }
     }
 
+    fun changeTalkWords(words: String) {
+        savedState[TALK_WORDS] = words
+        _state.update { it.copy(talkWords = words) }
+    }
+
     /** The page as it was left, from [savedState]; [State]'s own defaults for anything never chosen. */
     private fun restored(): State {
         val fresh = State()
@@ -169,6 +186,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
                 fresh.evaluate
             },
             adjustWords = savedState.get<String>(ADJUST_WORDS) ?: "",
+            talkWords = savedState.get<String>(TALK_WORDS) ?: "",
         )
     }
 
@@ -205,9 +223,10 @@ class TrainerWorkbenchViewModel @Inject constructor(
     fun send() {
         val current = _state.value
         if (!current.canSend) return
+        if (current.path == TrainerPath.TALK) return sendConversation(current)
         val inputs = current.inputs ?: return
         val system = current.instructions ?: workbench.appInstructions(current.path)
-        _state.update { it.copy(sending = true, reply = null, sent = null, failure = null, notice = null) }
+        _state.update { it.copy(sending = true, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList()) }
         sendJob = viewModelScope.launch {
             // Only building the request reads the record, so only that is caught; the sender's failures come back as its reply.
             val built = runCatchingRead("request not built") { workbench.request(inputs) }
@@ -230,6 +249,31 @@ class TrainerWorkbenchViewModel @Inject constructor(
                 when (reply) {
                     is WorkbenchReply.Answered -> it.copy(sending = false, reply = reply.text, sent = reply.sent)
                     is WorkbenchReply.Failed -> it.copy(sending = false, failure = reply.failure, sent = reply.sent)
+                }
+            }
+        }
+    }
+
+    /**
+     * D163: the conversation path. The structured reply is the path's own, so a loaded file replaces the instructions
+     * and not the shape; nothing is stored.
+     */
+    private fun sendConversation(current: State) {
+        _state.update { it.copy(sending = true, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList()) }
+        sendJob = viewModelScope.launch {
+            val tried = runCatchingRead("conversation not tried") { workbench.tryConversation(current.talkWords, current.instructions) }
+            val answer = tried.getOrNull()
+            _state.update {
+                when (answer) {
+                    null -> it.copy(sending = false, notice = WorkbenchWording.RECORD_UNREADABLE)
+                    is CoachAnswer.Answered -> it.copy(
+                        sending = false,
+                        reply = answer.text,
+                        sent = workbench.sentOf(answer.last, current.instructions),
+                        read = TalkWording.read(ReadLine.of(answer.opened)),
+                        wouldRemember = answer.remember.map { fact -> fact.text },
+                    )
+                    is CoachAnswer.Failed -> it.copy(sending = false, failure = answer.failure, sent = workbench.sentOf(answer.last, current.instructions))
                 }
             }
         }
@@ -266,5 +310,6 @@ class TrainerWorkbenchViewModel @Inject constructor(
         private const val EVALUATE_PER_WEEK = "workbench_evaluate_per_week"
         private const val EVALUATE_WORDS = "workbench_evaluate_words"
         private const val ADJUST_WORDS = "workbench_adjust_words"
+        private const val TALK_WORDS = "workbench_talk_words"
     }
 }

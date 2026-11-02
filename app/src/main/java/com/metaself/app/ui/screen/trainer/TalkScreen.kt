@@ -49,7 +49,7 @@ import java.time.ZoneId
 /**
  * One conversation with the trainer (D145, D146, D159): oldest at the top, the newest in view — the trainer's messages on the left on
  * a card, the owner's on the right in light green, a day line where the day changes, a session's feedback in full
- * under its label, a letter as a card that opens it — and the field with Send at the bottom. The AI line and what
+ * under its label, a letter as a card that opens it, and what each reply read under it (D163) — and the field with Send at the bottom. The AI line and what
  * leaves the phone head the thread. Branches only — no early return out of an inline composable
  * (InlineComposableReturnGuardTest).
  */
@@ -195,17 +195,20 @@ private fun Item(
         is ThreadItem.Said -> if (item.message.fromOwner) {
             Mine(item.message, state, onTryAgain, onSelect, onAskDelete)
         } else {
-            Theirs(null, item.message.text)
+            Theirs(null, item.message.text, TalkWording.read(item.message.opened))
         }
         is ThreadItem.AfterSession -> Theirs(TalkWording.afterSession(item.kind, item.minutes), Conversation.text(item))
         is ThreadItem.Letter -> LetterCard(item, zone, onLetter)
     }
 }
 
-/** The trainer's: on the left, on a card, under a label when it is a session's feedback. */
+/**
+ * The trainer's: on the left, on a card, under a label when it is a session's feedback; under it, small, what the reply
+ * read (D163).
+ */
 @Composable
-private fun Theirs(label: String?, text: String) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
+private fun Theirs(label: String?, text: String, read: String? = null) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start, verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
         Card(
             modifier = Modifier.widthIn(max = 300.dp),
             shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp),
@@ -215,6 +218,7 @@ private fun Theirs(label: String?, text: String) {
                 Text(text, style = MaterialTheme.typography.bodyLarge)
             }
         }
+        read?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
 

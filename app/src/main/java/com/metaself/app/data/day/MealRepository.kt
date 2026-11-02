@@ -3,6 +3,7 @@ package com.metaself.app.data.day
 import com.metaself.app.domain.day.FoodItem
 import com.metaself.app.domain.day.Meal
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 
 /**
  * The meals of a day, and the two things step 3 can do to them.
@@ -14,6 +15,9 @@ import kotlinx.coroutines.flow.Flow
 interface MealRepository {
 
     fun observeDay(epochDay: Long): Flow<List<Meal>>
+
+    /** D161: every logging of [from]..[to], read once, in day order. By default a day at a time. */
+    suspend fun mealsBetween(from: Long, to: Long): List<Meal> = (from..to).flatMap { observeDay(it).first() }
 
     /** Every calendar day holding at least one thing eaten, for the streak (D13). */
     fun observeLoggedDays(): Flow<Set<Long>>

@@ -39,7 +39,23 @@ class TalkScreenRenderTest {
         val texts = draw(TalkViewModel.State(loaded = true))
 
         assertThat(texts).containsAtLeast("Your trainer", "Back", TalkWording.AI, TalkWording.EMPTY)
-        assertThat(texts.any { it.startsWith("Sends to OpenAI, with your key: your message, this conversation and your others of the last 14 days") }).isTrue()
+        assertThat(texts.any { it.startsWith("Sends to OpenAI, with your key: your message; this conversation and your others of the last 14 days") }).isTrue()
+    }
+
+    /** D163: under a coach's reply, small, what the phone says it read; nothing under a reply from before the file. */
+    @Test
+    fun `a reply shows what it read`() {
+        val thread = listOf(
+            ThreadItem.Said(TrainerMessage(1, 1_000, true, "Invented question.", null, true, conversation = "talk:1")),
+            ThreadItem.Said(TrainerMessage(2, 2_000, false, "Invented reply.", "a-model", false, 1, "talk:1", "sleep and recovery, 7 days · meals, 3 days")),
+            ThreadItem.Said(TrainerMessage(3, 3_000, false, "Invented second.", "a-model", false, 1, "talk:1", "")),
+            ThreadItem.Said(TrainerMessage(4, 4_000, false, "Invented older.", "a-model", false, 1, "talk:1", null)),
+        )
+
+        val texts = draw(TalkViewModel.State(loaded = true, thread = thread))
+
+        assertThat(texts).containsAtLeast("Read: sleep and recovery, 7 days · meals, 3 days", "Read: the front page only")
+        assertThat(texts.count { it.startsWith("Read: ") }).isEqualTo(2)
     }
 
     /** D146: the letter as a card, the feedback in full under its label, then the messages — each in its place. */

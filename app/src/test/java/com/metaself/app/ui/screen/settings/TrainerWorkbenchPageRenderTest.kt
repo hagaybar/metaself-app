@@ -151,7 +151,7 @@ class TrainerWorkbenchPageRenderTest {
     private fun page(state: TrainerWorkbenchViewModel.State): List<String> = render.texts(heightPx = TALL) {
         TrainerWorkbenchPage(
             state = state,
-            onPath = {}, onSession = {}, onPlan = {}, onEvaluate = {}, onAdjustWords = {},
+            onPath = {}, onSession = {}, onPlan = {}, onEvaluate = {}, onAdjustWords = {}, onTalkWords = {},
             onLoad = {}, onUseAppOwn = {}, onSaveAppOwn = {}, onSend = {},
             onCopyReply = { copied += "reply" }, onCopySent = { copied += "sent" },
             onBack = {},

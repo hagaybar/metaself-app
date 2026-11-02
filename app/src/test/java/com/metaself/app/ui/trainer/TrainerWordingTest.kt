@@ -157,6 +157,18 @@ class TrainerWordingTest {
         assertThat(TrainerWording.privacyAdjust(30)).endsWith("One of today's 30 AI requests.")
     }
 
+    /** D163: a conversation's line is true: meals can go there, it says what reads them, and only it drops Never meals. */
+    @Test
+    fun `the conversation's privacy line says the coach may open the record, meals included`() {
+        val line = TrainerWording.privacyTalk(30)
+
+        assertThat(line).contains("The coach may also open any part of your record")
+        assertThat(line).contains("individual meals with food names and times")
+        assertThat(line).contains("The line under each reply says what it read.")
+        assertThat(line).contains("up to 3 of today's 30 AI requests")
+        assertThat(line).doesNotContain("Never meals")
+    }
+
     /** D111: every ask's line names the weekly averages that may now leave the phone. */
     @Test
     fun `every ask's privacy line names the weekly averages D111 adds`() {

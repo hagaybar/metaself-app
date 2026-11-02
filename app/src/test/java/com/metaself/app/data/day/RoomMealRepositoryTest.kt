@@ -13,7 +13,10 @@ import com.metaself.app.data.assumeSqliteRuntime
 import com.metaself.app.data.food.SavedMealEntity
 import com.metaself.app.domain.day.Confidence
 import com.metaself.app.domain.food.FoodKeys
+import com.metaself.app.domain.day.FoodItem
+import com.metaself.app.domain.day.Meal
 import com.metaself.app.domain.day.Source
+import com.metaself.app.domain.day.TEST_EPOCH_DAY
 import com.metaself.app.domain.day.aMeal
 import com.metaself.app.domain.day.anItem
 import kotlinx.coroutines.flow.first
@@ -67,6 +70,18 @@ class RoomMealRepositoryTest {
         val day = repository.observeDay(DAY).first()
 
         assertThat(day.single().items.single().name).isEqualTo("Hummus")
+    }
+
+    /** D161: the span in one query, labelled as a day is. */
+    @Test
+    fun `the loggings of a span come back in day order, and none outside it`() = runTest {
+        val item = FoodItem(name = "Invented", kcal = 10, proteinG = 1, carbsG = 1, fatG = 1, source = Source.TYPED)
+        listOf(TEST_EPOCH_DAY, TEST_EPOCH_DAY - 2, TEST_EPOCH_DAY - 9).forEach { day ->
+            repository.log(Meal(epochDay = day, loggedAtMillis = day * 86_400_000L, items = listOf(item)))
+        }
+
+        assertThat(repository.mealsBetween(TEST_EPOCH_DAY - 2, TEST_EPOCH_DAY).map { it.epochDay })
+            .containsExactly(TEST_EPOCH_DAY - 2, TEST_EPOCH_DAY).inOrder()
     }
 
     @Test

@@ -14,6 +14,7 @@ import com.metaself.app.data.ai.OpenAiLetterWriter
 import com.metaself.app.data.ai.OpenAiSheetWriter
 import com.metaself.app.data.ai.OpenAiMealConversation
 import com.metaself.app.data.ai.OpenAiMealEstimator
+import com.metaself.app.data.ai.OpenAiCoach
 import com.metaself.app.data.ai.OpenAiTrainer
 import com.metaself.app.data.ai.OpenAiWorkbench
 import com.metaself.app.data.ai.RequestProfileStore
@@ -33,6 +34,7 @@ import com.metaself.app.domain.ai.MealConversationAsker
 import com.metaself.app.domain.ai.MealEstimator
 import com.metaself.app.domain.letter.LetterWriter
 import com.metaself.app.domain.trainer.SheetWriter
+import com.metaself.app.domain.trainer.CoachModel
 import com.metaself.app.domain.trainer.Trainer
 import com.metaself.app.domain.trainer.WorkbenchSender
 import dagger.Module
@@ -156,6 +158,17 @@ object AiModule {
         profiles: RequestProfileStore,
         problems: ProblemLog,
     ): Trainer = OpenAiTrainer(keys, settings, client, profiles, problems)
+
+    /** The coach opening the file (D161): the same key, ceiling, client, profiles and log as the trainer. */
+    @Provides
+    @Singleton
+    fun provideCoachModel(
+        keys: ApiKeyStore,
+        settings: AiSettingsStore,
+        client: OkHttpClient,
+        profiles: RequestProfileStore,
+        problems: ProblemLog,
+    ): CoachModel = OpenAiCoach(keys, settings, client, profiles, problems)
 
     /** The trainer's instructions workbench (D106): the same key, ceiling, client and profiles as the trainer. */
     @Provides

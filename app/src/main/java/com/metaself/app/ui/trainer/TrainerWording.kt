@@ -2,6 +2,7 @@ package com.metaself.app.ui.trainer
 
 import com.metaself.app.data.trainer.AboutMeStore
 import com.metaself.app.domain.ai.EstimateResult
+import com.metaself.app.domain.trainer.CoachLooks
 import com.metaself.app.domain.movement.EnergySource
 import com.metaself.app.domain.movement.Workout
 import com.metaself.app.domain.movement.WorkoutFigureSource
@@ -203,15 +204,18 @@ object TrainerWording {
     fun privacyFill(ceiling: Int): String = privacy("your plan with its goal and outline, and how it has gone", ceiling)
 
     /**
-     * D147, D148: a reply in the conversation — the message, the conversation's last 14 days word for word (the
-     * feedback and letters in it included), the running plan and the coach's note, and everything else every request
-     * holds.
+     * D148, D161, D163: a reply in the conversation. Its own sentence, because it no longer holds what the other paths
+     * hold: the front page goes every time, and the rest only as the coach opens it. Meals may go here, so "Never meals"
+     * is not said here; the other paths keep it.
      */
-    fun privacyTalk(ceiling: Int): String = privacy(
-        "your message, this conversation and your others of the last 14 days, word for word, the trainer's feedback and letters in them included",
-        ceiling,
-        extra = "your plan, its week and goal when one runs, and the coach's note on this week",
-    ) + " Never meals."
+    fun privacyTalk(ceiling: Int): String =
+        "Sends to OpenAI, with your key: your message; this conversation and your others of the last 14 days, word for word, " +
+            "the trainer's feedback and letters in them included; your note about yourself; what the trainer knows about you; " +
+            "your goal rate, age, sex and height; your calorie floor and target; your plan, its week and goal when one runs; " +
+            "this week's session count; and the coach's note on this week. The coach may also open any part of your record: " +
+            "sessions, sleep and recovery, food totals, individual meals with food names and times, eating habits, weight, your plan " +
+            "and past conversations. The line under each reply says what it read. Each reply is up to ${CoachLooks.MAX} of today's " +
+            "$ceiling AI requests."
 
     private fun privacy(first: String, ceiling: Int, extra: String? = null): String =
         "Sends to OpenAI, with your key: $first; your note about yourself; what the trainer knows about you; " +

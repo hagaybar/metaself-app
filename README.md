@@ -54,9 +54,10 @@ walk it shows once, each figure taken from the best source and labelled with it,
 back into two sessions if the app guessed wrong.
 
 **A trainer, if you ask for one.** Before a session the model can suggest what to do next; after it,
-you say how it felt and get feedback. It sees your sessions, weekly and monthly totals, the weight
-trend and a short note you write about yourself — never your meals or your sleep — and everything it
-says is labelled as advice, not a measurement.
+you say how it felt and get feedback. For those it sees your sessions, weekly and monthly totals, the
+weight trend and a short note you write about yourself, never a meal. When you write to it, it may open
+any part of your record, individual meals included, and each reply says what it read. Everything it says
+is labelled as advice, not a measurement.
 
 **An eating window, if you want one.** Either fixed hours or a fasting ratio. The app says when you
 may eat next rather than telling you off, and it never judges a day that was logged before the rule

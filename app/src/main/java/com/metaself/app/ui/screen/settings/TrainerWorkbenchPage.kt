@@ -45,6 +45,7 @@ fun TrainerWorkbenchPage(
     onPlan: (PlanSessionViewModel.Form) -> Unit,
     onEvaluate: (EvaluatePlanViewModel.Form) -> Unit,
     onAdjustWords: (String) -> Unit,
+    onTalkWords: (String) -> Unit,
     onLoad: () -> Unit,
     onUseAppOwn: () -> Unit,
     onSaveAppOwn: () -> Unit,
@@ -60,7 +61,7 @@ fun TrainerWorkbenchPage(
             if (state.unreadable) Text(WorkbenchWording.RECORD_NOT_READ, color = MaterialTheme.colorScheme.error)
             val open = !state.sending
             ChoiceRow(R.string.workbench_row_path, TrainerPath.WORKBENCH, state.path, WorkbenchWording::path, open, onPath)
-            PathInputs(state, open, onSession, onPlan, onEvaluate, onAdjustWords)
+            PathInputs(state, open, onSession, onPlan, onEvaluate, onAdjustWords, onTalkWords)
 
             Text(WorkbenchWording.willSend(state.fileName), style = MaterialTheme.typography.titleSmall)
             OutlinedButton(onClick = onLoad, enabled = open, modifier = Modifier.fillMaxWidth()) { Text(WorkbenchWording.LOAD) }
@@ -73,11 +74,19 @@ fun TrainerWorkbenchPage(
             Button(onClick = onSend, enabled = state.canSend, modifier = Modifier.fillMaxWidth()) {
                 Text(if (state.sending) WorkbenchWording.SENDING else WorkbenchWording.SEND)
             }
-            Text(WorkbenchWording.PRIVACY, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (state.path == TrainerPath.TALK) WorkbenchWording.TALK_PRIVACY else WorkbenchWording.PRIVACY,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             state.notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             state.failure?.let { Text(TrainerWording.failure(it), color = MaterialTheme.colorScheme.error) }
             state.reply?.let { reply ->
                 SelectionContainer { Text(reply) }
+                state.read?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                state.wouldRemember.forEach { fact ->
+                    Text(WorkbenchWording.WOULD_REMEMBER + fact, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 OutlinedButton(onClick = onCopyReply, modifier = Modifier.fillMaxWidth()) { Text(WorkbenchWording.COPY_REPLY) }
             }
             if (state.sent != null) {
@@ -96,6 +105,7 @@ private fun PathInputs(
     onPlan: (PlanSessionViewModel.Form) -> Unit,
     onEvaluate: (EvaluatePlanViewModel.Form) -> Unit,
     onAdjustWords: (String) -> Unit,
+    onTalkWords: (String) -> Unit,
 ) {
     when (state.path) {
         // Until the record has been read, an empty list or no plan is not yet a fact, so nothing is said.
@@ -132,8 +142,19 @@ private fun PathInputs(
             Text(WorkbenchWording.NO_PLAN)
         }
 
+        // D163: a sentence, with the label its own line gives.
+        TrainerPath.TALK -> OutlinedTextField(
+            value = state.talkWords,
+            onValueChange = onTalkWords,
+            enabled = open,
+            label = { Text(WorkbenchWording.TALK_LABEL) },
+            minLines = 2,
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
         // Not on the workbench (TrainerPath.WORKBENCH): never chosen here.
-        TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS, TrainerPath.TALK -> Text(WorkbenchWording.NOT_HERE)
+        TrainerPath.FILL_WEEK, TrainerPath.NEXT_BLOCK, TrainerPath.SUGGEST_GOALS -> Text(WorkbenchWording.NOT_HERE)
     }
 }
 

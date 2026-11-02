@@ -24,9 +24,10 @@ interface ConversationStore {
 
     /**
      * Stores the trainer's reply to the owner's message [to], in that message's conversation, and marks that message
-     * answered — one transaction, so a reply is never stored beside a message still marked not answered. Its id.
+     * answered — one transaction, so a reply is never stored beside a message still marked not answered. [opened] is
+     * what it read (D163). Its id.
      */
-    suspend fun addReply(to: Long, text: String, model: String, atMillis: Long): Long
+    suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String? = null): Long
 
     /** D145: the owner's message [id] and the reply it got; a reply's id deletes nothing. */
     suspend fun deleteOwn(id: Long)
@@ -50,12 +51,12 @@ class RoomConversationStore @Inject constructor(
     override suspend fun addNote(text: String, atMillis: Long, conversation: String): Long =
         dao.insertMessage(TrainerMessageEntity(0, atMillis, fromOwner = false, text = text, model = null, answered = false, replyTo = null, conversation = conversation))
 
-    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long): Long {
+    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String?): Long {
         var id = 0L
         transaction.run {
             check(dao.markAnswered(to) == 1) { "the message answered is not the owner's, or is gone" }
             val conversation = checkNotNull(dao.message(to)) { "the message answered is gone" }.conversation
-            id = dao.insertMessage(TrainerMessageEntity(0, atMillis, fromOwner = false, text = text, model = model, answered = false, replyTo = to, conversation = conversation))
+            id = dao.insertMessage(TrainerMessageEntity(0, atMillis, fromOwner = false, text = text, model = model, answered = false, replyTo = to, conversation = conversation, opened = opened))
         }
         return id
     }
@@ -69,4 +70,4 @@ class RoomConversationStore @Inject constructor(
     }
 }
 
-fun TrainerMessageEntity.toMessage(): TrainerMessage = TrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo, conversation)
+fun TrainerMessageEntity.toMessage(): TrainerMessage = TrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo, conversation, opened)

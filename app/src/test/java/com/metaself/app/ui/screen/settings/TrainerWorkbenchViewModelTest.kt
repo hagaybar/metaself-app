@@ -11,7 +11,14 @@ import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
 import com.metaself.app.data.trainer.AskTheTrainer
 import com.metaself.app.data.trainer.FakeProgrammeStore
+import com.metaself.app.data.letter.FakeLetterStore
+import com.metaself.app.data.trainer.FakeCoachModel
 import com.metaself.app.data.trainer.FakeTrainer
+import com.metaself.app.data.trainer.InMemoryConversationStore
+import com.metaself.app.data.trainer.InMemorySheetStore
+import com.metaself.app.data.trainer.InMemoryWeekNoteStore
+import com.metaself.app.data.trainer.TalkToTheTrainer
+import com.metaself.app.data.trainer.askTheCoach
 import com.metaself.app.data.trainer.FakeTrainerStore
 import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.data.trainer.InstructionFiles
@@ -37,6 +44,9 @@ import com.metaself.app.domain.trainer.Programme
 import com.metaself.app.domain.trainer.ProgrammeAsk
 import com.metaself.app.domain.trainer.TimeAvailable
 import com.metaself.app.domain.trainer.TrainerPath
+import com.metaself.app.domain.trainer.DrawerAsk
+import com.metaself.app.domain.trainer.RememberedFact
+import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.domain.trainer.WorkbenchReply
 import com.metaself.app.domain.trainer.WorkbenchSender
 import com.metaself.app.domain.trainer.WeeksPlan
@@ -73,6 +83,7 @@ class TrainerWorkbenchViewModelTest {
     private val problems = RecordingProblemLog()
     private val record = FakeMovementRecord()
     private val store = FakeTrainerStore()
+    private val coach = FakeCoachModel()
 
     /** While set, a send is held after it reaches the sender, until the test completes it. */
     private var gate: CompletableDeferred<Unit>? = null
@@ -162,6 +173,49 @@ class TrainerWorkbenchViewModelTest {
         vm.pickPath(TrainerPath.ADJUST)
         assertThat(vm.state.value.planRuns).isFalse()
         assertThat(vm.state.value.canSend).isFalse()
+    }
+
+    /** D163: a sentence is asked about, the page shows what it read, and what would be remembered is only said. */
+    @Test
+    fun `a sentence in a conversation shows the reply and what it read`() = runTest {
+        val vm = opened()
+        vm.pickPath(TrainerPath.TALK)
+        assertThat(vm.state.value.canSend).isFalse()
+        vm.changeTalkWords("Invented sentence.")
+        assertThat(vm.state.value.canSend).isTrue()
+        coach.opens(DrawerAsk("habits", "", "", ""))
+        coach.says("Invented reply.", remember = listOf(RememberedFact("life", "An invented fact.")))
+
+        vm.send()
+        advanceUntilIdle()
+
+        with(vm.state.value) {
+            assertThat(reply).isEqualTo("Invented reply.")
+            assertThat(read).isEqualTo("Read: eating habits")
+            assertThat(wouldRemember).containsExactly("An invented fact.")
+            assertThat(sent).contains("Invented sentence.")
+            assertThat(sending).isFalse()
+        }
+        assertThat(coach.asked).hasSize(2)
+        assertThat(coach.instructions.first()).isNull()
+
+        vm.pickPath(TrainerPath.PLAN)
+        assertThat(vm.state.value.read).isNull()
+        assertThat(vm.state.value.wouldRemember).isEmpty()
+    }
+
+    @Test
+    fun `a failed look in a conversation keeps its failure`() = runTest {
+        val vm = opened()
+        vm.pickPath(TrainerPath.TALK)
+        vm.changeTalkWords("Invented sentence.")
+        coach.looks += TrainerReply.Failed(EstimateResult.NoKey)
+
+        vm.send()
+        advanceUntilIdle()
+
+        assertThat(vm.state.value.failure).isEqualTo(EstimateResult.NoKey)
+        assertThat(vm.state.value.reply).isNull()
     }
 
     @Test
@@ -451,7 +505,11 @@ class TrainerWorkbenchViewModelTest {
             programmes, today, Now { TEST_EPOCH_DAY * 86_400_000L }, CurrentYear { TEST_YEAR },
         )
         val held = WorkbenchSender { system, request -> sender.send(system, request).also { gate?.await() } }
-        return TrainerWorkbenchViewModel(savedState, TrainerWorkbench(ask, store, record, today, held), files, today, problems)
+        val talk = TalkToTheTrainer(
+            askTheCoach(coach, Now { TEST_EPOCH_DAY * 86_400_000L }, record = record, store = store, programmes = programmes),
+            InMemoryConversationStore(), store, FakeLetterStore(), InMemoryWeekNoteStore(), InMemorySheetStore(), problems, today, Now { TEST_EPOCH_DAY * 86_400_000L },
+        )
+        return TrainerWorkbenchViewModel(savedState, TrainerWorkbench(ask, store, record, today, held, talk), files, today, problems)
             .also { advanceUntilIdle() }
     }
 

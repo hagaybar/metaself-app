@@ -479,7 +479,8 @@ class TrainerPromptTest {
     /** D110, D112: every path's instructions say what a ledger holds and carry the five rules for using it. */
     @Test
     fun `every path's instructions carry the ledger and the rules for using it`() {
-        TrainerPath.entries.forEach { path ->
+        // D161: a reply in the conversation sends no ledgers; it opens the file.
+        TrainerPath.entries.filter { it != TrainerPath.TALK }.forEach { path ->
             val system = TrainerPrompt.instructions(path)
 
             assertThat(system).contains(TrainerPrompt.LEDGER)
@@ -492,7 +493,7 @@ class TrainerPromptTest {
 
     /**
      * D116: every path asks for the week's note last, in the same request, and every reply schema requires it — but a
-     * reply in the conversation (D147), which asks for its words only and never replaces the coach's note.
+     * reply in the conversation (D161), which has its own request and never replaces the coach's note.
      */
     @Test
     fun `every path asks for week_note last, and its schema requires it`() {
@@ -633,12 +634,11 @@ class TrainerPromptTest {
             { TrainerPrompt.fillBody("a-model", it) },
             { TrainerPrompt.nextBlockBody("a-model", it) },
             { TrainerPrompt.suggestGoalsBody("a-model", it) },
-            { TrainerPrompt.talkBody("a-model", it) },
             { TrainerPrompt.workbenchBody("a-model", LOADED, it) },
         )
         val requests = listOf(
             planRequest(), reviewRequest(), evaluateRequest(), adjustRequest(), fillRequest(), nextBlockRequest(), goals,
-            talkRequest(), planRequest(),
+            planRequest(),
         )
         bodies.zip(requests).forEach { (body, request) ->
             val sent = Json.parseToJsonElement(userContent(Json.parseToJsonElement(body(request.copy(sheet = SHEET))).jsonObject)).jsonObject
@@ -656,8 +656,8 @@ class TrainerPromptTest {
     @Test
     fun `the shared instructions say what the sheet is, and that the numbers win`() {
         TrainerPath.entries.forEach { path ->
-            val text = TrainerPrompt.instructions(path)
-            assertThat(text).contains("sheet is what you know about them from your conversations with them")
+            val text = TrainerPrompt.instructions(path).replace(Regex("\\s+"), " ")
+            if (path != TrainerPath.TALK) assertThat(text).contains("sheet is what you know about them from your conversations with them")
             assertThat(text).contains("where it conflicts with the numbers, the numbers are what happened")
         }
     }
@@ -912,103 +912,6 @@ class TrainerPromptTest {
             howItWent = listOf(WEEK_ONE, WEEK_ONE.copy(week = 2)),
         ),
     )
-
-    /** D147: a reply's request names its schema, and its question carries the conversation, reply_to and the plan. */
-    @Test
-    fun `a talk request carries the conversation oldest first, the message answered and the plan`() {
-        val body = Json.parseToJsonElement(TrainerPrompt.talkBody("a-model", talkRequest(), RequestProfile.DETERMINISTIC)).jsonObject
-        val format = body.getValue("response_format").jsonObject.getValue("json_schema").jsonObject
-
-        assertThat(format.getValue("name").jsonPrimitive.content).isEqualTo("conversation_reply")
-        assertThat(format.getValue("schema").jsonObject.getValue("properties").jsonObject.keys).containsExactly("reply")
-        assertThat(systemContent(TrainerPrompt.talkBody("a-model", talkRequest(), RequestProfile.DETERMINISTIC)))
-            .isEqualTo(TrainerPrompt.instructions(TrainerPath.TALK))
-        val user = Json.parseToJsonElement(userContent(body)).jsonObject
-        assertThat(userContent(body)).isEqualTo(TrainerPrompt.userMessage(talkRequest()))
-        val question = user.getValue("question").jsonObject
-        assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("talk")
-        val lines = question.getValue("conversation").jsonArray.map { it.jsonObject }
-        // D159: a reply's lines also say which conversation they are in.
-        val keys = LINE_KEYS + "this_conversation"
-        assertThat(lines.map { it.keys }).containsExactly(keys, keys, keys, keys)
-        assertThat(lines.map { it.getValue("kind").jsonPrimitive.content }).containsExactly("letter", "session_feedback", "message", "message").inOrder()
-        assertThat(lines.map { it.getValue("from").jsonPrimitive.content }).containsExactly("you", "you", "them", "you").inOrder()
-        assertThat(lines[0].getValue("week").jsonPrimitive.content).isEqualTo("2026-08-24")
-        assertThat(lines[0].getValue("at").jsonPrimitive.content).isEqualTo("2026-08-30T20:00")
-        assertThat(lines[1].getValue("session").jsonObject.getValue("kind").jsonPrimitive.content).isEqualTo("run")
-        assertThat(lines[1].getValue("session").jsonObject.getValue("minutes").jsonPrimitive.int).isEqualTo(60)
-        assertThat(lines[2].getValue("session")).isEqualTo(JsonNull)
-        assertThat(lines[2].getValue("text").jsonPrimitive.content).isEqualTo("Invented question.")
-        assertThat(question.getValue("reply_to").jsonObject.getValue("text").jsonPrimitive.content).isEqualTo("Invented question.")
-        assertThat(question.getValue("reply_to").jsonObject.getValue("at").jsonPrimitive.content).isEqualTo("2026-09-03T08:30")
-        val plan = question.getValue("plan").jsonObject
-        assertThat(plan.getValue("this_week_number").jsonPrimitive.int).isEqualTo(2)
-        assertThat(plan.getValue("starts").jsonPrimitive.content).isEqualTo(TrainerPrompt.date(TEST_EPOCH_DAY - 10))
-        assertThat(plan.getValue("plan").jsonObject.getValue("title").jsonPrimitive.content).isEqualTo(WEEKS.title)
-        assertThat(plan.keys).containsExactly("goal", "weeks", "sessions_a_week", "starts", "plan", "this_week_number", "filled_weeks")
-
-        assertThat(question.getValue("week_note").jsonPrimitive.content).isEqualTo("Invented week note.")
-        assertThat(question.keys).containsExactly("kind", "conversation", "reply_to", "plan", "week_note")
-
-        val noPlan = talkRequest(plan = null, weekNote = null)
-        val sent = Json.parseToJsonElement(TrainerPrompt.userMessage(noPlan)).jsonObject.getValue("question").jsonObject
-        assertThat(sent.getValue("plan")).isEqualTo(JsonNull)
-        assertThat(sent.getValue("week_note")).isEqualTo(JsonNull)
-    }
-
-    /** D147: the coach's rules for a reply, and the phrase the letter bans, banned in the same words. */
-    @Test
-    fun `the talk instructions hold the coach's rules and ban nobody asked for as the letter does`() {
-        val system = TrainerPrompt.instructions(TrainerPath.TALK)
-
-        listOf(
-            "You are the same coach who writes their feedback after a session, their plans, the note on their week and the\nweekly letter.",
-            "in a few sentences unless they ask for more",
-            "Use the record's numbers and never invent one",
-            "You may disagree with them. When you do, say so plainly and say why, from the record.",
-            "You cannot change their plan, their goal or anything else stored on their phone from this conversation.",
-            "tell them what to change and where",
-            "never say or imply that you have changed it",
-            "If reply_to mentions pain, dizziness or chest discomfort, tell them to stop and see a doctor",
-            "Reply with reply: your answer.",
-        ).forEach { assertThat(system).contains(it) }
-        assertThat(system).contains(TrainerPrompt.OWN_CHOICE)
-        assertThat(TrainerPrompt.OWN_CHOICE).contains("Never \"nobody asked for\"")
-        // The letter's sentence, word for word (LetterPromptTest pins it in the letter's instructions).
-        assertThat(TrainerPrompt.OWN_CHOICE).isEqualTo(
-            "Sessions beyond the plan are their own choice, and are described so: \"of your own\", \"your own choice\". " +
-                "Never \"nobody asked for\", \"unasked\", \"extra\" or anything that makes them sound unwanted.",
-        )
-        assertThat(system).contains(TrainerPrompt.WEEK_RULES)
-        assertThat(system).doesNotContain(TrainerPrompt.CONVENTIONS)
-        assertThat(system).doesNotContain(TrainerPrompt.GOAL_VIEW)
-    }
-
-    @Test
-    fun `a talk body for another question is refused`() {
-        assertThrows<IllegalArgumentException> { TrainerPrompt.talkBody("a-model", planRequest()) }
-        assertThrows<IllegalArgumentException> { TrainerPrompt.planBody("a-model", talkRequest()) }
-    }
-
-    private fun talkRequest(
-        plan: TalkPlan? = TalkPlan(ProgrammeAsk(4, 3), TEST_EPOCH_DAY - 10, WEEKS, weekIndex = 1),
-        weekNote: String? = "Invented week note.",
-    ): TrainerRequest {
-        val asked = ConversationLine(LocalDateTime.of(2026, 9, 3, 8, 30), true, LineKind.MESSAGE, "Invented question.")
-        return request(
-            TrainerQuestion.Talk(
-                conversation = listOf(
-                    ConversationLine(LocalDateTime.of(2026, 8, 30, 20, 0), false, LineKind.LETTER, "Invented letter.", letterWeek = TEST_EPOCH_DAY - 10),
-                    ConversationLine(LocalDateTime.of(2026, 9, 2, 9, 0), false, LineKind.SESSION_FEEDBACK, "Invented feedback.", WorkoutKind.RUN, 60),
-                    asked,
-                    ConversationLine(LocalDateTime.of(2026, 9, 3, 8, 31), false, LineKind.MESSAGE, "Invented answer."),
-                ),
-                replyTo = asked,
-                plan = plan,
-                weekNote = weekNote,
-            ),
-        )
-    }
 
     // --- Fixtures, all invented --------------------------------------------------------------------
 
