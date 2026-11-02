@@ -134,8 +134,8 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 12`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(12)
+    fun `the format is version 13`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(13)
     }
 
     /** D150: every version of the sheet rides in the file, each with its id; a version 1–11 file has none. Invented. */

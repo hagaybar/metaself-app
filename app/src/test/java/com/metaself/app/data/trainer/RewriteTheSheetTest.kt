@@ -41,7 +41,7 @@ class RewriteTheSheetTest {
 
     @Test
     fun `with nothing said, nothing is asked`() = runTest {
-        messages.addOwn("Invented question.", NOW - 9 * DAY)
+        messages.addOwn("Invented question.", NOW - 9 * DAY, "talk:0")
         sheets.add(NOW - 8 * DAY, emptyList(), SheetMadeBy.REWRITE, "a-model")
 
         assertThat(rewrite().rewrite(SUNDAY)).isEqualTo(RewriteTheSheet.Outcome.NothingSaid)
@@ -50,7 +50,7 @@ class RewriteTheSheetTest {
 
     @Test
     fun `the first rewrite reads the whole conversation and stores a version made by the rewrite`() = runTest {
-        val asked = messages.addOwn("Invented question.", NOW - 20 * DAY)
+        val asked = messages.addOwn("Invented question.", NOW - 20 * DAY, "talk:0")
         messages.addReply(asked, "Invented answer.", "a-model", NOW - 20 * DAY + 1_000)
         writer.replies += TrainerReply.Answered(listOf(RewrittenFact(null, FactGroup.LIFE, "A new invented fact.", TEST_EPOCH_DAY - 20, FactSource.SAID)), "a-model")
 
@@ -75,10 +75,10 @@ class RewriteTheSheetTest {
         val kept = SheetFact(1, FactGroup.BODY, "Kept.", TEST_EPOCH_DAY - 9, FactSource.SAID, edited = true)
         val removed = SheetFact(2, FactGroup.GOALS, "Removed by him.", TEST_EPOCH_DAY - 9, FactSource.SAID, droppedEpochDay = TEST_EPOCH_DAY - 2, removedByOwner = true)
         val dropped = SheetFact(3, FactGroup.LIFE, "Dropped by a rewrite.", TEST_EPOCH_DAY - 20, FactSource.NOTICED, droppedEpochDay = TEST_EPOCH_DAY - 7)
-        messages.addOwn("Before the rewrite.", NOW - 8 * DAY)
+        messages.addOwn("Before the rewrite.", NOW - 8 * DAY, "talk:0")
         sheets.add(NOW - 7 * DAY, listOf(kept, dropped), SheetMadeBy.REWRITE, "a-model")
         sheets.add(NOW - 2 * DAY, listOf(kept, removed, dropped), SheetMadeBy.OWNER, null)
-        messages.addOwn("After the rewrite.", NOW - DAY)
+        messages.addOwn("After the rewrite.", NOW - DAY, "talk:0")
         writer.replies += TrainerReply.Answered(listOf(RewrittenFact(1, FactGroup.BODY, "Kept.", TEST_EPOCH_DAY - 9, FactSource.SAID)), "a-model")
 
         rewrite().rewrite(SUNDAY)
@@ -95,7 +95,7 @@ class RewriteTheSheetTest {
     @Test
     fun `a rewrite undone by go back is read again`() = runTest {
         sheets.add(NOW - 14 * DAY, emptyList(), SheetMadeBy.REWRITE, "a-model")
-        messages.addOwn("Read by the undone rewrite.", NOW - 10 * DAY)
+        messages.addOwn("Read by the undone rewrite.", NOW - 10 * DAY, "talk:0")
         sheets.add(NOW - 7 * DAY, emptyList(), SheetMadeBy.REWRITE, "a-model")
         sheets.add(NOW - 6 * DAY, emptyList(), SheetMadeBy.OWNER, null, restoredFrom = 1)
         writer.replies += TrainerReply.Answered(emptyList(), "a-model")
@@ -107,7 +107,7 @@ class RewriteTheSheetTest {
 
     @Test
     fun `one rewrite a Sunday`() = runTest {
-        messages.addOwn("Invented question.", NOW - 2 * HOUR)
+        messages.addOwn("Invented question.", NOW - 2 * HOUR, "talk:0")
         sheets.add(NOW - HOUR, emptyList(), SheetMadeBy.REWRITE, "a-model")
 
         assertThat(rewrite().rewrite(SUNDAY)).isEqualTo(RewriteTheSheet.Outcome.AlreadyDone)
@@ -116,13 +116,13 @@ class RewriteTheSheetTest {
 
     @Test
     fun `a failed rewrite stores nothing, and the next reads the longer span`() = runTest {
-        messages.addOwn("First week.", NOW - 8 * DAY)
+        messages.addOwn("First week.", NOW - 8 * DAY, "talk:0")
         writer.replies += TrainerReply.Failed(EstimateResult.Unreachable())
 
         assertThat(rewrite().rewrite(SUNDAY - 7)).isEqualTo(RewriteTheSheet.Outcome.Failed(EstimateResult.Unreachable()))
         assertThat(sheets.versions.value).isEmpty()
 
-        messages.addOwn("Second week.", NOW - DAY)
+        messages.addOwn("Second week.", NOW - DAY, "talk:0")
         writer.replies += TrainerReply.Answered(emptyList(), "a-model")
         rewrite().rewrite(SUNDAY)
 

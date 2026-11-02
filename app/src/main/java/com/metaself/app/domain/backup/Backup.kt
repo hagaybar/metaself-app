@@ -120,8 +120,11 @@ data class Backup(
          * Version 12 adds the sheet of what the trainer knows about the owner (D150), [trainerSheets]: every version,
          * each with its id (which a version's `restored_from` names), its facts as the app stores them, who made it and
          * the model. A version 1–11 file has none, and restoring one leaves none — a restore replaces.
+         *
+         * Version 13 adds each message's conversation (D159), [BackupTrainerMessage.conversation]. A version 11 or 12 file
+         * has none, and each of its messages goes in its local day's conversation, as the database's upgrade put them.
          */
-        const val CURRENT_VERSION = 12
+        const val CURRENT_VERSION = 13
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -381,7 +384,8 @@ data class BackupWeeklyLetter(
 
 /**
  * One message of the conversation (D148): the owner's ([fromOwner]) or the trainer's reply, with the model that wrote
- * it (null on his); [answered] whether his got a reply; [replyTo] a reply's message, by its [id].
+ * it (null on his); [answered] whether his got a reply; [replyTo] a reply's message, by its [id]; [conversation] the
+ * conversation it is in (D159), null in a file from before version 13.
  */
 @Serializable
 data class BackupTrainerMessage(
@@ -392,6 +396,7 @@ data class BackupTrainerMessage(
     val model: String? = null,
     val answered: Boolean = false,
     @SerialName("reply_to") val replyTo: Long? = null,
+    val conversation: String? = null,
 )
 
 /**

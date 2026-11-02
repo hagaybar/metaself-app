@@ -327,7 +327,10 @@ object TrainerPrompt {
 
     /** D147: a reply in the conversation — the same coach, a few sentences, the record's numbers, no change made. */
     internal val TALK = """
-        They are talking with you in a conversation on their phone. question.conversation is the last 14 days of it,
+        They are talking with you on their phone, in separate conversations, one for each subject. The items with
+        this_conversation true are the conversation they are writing in now, whatever its age. The other items are their
+        other conversations of the last 14 days, which you remember and may draw on: do not answer them, and do not take
+        them for the subject here. question.conversation is all of these,
         word for word, oldest first, cut to its newest part when it is long: their messages ("from": "them"), your
         replies ("from": "you"), and, in their place, your feedback after a session ("kind": "session_feedback", with the
         session's kind and minutes) and your weekly letters ("kind": "letter", with the Monday of the week). Each has
@@ -635,7 +638,10 @@ object TrainerPrompt {
         }
         is TrainerQuestion.Talk -> buildJsonObject {
             put("kind", "talk")
-            putJsonArray("conversation") { question.conversation.forEach { add(lineJson(it)) } }
+            // D159: only a reply says which conversation an item is in; the sheet's rewrite reads them all alike.
+            putJsonArray("conversation") {
+                question.conversation.forEach { add(JsonObject(lineJson(it) + ("this_conversation" to JsonPrimitive(it.thisConversation)))) }
+            }
             putJsonObject("reply_to") {
                 put("at", at(question.replyTo.at))
                 put("text", question.replyTo.text)

@@ -62,7 +62,7 @@ import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
 /**
- * The Trainer screen (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
+ * Everything else (D157), the old Trainer page (D85, D114), top to bottom: the week's header and the phone's verdict (D115); the week
  * strip on a card, with the shorter-session question under it (D105); the three boxes; the coach's note (D116) with
  * Reply › (D145); Log a workout beside Talk to your trainer (D132, D145), the next thing to do under them; the session
  * waiting for words; and six plain rows —
@@ -90,13 +90,15 @@ fun TrainerScreen(
     onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
     /** D132 item 2: Your movement, with the log-a-workout sheet open for today. */
     onLogWorkout: () -> Unit = {},
-    /** D145: Your trainer, the conversation — from Talk to your trainer and the coach's note's Reply ›. */
+    /** D157: Talk to your trainer goes back to the coach screen. */
     onTalk: () -> Unit = {},
+    /** D159: the coach's note's Reply › opens the note's conversation. */
+    onReplyToNote: (WeekNote) -> Unit = {},
     /** D149: What I know about you, the trainer's sheet. */
     onSheet: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
-    MetaSelfScreen(title = stringResource(R.string.trainer_title), modifier = modifier, onBack = onBack) {
+    MetaSelfScreen(title = TalkWording.EVERYTHING_ELSE, modifier = modifier, onBack = onBack) {
         val home = state.home
         when {
             state.unreadable -> Text(stringResource(R.string.trainer_unreadable), color = MaterialTheme.colorScheme.error)
@@ -108,7 +110,7 @@ fun TrainerScreen(
                     val boxes = TrainerWeekWording.boxes(week.ledger)
                     if (boxes.isNotEmpty()) Boxes(boxes)
                 }
-                state.note?.let { NoteView(it, zone, onTalk) }
+                state.note?.let { NoteView(it, zone) { onReplyToNote(it) } }
                 MainButton(home, onPlan, onPlanAhead, onSeePlan, onLogWorkout, onTalk)
                 home.waiting?.let { session -> WaitingCard(session, state.today, zone, onReview) }
                 // D122: the kept single session is on the plan page now (Your plan → Session), not here.
@@ -283,13 +285,13 @@ private fun Boxes(boxes: List<TrainerWeekWording.Box>) {
 
 /** D116: the coach's note, when it was written, and whose it is (D4); D145: Reply › opens the conversation. */
 @Composable
-private fun NoteView(note: WeekNote, zone: ZoneId, onTalk: () -> Unit) {
+internal fun NoteView(note: WeekNote, zone: ZoneId, onReply: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(topStart = 4.dp, topEnd = 16.dp, bottomEnd = 16.dp, bottomStart = 16.dp)) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
             Text(note.text, style = MaterialTheme.typography.bodyLarge)
             Text(TrainerWeekWording.noteWhen(note, zone), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(TrainerWording.FROM_TRAINER, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            TextButton(onClick = onTalk, modifier = Modifier.align(Alignment.End)) {
+            TextButton(onClick = onReply, modifier = Modifier.align(Alignment.End)) {
                 Text(TalkWording.REPLY, fontWeight = FontWeight.SemiBold)
             }
         }

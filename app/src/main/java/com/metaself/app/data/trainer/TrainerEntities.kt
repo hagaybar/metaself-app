@@ -1,5 +1,6 @@
 package com.metaself.app.data.trainer
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -99,8 +100,9 @@ data class WeeklyLetterEntity(
 /**
  * One message of the conversation (D145, D148): the owner's ([fromOwner]) or the trainer's reply, with the model
  * that wrote it ([model], null on his). [answered] says whether his got a reply; a reply's [replyTo] names the message
- * it answers, so deleting his message removes exactly the reply it got. The feedback and the letters shown in the
- * thread are not copied here (D146). **No foreign key**: a restore replaces the table whole.
+ * it answers, so deleting his message removes exactly the reply it got. [conversation] is the one it belongs to (D159);
+ * there is no table of conversations. The feedback and the letters shown in the thread are not copied here (D146).
+ * **No foreign key**: a restore replaces the table whole.
  */
 @Entity(tableName = "trainer_messages")
 data class TrainerMessageEntity(
@@ -111,6 +113,7 @@ data class TrainerMessageEntity(
     val model: String?,
     val answered: Boolean,
     val replyTo: Long?,
+    @ColumnInfo(defaultValue = "") val conversation: String,
 )
 
 /**

@@ -979,8 +979,8 @@ class HealthRecordStoreTest {
     @Test
     fun `the conversation stores replies against their message, and deletes a message with its reply`() = runTest {
         val messages = RoomConversationStore(db.trainerDao(), RoomDatabaseTransaction(db))
-        val first = messages.addOwn("Invented question.", atMillis = 1_000)
-        val second = messages.addOwn("Invented second question.", atMillis = 3_000)
+        val first = messages.addOwn("Invented question.", atMillis = 1_000, conversation = "talk:0")
+        val second = messages.addOwn("Invented second question.", atMillis = 3_000, conversation = "talk:0")
         val reply = messages.addReply(first, "Invented answer.", "a-model", atMillis = 2_000)
         val secondReply = messages.addReply(second, "Invented second answer.", "a-model", atMillis = 4_000)
 

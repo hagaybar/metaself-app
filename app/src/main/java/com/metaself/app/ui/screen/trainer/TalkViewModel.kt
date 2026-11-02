@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.trainer
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.ai.AiSettings
@@ -26,13 +27,15 @@ import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 
 /**
- * Your trainer, the conversation (D145, D146). Send stores the owner's words first — the field is emptied only once
+ * One conversation with the trainer (D145, D146, D159), named by [CONVERSATION]; [ASK] names a message the coach
+ * screen has stored, which is asked about on opening. Send stores the owner's words first — the field is emptied only once
  * they are stored — then asks, in [outliving], so a reply on its way is still stored if the screen is left. One
  * request at a time: Send and Try again wait while the trainer is writing. A failed reply leaves the message, not
  * answered, with Try again (D145); a failed write is said (D8).
  */
 @HiltViewModel
 class TalkViewModel @Inject constructor(
+    savedState: SavedStateHandle,
     private val talk: TalkToTheTrainer,
     settings: AiSettingsStore,
     private val problems: ProblemLog,
@@ -45,6 +48,8 @@ class TalkViewModel @Inject constructor(
      * @property failure why the last reply did not come.
      * @property selected the owner's message whose Delete is shown.
      * @property confirmingDelete the owner's message whose deletion is being confirmed.
+     * @property confirmingDeleteAll Delete this conversation is being confirmed (D159).
+     * @property deletedAll the conversation's messages are gone: the screen goes back.
      */
     data class State(
         val thread: List<ThreadItem> = emptyList(),
@@ -57,17 +62,24 @@ class TalkViewModel @Inject constructor(
         val refused: ActionRefused? = null,
         val selected: Long? = null,
         val confirmingDelete: Long? = null,
+        val confirmingDeleteAll: Boolean = false,
+        val deletedAll: Boolean = false,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
     ) {
         val busy: Boolean get() = sending || writing != null
         val canSend: Boolean get() = loaded && !busy && draft.isNotBlank()
+
+        /** D159: there are messages for Delete this conversation to remove, stored (a note not yet copied has id 0). */
+        val canDeleteAll: Boolean get() = !busy && selected == null && thread.any { it is ThreadItem.Said && it.message.id != 0L }
     }
+
+    private val conversation: String = checkNotNull(savedState[CONVERSATION]) { "a conversation has a key" }
 
     private val local = MutableStateFlow(State())
 
     private data class Read(val thread: List<ThreadItem>, val unreadable: Boolean)
 
-    private val thread = talk.observeThread()
+    private val thread = talk.observeConversation(conversation)
         .map { Read(it, unreadable = false) }
         .catch { failure ->
             problems.record(PROBLEM_KIND, failure.message ?: failure::class.java.simpleName)
@@ -77,6 +89,10 @@ class TalkViewModel @Inject constructor(
     val state: StateFlow<State> = combine(local, thread, settings.settings.catch { emit(AiSettings()) }) { now, read, ai ->
         now.copy(thread = read.thread, loaded = !read.unreadable, unreadable = read.unreadable, ceiling = ai.dailyCeiling)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), State())
+
+    init {
+        savedState.get<Long>(ASK)?.takeIf { it != NO_ASK }?.let(::tryAgain)
+    }
 
     /** The field changed; at most [Conversation.MAX_MESSAGE] characters are kept. */
     fun edit(text: String) = local.update { it.copy(draft = Conversation.cut(text), refused = null) }
@@ -91,7 +107,7 @@ class TalkViewModel @Inject constructor(
             problems,
             onRefused = { local.update { it.copy(sending = false, writing = null, refused = ActionRefused.NOTHING_CHANGED) } },
             work = {
-                val id = talk.say(text)
+                val id = talk.say(text, conversation)
                 // Stored: the field is emptied unless he has typed on, and the thread shows the trainer writing.
                 local.update { it.copy(draft = if (it.draft == text) "" else it.draft, sending = false, writing = id) }
                 talk.answer(id)
@@ -132,7 +148,25 @@ class TalkViewModel @Inject constructor(
         }
     }
 
+    fun askDeleteAll() = local.update { if (it.busy) it else it.copy(confirmingDeleteAll = true) }
+
+    fun cancelDeleteAll() = local.update { it.copy(confirmingDeleteAll = false) }
+
+    /** D159: the conversation's messages and replies; feedback and letters stay. */
+    fun confirmDeleteAll() {
+        if (!local.value.confirmingDeleteAll) return
+        local.update { it.copy(confirmingDeleteAll = false, selected = null, refused = null) }
+        if (local.value.busy) return
+        guarded(problems, onRefused = { local.update { it.copy(refused = ActionRefused.NOTHING_CHANGED) } }) {
+            talk.deleteConversation(conversation)
+            local.update { it.copy(deletedAll = true) }
+        }
+    }
+
     companion object {
         const val PROBLEM_KIND = "trainer"
+        const val CONVERSATION = "conversation"
+        const val ASK = "ask"
+        const val NO_ASK = -1L
     }
 }

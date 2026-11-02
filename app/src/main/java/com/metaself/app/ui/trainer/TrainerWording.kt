@@ -208,7 +208,7 @@ object TrainerWording {
      * holds.
      */
     fun privacyTalk(ceiling: Int): String = privacy(
-        "your message and the last 14 days of this conversation, word for word, the trainer's feedback and letters in it included",
+        "your message, this conversation and your others of the last 14 days, word for word, the trainer's feedback and letters in them included",
         ceiling,
         extra = "your plan, its week and goal when one runs, and the coach's note on this week",
     ) + " Never meals."

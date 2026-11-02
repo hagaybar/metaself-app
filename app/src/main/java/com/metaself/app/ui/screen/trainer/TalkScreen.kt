@@ -47,7 +47,7 @@ import com.metaself.app.ui.trainer.TrainerWording
 import java.time.ZoneId
 
 /**
- * Your trainer (D145, D146): one thread, oldest at the top, the newest in view — the trainer's messages on the left on
+ * One conversation with the trainer (D145, D146, D159): oldest at the top, the newest in view — the trainer's messages on the left on
  * a card, the owner's on the right in light green, a day line where the day changes, a session's feedback in full
  * under its label, a letter as a card that opens it — and the field with Send at the bottom. The AI line and what
  * leaves the phone head the thread. Branches only — no early return out of an inline composable
@@ -67,9 +67,15 @@ fun TalkScreen(
     /** D146: a letter's card opens the letter page, by its week's Monday. */
     onLetter: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    /** D159: Delete this conversation, and its confirmation. */
+    onAskDeleteAll: () -> Unit = {},
+    onConfirmDeleteAll: () -> Unit = {},
+    onCancelDeleteAll: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
-    MetaSelfScreen(title = TalkWording.TITLE, modifier = modifier, onBack = onBack, scrolls = false) {
+    if (state.deletedAll) LaunchedEffect(Unit) { onBack() }
+    val title = Conversation.summaries(state.thread).firstOrNull()?.let(TalkWording::name) ?: TalkWording.TITLE
+    MetaSelfScreen(title = title, modifier = modifier, onBack = onBack, scrolls = false) {
         Column(Modifier.fillMaxSize().imePadding(), verticalArrangement = Arrangement.spacedBy(Spacing.Related)) {
             val list = rememberLazyListState()
             val rows = rows(state, zone)
@@ -82,7 +88,7 @@ fun TalkScreen(
             ) {
                 items(rows, key = { it.key }) { row ->
                     when (row) {
-                        ThreadRow.Head -> Head(state)
+                        ThreadRow.Head -> Head(state, onAskDeleteAll)
                         is ThreadRow.Day -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Text(TalkWording.day(row.epochDay), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -107,6 +113,14 @@ fun TalkScreen(
             text = { Text(TalkWording.CONFIRM_DELETE) },
             confirmButton = { TextButton(onClick = onConfirmDelete) { Text(TalkWording.DELETE) } },
             dismissButton = { TextButton(onClick = onCancelDelete) { Text(TalkWording.KEEP) } },
+        )
+    }
+    if (state.confirmingDeleteAll) {
+        AlertDialog(
+            onDismissRequest = onCancelDeleteAll,
+            text = { Text(TalkWording.CONFIRM_DELETE_CONVERSATION) },
+            confirmButton = { TextButton(onClick = onConfirmDeleteAll) { Text(TalkWording.DELETE) } },
+            dismissButton = { TextButton(onClick = onCancelDeleteAll) { Text(TalkWording.KEEP) } },
         )
     }
 }
@@ -152,7 +166,7 @@ private fun rows(state: TalkViewModel.State, zone: ZoneId): List<ThreadRow> = bu
 
 /** The AI line (D4), what leaves the phone (D148), and with nothing yet said, what this is for. */
 @Composable
-private fun Head(state: TalkViewModel.State) {
+private fun Head(state: TalkViewModel.State, onAskDeleteAll: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
         Text(TalkWording.AI, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(TrainerWording.privacyTalk(state.ceiling), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -160,6 +174,9 @@ private fun Head(state: TalkViewModel.State) {
             state.unreadable -> Text(TalkWording.UNREADABLE, color = MaterialTheme.colorScheme.error)
             state.loaded && state.thread.isEmpty() -> Text(TalkWording.EMPTY, style = MaterialTheme.typography.bodyMedium)
             else -> Unit
+        }
+        if (state.canDeleteAll) {
+            TextButton(onClick = onAskDeleteAll) { Text(TalkWording.DELETE_CONVERSATION) }
         }
     }
 }
