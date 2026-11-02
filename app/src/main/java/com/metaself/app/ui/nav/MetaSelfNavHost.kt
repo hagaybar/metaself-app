@@ -526,8 +526,8 @@ fun MetaSelfNavHost(
                 onPlan = { navController.navigate(Destination.PlanSession.form()) },
                 onPlanAhead = { navController.navigate(Destination.EvaluatePlan.form()) },
                 onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
+                onLetter = { navController.navigate(Destination.Letter.of(it)) },
                 onReplyToNote = { navController.navigate(Destination.Talk.of(Conversation.note(it.writtenAtMillis))) },
-                onConversation = { navController.navigate(Destination.Talk.of(it)) },
                 onAllConversations = { navController.navigate(Destination.Conversations.route) },
                 onEverythingElse = { navController.navigate(Destination.TrainerDetails.route) },
             )

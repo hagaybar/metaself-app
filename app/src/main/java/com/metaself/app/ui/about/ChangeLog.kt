@@ -20,6 +20,7 @@ data class ChangeLogEntry(
 object ChangeLog {
 
     val entries: List<ChangeLogEntry> = listOf(
+        entry("0.91.0", 11, 2, "The coach screen is now a clean chat: the box at the bottom, a short line on what is sent to OpenAI with the details one tap away, up to three quick links above the box, and All conversations and Everything else in the menu."),
         entry("0.90.0", 11, 2, "Your coach opens your file before answering: it can look at your sessions, sleep, meals, habits, weight and past conversations, the line under each reply says what it read, and what you tell it about yourself goes straight on What I know about you."),
         entry("0.89.0", 11, 2, "Trainer opens on one coach screen with a box: each subject is its own conversation, feedback and letters open their own, the coach still remembers them all, and the old page is under Everything else."),
         entry("0.88.0", 11, 1, "Add something opens with Quick add: up to 8 of what you log most, one tap logs it, and Today offers Undo; a food you pick now starts from your usual amount."),

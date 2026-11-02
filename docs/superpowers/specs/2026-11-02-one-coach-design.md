@@ -75,6 +75,21 @@ grouped by day in the same way.
 **All conversations ›** opens every conversation in the same rows as the coach screen: its name, the start of its
 newest words, and when. A message not answered says so. The sheet's Full conversation › opens this list.
 
+## D166 — A clean coach screen
+
+Amends D157, D158 and D160, after seeing D157 on the phone: seven things competed with the box, and the largest was the
+paragraph on what is sent. The chat is the focus.
+
+- **The box is at the bottom**, where it is in a conversation, and stays there; the screen's other content sits just above it.
+- **What leaves the phone is one line** under the box, "Sent to OpenAI with your key · What's sent ›", and the whole text is
+  one tap away. The same line replaces the paragraph at the head of a conversation. The other AI paths keep their text.
+- **Up to three quick links** show above the box while it is empty: what needs the owner comes first (D158's order), then
+  "See your weekly letter", when there is one, which opens the newest letter's page, then "How am I doing this week?", which
+  still fills the box and sends nothing. With a letter one thing that needs him is shown, without one two.
+- **All conversations and Everything else are in the title bar's menu.** The screen lists no conversations; All
+  conversations keeps its rows with their newest words. A session's feedback is reached there.
+- The coach's note (D116), when there is one, stays on the screen above the links.
+
 ## Later releases, as decided
 
 ### D161 — The memory model and the file

@@ -112,6 +112,9 @@ object Conversation {
     /** D159: a letter and what was said about it. */
     fun letter(weekMonday: Long): String = "letter:$weekMonday"
 
+    /** D166: the week's Monday of a letter's conversation; null for any other conversation. */
+    fun letterWeek(key: String): Long? = key.takeIf { it.startsWith("letter:") }?.removePrefix("letter:")?.toLongOrNull()
+
     /** D159: the coach's note and what was said about it, by the moment the note was written. */
     fun note(writtenAtMillis: Long): String = "note:$writtenAtMillis"
 
