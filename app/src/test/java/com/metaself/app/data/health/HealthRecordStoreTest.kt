@@ -985,7 +985,7 @@ class HealthRecordStoreTest {
         val secondReply = messages.addReply(second, "Invented second answer.", "a-model", atMillis = 4_000)
 
         assertThat(messages.message(first)!!.answered).isTrue()
-        assertThat(messages.message(reply)).isEqualTo(TrainerMessage(reply, 2_000, false, "Invented answer.", "a-model", false, first))
+        assertThat(messages.message(reply)).isEqualTo(TrainerMessage(reply, 2_000, false, "Invented answer.", "a-model", false, first, "talk:0"))
         assertThat(messages.observe().first().map { it.id }).containsExactly(first, reply, second, secondReply).inOrder()
         // A reply's own id deletes nothing; a reply to a reply is refused.
         messages.deleteOwn(reply)
