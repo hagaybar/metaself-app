@@ -621,7 +621,7 @@ class AskTheTrainer @Inject constructor(
             weekIndex = index,
             doneByWeek = running.progress.weeks.take(index).map { it.done },
             tickedThisWeek = ticked,
-            thisWeekMax = week.planned - ticked.size,
+            thisWeekMax = week.planned - ticked.size + 1,
             words = words.trim(),
             howItWent = running.progress.weeks.take(index + 1).map { it.outcome() },
         )

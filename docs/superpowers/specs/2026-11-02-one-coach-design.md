@@ -140,7 +140,21 @@ names of frequent foods; later the AI may label each food once with a food group
 - Each reply shows **Read:** and what it opened, so its grounds can be checked. The trainer test page (D106) gains the
   conversation, and shows what it read, so a risky sentence can be tried without touching the real one.
 
+**Food as a reason.** What was eaten is said only from the food record read for that reply, never from an old letter or
+note, because a half-logged week reads as under-eating. The model marks a reply that speaks of food, and the phone also
+looks for food words in it. With no food read, the phone opens the last 14 days itself (a chosen size), once, and asks
+again, within the same 3 requests. On the last request there is no again, and the Read line says "food not checked". These
+are words and a mark: a sentence that has neither goes unchecked.
+
 ### D164 — Acting
+
+**The owner has the last word.** Asked for a change the coach disagrees with, it says so and why, and still names the
+change, so the card is how the owner overrules it. It holds back only when the message mentions pain, dizziness or chest
+discomfort, and only from adding or increasing exercise; that is an instruction and can fail, since the phone cannot tell a
+plan made harder from one made easier. Nothing about the floor or the calorie target changes: neither can be named.
+
+**Amends D97.** A plan change may give this week one session more than are left, so that a session can be added. It
+applies on the plan page too. The model is told to go above what is left only when asked.
 
 A reply may name an action. The phone runs the existing job with its existing checks, and shows a card with the change
 and **Confirm**; nothing changes until it is pressed. The plan, goals and the sheet may change this way, and nothing

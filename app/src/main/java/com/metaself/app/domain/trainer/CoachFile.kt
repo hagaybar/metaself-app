@@ -28,7 +28,7 @@ data class RememberedFact(val group: String, val text: String)
  * D161: one answer in the structured form: drawers to [open], or the [reply]'s words; [remember] is what the owner
  * said that belongs on the sheet. Blank and empty are read as such; what they mean is decided by the look they came on.
  */
-data class CoachTurn(val open: List<DrawerAsk>, val reply: String, val remember: List<RememberedFact>, val propose: Proposal? = null)
+data class CoachTurn(val open: List<DrawerAsk>, val reply: String, val remember: List<RememberedFact>, val propose: Proposal? = null, val aboutFood: Boolean = false)
 
 /**
  * D163: what the phone really read for one drawer, the only source of the Read line. [days] is the days it covered;
@@ -72,6 +72,7 @@ data class FrontPage(
  * @property conversation the window a reply reads ([Conversation.window]), this conversation marked.
  * @property opened every drawer read for this reply so far.
  * @property look which of [CoachLooks.MAX] requests this is, from 1.
+ * @property foodCheck the last answer spoke of food unread, and the phone opened it for this request ([FoodTalk]).
  */
 data class CoachRequest(
     val replyTo: ConversationLine,
@@ -79,6 +80,7 @@ data class CoachRequest(
     val frontPage: FrontPage,
     val opened: List<OpenedDrawer>,
     val look: Int,
+    val foodCheck: Boolean = false,
 ) {
     init {
         require(replyTo.fromOwner && replyTo.kind == LineKind.MESSAGE) { "a reply answers one of the owner's messages" }
@@ -92,6 +94,27 @@ data class CoachRequest(
 /** D161: the requests one reply may take. */
 object CoachLooks {
     const val MAX = 3
+}
+
+/**
+ * D163: a reply that speaks of what was eaten rests on the food record read for that reply, not on an old letter or note.
+ * A half-logged week reads as under-eating, and the coach can object from it (D164). The model says so in about_food, and
+ * [states] catches what it did not say, so that this is more than an instruction. These are words: a sentence they miss, on
+ * a reply the model did not mark, goes unchecked.
+ */
+object FoodTalk {
+    /** Each one tells how much of the record is logged. */
+    val DRAWERS: Set<Drawer> = setOf(Drawer.FOOD_DAYS, Drawer.MEALS, Drawer.HABITS)
+
+    /** What the phone opens itself: whole days ending yesterday, as the habits do (D162). A chosen size. */
+    const val CHECK_DAYS = 14
+
+    private val WORDS = Regex(
+        "\\b(kcal|calories?|intake|protein|macros?|eaten|eating|ate|logged food|food average|under-?eat\\w*|under-?fuel\\w*)\\b",
+        RegexOption.IGNORE_CASE,
+    )
+
+    fun states(reply: String): Boolean = WORDS.containsMatchIn(reply)
 }
 
 /**
@@ -114,6 +137,7 @@ sealed interface CoachAnswer {
         val remember: List<RememberedFact>,
         override val last: CoachRequest,
         val proposal: Proposal? = null,
+        val foodUnchecked: Boolean = false,
     ) : CoachAnswer
 
     data class Failed(val failure: EstimateResult, override val last: CoachRequest) : CoachAnswer
@@ -125,13 +149,24 @@ sealed interface CoachAnswer {
  */
 object ReadLine {
 
-    /** Each drawer once, in the order first read, its days the union of what was read of it. */
-    fun of(reads: List<DrawerRead>): String =
-        reads.groupBy { it.drawer }.map { (drawer, same) ->
+    /**
+     * Each drawer once, in the order first read, its days the union of what was read of it. [foodUnchecked] says that the
+     * reply speaks of food the phone could not read for it ([FoodTalk]).
+     */
+    fun of(reads: List<DrawerRead>, foodUnchecked: Boolean = false): String {
+        val parts = reads.groupBy { it.drawer }.map { (drawer, same) ->
             val name = name(drawer)
             val days = same.mapNotNull { it.days }
             if (days.isEmpty()) name else "$name, " + days(days.flatten().toSet().size)
+        }
+        return when {
+            !foodUnchecked -> parts
+            parts.isEmpty() -> listOf("the front page", FOOD_UNCHECKED)
+            else -> parts + FOOD_UNCHECKED
         }.joinToString(" · ")
+    }
+
+    private const val FOOD_UNCHECKED = "food not checked"
 
     private fun days(count: Int): String = if (count == 1) "1 day" else "$count days"
 

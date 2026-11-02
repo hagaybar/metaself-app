@@ -34,6 +34,11 @@ class FakeCoachModel : CoachModel {
         looks += TrainerReply.Answered(CoachTurn(emptyList(), text, remember), model)
     }
 
+    /** The next look answers in [text], and marks it as speaking of food. */
+    fun saysAboutFood(text: String) {
+        looks += TrainerReply.Answered(CoachTurn(emptyList(), text, emptyList(), aboutFood = true), "a-model")
+    }
+
     /** The next look opens [asks], with no words. */
     fun opens(vararg asks: DrawerAsk) {
         looks += TrainerReply.Answered(CoachTurn(asks.toList(), "", emptyList()), "a-model")

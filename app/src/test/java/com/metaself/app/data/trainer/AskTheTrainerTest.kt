@@ -435,7 +435,7 @@ class AskTheTrainerTest {
         assertThat(question.weekIndex).isEqualTo(1)
         assertThat(question.doneByWeek).containsExactly(1)
         assertThat(question.tickedThisWeek).containsExactly(WALK_30)
-        assertThat(question.thisWeekMax).isEqualTo(1)
+        assertThat(question.thisWeekMax).isEqualTo(2)
         val composed = outcome.programme.plan
         assertThat(composed.weeks.first()).isEqualTo(WEEKS.weeks.first())
         assertThat(composed.weeks[1].sessions).containsExactly(WALK_30, WALK_20).inOrder()
@@ -546,7 +546,7 @@ class AskTheTrainerTest {
         assertThat(question.weekIndex).isEqualTo(0)
         assertThat(question.doneByWeek).isEmpty()
         assertThat(question.tickedThisWeek).isEmpty()
-        assertThat(question.thisWeekMax).isEqualTo(2)
+        assertThat(question.thisWeekMax).isEqualTo(3)
         assertThat(outcome.programme.plan.weeks).isEqualTo(rest.weeks)
     }
 
@@ -762,7 +762,7 @@ class AskTheTrainerTest {
         assertThat(question.howItWent[0].sessions.map { it.outcome }).containsExactly(PlannedOutcome.DONE, PlannedOutcome.DONE_SHORT).inOrder()
         assertThat(question.howItWent[0].sessions.map { it.minutesDone }).containsExactly(40, 20).inOrder()
         assertThat(question.howItWent[1].attempts).containsExactly(AttemptFacts(WorkoutKind.WALK, 10, 30))
-        assertThat(question.thisWeekMax).isEqualTo(2)
+        assertThat(question.thisWeekMax).isEqualTo(3)
     }
 
     /**

@@ -34,7 +34,7 @@ object CoachPrompt {
 
         First, safety. If reply_to mentions pain, dizziness or chest discomfort, tell them to stop and see a doctor
         before saying anything else. If it or what you read suggests they are eating far too little or are exhausted,
-        say so plainly first, and do not push them on. Never advise eating below front_page.floor_kcal, the lowest daily
+        say so plainly first, and do not press them to do more. Never advise eating below front_page.floor_kcal, the lowest daily
         target this app proposes for their body, whatever they ask; when floor_kcal is null, give no calorie figure.
 
         You are given question.reply_to, the message of theirs to answer now, and question.conversation: this conversation
@@ -63,6 +63,11 @@ object CoachPrompt {
         - Never invent a fact about them; general knowledge is fine, and is said as such. When the file does not hold what
           you need, say so and ask them.
         - Every figure you state comes from what you are given. You may compare two of them, but never estimate one.
+        - What they ate is never your reason, and never a figure you state, unless you read it for this reply: open
+          food_days, meals or habits first, whatever your letters, your notes or this conversation say. Set about_food
+          true whenever your reply says anything about what or how much they ate, or about calories. When
+          question.food_check is true you said something about their food without reading it, and the phone has opened it
+          for you: write your reply again from what it shows, coverage first.
         - Not logged is not zero, and a gap is not a fast. A drawer's days have a state: "not_logged" means nothing was
           recorded, "logged_as_zero" means a zero was recorded, and days before record_begins come as before_record, which
           means the record had not begun. A half-logged day reads as under-eating, so read coverage before you read food.
@@ -89,7 +94,11 @@ object CoachPrompt {
         Proposing: you change nothing yourself, but you may name one change in propose, when they asked for it or agreed
         to it, or when the record plainly calls for it. Your reply says what you propose and why; the phone prepares it and
         shows a card with Confirm under your reply, and nothing changes until they press it. Never say or imply it is done.
-        The kinds: change_plan (the rest of the running plan, with words saying what should change); new_plan (a new plan
+        They have the last word. When they ask for a change and you disagree, say so plainly and say why, and still name it
+        in propose: the card is how they overrule you, so never refuse it or make it wait on something else. The one
+        exception: when reply_to mentions pain, dizziness or chest discomfort, do not propose adding or increasing exercise.
+        The kinds: change_plan (the rest of the running plan, this week included, which can take one session more than
+        it has, with words saying what should change); new_plan (a new plan
         with its goal and per_week; words for anything else; a goal's by is a Sunday); stop_plan; fill_week (the next week of
         the plan that has no sessions yet); next_block (a steady plan's next block, in its last week); add_fact (something
         you noticed for the sheet, with group and text; what they said themselves goes in remember); change_fact and
@@ -135,6 +144,7 @@ object CoachPrompt {
             }
             put("look", request.look)
             put("last_look", request.lastLook)
+            put("food_check", request.foodCheck)
         }
         put("front_page", frontPage(request.frontPage))
         putJsonArray("drawers") {
@@ -211,6 +221,7 @@ object CoachPrompt {
             ),
         ),
         "reply" to TrainerPrompt.string(),
+        "about_food" to TrainerPrompt.boolean(),
         "remember" to TrainerPrompt.arraySchema(
             TrainerPrompt.strictObject(
                 "group" to TrainerPrompt.enumOf(*FactGroup.entries.map(SheetPrompt::group).toTypedArray()),

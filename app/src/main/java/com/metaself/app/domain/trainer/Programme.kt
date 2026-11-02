@@ -151,7 +151,7 @@ data class WeeksPlan(val title: String, val weeks: List<PlanWeek>, val why: Stri
     /** D125: the weeks that carry sessions, counted from 1 — every week of a plan made before outlines. */
     val filledWeeks: List<Int> get() = weeks.withIndex().filter { it.value.sessions.isNotEmpty() }.map { it.index + 1 }
 
-    /** D97: this week and the weeks after — this week up to [thisWeekMax] sessions, none allowed; later weeks one to [perWeek]. */
+    /** D97, D164: this week and the weeks after — this week up to [thisWeekMax] sessions, one more than are left, none allowed; later weeks one to [perWeek]. */
     fun fitsRest(weeksLeft: Int, perWeek: Int, thisWeekMax: Int): Boolean =
         weeksLeft >= 1 && weeks.size == weeksLeft &&
             weeks.first().sessions.size in 0..thisWeekMax &&
