@@ -280,8 +280,9 @@ object TrainerPrompt {
 
         Reply with a plan in the same shape for this week and the weeks after: a title; one entry per
         remaining week, starting with this one; and one paragraph on why. For this week give only the
-        sessions still to do, at most max_this_week, and none is allowed; for each later week between one
-        and sessions_a_week. Each session has a kind (walk, run, cycle, swim, strength or other), whole
+        sessions still to do, at most max_this_week, and none is allowed; max_this_week is one more than
+        are left, so that they can add a session, and you go above what is left only when their words ask for
+        it. For each later week give between one and sessions_a_week. Each session has a kind (walk, run, cycle, swim, strength or other), whole
         minutes from 5 to 180, an effort (easy, steady or push) and one line on what it is. Keep the same
         number of weeks; the end date does not move. Weeks already over are not yours to change.
 
@@ -1042,7 +1043,7 @@ object TrainerPrompt {
         "why" to string(),
     )
 
-    private fun boolean() = buildJsonObject { put("type", "boolean") }
+    internal fun boolean() = buildJsonObject { put("type", "boolean") }
 
     /** D120: one week's target. */
     private val TARGET_SCHEMA: JsonObject = strictObject("minutes" to integer(), "longest_minutes" to integer(), "easier" to boolean())

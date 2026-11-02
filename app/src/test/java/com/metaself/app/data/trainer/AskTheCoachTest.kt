@@ -268,6 +268,80 @@ class AskTheCoachTest {
     }
 
     @Test
+    fun `words about food with no food read send the phone to the record, and the coach answers again from it`() = runTest {
+        meals.log(Meal(epochDay = today - 20, loggedAtMillis = (today - 20) * DAY + 8 * HOUR, items = listOf(FoodItem(name = "Invented porridge", kcal = 300, proteinG = 10, carbsG = 50, fatG = 5, source = Source.TYPED))))
+        model.says("Your intake has been too low.")
+        model.says("Only some of those days are logged, so I cannot say.")
+
+        val answer = answer() as CoachAnswer.Answered
+
+        assertThat(answer.text).isEqualTo("Only some of those days are logged, so I cannot say.")
+        assertThat(model.asked.map { it.foodCheck }).containsExactly(false, true).inOrder()
+        val check = model.asked.last().opened.single().ask
+        assertThat(check).isEqualTo(DrawerAsk("food_days", date(today - 14), date(today - 1), ""))
+        assertThat(answer.foodUnchecked).isFalse()
+        assertThat(ReadLine.of(answer.opened, answer.foodUnchecked)).isEqualTo("daily food totals, 14 days")
+    }
+
+    @Test
+    fun `a reply the model marks as about food is checked though it has none of the words`() = runTest {
+        model.saysAboutFood("Invented reply.")
+        model.says("Another invented reply.")
+
+        answer()
+
+        assertThat(model.asked).hasSize(2)
+        assertThat(model.asked.last().foodCheck).isTrue()
+    }
+
+    @Test
+    fun `words about food after food was read are the answer, with no further request`() = runTest {
+        model.opens(DrawerAsk("habits", "", "", ""))
+        model.says("Your intake has been too low.")
+
+        val answer = answer() as CoachAnswer.Answered
+
+        assertThat(answer.text).isEqualTo("Your intake has been too low.")
+        assertThat(model.asked).hasSize(2)
+        assertThat(answer.foodUnchecked).isFalse()
+    }
+
+    @Test
+    fun `a reply with no food in it takes no more requests`() = runTest {
+        model.says("Keep the walk easy.")
+
+        answer()
+
+        assertThat(model.asked).hasSize(1)
+    }
+
+    @Test
+    fun `the phone checks once, and a second reply that still has no food read says so`() = runTest {
+        val food = FoodTotals { _, _ -> error("invented read failure") }
+        model.says("Your intake has been too low.")
+        model.says("Your intake is still too low.")
+
+        val answer = answer(askTheCoach(model, Now { NOW }, meals = meals, food = food)) as CoachAnswer.Answered
+
+        assertThat(model.asked).hasSize(2)
+        assertThat(answer.foodUnchecked).isTrue()
+        assertThat(ReadLine.of(answer.opened, answer.foodUnchecked)).isEqualTo("the front page · food not checked")
+    }
+
+    @Test
+    fun `on the last look nothing more can be read, the reply stands, and the Read line says food was not checked`() = runTest {
+        model.opens(DrawerAsk("plan", "", "", ""))
+        model.opens(DrawerAsk("days", date(today - 1), date(today - 1), ""))
+        model.says("Your intake has been too low.")
+
+        val answer = answer() as CoachAnswer.Answered
+
+        assertThat(model.asked).hasSize(CoachLooks.MAX)
+        assertThat(answer.foodUnchecked).isTrue()
+        assertThat(ReadLine.of(answer.opened, answer.foodUnchecked)).endsWith("· food not checked")
+    }
+
+    @Test
     fun `reading the file changes nothing`() = runTest {
         model.opens(DrawerAsk("habits", "", "", ""))
         model.says("Invented reply.", remember = listOf(RememberedFact("life", "Invented fact.")))

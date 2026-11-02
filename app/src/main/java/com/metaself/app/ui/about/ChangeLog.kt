@@ -20,6 +20,7 @@ data class ChangeLogEntry(
 object ChangeLog {
 
     val entries: List<ChangeLogEntry> = listOf(
+        entry("0.93.0", 11, 2, "You have the last word: when your coach disagrees with a change you ask for, it says why and still offers the card. It reads your food record before using food as a reason, and a plan change can add a session to this week."),
         entry("0.92.0", 11, 2, "Your coach can propose a change: to your plan, its goal or what it knows about you. A card under its reply shows the change, and nothing changes until you press Confirm."),
         entry("0.91.0", 11, 2, "The coach screen is now a clean chat: the box at the bottom, a short line on what is sent to OpenAI with the details one tap away, up to three quick links above the box, and All conversations and Everything else in the menu."),
         entry("0.90.0", 11, 2, "Your coach opens your file before answering: it can look at your sessions, sleep, meals, habits, weight and past conversations, the line under each reply says what it read, and what you tell it about yourself goes straight on What I know about you."),

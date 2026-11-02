@@ -66,7 +66,7 @@ class CoachPromptTest {
         val message = sent(request())
 
         assertThat(message.keys).containsExactly("question", "front_page", "drawers", "opened")
-        assertThat(message.getValue("question").jsonObject.keys).containsExactly("reply_to", "conversation", "look", "last_look")
+        assertThat(message.getValue("question").jsonObject.keys).containsExactly("reply_to", "conversation", "look", "last_look", "food_check")
         assertThat(message.getValue("front_page").jsonObject.keys).containsExactly(
             "today", "goal", "plan", "this_week", "week_note", "about_me", "sheet", "body", "floor_kcal", "target_kcal", "record_begins",
         )
@@ -81,6 +81,15 @@ class CoachPromptTest {
         assertThat(front.getValue("sheet").jsonArray.single().jsonObject.getValue("text").jsonPrimitive.content).isEqualTo("An invented ache.")
         assertThat(front.getValue("record_begins").jsonObject.getValue("food").jsonPrimitive.content).isEqualTo("2026-07-05")
         assertThat(front.getValue("plan").jsonObject.getValue("this_week_number").jsonPrimitive.content).isEqualTo("2")
+    }
+
+    @Test
+    fun `the coach is told the owner has the last word, and to read food before using it`() {
+        assertThat(CoachPrompt.INSTRUCTIONS).contains("They have the last word")
+        assertThat(CoachPrompt.INSTRUCTIONS).contains("still name it")
+        assertThat(CoachPrompt.INSTRUCTIONS).contains("do not propose adding or increasing exercise")
+        assertThat(CoachPrompt.INSTRUCTIONS).contains("What they ate is never your reason")
+        assertThat(CoachPrompt.INSTRUCTIONS).doesNotContain("do not push them on")
     }
 
     @Test
@@ -111,7 +120,7 @@ class CoachPromptTest {
         assertThat(format.getValue("name").jsonPrimitive.content).isEqualTo("coach_reply")
         assertThat(format.getValue("strict").jsonPrimitive.content).isEqualTo("true")
         val properties = format.getValue("schema").jsonObject.getValue("properties").jsonObject
-        assertThat(properties.keys).containsExactly("open", "reply", "remember", "propose")
+        assertThat(properties.keys).containsExactly("open", "reply", "about_food", "remember", "propose")
         // D163, D164: the only changes that can be named; none is the calorie target, a food record or a weight.
         val propose = properties.getValue("propose").jsonObject.getValue("properties").jsonObject
         assertThat(propose.getValue("kind").jsonObject.getValue("enum").jsonArray.map { it.jsonPrimitive.content })

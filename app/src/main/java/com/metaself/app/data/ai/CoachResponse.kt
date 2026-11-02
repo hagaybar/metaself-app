@@ -36,7 +36,8 @@ object CoachResponse {
         val remember = (payload["remember"] as? JsonArray).orEmpty().mapNotNull { element ->
             (element as? JsonObject)?.let { RememberedFact(it.text("group"), it.text("text")) }
         }
-        return TrainerReply.Answered(CoachTurn(open, payload.text("reply"), remember, proposal(payload["propose"] as? JsonObject)), model)
+        val aboutFood = (payload["about_food"] as? JsonPrimitive)?.takeUnless { it.isString }?.content == "true"
+        return TrainerReply.Answered(CoachTurn(open, payload.text("reply"), remember, proposal(payload["propose"] as? JsonObject), aboutFood), model)
     }
 
     /**

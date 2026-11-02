@@ -11,7 +11,7 @@ class CoachRequestTest {
     /** Adding a field here is deciding to send something new: the disclosure has to say so too (D163). */
     @Test
     fun `a coach request holds exactly these fields`() {
-        assertThat(fieldsOf(CoachRequest::class.java)).containsExactly("replyTo", "conversation", "frontPage", "opened", "look")
+        assertThat(fieldsOf(CoachRequest::class.java)).containsExactly("replyTo", "conversation", "frontPage", "opened", "look", "foodCheck")
         assertThat(fieldsOf(FrontPage::class.java)).containsExactly(
             "today", "goal", "plan", "thisWeek", "weekNote", "aboutMe", "sheet", "body", "floorKcal", "targetKcal", "recordBegins",
         )
@@ -28,6 +28,16 @@ class CoachRequestTest {
         assertThrows<IllegalArgumentException> { CoachRequest(mine, emptyList(), page, emptyList(), CoachLooks.MAX + 1) }
         assertThat(CoachRequest(mine, emptyList(), page, emptyList(), CoachLooks.MAX - 1).lastLook).isFalse()
         assertThat(CoachRequest(mine, emptyList(), page, emptyList(), CoachLooks.MAX).lastLook).isTrue()
+    }
+
+    @Test
+    fun `food words are recognised, and advice with none of them is not`() {
+        listOf("Your intake was low", "below 2000 kcal", "You have been under-eating", "You ate little", "low on PROTEIN").forEach {
+            assertThat(FoodTalk.states(it)).isTrue()
+        }
+        listOf("Keep the walk easy", "Rest your knee", "A later start", "A pelvic floor exercise").forEach {
+            assertThat(FoodTalk.states(it)).isFalse()
+        }
     }
 
     @Test

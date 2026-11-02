@@ -111,7 +111,7 @@ class TalkToTheTrainer @Inject constructor(
         return when (val reply = ask(message, thread, exceptMessage = id, instructions = null)) {
             is CoachAnswer.Failed -> Talked.Failed(reply.failure)
             is CoachAnswer.Answered -> {
-                messages.addReply(id, reply.text, reply.model, now(), ReadLine.of(reply.opened), reply.proposal)
+                messages.addReply(id, reply.text, reply.model, now(), ReadLine.of(reply.opened, reply.foodUnchecked), reply.proposal)
                 remember(reply.remember)
                 Talked.Replied
             }

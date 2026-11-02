@@ -272,7 +272,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
                         sending = false,
                         reply = answer.text,
                         sent = workbench.sentOf(answer.last, current.instructions),
-                        read = TalkWording.read(ReadLine.of(answer.opened)),
+                        read = TalkWording.read(ReadLine.of(answer.opened, answer.foodUnchecked)),
                         wouldRemember = answer.remember.map { fact -> fact.text },
                         wouldPropose = answer.proposal?.let(TalkWording::proposalTitle),
                     )
