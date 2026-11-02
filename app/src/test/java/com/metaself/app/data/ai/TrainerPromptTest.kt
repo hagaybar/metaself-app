@@ -928,7 +928,9 @@ class TrainerPromptTest {
         val question = user.getValue("question").jsonObject
         assertThat(question.getValue("kind").jsonPrimitive.content).isEqualTo("talk")
         val lines = question.getValue("conversation").jsonArray.map { it.jsonObject }
-        assertThat(lines.map { it.keys }).containsExactly(LINE_KEYS, LINE_KEYS, LINE_KEYS, LINE_KEYS)
+        // D159: a reply's lines also say which conversation they are in.
+        val keys = LINE_KEYS + "this_conversation"
+        assertThat(lines.map { it.keys }).containsExactly(keys, keys, keys, keys)
         assertThat(lines.map { it.getValue("kind").jsonPrimitive.content }).containsExactly("letter", "session_feedback", "message", "message").inOrder()
         assertThat(lines.map { it.getValue("from").jsonPrimitive.content }).containsExactly("you", "you", "them", "you").inOrder()
         assertThat(lines[0].getValue("week").jsonPrimitive.content).isEqualTo("2026-08-24")

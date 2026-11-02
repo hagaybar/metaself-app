@@ -180,6 +180,10 @@ interface TrainerDao {
     @Query("DELETE FROM trainer_messages WHERE (id = :id AND fromOwner = 1) OR replyTo = :id")
     suspend fun deleteOwnMessage(id: Long): Int
 
+    /** D159: every message of one conversation. Feedback and letters are not messages, and stay. */
+    @Query("DELETE FROM trainer_messages WHERE conversation = :conversation")
+    suspend fun deleteConversation(conversation: String): Int
+
     @Query("SELECT * FROM trainer_messages ORDER BY id")
     suspend fun allMessages(): List<TrainerMessageEntity>
 

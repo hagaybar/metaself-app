@@ -16,6 +16,7 @@ import com.metaself.app.data.day.MIGRATION_12_13
 import com.metaself.app.data.day.MIGRATION_13_14
 import com.metaself.app.data.day.MIGRATION_14_15
 import com.metaself.app.data.day.MIGRATION_15_16
+import com.metaself.app.data.day.MIGRATION_16_17
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -897,6 +898,27 @@ class MigrationTest {
         }
         assertThat(indexes("sleep_sessions")).containsAtLeast("index_sleep_sessions_recordId", "index_sleep_sessions_startMillis")
         assertThat(indexes("workouts")).containsAtLeast("index_workouts_originId", "index_workouts_startedAtMillis")
+        migrated.close()
+    }
+
+    /** D159: each message goes in its day's conversation, and a reply with the message it answers. */
+    @Test
+    fun `version 17 puts each message in its day's conversation, a reply with its message`() {
+        assumeSqliteRuntime()
+        helper.createDatabase(TEST_DB, 16).use { db ->
+            db.execSQL("INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo) VALUES (1, 1000, 1, 'Invented.', NULL, 1, NULL)")
+            db.execSQL("INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo) VALUES (2, 172800000, 0, 'Invented reply.', 'm', 0, 1)")
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 17, true, MIGRATION_16_17)
+
+        val found = mutableListOf<String>()
+        migrated.query("SELECT conversation FROM trainer_messages ORDER BY id").use { cursor ->
+            while (cursor.moveToNext()) found += cursor.getString(0)
+        }
+        assertThat(found).hasSize(2)
+        assertThat(found[0]).startsWith("day:")
+        assertThat(found[1]).isEqualTo(found[0])
         migrated.close()
     }
 

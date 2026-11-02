@@ -75,6 +75,11 @@ import com.metaself.app.ui.screen.letter.LetterViewModel
 import com.metaself.app.ui.screen.letter.LettersScreen
 import com.metaself.app.ui.screen.letter.LettersViewModel
 import com.metaself.app.ui.screen.letter.UnreadLetterViewModel
+import com.metaself.app.domain.trainer.Conversation
+import com.metaself.app.ui.screen.trainer.CoachScreen
+import com.metaself.app.ui.screen.trainer.CoachViewModel
+import com.metaself.app.ui.screen.trainer.ConversationsScreen
+import com.metaself.app.ui.trainer.TalkWording
 import com.metaself.app.ui.screen.trainer.AboutMeScreen
 import com.metaself.app.ui.screen.trainer.AboutMeViewModel
 import com.metaself.app.ui.screen.trainer.AdjustPlanScreen
@@ -118,8 +123,14 @@ sealed class Destination(val route: String) {
         fun toLog(): String = "movement?${MovementViewModel.OPEN_LOG}=true"
     }
 
-    /** The trainer (D85). */
+    /** The coach screen (D157), which Trainer opens from everywhere. */
     data object Trainer : Destination("trainer")
+
+    /** Everything else (D157): the old Trainer page (D85). */
+    data object TrainerDetails : Destination("trainer/everything")
+
+    /** All conversations (D160). */
+    data object Conversations : Destination("trainer/conversations")
 
     /** Plan my next session (D86); with a week and a session, for that planned session — Get the steps (D123). */
     data object PlanSession : Destination(
@@ -142,8 +153,11 @@ sealed class Destination(val route: String) {
     /** D114: the reviewed sessions, a page of their own. */
     data object EarlierSessions : Destination("trainer/earlier")
 
-    /** Your trainer (D145): the conversation. */
-    data object Talk : Destination("trainer/talk")
+    /** One conversation (D145, D159); `ask` is a message the coach screen stored, asked about on opening. */
+    data object Talk : Destination("trainer/talk?${TalkViewModel.CONVERSATION}={${TalkViewModel.CONVERSATION}}&${TalkViewModel.ASK}={${TalkViewModel.ASK}}") {
+        fun of(conversation: String, ask: Long = TalkViewModel.NO_ASK): String =
+            "trainer/talk?${TalkViewModel.CONVERSATION}=${Uri.encode(conversation)}&${TalkViewModel.ASK}=$ask"
+    }
 
     /** About me (D90): the owner's note for the trainer. */
     data object AboutMe : Destination("trainer/about")
@@ -495,6 +509,43 @@ fun MetaSelfNavHost(
         composable(Destination.Trainer.route) {
             val trainerViewModel: TrainerViewModel = hiltViewModel()
             val trainerState by trainerViewModel.state.collectAsStateWithLifecycle()
+            val coachViewModel: CoachViewModel = hiltViewModel()
+            val coachState by coachViewModel.state.collectAsStateWithLifecycle()
+            LifecycleResumeEffect(trainerViewModel) {
+                trainerViewModel.lookedAt()
+                onPauseOrDispose { }
+            }
+            CoachScreen(
+                trainer = trainerState,
+                coach = coachState,
+                onBack = { navController.popBackStack() },
+                onEdit = coachViewModel::edit,
+                onSend = { coachViewModel.send { conversation, ask -> navController.navigate(Destination.Talk.of(conversation, ask)) } },
+                onAskAboutTheWeek = { coachViewModel.edit(TalkWording.ASK_ABOUT_THE_WEEK) },
+                onReview = { navController.navigate(Destination.ReviewSession.of(it)) },
+                onPlan = { navController.navigate(Destination.PlanSession.form()) },
+                onPlanAhead = { navController.navigate(Destination.EvaluatePlan.form()) },
+                onSeePlan = { navController.navigate(Destination.EvaluatePlan.running()) },
+                onReplyToNote = { navController.navigate(Destination.Talk.of(Conversation.note(it.writtenAtMillis))) },
+                onConversation = { navController.navigate(Destination.Talk.of(it)) },
+                onAllConversations = { navController.navigate(Destination.Conversations.route) },
+                onEverythingElse = { navController.navigate(Destination.TrainerDetails.route) },
+            )
+        }
+
+        composable(Destination.Conversations.route) {
+            val coachViewModel: CoachViewModel = hiltViewModel()
+            val coachState by coachViewModel.state.collectAsStateWithLifecycle()
+            ConversationsScreen(
+                coach = coachState,
+                onBack = { navController.popBackStack() },
+                onConversation = { navController.navigate(Destination.Talk.of(it)) },
+            )
+        }
+
+        composable(Destination.TrainerDetails.route) {
+            val trainerViewModel: TrainerViewModel = hiltViewModel()
+            val trainerState by trainerViewModel.state.collectAsStateWithLifecycle()
             // Left open past midnight, its last three days move to the new day on return.
             LifecycleResumeEffect(trainerViewModel) {
                 trainerViewModel.lookedAt()
@@ -515,7 +566,9 @@ fun MetaSelfNavHost(
                 // D132: Log a workout opens it with the sheet open for today; saving returns there.
                 onLogWorkout = { navController.navigate(Destination.Movement.toLog()) },
                 onAnswer = trainerViewModel::answer,
-                onTalk = { navController.navigate(Destination.Talk.route) },
+                // D157: back to the coach screen, which is what opened this page.
+                onTalk = { navController.popBackStack() },
+                onReplyToNote = { navController.navigate(Destination.Talk.of(Conversation.note(it.writtenAtMillis))) },
                 onSheet = { navController.navigate(Destination.Sheet.route) },
             )
         }
@@ -536,12 +589,21 @@ fun MetaSelfNavHost(
                 onGoBack = sheetViewModel::askGoBack,
                 onConfirmGoBack = sheetViewModel::confirmGoBack,
                 onCancelGoBack = sheetViewModel::cancelGoBack,
-                // Full conversation › opens Your trainer (D145).
-                onConversation = { navController.navigate(Destination.Talk.route) },
+                // D160: Full conversation › opens every conversation.
+                onConversation = { navController.navigate(Destination.Conversations.route) },
             )
         }
 
-        composable(Destination.Talk.route) {
+        composable(
+            Destination.Talk.route,
+            arguments = listOf(
+                navArgument(TalkViewModel.CONVERSATION) { type = NavType.StringType },
+                navArgument(TalkViewModel.ASK) {
+                    type = NavType.LongType
+                    defaultValue = TalkViewModel.NO_ASK
+                },
+            ),
+        ) {
             val talkViewModel: TalkViewModel = hiltViewModel()
             val talkState by talkViewModel.state.collectAsStateWithLifecycle()
             TalkScreen(
@@ -556,6 +618,9 @@ fun MetaSelfNavHost(
                 onCancelDelete = talkViewModel::cancelDelete,
                 // D146: a letter's card opens its page.
                 onLetter = { navController.navigate(Destination.Letter.of(it)) },
+                onAskDeleteAll = talkViewModel::askDeleteAll,
+                onConfirmDeleteAll = talkViewModel::confirmDeleteAll,
+                onCancelDeleteAll = talkViewModel::cancelDeleteAll,
             )
         }
 

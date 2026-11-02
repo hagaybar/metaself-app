@@ -1,5 +1,6 @@
 package com.metaself.app.ui.screen.trainer
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
@@ -154,13 +155,69 @@ class TalkViewModelTest {
         assertThat(viewModel.state.value.confirmingDelete).isNull()
     }
 
-    private fun TestScope.watched(): TalkViewModel {
+    /** D159: a message the coach screen stored is asked about on opening, and answered in its conversation. */
+    @Test
+    fun `a conversation opened to ask answers that message`() = runTest {
+        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        val asked = messages.addOwn("Invented question.", now, CONVERSATION)
+
+        val viewModel = watched(ask = asked)
+        advanceUntilIdle()
+
+        assertThat(messages.messages.value.map { it.conversation }.distinct()).containsExactly(CONVERSATION)
+        assertThat(messages.messages.value.first { it.id == asked }.answered).isTrue()
+        assertThat(viewModel.state.value.thread).hasSize(2)
+    }
+
+    /** D159: it shows only its own conversation, and sends into it. */
+    @Test
+    fun `only its own conversation, and Send stays in it`() = runTest {
+        messages.addOwn("Invented, another subject.", now, "talk:9")
+        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        val viewModel = watched()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.thread).isEmpty()
+
+        viewModel.edit("Invented question.")
+        viewModel.send()
+        advanceUntilIdle()
+
+        assertThat(viewModel.state.value.thread.map { it.conversation }.distinct()).containsExactly(CONVERSATION)
+        assertThat(viewModel.state.value.thread).hasSize(2)
+    }
+
+    /** D159: Delete this conversation asks first, removes this conversation's messages and no other's, and leaves. */
+    @Test
+    fun `Delete this conversation asks first and takes only this one`() = runTest {
+        messages.addOwn("Invented, another subject.", now, "talk:9")
+        messages.addOwn("Invented question.", now, CONVERSATION)
+        val viewModel = watched()
+        advanceUntilIdle()
+        assertThat(viewModel.state.value.canDeleteAll).isTrue()
+
+        viewModel.confirmDeleteAll()
+        advanceUntilIdle()
+        assertThat(messages.messages.value).hasSize(2)
+
+        viewModel.askDeleteAll()
+        viewModel.confirmDeleteAll()
+        advanceUntilIdle()
+
+        assertThat(messages.messages.value.map { it.conversation }).containsExactly("talk:9")
+        assertThat(viewModel.state.value.deletedAll).isTrue()
+    }
+
+    private fun TestScope.watched(ask: Long = TalkViewModel.NO_ASK): TalkViewModel {
         val talk = TalkToTheTrainer(
             TrainerScreens.ask(FakeMovementRecord(), store, trainer), trainer, messages, store, FakeLetterStore(), InMemoryWeekNoteStore(), Now { now },
         )
-        val make = { TalkViewModel(talk, FakeAiSettings(), problems, outliving) }
+        val make = { TalkViewModel(SavedStateHandle(mapOf(TalkViewModel.CONVERSATION to CONVERSATION, TalkViewModel.ASK to ask)), talk, FakeAiSettings(), problems, outliving) }
         val viewModel = ViewModelProvider(ViewModelStore(), TrainerScreens.factory(make))[TalkViewModel::class.java]
         backgroundScope.launch { viewModel.state.collect {} }
         return viewModel
+    }
+
+    private companion object {
+        const val CONVERSATION = "talk:1"
     }
 }

@@ -54,10 +54,10 @@ class TrainerScreenRenderTest {
     fun tearDown() = render.dispose()
 
     @Test
-    fun `the screen is called Trainer and has a way back`() {
+    fun `the screen is called Everything else and has a way back`() {
         val texts = draw(page())
 
-        assertThat(texts).contains("Trainer")
+        assertThat(texts).contains("Everything else")
         assertThat(texts).contains("Back")
     }
 
@@ -276,7 +276,7 @@ class TrainerScreenRenderTest {
     @Test
     fun `the coach's note's Reply opens the conversation`() {
         var talked = 0
-        draw(page(note = NOTE), onTalk = { talked++ })
+        draw(page(note = NOTE), onReplyToNote = { talked++ })
 
         assertThat(render.roleOf("Reply ›")).isEqualTo(Role.Button)
         render.click("Reply ›")
@@ -352,6 +352,7 @@ class TrainerScreenRenderTest {
         onAnswer: (Long, Boolean) -> Unit = { _, _ -> },
         onLogWorkout: () -> Unit = {},
         onTalk: () -> Unit = {},
+        onReplyToNote: (WeekNote) -> Unit = {},
         onSheet: () -> Unit = {},
     ): List<String> = render.texts {
         TrainerScreen(
@@ -368,6 +369,7 @@ class TrainerScreenRenderTest {
             onAnswer = onAnswer,
             onLogWorkout = onLogWorkout,
             onTalk = onTalk,
+            onReplyToNote = onReplyToNote,
             onSheet = onSheet,
         )
     }

@@ -860,8 +860,8 @@ class BackupRoundTripTest {
     /** D148: the conversation goes out with the file and comes back as it was, ids and all; a version 10 file leaves none. */
     @Test
     fun `the conversation comes back as it was, and an older file leaves none`() = runTest {
-        val asked = TrainerMessageEntity(5, 1_000, true, "Invented question.", null, true, null)
-        val reply = TrainerMessageEntity(6, 2_000, false, "Invented reply.", "m", false, 5)
+        val asked = TrainerMessageEntity(5, 1_000, true, "Invented question.", null, true, null, "talk:1")
+        val reply = TrainerMessageEntity(6, 2_000, false, "Invented reply.", "m", false, 5, "talk:1")
         db.trainerDao().insertMessages(listOf(asked, reply))
 
         val file = BackupCodec.decode(BackupCodec.encode(repository().export(nowMillis = 5_000)))!!

@@ -64,7 +64,7 @@ class TalkToTheTrainerTest {
     fun `a message is stored, asked about once, and its reply stored against it`() = runTest {
         trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
 
-        val id = talk().say("  Invented question.  ")
+        val id = talk().say("  Invented question.  ", "talk:1")
         val outcome = talk().answer(id)
 
         assertThat(outcome).isEqualTo(TalkToTheTrainer.Talked.Replied)
@@ -87,7 +87,7 @@ class TalkToTheTrainerTest {
         sheets.add(NOW - HOUR, listOf(fact), SheetMadeBy.REWRITE, "a-model")
         trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
 
-        talk().answer(talk().say("Invented question."))
+        talk().answer(talk().say("Invented question.", "talk:1"))
 
         assertThat(trainer.asked.single().sheet).containsExactly(fact)
     }
@@ -95,7 +95,7 @@ class TalkToTheTrainerTest {
     @Test
     fun `a failed request keeps the message not answered, and trying again answers it`() = runTest {
         trainer.talks += TrainerReply.Failed(EstimateResult.Unreachable())
-        val id = talk().say("Invented question.")
+        val id = talk().say("Invented question.", "talk:1")
 
         assertThat(talk().answer(id)).isEqualTo(TalkToTheTrainer.Talked.Failed(EstimateResult.Unreachable()))
         assertThat(messages.observe().first().single().answered).isFalse()
@@ -114,8 +114,8 @@ class TalkToTheTrainerTest {
 
     @Test
     fun `a blank message is refused, and a long one is cut`() = runTest {
-        assertThat(runCatching { talk().say("   ") }.exceptionOrNull()).isInstanceOf(IllegalArgumentException::class.java)
-        val id = talk().say("a".repeat(2_500))
+        assertThat(runCatching { talk().say("   ", "talk:1") }.exceptionOrNull()).isInstanceOf(IllegalArgumentException::class.java)
+        val id = talk().say("a".repeat(2_500), "talk:1")
         assertThat(messages.message(id)!!.text).hasLength(Conversation.MAX_MESSAGE)
     }
 
@@ -124,10 +124,10 @@ class TalkToTheTrainerTest {
     fun `deleting a message removes the reply it got`() = runTest {
         trainer.talks += TrainerReply.Answered("Invented first reply.", "a-model")
         trainer.talks += TrainerReply.Answered("Invented second reply.", "a-model")
-        val first = talk().say("Invented first.")
+        val first = talk().say("Invented first.", "talk:1")
         talk().answer(first)
         now += 60_000
-        val second = talk().say("Invented second.")
+        val second = talk().say("Invented second.", "talk:1")
         talk().answer(second)
 
         talk().delete(first)
@@ -145,7 +145,7 @@ class TalkToTheTrainerTest {
             TrainerReview(2, workoutId = 5, planId = null, felt = null, words = "Invented."),
         )
         letters.letters.value = listOf(aWeeklyLetter(weekMonday = MONDAY - 7).copy(createdAtMillis = NOW - 3 * HOUR))
-        val id = talk().say("Invented question.")
+        val id = talk().say("Invented question.", "talk:1")
 
         val thread = talk().observeThread().first()
 
@@ -165,10 +165,10 @@ class TalkToTheTrainerTest {
     /** D147: the conversation sent is the window — nothing older than 14 days, the oldest dropped past the cap. */
     @Test
     fun `the request carries the last 14 days, the oldest dropped past the cap`() = runTest {
-        messages.addOwn("Invented, fifteen days ago.", NOW - 15 * DAY)
-        messages.addOwn("b".repeat(1_000), NOW - 3 * DAY)
-        repeat(12) { messages.addOwn("c".repeat(2_000), NOW - 2 * DAY + it) }
-        val id = talk().say("Invented question.")
+        messages.addOwn("Invented, fifteen days ago.", NOW - 15 * DAY, "talk:0")
+        messages.addOwn("b".repeat(1_000), NOW - 3 * DAY, "talk:0")
+        repeat(12) { messages.addOwn("c".repeat(2_000), NOW - 2 * DAY + it, "talk:0") }
+        val id = talk().say("Invented question.", "talk:1")
         trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
 
         talk().answer(id)
@@ -186,7 +186,7 @@ class TalkToTheTrainerTest {
         val id = programmes.add(Programme(0, (MONDAY - 15) * DAY + 12 * HOUR, ProgrammeAsk(2, 2), EVALUATION, WEEKS, "a-model"))
         programmes.keep(id, MONDAY - 7, TEST_EPOCH_DAY - 7)
         weekNotes.note.value = WeekNote("Invented week note.", NOW - HOUR, MONDAY, WeekNoteSource.TRAINER)
-        val message = talk().say("Invented question.")
+        val message = talk().say("Invented question.", "talk:1")
 
         val question = talk().question(messages.message(message)!!)
 
@@ -200,9 +200,65 @@ class TalkToTheTrainerTest {
 
     @Test
     fun `with no plan running, none goes`() = runTest {
-        val message = talk().say("Invented question.")
+        val message = talk().say("Invented question.", "talk:1")
 
         assertThat(talk().question(messages.message(message)!!).plan).isNull()
+    }
+
+    /** D159: the box begins a new conversation each time; a reply stays in its message's. */
+    @Test
+    fun `the box begins a new conversation, and a reply stays in it`() = runTest {
+        trainer.talks += TrainerReply.Answered("Invented reply.", "a-model")
+        val (first, asked) = talk().begin("Invented question.")
+        talk().answer(asked)
+        now += 1_000
+        val (second, _) = talk().begin("Invented other subject.")
+
+        assertThat(second).isNotEqualTo(first)
+        assertThat(messages.messages.value.filter { it.conversation == first }.map { it.text })
+            .containsExactly("Invented question.", "Invented reply.").inOrder()
+        assertThat(talk().observeConversations().first().map { it.key }).containsExactly(second, first).inOrder()
+    }
+
+    /** D159: one memory — another conversation's words are sent too, and only this one's are marked as this one's. */
+    @Test
+    fun `a reply reads the other conversations and marks this one`() = runTest {
+        messages.addOwn("Invented, another subject.", NOW - DAY, "talk:9")
+        val id = talk().say("Invented question.", "talk:1")
+
+        val question = talk().question(messages.message(id)!!)
+
+        assertThat(question.conversation.map { it.text to it.thisConversation })
+            .containsExactly("Invented, another subject." to false, "Invented question." to true).inOrder()
+    }
+
+    /** D159: a conversation being written in is read whole, however old it is. */
+    @Test
+    fun `this conversation is read whatever its age`() = runTest {
+        messages.addOwn("Invented, long ago, here.", NOW - 40 * DAY, "talk:1")
+        messages.addOwn("Invented, long ago, elsewhere.", NOW - 40 * DAY, "talk:9")
+        val id = talk().say("Invented question.", "talk:1")
+
+        val question = talk().question(messages.message(id)!!)
+
+        assertThat(question.conversation.map { it.text }).containsExactly("Invented, long ago, here.", "Invented question.").inOrder()
+    }
+
+    /** D159: a note's conversation shows the note before anything is stored, and stores it with the first message. */
+    @Test
+    fun `the note is shown, then stored with the first message`() = runTest {
+        val note = WeekNote("Invented note.", NOW - DAY, MovementWeek.mondayOf(TEST_EPOCH_DAY), WeekNoteSource.TRAINER)
+        weekNotes.keep(note)
+        val key = Conversation.note(note.writtenAtMillis)
+
+        assertThat(talk().observeConversation(key).first().map { Conversation.text(it) }).containsExactly("Invented note.")
+        assertThat(messages.messages.value).isEmpty()
+
+        talk().say("Invented answer.", key)
+        talk().say("Invented more.", key)
+
+        assertThat(messages.messages.value.map { it.text to it.fromOwner })
+            .containsExactly("Invented note." to false, "Invented answer." to true, "Invented more." to true).inOrder()
     }
 
     private fun talk() = TalkToTheTrainer(ask(), trainer, messages, store, letters, weekNotes, Now { now })

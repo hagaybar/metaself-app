@@ -411,8 +411,8 @@ class BackupRestoreOrderTest {
     /** D148: the conversation is replaced inside the transaction, each message with its id, one per id. Invented. */
     @Test
     fun `the conversation is emptied and restored with its ids, and counted`() = runTest {
-        val asked = BackupTrainerMessage(3, 1_000, true, "Invented question.", answered = true)
-        val reply = BackupTrainerMessage(4, 2_000, false, "Invented reply.", model = "m", replyTo = 3)
+        val asked = BackupTrainerMessage(3, 1_000, true, "Invented question.", answered = true, conversation = "talk:1")
+        val reply = BackupTrainerMessage(4, 2_000, false, "Invented reply.", model = "m", replyTo = 3, conversation = "talk:1")
         val file = aFile().copy(trainerMessages = listOf(asked, reply, asked.copy(text = "Invented duplicate.")))
 
         val result = restorer().restore(file)
@@ -420,11 +420,25 @@ class BackupRestoreOrderTest {
         @Suppress("UNCHECKED_CAST")
         val rows = written.getValue("trainer.insertMessages").first() as List<TrainerMessageEntity>
         assertThat(rows).containsExactly(
-            TrainerMessageEntity(3, 1_000, true, "Invented question.", null, true, null),
-            TrainerMessageEntity(4, 2_000, false, "Invented reply.", "m", false, 3),
+            TrainerMessageEntity(3, 1_000, true, "Invented question.", null, true, null, "talk:1"),
+            TrainerMessageEntity(4, 2_000, false, "Invented reply.", "m", false, 3, "talk:1"),
         ).inOrder()
         assertThat(result.trainerMessages).isEqualTo(2)
         assertThat(log).containsAtLeast("trainer.deleteMessages", "trainer.insertMessages").inOrder()
+    }
+
+    /** D159: a file from before conversations: each message in its local day's, a reply with its message. Invented. */
+    @Test
+    fun `a file without conversations groups its messages by day`() = runTest {
+        val asked = BackupTrainerMessage(3, 1_000, true, "Invented question.", answered = true)
+        val reply = BackupTrainerMessage(4, 1_000 + 2 * 86_400_000L, false, "Invented reply.", model = "m", replyTo = 3)
+
+        restorer().restore(aFile().copy(trainerMessages = listOf(asked, reply)))
+
+        @Suppress("UNCHECKED_CAST")
+        val rows = written.getValue("trainer.insertMessages").first() as List<TrainerMessageEntity>
+        val day = "day:" + java.time.Instant.ofEpochMilli(1_000).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        assertThat(rows.map { it.conversation }).containsExactly(day, day)
     }
 
     /** D150: the sheet's versions are replaced inside the transaction, each with its id, one per id. Invented. */

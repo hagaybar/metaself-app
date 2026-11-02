@@ -79,6 +79,9 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+import java.time.ZoneId
+import com.metaself.app.domain.trainer.TrainerMessage
+import com.metaself.app.domain.trainer.Conversation
 
 /**
  * What a restore did, so the owner is told in numbers rather than reassured in adjectives.
@@ -512,7 +515,7 @@ class BackupRepository @Inject constructor(
             // D104: one per week (the table's unique index), numbered afresh.
             letters = backup.weeklyLetters.distinctBy { it.weekMonday }.map { it.toEntity() },
             // D148: with their ids, which a reply's replyTo names; one per id.
-            messages = backup.trainerMessages.distinctBy { it.id }.map { it.toEntity() },
+            messages = backup.trainerMessages.distinctBy { it.id }.withConversations().map { it.toEntity() },
             // D150: with their ids, which a version's restoredFrom names; one per id.
             sheets = backup.trainerSheets.distinctBy { it.id }.map { it.toEntity() },
         )
@@ -857,9 +860,15 @@ private fun WeeklyLetterEntity.toBackup() = BackupWeeklyLetter(
     weekMonday, createdAtMillis, figures, letter, model, bandDataUntil, readAtMillis,
 )
 
-private fun TrainerMessageEntity.toBackup() = BackupTrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo)
+private fun TrainerMessageEntity.toBackup() = BackupTrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo, conversation)
 
-private fun BackupTrainerMessage.toEntity() = TrainerMessageEntity(id, atMillis, fromOwner, text, model, answered, replyTo)
+/** D159: a message from a file before version 13 goes in its local day's conversation, as the upgrade put them. */
+private fun List<BackupTrainerMessage>.withConversations(): List<BackupTrainerMessage> {
+    val byDay = Conversation.byDay(map { TrainerMessage(it.id, it.atMillis, it.fromOwner, it.text, it.model, it.answered, it.replyTo) }, ZoneId.systemDefault())
+    return map { it.copy(conversation = it.conversation ?: byDay.getValue(it.id)) }
+}
+
+private fun BackupTrainerMessage.toEntity() = TrainerMessageEntity(id, atMillis, fromOwner, text, model, answered, replyTo, conversation.orEmpty())
 
 private fun TrainerSheetEntity.toBackup() = BackupTrainerSheet(id, atMillis, facts, madeBy, model, restoredFrom)
 

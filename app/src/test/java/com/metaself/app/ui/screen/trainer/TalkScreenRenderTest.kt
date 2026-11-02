@@ -39,7 +39,7 @@ class TalkScreenRenderTest {
         val texts = draw(TalkViewModel.State(loaded = true))
 
         assertThat(texts).containsAtLeast("Your trainer", "Back", TalkWording.AI, TalkWording.EMPTY)
-        assertThat(texts.any { it.startsWith("Sends to OpenAI, with your key: your message and the last 14 days of this conversation") }).isTrue()
+        assertThat(texts.any { it.startsWith("Sends to OpenAI, with your key: your message, this conversation and your others of the last 14 days") }).isTrue()
     }
 
     /** D146: the letter as a card, the feedback in full under its label, then the messages — each in its place. */

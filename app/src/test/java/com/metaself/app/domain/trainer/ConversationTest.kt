@@ -122,4 +122,45 @@ class ConversationTest {
             "Invented next week.", "Invented close.",
         )
     }
+
+    /** D159: an older file's messages by local day; a reply after midnight stays with the message it answers. */
+    @Test
+    fun `an older file's messages go by local day, a reply with its message`() {
+        val zone = java.time.ZoneOffset.UTC
+        val day = 86_400_000L
+        val before = day * 20_699 + 1_000
+        val keys = Conversation.byDay(
+            listOf(
+                TrainerMessage(1, before, true, "Invented.", null, true),
+                TrainerMessage(2, before + day, false, "Invented, after midnight.", "m", false, replyTo = 1),
+                TrainerMessage(3, before + day, true, "Invented next day.", null, false),
+                TrainerMessage(4, before + day, false, "Invented, its message gone.", "m", false, replyTo = 99),
+            ),
+            zone,
+        )
+
+        assertThat(keys).containsExactly(1L, "day:2026-09-03", 2L, "day:2026-09-03", 3L, "day:2026-09-04", 4L, "day:2026-09-04")
+    }
+
+    /** D159: a conversation's summary, and the newest activity first. */
+    @Test
+    fun `conversations list the newest activity first and say what is not answered`() {
+        val thread = Conversation.thread(
+            listOf(
+                TrainerMessage(1, 1_000, true, "Invented first.", null, true, conversation = "talk:1"),
+                TrainerMessage(2, 2_000, false, "Invented reply.", "m", false, replyTo = 1, conversation = "talk:1"),
+                TrainerMessage(3, 3_000, true, "Invented second.", null, false, conversation = "talk:3"),
+            ),
+            emptyList(),
+            emptyList(),
+        )
+
+        val summaries = Conversation.summaries(thread)
+
+        assertThat(summaries.map { it.key }).containsExactly("talk:3", "talk:1").inOrder()
+        assertThat(summaries[0].notAnswered).isTrue()
+        assertThat(summaries[1].notAnswered).isFalse()
+        assertThat(summaries[1].firstWords).isEqualTo("Invented first.")
+        assertThat(summaries[1].lastWords).isEqualTo("Invented reply.")
+    }
 }
