@@ -169,6 +169,12 @@ interface TrainerDao {
     @Query("SELECT * FROM trainer_messages ORDER BY atMillis, id")
     fun observeMessages(): Flow<List<TrainerMessageEntity>>
 
+    @Query("SELECT * FROM trainer_messages WHERE replyTo = :to AND fromOwner = 0 ORDER BY id DESC LIMIT 1")
+    suspend fun replyTo(to: Long): TrainerMessageEntity?
+
+    @Query("UPDATE trainer_messages SET proposal = :proposal WHERE id = :id")
+    suspend fun setProposal(id: Long, proposal: String): Int
+
     @Query("SELECT * FROM trainer_messages WHERE id = :id")
     suspend fun message(id: Long): TrainerMessageEntity?
 

@@ -23,6 +23,7 @@ data class TrainerMessage(
     val replyTo: Long? = null,
     val conversation: String = "",
     val opened: String? = null,
+    val proposal: Proposal? = null,
 )
 
 /** What the thread shows (D146): the messages, and the feedback and letters in their place — never copied. */
@@ -201,7 +202,10 @@ object Conversation {
         val at = LocalDateTime.ofInstant(Instant.ofEpochMilli(item.atMillis), zone)
         val here = item.conversation == current
         return when (item) {
-            is ThreadItem.Said -> ConversationLine(at, item.message.fromOwner, LineKind.MESSAGE, text(item), thisConversation = here)
+            is ThreadItem.Said -> {
+                val note = item.message.proposal?.let(Proposals::note)
+                ConversationLine(at, item.message.fromOwner, LineKind.MESSAGE, if (note == null) text(item) else text(item) + "\n" + note, thisConversation = here)
+            }
             is ThreadItem.AfterSession -> ConversationLine(at, false, LineKind.SESSION_FEEDBACK, text(item), item.kind, item.minutes, thisConversation = here)
             is ThreadItem.Letter -> ConversationLine(at, false, LineKind.LETTER, text(item), letterWeek = item.weekMonday, thisConversation = here)
         }

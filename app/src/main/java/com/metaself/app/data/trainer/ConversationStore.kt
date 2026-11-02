@@ -1,6 +1,8 @@
 package com.metaself.app.data.trainer
 
 import com.metaself.app.data.day.DatabaseTransaction
+import com.metaself.app.domain.trainer.Proposal
+import com.metaself.app.domain.trainer.Proposals
 import com.metaself.app.domain.trainer.TrainerMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -27,7 +29,13 @@ interface ConversationStore {
      * answered — one transaction, so a reply is never stored beside a message still marked not answered. [opened] is
      * what it read (D163). Its id.
      */
-    suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String? = null): Long
+    suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String? = null, proposal: Proposal? = null): Long
+
+    /** D164: the reply to the owner's message [to], if it has one. */
+    suspend fun replyTo(to: Long): TrainerMessage?
+
+    /** D164: how far the change named by the reply [id] has got. */
+    suspend fun setProposal(id: Long, proposal: Proposal)
 
     /** D145: the owner's message [id] and the reply it got; a reply's id deletes nothing. */
     suspend fun deleteOwn(id: Long)
@@ -51,12 +59,18 @@ class RoomConversationStore @Inject constructor(
     override suspend fun addNote(text: String, atMillis: Long, conversation: String): Long =
         dao.insertMessage(TrainerMessageEntity(0, atMillis, fromOwner = false, text = text, model = null, answered = false, replyTo = null, conversation = conversation))
 
-    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String?): Long {
+    override suspend fun replyTo(to: Long): TrainerMessage? = dao.replyTo(to)?.toMessage()
+
+    override suspend fun setProposal(id: Long, proposal: Proposal) {
+        check(dao.setProposal(id, Proposals.encode(proposal)) == 1) { "the reply is gone" }
+    }
+
+    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String?, proposal: Proposal?): Long {
         var id = 0L
         transaction.run {
             check(dao.markAnswered(to) == 1) { "the message answered is not the owner's, or is gone" }
             val conversation = checkNotNull(dao.message(to)) { "the message answered is gone" }.conversation
-            id = dao.insertMessage(TrainerMessageEntity(0, atMillis, fromOwner = false, text = text, model = model, answered = false, replyTo = to, conversation = conversation, opened = opened))
+            id = dao.insertMessage(TrainerMessageEntity(0, atMillis, fromOwner = false, text = text, model = model, answered = false, replyTo = to, conversation = conversation, opened = opened, proposal = proposal?.let(Proposals::encode)))
         }
         return id
     }
@@ -70,4 +84,4 @@ class RoomConversationStore @Inject constructor(
     }
 }
 
-fun TrainerMessageEntity.toMessage(): TrainerMessage = TrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo, conversation, opened)
+fun TrainerMessageEntity.toMessage(): TrainerMessage = TrainerMessage(id, atMillis, fromOwner, text, model, answered, replyTo, conversation, opened, Proposals.decode(proposal))

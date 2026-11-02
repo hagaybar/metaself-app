@@ -18,6 +18,7 @@ import com.metaself.app.data.day.MIGRATION_14_15
 import com.metaself.app.data.day.MIGRATION_15_16
 import com.metaself.app.data.day.MIGRATION_16_17
 import com.metaself.app.data.day.MIGRATION_17_18
+import com.metaself.app.data.day.MIGRATION_18_19
 import com.metaself.app.data.day.MetaSelfDatabase
 import org.junit.Rule
 import org.junit.Test
@@ -937,6 +938,25 @@ class MigrationTest {
             assertThat(cursor.moveToFirst()).isTrue()
             assertThat(cursor.getString(0)).isEqualTo("Invented.")
             assertThat(cursor.isNull(1)).isTrue()
+        }
+        migrated.close()
+    }
+
+    /** D164: older messages keep their words and have no card. */
+    @Test
+    fun `version 19 adds the change a reply names, empty on every older message`() {
+        assumeSqliteRuntime()
+        helper.createDatabase(TEST_DB, 18).use { db ->
+            db.execSQL("INSERT INTO trainer_messages (id, atMillis, fromOwner, text, model, answered, replyTo, conversation, opened) VALUES (1, 1000, 0, 'Invented.', 'm', 0, NULL, 'talk:1', '')")
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 19, true, MIGRATION_18_19)
+
+        migrated.query("SELECT text, opened, proposal FROM trainer_messages").use { cursor ->
+            assertThat(cursor.moveToFirst()).isTrue()
+            assertThat(cursor.getString(0)).isEqualTo("Invented.")
+            assertThat(cursor.getString(1)).isEqualTo("")
+            assertThat(cursor.isNull(2)).isTrue()
         }
         migrated.close()
     }

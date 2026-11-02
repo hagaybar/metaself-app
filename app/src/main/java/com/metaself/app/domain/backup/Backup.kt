@@ -126,8 +126,11 @@ data class Backup(
          *
          * Version 14 adds what a reply read (D163), [BackupTrainerMessage.opened], optional: a file without it restores
          * with no Read line under its replies, as they were written.
+         *
+         * Version 15 adds the change a reply names (D164), [BackupTrainerMessage.proposal], optional: a file without it
+         * restores with no card under its replies.
          */
-        const val CURRENT_VERSION = 14
+        const val CURRENT_VERSION = 15
 
         /** The first version, which had no foods and no meals of its own. */
         const val FIRST_VERSION = 1
@@ -402,6 +405,7 @@ data class BackupTrainerMessage(
     @SerialName("reply_to") val replyTo: Long? = null,
     val conversation: String? = null,
     val opened: String? = null,
+    val proposal: String? = null,
 )
 
 /**

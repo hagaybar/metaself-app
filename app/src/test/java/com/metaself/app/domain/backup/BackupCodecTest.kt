@@ -134,8 +134,8 @@ class BackupCodecTest {
     }
 
     @Test
-    fun `the format is version 14`() {
-        assertThat(Backup.CURRENT_VERSION).isEqualTo(14)
+    fun `the format is version 15`() {
+        assertThat(Backup.CURRENT_VERSION).isEqualTo(15)
     }
 
     /** D163: what a reply read travels with it, and a file without it reads as a reply with no Read line. */

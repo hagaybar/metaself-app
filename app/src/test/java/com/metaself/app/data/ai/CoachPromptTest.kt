@@ -104,14 +104,18 @@ class CoachPromptTest {
     }
 
     @Test
-    fun `the reply's shape is the strict schema of open, reply and remember`() {
+    fun `the reply's shape is the strict schema of open, reply, remember and propose`() {
         val body = Json.parseToJsonElement(CoachPrompt.body("a-model", request(), profile = RequestProfile.DETERMINISTIC)).jsonObject
 
         val format = body.getValue("response_format").jsonObject.getValue("json_schema").jsonObject
         assertThat(format.getValue("name").jsonPrimitive.content).isEqualTo("coach_reply")
         assertThat(format.getValue("strict").jsonPrimitive.content).isEqualTo("true")
         val properties = format.getValue("schema").jsonObject.getValue("properties").jsonObject
-        assertThat(properties.keys).containsExactly("open", "reply", "remember")
+        assertThat(properties.keys).containsExactly("open", "reply", "remember", "propose")
+        // D163, D164: the only changes that can be named; none is the calorie target, a food record or a weight.
+        val propose = properties.getValue("propose").jsonObject.getValue("properties").jsonObject
+        assertThat(propose.getValue("kind").jsonObject.getValue("enum").jsonArray.map { it.jsonPrimitive.content })
+            .containsExactly("none", "change_plan", "new_plan", "stop_plan", "fill_week", "next_block", "add_fact", "change_fact", "remove_fact")
         val open = properties.getValue("open").jsonObject.getValue("items").jsonObject.getValue("properties").jsonObject
         assertThat(open.keys).containsExactly("drawer", "from", "to", "words")
         val remember = properties.getValue("remember").jsonObject.getValue("items").jsonObject.getValue("properties").jsonObject
@@ -148,7 +152,8 @@ class CoachPromptTest {
         assertThat(system).contains("Never call it breakfast, lunch or dinner")
         assertThat(system).contains("medication, allergies, and medical conditions")
         assertThat(system).contains("after answering what they asked and never instead of it")
-        assertThat(system).contains("never say or imply that you have changed it")
+        assertThat(system).contains("nothing changes until they press it")
+        assertThat(system).contains("never say or imply that you have changed anything")
         assertThat(CoachPrompt.INSTRUCTIONS).contains(TrainerPrompt.OWN_CHOICE)
         assertThat(CoachPrompt.INSTRUCTIONS).doesNotContain(TrainerPrompt.WEEK_NOTE)
     }

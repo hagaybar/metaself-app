@@ -9,6 +9,9 @@ import com.metaself.app.domain.letter.LetterTexts
 import com.metaself.app.domain.movement.WorkoutKind
 import com.metaself.app.domain.trainer.Feedback
 import com.metaself.app.domain.trainer.PlanFollowed
+import com.metaself.app.domain.trainer.Proposal
+import com.metaself.app.domain.trainer.ProposalKind
+import com.metaself.app.domain.trainer.ProposalState
 import com.metaself.app.domain.trainer.ThreadItem
 import com.metaself.app.domain.trainer.TrainerMessage
 import com.metaself.app.ui.ComposeRender
@@ -40,6 +43,33 @@ class TalkScreenRenderTest {
 
         assertThat(texts).containsAtLeast("Your trainer", "Back", TalkWording.AI, TalkWording.EMPTY)
         assertThat(texts).contains(TalkWording.SENT_TO_OPENAI)
+    }
+
+    /** D164: a ready card shows the change, Confirm and Not now, and each calls back with its reply. */
+    @Test
+    fun `a ready card shows the change and asks for Confirm`() {
+        val proposal = Proposal(ProposalKind.STOP_PLAN, ProposalState.READY, title = "Invented plan", programmeId = 1)
+        val message = TrainerMessage(7, 1_000, false, "Invented reply.", "a-model", false, replyTo = 6, conversation = "talk:1", proposal = proposal)
+        var confirmed: Long? = null
+        val texts = render.texts(heightPx = 4_000) {
+            run { TalkScreen(TalkViewModel.State(thread = listOf(ThreadItem.Said(message)), loaded = true), {}, {}, {}, {}, {}, {}, {}, {}, {}, onConfirmProposal = { confirmed = it }) }
+        }
+
+        assertThat(texts).containsAtLeast("Stop your plan: Invented plan", "Confirm", "Not now")
+        render.click("Confirm")
+        assertThat(confirmed).isEqualTo(7L)
+    }
+
+    /** D164: a card that is over says how it ended, with no Confirm. */
+    @Test
+    fun `a card that is over has no Confirm`() {
+        val message = TrainerMessage(7, 1_000, false, "Invented reply.", "a-model", false, replyTo = 6, conversation = "talk:1", proposal = Proposal(ProposalKind.STOP_PLAN, ProposalState.OUT_OF_DATE))
+        val texts = render.texts(heightPx = 4_000) {
+            run { TalkScreen(TalkViewModel.State(thread = listOf(ThreadItem.Said(message)), loaded = true), {}, {}, {}, {}, {}, {}, {}, {}, {}) }
+        }
+
+        assertThat(texts).contains(TalkWording.OUT_OF_DATE)
+        assertThat(texts).doesNotContain("Confirm")
     }
 
     /** D163: under a coach's reply, small, what the phone says it read; nothing under a reply from before the file. */

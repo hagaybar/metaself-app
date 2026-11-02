@@ -4,24 +4,39 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelStore
 import com.google.common.truth.Truth.assertThat
+import com.metaself.app.data.diagnostics.ProblemLog
 import com.metaself.app.data.health.FakeMovementRecord
 import com.metaself.app.data.letter.FakeLetterStore
-import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.profile.FakeProfileRepository
+import com.metaself.app.data.time.CurrentYear
 import com.metaself.app.data.time.Now
 import com.metaself.app.data.time.Today
+import com.metaself.app.data.trainer.AskTheTrainer
+import com.metaself.app.data.trainer.CoachActions
 import com.metaself.app.data.trainer.FakeCoachModel
-import com.metaself.app.data.trainer.askTheCoach
-import com.metaself.app.data.trainer.InMemorySheetStore
+import com.metaself.app.data.trainer.FakeProgrammeStore
+import com.metaself.app.data.trainer.FakeTrainer
 import com.metaself.app.data.trainer.FakeTrainerStore
+import com.metaself.app.data.trainer.InMemoryAboutMeStore
 import com.metaself.app.data.trainer.InMemoryConversationStore
+import com.metaself.app.data.trainer.InMemorySheetStore
 import com.metaself.app.data.trainer.InMemoryWeekNoteStore
 import com.metaself.app.data.trainer.TalkToTheTrainer
+import com.metaself.app.data.trainer.askTheCoach
+import com.metaself.app.data.weight.InMemoryWeightRepository
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.day.TEST_EPOCH_DAY
+import com.metaself.app.domain.profile.TEST_YEAR
+import com.metaself.app.domain.profile.aProfile
+import com.metaself.app.domain.trainer.CoachTurn
+import com.metaself.app.domain.trainer.Proposal
+import com.metaself.app.domain.trainer.ProposalKind
+import com.metaself.app.domain.trainer.ProposalState
 import com.metaself.app.domain.trainer.ThreadItem
 import com.metaself.app.domain.trainer.TrainerReply
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.RecordingProblemLog
+import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -38,7 +53,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.LocalDate
 
 /** Your trainer (D145, D146): send, a failure that loses nothing, Try again, delete. Every word is invented. */
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -59,6 +73,28 @@ class TalkViewModelTest {
     fun tearDown() {
         outliving.cancel()
         Dispatchers.resetMain()
+    }
+
+    /** D164: the change a reply names is prepared under the same tap; Not now ends it. */
+    @Test
+    fun `a named change is ready after the reply, and Not now ends it`() = runTest {
+        coach.looks += TrainerReply.Answered(CoachTurn(emptyList(), "Invented reply.", emptyList(), Proposal(ProposalKind.ADD_FACT, group = "LIFE", text = "An invented fact.")), "a-model")
+        val viewModel = watched()
+        advanceUntilIdle()
+
+        viewModel.edit("Invented question.")
+        viewModel.send()
+        advanceUntilIdle()
+
+        val reply = viewModel.state.value.thread.map { (it as ThreadItem.Said).message }.last()
+        assertThat(reply.proposal!!.state).isEqualTo(ProposalState.READY)
+        assertThat(viewModel.state.value.busy).isFalse()
+
+        viewModel.declineProposal(reply.id)
+        advanceUntilIdle()
+
+        val ended = viewModel.state.value.thread.map { (it as ThreadItem.Said).message }.last()
+        assertThat(ended.proposal!!.state).isEqualTo(ProposalState.DECLINED)
     }
 
     @Test
@@ -218,7 +254,12 @@ class TalkViewModelTest {
             askTheCoach(coach, Now { now }, store = store), messages, store, FakeLetterStore(), InMemoryWeekNoteStore(), InMemorySheetStore(), ProblemLog.NONE,
             Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }, Now { now },
         )
-        val make = { TalkViewModel(SavedStateHandle(mapOf(TalkViewModel.CONVERSATION to CONVERSATION, TalkViewModel.ASK to ask)), talk, FakeAiSettings(), problems, outliving) }
+        val today = Today { LocalDate.ofEpochDay(TEST_EPOCH_DAY) }
+        val programmes = FakeProgrammeStore()
+        val sheets = InMemorySheetStore()
+        val asker = AskTheTrainer(FakeMovementRecord(), store, InMemoryWeightRepository(), FakeProfileRepository(aProfile()), FakeTrainer(), InMemoryAboutMeStore(), programmes, today, Now { now }, CurrentYear { TEST_YEAR }, sheets = sheets)
+        val actions = CoachActions(asker, messages, programmes, sheets, today, Now { now })
+        val make = { TalkViewModel(SavedStateHandle(mapOf(TalkViewModel.CONVERSATION to CONVERSATION, TalkViewModel.ASK to ask)), talk, actions, FakeAiSettings(), problems, outliving) }
         val viewModel = ViewModelProvider(ViewModelStore(), TrainerScreens.factory(make))[TalkViewModel::class.java]
         backgroundScope.launch { viewModel.state.collect {} }
         return viewModel

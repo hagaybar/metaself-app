@@ -990,7 +990,7 @@ object TrainerPrompt {
 
     internal fun string() = buildJsonObject { put("type", "string") }
 
-    private fun integer() = buildJsonObject { put("type", "integer") }
+    internal fun integer() = buildJsonObject { put("type", "integer") }
 
     internal fun strictObject(vararg properties: Pair<String, JsonObject>) = buildJsonObject {
         put("type", "object")
@@ -1086,6 +1086,14 @@ object TrainerPrompt {
     )
 
     private val GOAL_SCHEMA: JsonObject = buildJsonObject { putJsonArray("anyOf") { goalOptions().forEach { add(it) } } }
+
+    /** D164: a goal, or none. */
+    internal val NULLABLE_GOAL_SCHEMA: JsonObject = buildJsonObject {
+        putJsonArray("anyOf") {
+            goalOptions().forEach { add(it) }
+            add(buildJsonObject { put("type", "null") })
+        }
+    }
 
     /** D126: the suggestions, and the week's note (D116). */
     private val SUGGESTIONS_SCHEMA: JsonObject = strictObject(
