@@ -87,6 +87,9 @@ fun TrainerWorkbenchPage(
                 state.wouldRemember.forEach { fact ->
                     Text(WorkbenchWording.WOULD_REMEMBER + fact, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                state.wouldPropose?.let {
+                    Text(WorkbenchWording.WOULD_PROPOSE + it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 OutlinedButton(onClick = onCopyReply, modifier = Modifier.fillMaxWidth()) { Text(WorkbenchWording.COPY_REPLY) }
             }
             if (state.sent != null) {

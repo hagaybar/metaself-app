@@ -146,6 +146,29 @@ A reply may name an action. The phone runs the existing job with its existing ch
 and **Confirm**; nothing changes until it is pressed. The plan, goals and the sheet may change this way, and nothing
 else.
 
+**As built.** A reply names at most one change, of these kinds and no others: change the rest of the plan, a new plan with
+its goal, stop the plan, fill in the next week, plan the next block, add a noticed fact to the sheet, change or remove a fact.
+The running plan is changed by these only; a plan's goal changes by a new plan. The weight goal and the calorie target are
+not plan goals and are out of reach.
+
+- A plan change or a new plan is prepared straight after the reply, under the same tap, by the existing job (one more AI
+  request, counted, and stored as an offered version as the plan page does). The card shows the title, its reason and See the
+  weeks. A failed or interrupted job leaves the card with Try again.
+- Filling a week and the next block keep their answer at once by design (D121), so they run on Confirm, and the card says
+  so. There is nothing to show beforehand.
+- Confirm uses the job's own checks. A plan since stopped or replaced, a fact no longer on the sheet, or a job no longer
+  offered ends the card as no longer applying, and changes nothing.
+- A fact the owner confirms stays "I noticed" (D4); his own sentences still go in through remember (D161).
+- Preparing does write two things that are not the change: the offered version, which nothing runs, and the job's week note
+  (D116), which is the coach's words on the week and is kept even for an answer later discarded, as on the plan page.
+- A name the phone cannot read leaves the card saying so, because the reply's words may promise it.
+- The coach is told how its earlier proposals ended, so a declined one is not repeated unasked. This is an instruction and
+  can fail. Its stand's moderated goal (D129) is not offered on the card.
+- The workbench shows what a real conversation would propose and prepares nothing.
+
+Storage: Room version 19 adds `proposal` (JSON text) to `trainer_messages`. Backup format 15 carries it; a file without it
+restores with no cards.
+
 ### D165 — Showing
 
 A reply may show the app's own charts, drawn from the record, not from the AI's figures. A tapped suggestion can show

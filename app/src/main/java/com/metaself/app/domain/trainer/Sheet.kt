@@ -148,7 +148,7 @@ object Sheets {
      * one he removed (ignoring case), and one that would cross [MAX_FACTS] or [MAX_CHARS] is left out; later ones are
      * still tried. When none is added the answer is [previous] itself, so no version is made.
      */
-    fun remembered(previous: List<SheetFact>, said: List<Pair<FactGroup, String>>, today: Long): List<SheetFact> {
+    fun remembered(previous: List<SheetFact>, said: List<Pair<FactGroup, String>>, today: Long, source: FactSource = FactSource.SAID): List<SheetFact> {
         val current = previous.filter { it.current }
         val taken = (current + previous.filter { it.removedByOwner }).map { it.text.lowercase() }.toMutableSet()
         var nextId = (previous.maxOfOrNull { it.id } ?: 0L) + 1
@@ -163,7 +163,7 @@ object Sheets {
                     taken += words.lowercase()
                     count++
                     chars += words.length
-                    SheetFact(nextId++, group, words, today, FactSource.SAID)
+                    SheetFact(nextId++, group, words, today, source)
                 }
             }
         }

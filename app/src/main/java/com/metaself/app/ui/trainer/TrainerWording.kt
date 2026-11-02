@@ -215,7 +215,8 @@ object TrainerWording {
             "this week's session count; and the coach's note on this week. The coach may also open any part of your record: " +
             "sessions, sleep and recovery, food totals, individual meals with food names and times, eating habits, weight, your plan " +
             "and past conversations. The line under each reply says what it read. Each reply is up to ${CoachLooks.MAX} of today's " +
-            "$ceiling AI requests."
+            "$ceiling AI requests. When the coach proposes a plan or a change to one, preparing it is one more request, holding what " +
+            "Plan ahead or Change the rest of my plan sends."
 
     private fun privacy(first: String, ceiling: Int, extra: String? = null): String =
         "Sends to OpenAI, with your key: $first; your note about yourself; what the trainer knows about you; " +

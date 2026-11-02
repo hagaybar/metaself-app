@@ -58,6 +58,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
      * @property notice a sentence for a run that sent nothing (no plan, session gone, record unreadable).
      * @property read the conversation path's Read line, as a real reply would show it (D163).
      * @property wouldRemember what a real conversation would have put on the sheet; not put there.
+     * @property wouldPropose the change a real conversation would have put on a card (D164); not prepared.
      */
     data class State(
         val loaded: Boolean = false,
@@ -81,6 +82,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
         val notice: String? = null,
         val read: String? = null,
         val wouldRemember: List<String> = emptyList(),
+        val wouldPropose: String? = null,
     ) {
         /** Whether Send has what the chosen path needs. */
         private val ready: Boolean get() = if (path == TrainerPath.TALK) talkWords.isNotBlank() else inputs != null
@@ -130,7 +132,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
         sendJob?.cancel()
         sendJob = null
         savedState[PATH] = path.name
-        _state.update { it.copy(path = path, sending = false, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList()) }
+        _state.update { it.copy(path = path, sending = false, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList(), wouldPropose = null) }
     }
 
     fun pickSession(workoutId: Long) {
@@ -226,7 +228,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
         if (current.path == TrainerPath.TALK) return sendConversation(current)
         val inputs = current.inputs ?: return
         val system = current.instructions ?: workbench.appInstructions(current.path)
-        _state.update { it.copy(sending = true, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList()) }
+        _state.update { it.copy(sending = true, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList(), wouldPropose = null) }
         sendJob = viewModelScope.launch {
             // Only building the request reads the record, so only that is caught; the sender's failures come back as its reply.
             val built = runCatchingRead("request not built") { workbench.request(inputs) }
@@ -259,7 +261,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
      * and not the shape; nothing is stored.
      */
     private fun sendConversation(current: State) {
-        _state.update { it.copy(sending = true, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList()) }
+        _state.update { it.copy(sending = true, reply = null, sent = null, failure = null, notice = null, read = null, wouldRemember = emptyList(), wouldPropose = null) }
         sendJob = viewModelScope.launch {
             val tried = runCatchingRead("conversation not tried") { workbench.tryConversation(current.talkWords, current.instructions) }
             val answer = tried.getOrNull()
@@ -272,6 +274,7 @@ class TrainerWorkbenchViewModel @Inject constructor(
                         sent = workbench.sentOf(answer.last, current.instructions),
                         read = TalkWording.read(ReadLine.of(answer.opened)),
                         wouldRemember = answer.remember.map { fact -> fact.text },
+                        wouldPropose = answer.proposal?.let(TalkWording::proposalTitle),
                     )
                     is CoachAnswer.Failed -> it.copy(sending = false, failure = answer.failure, sent = workbench.sentOf(answer.last, current.instructions))
                 }

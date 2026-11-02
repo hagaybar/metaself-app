@@ -20,6 +20,7 @@ object WorkbenchWording {
         "OpenAI with your key: individual meals and food names included. Up to ${CoachLooks.MAX} of today's AI requests. Nothing is kept: " +
         "not this sentence, not the reply, and nothing is added to what the trainer knows."
     const val WOULD_REMEMBER = "In a real conversation, this would go on What I know about you: "
+    const val WOULD_PROPOSE = "In a real conversation, a card would offer this, not yet prepared: "
     const val COPY_REPLY = "Copy reply"
     const val COPY_SENT = "Copy what was sent"
     const val NO_PLAN = "No plan is running."

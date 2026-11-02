@@ -1,5 +1,6 @@
 package com.metaself.app.data.trainer
 
+import com.metaself.app.domain.trainer.Proposal
 import com.metaself.app.domain.trainer.TrainerMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,13 +30,21 @@ class InMemoryConversationStore : ConversationStore {
         return id
     }
 
-    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String?): Long {
+    override suspend fun addReply(to: Long, text: String, model: String, atMillis: Long, opened: String?, proposal: Proposal?): Long {
         check(!failWrites) { "invented write failure" }
         val answered = checkNotNull(messages.value.firstOrNull { it.id == to && it.fromOwner }) { "the message answered is not the owner's, or is gone" }
         val id = next++
         messages.value = messages.value.map { if (it.id == to) it.copy(answered = true) else it } +
-            TrainerMessage(id, atMillis, false, text, model, answered = false, replyTo = to, conversation = answered.conversation, opened = opened)
+            TrainerMessage(id, atMillis, false, text, model, answered = false, replyTo = to, conversation = answered.conversation, opened = opened, proposal = proposal)
         return id
+    }
+
+    override suspend fun replyTo(to: Long): TrainerMessage? = messages.value.lastOrNull { it.replyTo == to && !it.fromOwner }
+
+    override suspend fun setProposal(id: Long, proposal: Proposal) {
+        check(!failWrites) { "invented write failure" }
+        check(messages.value.any { it.id == id }) { "the reply is gone" }
+        messages.value = messages.value.map { if (it.id == id) it.copy(proposal = proposal) else it }
     }
 
     override suspend fun deleteOwn(id: Long) {

@@ -102,7 +102,7 @@ data class WeeklyLetterEntity(
  * that wrote it ([model], null on his). [answered] says whether his got a reply; a reply's [replyTo] names the message
  * it answers, so deleting his message removes exactly the reply it got. [conversation] is the one it belongs to (D159);
  * there is no table of conversations. [opened] is, on a reply that read the file, what it read (D163): "" when it opened
- * nothing, null on anything older. The feedback and the letters shown in the thread are not copied here (D146).
+ * nothing, null on anything older. [proposal] is the change it names (D164), `Proposals.encode`'s JSON. The feedback and the letters shown in the thread are not copied here (D146).
  * **No foreign key**: a restore replaces the table whole.
  */
 @Entity(tableName = "trainer_messages")
@@ -116,6 +116,7 @@ data class TrainerMessageEntity(
     val replyTo: Long?,
     @ColumnInfo(defaultValue = "") val conversation: String,
     val opened: String? = null,
+    val proposal: String? = null,
 )
 
 /**

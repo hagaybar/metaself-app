@@ -363,6 +363,9 @@ object TrainerResponse {
 
     private const val GOAL = "goal"
 
+    /** D164: a goal as plans store it. Throws when it does not read. */
+    fun goalOf(stored: String): PlanGoal = goal(Json.parseToJsonElement(stored).jsonObject)
+
     private fun goal(payload: JsonObject): PlanGoal = when (payload.text("kind")) {
         "steady" -> PlanGoal.Steady
         "distance" -> PlanGoal.Distance(

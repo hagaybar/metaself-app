@@ -6,10 +6,12 @@ import androidx.lifecycle.viewModelScope
 import com.metaself.app.data.ai.AiSettings
 import com.metaself.app.data.ai.AiSettingsStore
 import com.metaself.app.data.diagnostics.ProblemLog
+import com.metaself.app.data.trainer.CoachActions
 import com.metaself.app.data.trainer.TalkToTheTrainer
 import com.metaself.app.di.ApplicationScope
 import com.metaself.app.domain.ai.EstimateResult
 import com.metaself.app.domain.trainer.Conversation
+import com.metaself.app.domain.trainer.PlanShown
 import com.metaself.app.domain.trainer.ThreadItem
 import com.metaself.app.ui.ActionRefused
 import com.metaself.app.ui.guarded
@@ -37,6 +39,7 @@ import javax.inject.Inject
 class TalkViewModel @Inject constructor(
     savedState: SavedStateHandle,
     private val talk: TalkToTheTrainer,
+    private val actions: CoachActions,
     settings: AiSettingsStore,
     private val problems: ProblemLog,
     @ApplicationScope private val outliving: CoroutineScope,
@@ -49,6 +52,9 @@ class TalkViewModel @Inject constructor(
      * @property selected the owner's message whose Delete is shown.
      * @property confirmingDelete the owner's message whose deletion is being confirmed.
      * @property confirmingDeleteAll Delete this conversation is being confirmed (D159).
+     * @property acting the reply whose card's Confirm, Not now or preparing is under way (D164).
+     * @property actionFailure why the job behind a card did not answer.
+     * @property weeks the prepared plan's weeks, while See the weeks is open.
      * @property deletedAll the conversation's messages are gone: the screen goes back.
      */
     data class State(
@@ -64,9 +70,12 @@ class TalkViewModel @Inject constructor(
         val confirmingDelete: Long? = null,
         val confirmingDeleteAll: Boolean = false,
         val deletedAll: Boolean = false,
+        val acting: Long? = null,
+        val actionFailure: EstimateResult? = null,
+        val weeks: PlanShown? = null,
         val ceiling: Int = AiSettings.DEFAULT_CEILING,
     ) {
-        val busy: Boolean get() = sending || writing != null
+        val busy: Boolean get() = sending || writing != null || acting != null
         val canSend: Boolean get() = loaded && !busy && draft.isNotBlank()
 
         /** D159: there are messages for Delete this conversation to remove, stored (a note not yet copied has id 0). */
@@ -110,7 +119,7 @@ class TalkViewModel @Inject constructor(
                 val id = talk.say(text, conversation)
                 // Stored: the field is emptied unless he has typed on, and the thread shows the trainer writing.
                 local.update { it.copy(draft = if (it.draft == text) "" else it.draft, sending = false, writing = id) }
-                talk.answer(id)
+                answerAndPrepare(id)
             },
         ) { outcome -> answered(outcome) }
     }
@@ -123,13 +132,52 @@ class TalkViewModel @Inject constructor(
             outliving,
             problems,
             onRefused = { local.update { it.copy(writing = null, refused = ActionRefused.NOTHING_CHANGED) } },
-            work = { talk.answer(id) },
+            work = { answerAndPrepare(id) },
         ) { outcome -> answered(outcome) }
     }
 
-    private fun answered(outcome: TalkToTheTrainer.Talked) = local.update {
-        it.copy(writing = null, failure = (outcome as? TalkToTheTrainer.Talked.Failed)?.failure)
+    /** D164: the reply, then the change it names, still under the same tap. */
+    private suspend fun answerAndPrepare(id: Long): Pair<TalkToTheTrainer.Talked, EstimateResult?> {
+        val talked = talk.answer(id)
+        return talked to if (talked == TalkToTheTrainer.Talked.Replied) actions.prepareReplyTo(id) else null
     }
+
+    private fun answered(outcome: Pair<TalkToTheTrainer.Talked, EstimateResult?>) = local.update {
+        it.copy(writing = null, failure = (outcome.first as? TalkToTheTrainer.Talked.Failed)?.failure, actionFailure = outcome.second)
+    }
+
+    /** D164: the card's Try again: the change is prepared again. */
+    fun prepareAgain(replyId: Long) = act(replyId) { actions.prepare(replyId) }
+
+    /** D164: Confirm. Filling a week asks the AI here, so it outlives the screen. */
+    fun confirmProposal(replyId: Long) = act(replyId) { actions.confirm(replyId) }
+
+    /** D164: Not now. */
+    fun declineProposal(replyId: Long) = act(replyId) {
+        actions.decline(replyId)
+        null
+    }
+
+    private fun act(replyId: Long, work: suspend () -> EstimateResult?) {
+        if (local.value.busy) return
+        local.update { it.copy(acting = replyId, actionFailure = null, refused = null) }
+        outlived(
+            outliving,
+            problems,
+            onRefused = { local.update { it.copy(acting = null, refused = ActionRefused.NOTHING_CHANGED) } },
+            work = work,
+        ) { failure -> local.update { it.copy(acting = null, actionFailure = failure) } }
+    }
+
+    /** D164: See the weeks. Reads only. */
+    fun seeWeeks(replyId: Long) {
+        guarded(problems, onRefused = { local.update { it.copy(refused = ActionRefused.COULD_NOT_OPEN) } }) {
+            val shown = actions.weeks(replyId)
+            local.update { it.copy(weeks = shown) }
+        }
+    }
+
+    fun closeWeeks() = local.update { it.copy(weeks = null) }
 
     /** The owner's message [id] shows its Delete, or hides it when shown. */
     fun select(id: Long) = local.update { it.copy(selected = if (it.selected == id) null else id) }

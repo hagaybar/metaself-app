@@ -621,6 +621,11 @@ fun MetaSelfNavHost(
                 onAskDeleteAll = talkViewModel::askDeleteAll,
                 onConfirmDeleteAll = talkViewModel::confirmDeleteAll,
                 onCancelDeleteAll = talkViewModel::cancelDeleteAll,
+                onConfirmProposal = talkViewModel::confirmProposal,
+                onDeclineProposal = talkViewModel::declineProposal,
+                onPrepareAgain = talkViewModel::prepareAgain,
+                onSeeWeeks = talkViewModel::seeWeeks,
+                onCloseWeeks = talkViewModel::closeWeeks,
             )
         }
 

@@ -57,7 +57,7 @@ class AskTheCoach @Inject constructor(
                     } else {
                         val words = turn.value.reply.trim()
                         if (words.isNotEmpty()) {
-                            return CoachAnswer.Answered(words, turn.model, opened.mapNotNull { it.read }, remember.toList(), request)
+                            return CoachAnswer.Answered(words, turn.model, opened.mapNotNull { it.read }, remember.toList(), request, turn.value.propose)
                         }
                         if (request.lastLook || turn.value.open.isEmpty()) return CoachAnswer.Failed(NO_WORDS, request)
                         // It asked again for what it already has, with no words: the next look says so by what it holds.

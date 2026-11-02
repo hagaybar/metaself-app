@@ -28,7 +28,7 @@ data class RememberedFact(val group: String, val text: String)
  * D161: one answer in the structured form: drawers to [open], or the [reply]'s words; [remember] is what the owner
  * said that belongs on the sheet. Blank and empty are read as such; what they mean is decided by the look they came on.
  */
-data class CoachTurn(val open: List<DrawerAsk>, val reply: String, val remember: List<RememberedFact>)
+data class CoachTurn(val open: List<DrawerAsk>, val reply: String, val remember: List<RememberedFact>, val propose: Proposal? = null)
 
 /**
  * D163: what the phone really read for one drawer, the only source of the Read line. [days] is the days it covered;
@@ -113,6 +113,7 @@ sealed interface CoachAnswer {
         val opened: List<DrawerRead>,
         val remember: List<RememberedFact>,
         override val last: CoachRequest,
+        val proposal: Proposal? = null,
     ) : CoachAnswer
 
     data class Failed(val failure: EstimateResult, override val last: CoachRequest) : CoachAnswer

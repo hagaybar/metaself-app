@@ -7,23 +7,27 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +42,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.metaself.app.domain.trainer.Conversation
+import com.metaself.app.domain.trainer.PlanShown
+import com.metaself.app.domain.trainer.Proposal
+import com.metaself.app.domain.trainer.ProposalKind
+import com.metaself.app.domain.trainer.ProposalState
 import com.metaself.app.domain.trainer.ThreadItem
 import com.metaself.app.domain.trainer.TrainerMessage
 import com.metaself.app.ui.MetaSelfScreen
@@ -70,6 +78,12 @@ fun TalkScreen(
     onAskDeleteAll: () -> Unit = {},
     onConfirmDeleteAll: () -> Unit = {},
     onCancelDeleteAll: () -> Unit = {},
+    /** D164: a card's Confirm, Not now, Try again and See the weeks, by its reply's id. */
+    onConfirmProposal: (Long) -> Unit = {},
+    onDeclineProposal: (Long) -> Unit = {},
+    onPrepareAgain: (Long) -> Unit = {},
+    onSeeWeeks: (Long) -> Unit = {},
+    onCloseWeeks: () -> Unit = {},
 ) {
     val zone = ZoneId.systemDefault()
     if (state.deletedAll) LaunchedEffect(Unit) { onBack() }
@@ -91,7 +105,12 @@ fun TalkScreen(
                         is ThreadRow.Day -> Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                             Text(TalkWording.day(row.epochDay), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        is ThreadRow.Entry -> Item(row.item, state, zone, onTryAgain, onSelect, onAskDelete, onLetter)
+                        is ThreadRow.Entry -> {
+                            Item(row.item, state, zone, onTryAgain, onSelect, onAskDelete, onLetter)
+                            (row.item as? ThreadItem.Said)?.message?.let { message ->
+                                message.proposal?.let { ProposalCard(message.id, it, state, onConfirmProposal, onDeclineProposal, onPrepareAgain, onSeeWeeks) }
+                            }
+                        }
                         ThreadRow.Writing -> Text(
                             TalkWording.WRITING,
                             style = MaterialTheme.typography.bodyMedium,
@@ -101,6 +120,8 @@ fun TalkScreen(
                     }
                 }
             }
+            state.actionFailure?.let { Text(TalkWording.proposalFailure(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            state.weeks?.let { WeeksDialog(it, onCloseWeeks) }
             state.failure?.let { Text(TalkWording.failure(it), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             state.refused?.let { Text(stringResource(it.sentence), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             Composer(state, onEdit, onSend)
@@ -255,6 +276,64 @@ private fun Mine(
             TextButton(onClick = { onAskDelete(message.id) }) { Text(TalkWording.DELETE) }
         }
     }
+}
+
+/**
+ * D164: the change a reply names. What it would do, and Confirm; nothing changes until it is pressed. Where the change is
+ * not ready, or is over, it says so instead.
+ */
+@Composable
+private fun ProposalCard(
+    replyId: Long,
+    proposal: Proposal,
+    state: TalkViewModel.State,
+    onConfirm: (Long) -> Unit,
+    onDecline: (Long) -> Unit,
+    onPrepareAgain: (Long) -> Unit,
+    onSeeWeeks: (Long) -> Unit,
+) {
+    OutlinedCard(Modifier.fillMaxWidth().padding(top = Spacing.Tight)) {
+        Column(Modifier.padding(horizontal = 13.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(Spacing.Tight)) {
+            Text(TalkWording.proposalTitle(proposal), style = MaterialTheme.typography.titleSmall)
+            if (proposal.says.isNotBlank()) Text(proposal.says, style = MaterialTheme.typography.bodyMedium)
+            if (proposal.why.isNotBlank()) Text(proposal.why, style = MaterialTheme.typography.bodyMedium)
+            if (proposal.state != ProposalState.PREPARING) TalkWording.startsLine(proposal)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+            when (proposal.state) {
+                ProposalState.PREPARING ->
+                    if (state.busy) {
+                        Text(TalkWording.PREPARING, style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
+                    } else {
+                        Text(TalkWording.NOT_PREPARED, style = MaterialTheme.typography.bodyMedium)
+                        TextButton(onClick = { onPrepareAgain(replyId) }) { Text(TalkWording.TRY_AGAIN) }
+                    }
+                ProposalState.READY -> if (proposal.kind != ProposalKind.UNREADABLE) {
+                    if (proposal.kind == ProposalKind.FILL_WEEK || proposal.kind == ProposalKind.NEXT_BLOCK) {
+                        Text(TalkWording.FILL_LINE, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (proposal.kind == ProposalKind.CHANGE_PLAN || proposal.kind == ProposalKind.NEW_PLAN) {
+                        TextButton(onClick = { onSeeWeeks(replyId) }) { Text(TalkWording.SEE_WEEKS) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.Related), verticalAlignment = Alignment.CenterVertically) {
+                        Button(onClick = { onConfirm(replyId) }, enabled = !state.busy) { Text(TalkWording.CONFIRM) }
+                        TextButton(onClick = { onDecline(replyId) }, enabled = !state.busy) { Text(TalkWording.NOT_NOW) }
+                    }
+                }
+                ProposalState.CONFIRMED -> Text(TalkWording.DONE, style = MaterialTheme.typography.bodyMedium)
+                ProposalState.DECLINED -> Text(TalkWording.LEFT_AS_IT_IS, style = MaterialTheme.typography.bodyMedium)
+                ProposalState.OUT_OF_DATE -> Text(TalkWording.OUT_OF_DATE, style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+}
+
+/** D164: the prepared plan, as the plan page draws it. */
+@Composable
+private fun WeeksDialog(shown: PlanShown, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        text = { Column(Modifier.verticalScroll(rememberScrollState())) { PlanShownView(shown) } },
+        confirmButton = { TextButton(onClick = onClose) { Text(TalkWording.CLOSE) } },
+    )
 }
 
 /** D146: the letter as a card — its week and when it arrived — opening the letter page. */
